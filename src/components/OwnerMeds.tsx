@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
-import { AlertTriangle, Plus, Check } from 'lucide-react';
+import { AlertTriangle, Check } from 'lucide-react';
 
 export function OwnerMeds() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -95,21 +95,21 @@ export function OwnerMeds() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">Savininko duodami vaistai</h2>
-            <p className="text-sm text-gray-600">Log medications administered by animal owners</p>
+            <p className="text-sm text-gray-600">Registruokite savininko duodamus vaistus</p>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5" />
-            <span>Record logged successfully!</span>
+            <span>Įrašas sėkmingai užregistruotas!</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">First Administration Date *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pirmo davimo data *</label>
               <input
                 type="date"
                 value={formData.first_admin_date}
@@ -120,7 +120,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Vaistas</label>
               <select
                 value={formData.product_id}
                 onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
@@ -134,7 +134,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Dose</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Dozė</label>
               <div className="flex gap-2">
                 <input
                   type="number"
@@ -158,7 +158,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Treatment Duration (days)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gydymo trukmė (dienos)</label>
               <input
                 type="number"
                 value={formData.treatment_duration_days}
@@ -168,7 +168,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Supplier Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tiekėjo pavadinimas</label>
               <input
                 type="text"
                 value={formData.supplier_name}
@@ -178,7 +178,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Proof (Doc No)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pirkimo įrodymas (dok. nr.)</label>
               <input
                 type="text"
                 value={formData.purchase_proof}
@@ -188,7 +188,7 @@ export function OwnerMeds() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Animal / Group Identification</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gyvūno / grupės identifikacija</label>
               <input
                 type="text"
                 value={formData.animal_ident}
@@ -199,7 +199,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Prescribing Veterinarian</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Receptą išrašęs veterinaras</label>
               <input
                 type="text"
                 value={formData.prescribing_vet}
@@ -209,7 +209,7 @@ export function OwnerMeds() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Vet Contact Info</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Veterinaro kontaktai</label>
               <input
                 type="text"
                 value={formData.prescribing_vet_contacts}
@@ -219,7 +219,7 @@ export function OwnerMeds() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Withdrawal Until</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Karencija iki</label>
               <input
                 type="date"
                 value={formData.withdrawal_until}
@@ -229,7 +229,7 @@ export function OwnerMeds() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pastabos</label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -245,21 +245,21 @@ export function OwnerMeds() {
               disabled={loading}
               className="px-6 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Logging...' : 'Log Record'}
+              {loading ? 'Registruojama...' : 'Registruoti įrašą'}
             </button>
           </div>
         </form>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Recent Records</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">Paskutiniai įrašai</h3>
         <div className="space-y-3">
           {records.map((record) => (
             <div key={record.id} className="p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="font-medium text-gray-900">{record.products?.name || 'Unspecified medicine'}</p>
-                  <p className="text-sm text-gray-600">Animal: {record.animal_ident || 'N/A'}</p>
+                  <p className="font-medium text-gray-900">{record.products?.name || 'Nenurodytas vaistas'}</p>
+                  <p className="text-sm text-gray-600">Gyvūnas: {record.animal_ident || 'N/A'}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">

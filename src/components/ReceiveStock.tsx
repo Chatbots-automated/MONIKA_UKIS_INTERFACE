@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Product, Supplier, Unit } from '../lib/types';
+import { Product, Supplier } from '../lib/types';
 import { Plus, Check } from 'lucide-react';
 
 export function ReceiveStock() {

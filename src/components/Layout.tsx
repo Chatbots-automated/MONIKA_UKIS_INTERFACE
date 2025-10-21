@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Package,
   FileText,
-  Users,
   Pill,
   Syringe,
   AlertTriangle,

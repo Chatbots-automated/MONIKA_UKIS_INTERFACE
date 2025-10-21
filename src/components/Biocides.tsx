@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
-import { Droplet, Plus, Check } from 'lucide-react';
+import { Droplet, Check } from 'lucide-react';
 
 export function Biocides() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -86,21 +86,21 @@ export function Biocides() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">Biocidų naudojimas</h2>
-            <p className="text-sm text-gray-600">Log biocide applications and usage</p>
+            <p className="text-sm text-gray-600">Registruokite biocidų panaudojimą</p>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5" />
-            <span>Biocide usage logged successfully!</span>
+            <span>Biocidų panaudojimas sėkmingai užregistruotas!</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Use Date *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Naudojimo data *</label>
               <input
                 type="date"
                 value={formData.use_date}
@@ -111,7 +111,7 @@ export function Biocides() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Biocide Product *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Biocidinis produktas *</label>
               <select
                 value={formData.product_id}
                 onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
@@ -126,7 +126,7 @@ export function Biocides() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Batch (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Partija (Nebūtina)</label>
               <select
                 value={formData.batch_id}
                 onChange={(e) => setFormData({ ...formData, batch_id: e.target.value })}
@@ -135,13 +135,13 @@ export function Biocides() {
               >
                 <option value="">Pasirinkite partiją...</option>
                 {batches.filter(b => b.product_id === formData.product_id).map((b) => (
-                  <option key={b.batch_id} value={b.batch_id}>LOT: {b.lot || 'N/A'} ({b.on_hand} available)</option>
+                  <option key={b.batch_id} value={b.batch_id}>LOT: {b.lot || 'N/A'} (Likutis: {b.on_hand})</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Kiekis *</label>
               <div className="flex gap-2">
                 <input
                   type="number"
@@ -165,7 +165,7 @@ export function Biocides() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Purpose</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Paskirtis</label>
               <input
                 type="text"
                 value={formData.purpose}
@@ -176,7 +176,7 @@ export function Biocides() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Work Scope</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Darbų apimtis</label>
               <textarea
                 value={formData.work_scope}
                 onChange={(e) => setFormData({ ...formData, work_scope: e.target.value })}
@@ -187,7 +187,7 @@ export function Biocides() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Used By</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Naudojo</label>
               <input
                 type="text"
                 value={formData.used_by_name}
@@ -204,21 +204,21 @@ export function Biocides() {
               disabled={loading}
               className="px-6 py-2.5 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Logging...' : 'Log Usage'}
+              {loading ? 'Registruojama...' : 'Registruoti panaudojimą'}
             </button>
           </div>
         </form>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Recent Usage</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">Paskutiniai panaudojimai</h3>
         <div className="space-y-3">
           {usageRecords.map((record) => (
             <div key={record.id} className="p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-medium text-gray-900">{record.products?.name}</p>
-                  <p className="text-sm text-gray-600">{record.purpose || 'No purpose specified'}</p>
+                  <p className="text-sm text-gray-600">{record.purpose || 'Nenurodyta paskirtis'}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">{record.qty} {record.unit}</p>

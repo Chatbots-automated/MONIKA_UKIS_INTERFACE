@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trash2, Plus, Check } from 'lucide-react';
+import { Trash2, Check } from 'lucide-react';
 
 export function MedicalWaste() {
   const [records, setRecords] = useState<any[]>([]);
