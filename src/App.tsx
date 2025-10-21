@@ -11,6 +11,7 @@ import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
 import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
+import { Settings } from './components/Settings';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -18,7 +19,7 @@ function App() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentView} />;
       case 'inventory':
         return <Inventory />;
       case 'receive':
@@ -39,8 +40,10 @@ function App() {
         return <MedicalWaste />;
       case 'reports':
         return <Reports />;
+      case 'settings':
+        return <Settings />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentView} />;
     }
   };
 

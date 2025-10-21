@@ -12,8 +12,13 @@ import {
   Menu,
   X,
   Building2,
-  Stethoscope
+  Stethoscope,
+  LogOut,
+  User as UserIcon,
+  Search,
+  Settings
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -33,10 +38,20 @@ const menuItems = [
   { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle },
   { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2 },
   { id: 'reports', label: 'Ataskaitos', icon: FileText },
+  { id: 'settings', label: 'Nustatymai', icon: Settings },
 ];
 
 export function Layout({ children, currentView, onNavigate }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Atsijungimo klaida:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -101,11 +116,26 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
               >
                 <Menu className="w-6 h-6 text-slate-700" />
               </button>
-              <div>
+              <div className="flex-1">
                 <h2 className="text-2xl font-bold text-slate-900">
-                  {menuItems.find(item => item.id === currentView)?.label || 'Dashboard'}
+                  {menuItems.find(item => item.id === currentView)?.label || 'Pagrindinis'}
                 </h2>
                 <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Valdymo Sistema</p>
+              </div>
+
+              {/* User Badge */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg">
+                  <UserIcon className="w-4 h-4 text-slate-600" />
+                  <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Atsijungti"
+                >
+                  <LogOut className="w-5 h-5 text-slate-600" />
+                </button>
               </div>
             </div>
           </div>
