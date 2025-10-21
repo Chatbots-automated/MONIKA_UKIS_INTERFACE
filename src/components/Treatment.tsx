@@ -190,24 +190,24 @@ export function Treatment() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">Gydymas ir nurašymas</h2>
-            <p className="text-sm text-gray-600">Record treatment and decrease inventory</p>
+            <p className="text-sm text-gray-600">Užregistruokite gydymą ir sumažinkite atsargas</p>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5" />
-            <span>Treatment recorded successfully!</span>
+            <span>Gydymas sėkmingai užregistruotas!</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Treatment Information</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Gydymo informacija</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Registration Date *
+                  Registracijos data *
                 </label>
                 <input
                   type="date"
@@ -220,7 +220,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Symptoms Date
+                  Pirmųjų simptomų data
                 </label>
                 <input
                   type="date"
@@ -232,7 +232,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Animal
+                  Gyvūnas
                 </label>
                 <select
                   value={formData.animal_id}
@@ -250,7 +250,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Disease
+                  Liga
                 </label>
                 <select
                   value={formData.disease_id}
@@ -268,7 +268,7 @@ export function Treatment() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Animal Condition
+                  Gyvūno būklė
                 </label>
                 <textarea
                   value={formData.animal_condition}
@@ -281,7 +281,7 @@ export function Treatment() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tests Performed
+                  Atlikti tyrimai
                 </label>
                 <textarea
                   value={formData.tests}
@@ -294,7 +294,7 @@ export function Treatment() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Clinical Diagnosis
+                  Klinikinė diagnozė
                 </label>
                 <textarea
                   value={formData.clinical_diagnosis}
@@ -307,7 +307,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Services Provided
+                  Suteiktos paslaugos
                 </label>
                 <input
                   type="text"
@@ -320,7 +320,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Outcome
+                  Rezultatas
                 </label>
                 <input
                   type="text"
@@ -333,7 +333,7 @@ export function Treatment() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Veterinarian Name
+                  Veterinaro vardas
                 </label>
                 <input
                   type="text"
@@ -346,7 +346,7 @@ export function Treatment() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes
+                  Pastabos
                 </label>
                 <textarea
                   value={formData.notes}
@@ -361,7 +361,7 @@ export function Treatment() {
 
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Products Used</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Panaudoti produktai</h3>
               <button
                 type="button"
                 onClick={addUsageLine}
@@ -398,7 +398,7 @@ export function Treatment() {
                       <option value="">Pasirinkite partiją...</option>
                       {getAvailableBatches(item.product_id).map((batch) => (
                         <option key={batch.batch_id} value={batch.batch_id}>
-                          LOT: {batch.lot || 'N/A'} (Available: {batch.on_hand})
+                          LOT: {batch.lot || 'N/A'} (Likutis: {batch.on_hand})
                         </option>
                       ))}
                     </select>
@@ -445,7 +445,7 @@ export function Treatment() {
               disabled={loading}
               className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Saving...' : 'Record Treatment'}
+              {loading ? 'Išsaugoma...' : 'Užregistruoti gydymą'}
             </button>
           </div>
         </form>
