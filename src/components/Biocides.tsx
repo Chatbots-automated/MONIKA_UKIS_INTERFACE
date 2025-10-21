@@ -71,7 +71,7 @@ export function Biocides() {
       setTimeout(() => setSuccess(false), 3000);
       await loadData();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export function Biocides() {
             <Droplet className="w-6 h-6 text-cyan-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Biocide Usage</h2>
+            <h2 className="text-xl font-bold text-gray-900">Biocidų naudojimas</h2>
             <p className="text-sm text-gray-600">Log biocide applications and usage</p>
           </div>
         </div>
@@ -118,7 +118,7 @@ export function Biocides() {
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
                 required
               >
-                <option value="">Select product...</option>
+                <option value="">Pasirinkite produktą...</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -133,7 +133,7 @@ export function Biocides() {
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
                 disabled={!formData.product_id}
               >
-                <option value="">Select batch...</option>
+                <option value="">Pasirinkite partiją...</option>
                 {batches.filter(b => b.product_id === formData.product_id).map((b) => (
                   <option key={b.batch_id} value={b.batch_id}>LOT: {b.lot || 'N/A'} ({b.on_hand} available)</option>
                 ))}
@@ -171,7 +171,7 @@ export function Biocides() {
                 value={formData.purpose}
                 onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
-                placeholder="Disinfection, pest control, etc."
+                placeholder="Dezinfekcija, kenkėjų kontrolė ir t.t."
               />
             </div>
 
@@ -182,7 +182,7 @@ export function Biocides() {
                 onChange={(e) => setFormData({ ...formData, work_scope: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
                 rows={3}
-                placeholder="Describe the area/work performed..."
+                placeholder="Aprašykite vietą/atliktus darbus..."
               />
             </div>
 
@@ -193,7 +193,7 @@ export function Biocides() {
                 value={formData.used_by_name}
                 onChange={(e) => setFormData({ ...formData, used_by_name: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
-                placeholder="Name of person applying biocide"
+                placeholder="Biocidą naudojusio asmens vardas"
               />
             </div>
           </div>

@@ -75,7 +75,7 @@ export function MedicalWaste() {
       setTimeout(() => setSuccess(false), 3000);
       await loadRecords();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -89,22 +89,22 @@ export function MedicalWaste() {
             <Trash2 className="w-6 h-6 text-red-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Medical Waste Management</h2>
-            <p className="text-sm text-gray-600">Track veterinary medical waste generation and disposal</p>
+            <h2 className="text-xl font-bold text-gray-900">Medicininių Atliekų Valdymas</h2>
+            <p className="text-sm text-gray-600">Sekti veterinarinių medicininių atliekų susidarymą ir šalinimą</p>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5" />
-            <span>Waste record logged successfully!</span>
+            <span>Atliekų įrašas sėkmingai užregistruotas!</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Waste Code *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Atliekų kodas *</label>
               <input
                 type="text"
                 value={formData.waste_code}
@@ -116,30 +116,30 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Waste Name *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Atliekų pavadinimas *</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Waste description"
+                placeholder="Atliekų aprašymas"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Period</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Laikotarpis</label>
               <input
                 type="text"
                 value={formData.period}
                 onChange={(e) => setFormData({ ...formData, period: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Q1 2025, January, etc."
+                placeholder="2025 K1, Sausis, ir t.t."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Data</label>
               <input
                 type="date"
                 value={formData.date}
@@ -149,7 +149,7 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity Generated (kg)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Susidariusi kiekis (kg)</label>
               <input
                 type="number"
                 step="0.01"
@@ -160,7 +160,7 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity Transferred (kg)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Perduotas kiekis (kg)</label>
               <input
                 type="number"
                 step="0.01"
@@ -171,18 +171,18 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Carrier</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Vežėjas</label>
               <input
                 type="text"
                 value={formData.carrier}
                 onChange={(e) => setFormData({ ...formData, carrier: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Transport company"
+                placeholder="Transporto įmonė"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Processor / Disposal Facility</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Perdirbėjas / Šalinimo įmonė</label>
               <input
                 type="text"
                 value={formData.processor}
@@ -192,7 +192,7 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Transfer Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Perdavimo data</label>
               <input
                 type="date"
                 value={formData.transfer_date}
@@ -202,18 +202,18 @@ export function MedicalWaste() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Document Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Dokumento numeris</label>
               <input
                 type="text"
                 value={formData.doc_no}
                 onChange={(e) => setFormData({ ...formData, doc_no: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Transfer document no."
+                placeholder="Perdavimo dokumento nr."
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Responsible Person</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Atsakingas asmuo</label>
               <input
                 type="text"
                 value={formData.responsible}
@@ -229,14 +229,14 @@ export function MedicalWaste() {
               disabled={loading}
               className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Logging...' : 'Log Waste Record'}
+              {loading ? 'Registruojama...' : 'Registruoti atliekų įrašą'}
             </button>
           </div>
         </form>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Recent Waste Records</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">Paskutiniai atliekų įrašai</h3>
         <div className="space-y-3">
           {records.map((record) => (
             <div key={record.id} className="p-4 bg-gray-50 rounded-lg">
@@ -244,13 +244,13 @@ export function MedicalWaste() {
                 <div>
                   <p className="font-medium text-gray-900">{record.waste_code} - {record.name}</p>
                   <p className="text-sm text-gray-600">
-                    {record.carrier && `Carrier: ${record.carrier}`}
-                    {record.processor && ` • Processor: ${record.processor}`}
+                    {record.carrier && `Vežėjas: ${record.carrier}`}
+                    {record.processor && ` • Perdirbėjas: ${record.processor}`}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">
-                    {record.qty_transferred ? `${record.qty_transferred} kg transferred` : 'N/A'}
+                    {record.qty_transferred ? `${record.qty_transferred} kg perduota` : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-500">{record.date ? new Date(record.date).toLocaleDateString() : 'N/A'}</p>
                 </div>

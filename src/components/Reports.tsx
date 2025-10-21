@@ -132,7 +132,7 @@ export function Reports() {
             <FileText className="w-6 h-6 text-emerald-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Compliance Reports</h2>
+            <h2 className="text-xl font-bold text-gray-900">Atitikties ataskaitos</h2>
             <p className="text-sm text-gray-600">Generate and export regulatory journals</p>
           </div>
         </div>
@@ -143,11 +143,11 @@ export function Reports() {
             onChange={(e) => setReportType(e.target.value as ReportType)}
             className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
           >
-            <option value="drug_journal">Veterinary Drug Journal</option>
-            <option value="treated_animals">Treated Animals Register</option>
-            <option value="owner_meds">Owner-Administered Meds</option>
-            <option value="biocide_journal">Biocide Journal</option>
-            <option value="medical_waste">Medical Waste Journal</option>
+            <option value="drug_journal">Veterinarinių vaistų žurnalas</option>
+            <option value="treated_animals">Gydomų gyvūnų registras</option>
+            <option value="owner_meds">Savininko duodami vaistai</option>
+            <option value="biocide_journal">Biocidų žurnalas</option>
+            <option value="medical_waste">Medicininių atliekų žurnalas</option>
           </select>
 
           <div className="relative">
@@ -157,7 +157,7 @@ export function Reports() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              placeholder="From"
+              placeholder="Nuo"
             />
           </div>
 
@@ -168,7 +168,7 @@ export function Reports() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              placeholder="To"
+              placeholder="Iki"
             />
           </div>
 

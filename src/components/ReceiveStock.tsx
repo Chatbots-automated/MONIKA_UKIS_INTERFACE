@@ -76,7 +76,7 @@ export function ReceiveStock() {
 
       setTimeout(() => setSuccess(false), 3000);
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -90,15 +90,15 @@ export function ReceiveStock() {
             <Plus className="w-6 h-6 text-emerald-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Receive Stock</h2>
-            <p className="text-sm text-gray-600">Add new batch to inventory</p>
+            <h2 className="text-xl font-bold text-gray-900">Priėmimo registravimas</h2>
+            <p className="text-sm text-gray-600">Pridėti naują partiją į atsargas</p>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5" />
-            <span>Stock received successfully!</span>
+            <span>Atsargos sėkmingai priimtos!</span>
           </div>
         )}
 
@@ -106,7 +106,7 @@ export function ReceiveStock() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Product *
+                Produktas *
               </label>
               <select
                 value={formData.product_id}
@@ -114,7 +114,7 @@ export function ReceiveStock() {
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 required
               >
-                <option value="">Select product...</option>
+                <option value="">Pasirinkite produktą...</option>
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.name} ({product.category})
@@ -125,20 +125,20 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                LOT / Batch Number
+                PARTIJA / Serijos numeris
               </label>
               <input
                 type="text"
                 value={formData.lot}
                 onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="LOT-001"
+                placeholder="PARTIJA-001"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Received Quantity *
+                Priimtas kiekis *
               </label>
               <input
                 type="number"
@@ -153,7 +153,7 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Manufacturing Date
+                Gamybos data
               </label>
               <input
                 type="date"
@@ -165,7 +165,7 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Expiry Date
+                Galiojimo pabaiga
               </label>
               <input
                 type="date"
@@ -177,14 +177,14 @@ export function ReceiveStock() {
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Supplier
+                Tiekėjas
               </label>
               <select
                 value={formData.supplier_id}
                 onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
-                <option value="">Select supplier...</option>
+                <option value="">Pasirinkite tiekėją...</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}
@@ -195,33 +195,33 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Document Title
+                Dokumento pavadinimas
               </label>
               <input
                 type="text"
                 value={formData.doc_title}
                 onChange={(e) => setFormData({ ...formData, doc_title: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="Invoice"
+                placeholder="Sąskaita"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Document Number
+                Dokumento numeris
               </label>
               <input
                 type="text"
                 value={formData.doc_number}
                 onChange={(e) => setFormData({ ...formData, doc_number: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="INV-2025-001"
+                placeholder="S-2025-001"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Document Date
+                Dokumento data
               </label>
               <input
                 type="date"
@@ -233,7 +233,7 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Purchase Price
+                Pirkimo kaina
               </label>
               <div className="flex gap-2">
                 <input
@@ -263,7 +263,7 @@ export function ReceiveStock() {
               disabled={loading}
               className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Receiving...' : 'Receive Stock'}
+              {loading ? 'Registruojama...' : 'Registruoti priėmimą'}
             </button>
           </div>
         </form>

@@ -171,7 +171,7 @@ export function Treatment() {
       setTimeout(() => setSuccess(false), 3000);
       await loadData();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -189,7 +189,7 @@ export function Treatment() {
             <Syringe className="w-6 h-6 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Treatment & Write-off</h2>
+            <h2 className="text-xl font-bold text-gray-900">Gydymas ir nurašymas</h2>
             <p className="text-sm text-gray-600">Record treatment and decrease inventory</p>
           </div>
         </div>
@@ -239,7 +239,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Select animal...</option>
+                  <option value="">Pasirinkite gyvūną...</option>
                   {animals.map((animal) => (
                     <option key={animal.id} value={animal.id}>
                       {animal.tag_no} - {animal.species} ({animal.holder_name})
@@ -257,7 +257,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, disease_id: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Select disease...</option>
+                  <option value="">Pasirinkite ligą...</option>
                   {diseases.map((disease) => (
                     <option key={disease.id} value={disease.id}>
                       {disease.name}
@@ -275,7 +275,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, animal_condition: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
-                  placeholder="Describe animal condition..."
+                  placeholder="Aprašykite gyvūno būklę..."
                 />
               </div>
 
@@ -288,7 +288,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, tests: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
-                  placeholder="List tests performed..."
+                  placeholder="Išvardykite atliktus tyrimus..."
                 />
               </div>
 
@@ -301,7 +301,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, clinical_diagnosis: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
-                  placeholder="Enter diagnosis..."
+                  placeholder="Įveskite diagnozę..."
                 />
               </div>
 
@@ -314,7 +314,7 @@ export function Treatment() {
                   value={formData.services}
                   onChange={(e) => setFormData({ ...formData, services: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Services..."
+                  placeholder="Paslaugos..."
                 />
               </div>
 
@@ -327,7 +327,7 @@ export function Treatment() {
                   value={formData.outcome}
                   onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Treatment outcome..."
+                  placeholder="Gydymo rezultatas..."
                 />
               </div>
 
@@ -340,7 +340,7 @@ export function Treatment() {
                   value={formData.vet_name}
                   onChange={(e) => setFormData({ ...formData, vet_name: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Dr. Name"
+                  placeholder="Gydytojo vardas"
                 />
               </div>
 
@@ -353,7 +353,7 @@ export function Treatment() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
-                  placeholder="Additional notes..."
+                  placeholder="Papildomos pastabos..."
                 />
               </div>
             </div>
@@ -368,7 +368,7 @@ export function Treatment() {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Add Product
+                Pridėti produktą
               </button>
             </div>
 
@@ -381,7 +381,7 @@ export function Treatment() {
                       onChange={(e) => handleProductChange(item.id, e.target.value)}
                       className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="">Select product...</option>
+                      <option value="">Pasirinkite produktą...</option>
                       {products.map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name}
@@ -395,7 +395,7 @@ export function Treatment() {
                       className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={!item.product_id}
                     >
-                      <option value="">Select batch...</option>
+                      <option value="">Pasirinkite partiją...</option>
                       {getAvailableBatches(item.product_id).map((batch) => (
                         <option key={batch.batch_id} value={batch.batch_id}>
                           LOT: {batch.lot || 'N/A'} (Available: {batch.on_hand})
@@ -409,7 +409,7 @@ export function Treatment() {
                       value={item.qty}
                       onChange={(e) => updateUsageLine(item.id, 'qty', e.target.value)}
                       className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Quantity"
+                      placeholder="Kiekis"
                     />
 
                     <select

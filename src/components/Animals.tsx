@@ -71,7 +71,7 @@ export function Animals() {
       setFormData(emptyAnimal);
       await loadAnimals();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     }
   };
 
@@ -109,8 +109,8 @@ export function Animals() {
             <Stethoscope className="w-6 h-6 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Animals Registry</h2>
-            <p className="text-sm text-gray-600">Manage animal records and holder information</p>
+            <h2 className="text-xl font-bold text-gray-900">Gyvūnų registras</h2>
+            <p className="text-sm text-gray-600">Valdyti gyvūnų įrašus ir savininkų informaciją</p>
           </div>
         </div>
         {!showAdd && (
@@ -119,18 +119,18 @@ export function Animals() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
-            Add Animal
+            Pridėti gyvūną
           </button>
         )}
       </div>
 
       {showAdd && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">New Animal</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Naujas gyvūnas</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              placeholder="Tag Number *"
+              placeholder="Ženklo numeris *"
               value={formData.tag_no}
               onChange={(e) => setFormData({ ...formData, tag_no: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -138,7 +138,7 @@ export function Animals() {
 
             <input
               type="text"
-              placeholder="Species"
+              placeholder="Rūšis"
               value={formData.species}
               onChange={(e) => setFormData({ ...formData, species: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -149,14 +149,14 @@ export function Animals() {
               onChange={(e) => setFormData({ ...formData, sex: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">Select sex...</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
+              <option value="">Pasirinkite lytį...</option>
+              <option value="male">Patinas</option>
+              <option value="female">Patelė</option>
             </select>
 
             <input
               type="number"
-              placeholder="Age (months)"
+              placeholder="Amžius (mėn.)"
               value={formData.age_months}
               onChange={(e) => setFormData({ ...formData, age_months: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -164,7 +164,7 @@ export function Animals() {
 
             <input
               type="text"
-              placeholder="Holder Name"
+              placeholder="Savininko vardas"
               value={formData.holder_name}
               onChange={(e) => setFormData({ ...formData, holder_name: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -172,7 +172,7 @@ export function Animals() {
 
             <input
               type="text"
-              placeholder="Holder Address"
+              placeholder="Savininko adresas"
               value={formData.holder_address}
               onChange={(e) => setFormData({ ...formData, holder_address: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -184,14 +184,14 @@ export function Animals() {
               onClick={handleCancel}
               className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              Cancel
+              Atšaukti
             </button>
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Save className="w-4 h-4" />
-              Save Animal
+              Išsaugoti gyvūną
             </button>
           </div>
         </div>
@@ -202,12 +202,12 @@ export function Animals() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tag No</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Species</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sex</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Holder</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ženklo nr.</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rūšis</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lytis</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amžius</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Savininkas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -222,14 +222,14 @@ export function Animals() {
                             value={formData.tag_no}
                             onChange={(e) => setFormData({ ...formData, tag_no: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Tag Number"
+                            placeholder="Ženklo numeris"
                           />
                           <input
                             type="text"
                             value={formData.species}
                             onChange={(e) => setFormData({ ...formData, species: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Species"
+                            placeholder="Rūšis"
                           />
                           <select
                             value={formData.sex}
@@ -245,21 +245,21 @@ export function Animals() {
                             value={formData.age_months}
                             onChange={(e) => setFormData({ ...formData, age_months: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Age (months)"
+                            placeholder="Amžius (mėn.)"
                           />
                           <input
                             type="text"
                             value={formData.holder_name}
                             onChange={(e) => setFormData({ ...formData, holder_name: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Holder Name"
+                            placeholder="Savininko vardas"
                           />
                           <input
                             type="text"
                             value={formData.holder_address}
                             onChange={(e) => setFormData({ ...formData, holder_address: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Holder Address"
+                            placeholder="Savininko adresas"
                           />
                         </div>
                         <div className="flex justify-end gap-2 mt-3">
@@ -284,7 +284,7 @@ export function Animals() {
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.species}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || 'N/A'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {animal.age_months ? `${animal.age_months} mo` : 'N/A'}
+                        {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{animal.holder_name || 'N/A'}</div>

@@ -69,7 +69,7 @@ export function Suppliers() {
       setFormData(emptySupplier);
       await loadSuppliers();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     }
   };
 
@@ -106,7 +106,7 @@ export function Suppliers() {
             <Building2 className="w-6 h-6 text-orange-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Suppliers</h2>
+            <h2 className="text-xl font-bold text-gray-900">Tiekėjai</h2>
             <p className="text-sm text-gray-600">Manage supplier contacts and information</p>
           </div>
         </div>
@@ -116,18 +116,18 @@ export function Suppliers() {
             className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
-            Add Supplier
+            Pridėti tiekėją
           </button>
         )}
       </div>
 
       {showAdd && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">New Supplier</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Naujas tiekėjas</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              placeholder="Supplier Name *"
+              placeholder="Tiekėjo pavadinimas *"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -135,7 +135,7 @@ export function Suppliers() {
 
             <input
               type="text"
-              placeholder="Code"
+              placeholder="Kodas"
               value={formData.code}
               onChange={(e) => setFormData({ ...formData, code: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -143,7 +143,7 @@ export function Suppliers() {
 
             <input
               type="text"
-              placeholder="VAT Code"
+              placeholder="PVM kodas"
               value={formData.vat_code}
               onChange={(e) => setFormData({ ...formData, vat_code: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -151,7 +151,7 @@ export function Suppliers() {
 
             <input
               type="tel"
-              placeholder="Phone"
+              placeholder="Telefonas"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -159,7 +159,7 @@ export function Suppliers() {
 
             <input
               type="email"
-              placeholder="Email"
+              placeholder="El. paštas"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="md:col-span-2 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -171,14 +171,14 @@ export function Suppliers() {
               onClick={handleCancel}
               className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              Cancel
+              Atšaukti
             </button>
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
             >
               <Save className="w-4 h-4" />
-              Save Supplier
+              Išsaugoti tiekėją
             </button>
           </div>
         </div>
@@ -189,11 +189,11 @@ export function Suppliers() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">VAT Code</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pavadinimas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kodas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PVM kodas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kontaktai</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -208,35 +208,35 @@ export function Suppliers() {
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Supplier Name"
+                            placeholder="Tiekėjo pavadinimas"
                           />
                           <input
                             type="text"
                             value={formData.code}
                             onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Code"
+                            placeholder="Kodas"
                           />
                           <input
                             type="text"
                             value={formData.vat_code}
                             onChange={(e) => setFormData({ ...formData, vat_code: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="VAT Code"
+                            placeholder="PVM kodas"
                           />
                           <input
                             type="tel"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Phone"
+                            placeholder="Telefonas"
                           />
                           <input
                             type="email"
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className="md:col-span-2 px-4 py-2 border border-gray-300 rounded-lg"
-                            placeholder="Email"
+                            placeholder="El. paštas"
                           />
                         </div>
                         <div className="flex justify-end gap-2 mt-3">

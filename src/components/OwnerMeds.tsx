@@ -80,7 +80,7 @@ export function OwnerMeds() {
       setTimeout(() => setSuccess(false), 3000);
       await loadData();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export function OwnerMeds() {
             <AlertTriangle className="w-6 h-6 text-amber-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Owner-Administered Medicines</h2>
+            <h2 className="text-xl font-bold text-gray-900">Savininko duodami vaistai</h2>
             <p className="text-sm text-gray-600">Log medications administered by animal owners</p>
           </div>
         </div>
@@ -126,7 +126,7 @@ export function OwnerMeds() {
                 onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
               >
-                <option value="">Select medicine...</option>
+                <option value="">Pasirinkite vaistą...</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -194,7 +194,7 @@ export function OwnerMeds() {
                 value={formData.animal_ident}
                 onChange={(e) => setFormData({ ...formData, animal_ident: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                placeholder="Tag numbers or group description"
+                placeholder="Ženklinių numeriai arba grupės aprašymas"
               />
             </div>
 

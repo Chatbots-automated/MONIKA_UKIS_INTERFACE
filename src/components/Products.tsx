@@ -76,7 +76,7 @@ export function Products() {
       setFormData(emptyProduct);
       await loadProducts();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      alert('Klaida: ' + error.message);
     }
   };
 
@@ -116,8 +116,8 @@ export function Products() {
             <Pill className="w-6 h-6 text-emerald-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Products Catalog</h2>
-            <p className="text-sm text-gray-600">Manage medicines, hygiene, and other supplies</p>
+            <h2 className="text-xl font-bold text-gray-900">Produktų katalogas</h2>
+            <p className="text-sm text-gray-600">Valdyti vaistus, higieną ir kitas prekes</p>
           </div>
         </div>
         {!showAdd && (
@@ -126,18 +126,18 @@ export function Products() {
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
-            Add Product
+            Pridėti produktą
           </button>
         )}
       </div>
 
       {showAdd && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">New Product</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Naujas produktas</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              placeholder="Product Name *"
+              placeholder="Produkto pavadinimas *"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -148,13 +148,13 @@ export function Products() {
               onChange={(e) => setFormData({ ...formData, category: e.target.value as ProductCategory })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             >
-              <option value="medicines">Medicines</option>
-              <option value="prevention">Prevention</option>
-              <option value="hygiene">Hygiene</option>
-              <option value="biocide">Biocide</option>
-              <option value="technical">Technical</option>
-              <option value="treatment_materials">Treatment Materials</option>
-              <option value="reproduction">Reproduction</option>
+              <option value="medicines">Vaistai</option>
+              <option value="prevention">Prevencija</option>
+              <option value="hygiene">Higiena</option>
+              <option value="biocide">Biocidas</option>
+              <option value="technical">Techniniai</option>
+              <option value="treatment_materials">Gydymo medžiagos</option>
+              <option value="reproduction">Reprodukcija</option>
             </select>
 
             <select
@@ -171,7 +171,7 @@ export function Products() {
 
             <input
               type="number"
-              placeholder="Pack Size"
+              placeholder="Pakuotės dydis"
               value={formData.primary_pack_size}
               onChange={(e) => setFormData({ ...formData, primary_pack_size: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -179,7 +179,7 @@ export function Products() {
 
             <input
               type="text"
-              placeholder="Active Substance"
+              placeholder="Veiklioji medžiaga"
               value={formData.active_substance}
               onChange={(e) => setFormData({ ...formData, active_substance: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -187,7 +187,7 @@ export function Products() {
 
             <input
               type="text"
-              placeholder="Registration Code"
+              placeholder="Registracijos kodas"
               value={formData.registration_code}
               onChange={(e) => setFormData({ ...formData, registration_code: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -195,7 +195,7 @@ export function Products() {
 
             <input
               type="number"
-              placeholder="Withdrawal Days"
+              placeholder="Karencinės dienos"
               value={formData.withdrawal_days}
               onChange={(e) => setFormData({ ...formData, withdrawal_days: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -203,7 +203,7 @@ export function Products() {
 
             <input
               type="text"
-              placeholder="Dosage Notes"
+              placeholder="Dozavimo pastabos"
               value={formData.dosage_notes}
               onChange={(e) => setFormData({ ...formData, dosage_notes: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -215,14 +215,14 @@ export function Products() {
               onClick={handleCancel}
               className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              Cancel
+              Atšaukti
             </button>
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
             >
               <Save className="w-4 h-4" />
-              Save Product
+              Išsaugoti produktą
             </button>
           </div>
         </div>
@@ -233,11 +233,11 @@ export function Products() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Withdrawal</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pavadinimas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategorija</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vienetas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Karencija</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -258,13 +258,13 @@ export function Products() {
                             onChange={(e) => setFormData({ ...formData, category: e.target.value as ProductCategory })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
                           >
-                            <option value="medicines">Medicines</option>
-                            <option value="prevention">Prevention</option>
-                            <option value="hygiene">Hygiene</option>
-                            <option value="biocide">Biocide</option>
-                            <option value="technical">Technical</option>
-                            <option value="treatment_materials">Treatment Materials</option>
-                            <option value="reproduction">Reproduction</option>
+                            <option value="medicines">Vaistai</option>
+                            <option value="prevention">Prevencija</option>
+                            <option value="hygiene">Higiena</option>
+                            <option value="biocide">Biocidas</option>
+                            <option value="technical">Techniniai</option>
+                            <option value="treatment_materials">Gydymo medžiagos</option>
+                            <option value="reproduction">Reprodukcija</option>
                           </select>
                           <select
                             value={formData.primary_pack_unit}
@@ -279,7 +279,7 @@ export function Products() {
                           </select>
                           <input
                             type="number"
-                            placeholder="Withdrawal Days"
+                            placeholder="Karencinės dienos"
                             value={formData.withdrawal_days}
                             onChange={(e) => setFormData({ ...formData, withdrawal_days: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
@@ -319,7 +319,7 @@ export function Products() {
                         {product.primary_pack_size && ` (${product.primary_pack_size})`}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {product.withdrawal_days ? `${product.withdrawal_days} days` : 'N/A'}
+                        {product.withdrawal_days ? `${product.withdrawal_days} d.` : 'N/A'}
                       </td>
                       <td className="px-6 py-4">
                         <button
