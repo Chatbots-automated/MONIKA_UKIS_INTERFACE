@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { AlertTriangle, Package, TrendingDown, Clock } from 'lucide-react';
+import { formatCurrencyLT, formatDateLT, getDaysUntil } from '../lib/formatters';
 
 interface DashboardStats {
   totalProducts: number;
@@ -120,7 +121,7 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Bendra vertė</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">€{stats.totalValue.toFixed(2)}</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">{formatCurrencyLT(stats.totalValue)}</p>
             </div>
             <div className="bg-emerald-50 p-3 rounded-lg">
               <Package className="w-6 h-6 text-emerald-600" />
@@ -142,24 +143,24 @@ export function Dashboard() {
           ) : (
             <div className="space-y-3">
               {expiringBatches.map((batch) => {
-                const expiryDate = batch.batches?.expiry_date ? new Date(batch.batches.expiry_date) : null;
-                const daysUntilExpiry = expiryDate
-                  ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                  : null;
+                const daysUntilExpiry = getDaysUntil(batch.batches?.expiry_date);
 
                 return (
                   <div key={batch.batch_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">{batch.products?.name}</p>
                       <p className="text-sm text-gray-600">PARTIJA: {batch.lot || 'N/A'}</p>
+                      <p className="text-xs text-gray-500">Galioja iki: {formatDateLT(batch.batches?.expiry_date)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-900">
                         {batch.on_hand} vnt.
                       </p>
-                      <p className={`text-xs ${daysUntilExpiry && daysUntilExpiry <= 7 ? 'text-red-600' : 'text-orange-600'}`}>
-                        Pasibaigs po {daysUntilExpiry} d.
-                      </p>
+                      {daysUntilExpiry !== null && (
+                        <p className={`text-xs font-medium ${daysUntilExpiry <= 7 ? 'text-red-600' : 'text-orange-600'}`}>
+                          {daysUntilExpiry > 0 ? `Po ${daysUntilExpiry} d.` : 'Pasibaigęs'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );

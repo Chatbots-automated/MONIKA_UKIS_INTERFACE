@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Disease, StockByBatch, Unit } from '../lib/types';
 import { Syringe, Plus, Trash2, Check } from 'lucide-react';
+import { formatDateLT, getDaysUntil } from '../lib/formatters';
 
 interface UsageLine {
   id: string;
@@ -16,7 +17,7 @@ export function Treatment() {
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [diseases, setDiseases] = useState<Disease[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [batches, setBatches] = useState<(StockByBatch & { products?: { name: string } })[]>([]);
+  const [batches, setBatches] = useState<(StockByBatch & { products?: { name: string }; batches?: { expiry_date: string | null } })[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -32,6 +33,7 @@ export function Treatment() {
     outcome: '',
     vet_name: '',
     notes: '',
+    withdrawal_until: '',
   });
 
   const [usageItems, setUsageItems] = useState<UsageLine[]>([
@@ -49,7 +51,8 @@ export function Treatment() {
       supabase.from('products').select('*').eq('is_active', true).order('name'),
       supabase.from('stock_by_batch').select(`
         *,
-        products!inner(name)
+        products!inner(name),
+        batches!inner(expiry_date)
       `).gt('on_hand', 0),
     ]);
 
@@ -91,8 +94,28 @@ export function Treatment() {
     return data;
   };
 
+  const calculateWithdrawalDate = () => {
+    let maxWithdrawalDays = 0;
+
+    for (const item of usageItems) {
+      if (item.product_id) {
+        const product = products.find(p => p.id === item.product_id);
+        if (product && product.withdrawal_days && product.withdrawal_days > maxWithdrawalDays) {
+          maxWithdrawalDays = product.withdrawal_days;
+        }
+      }
+    }
+
+    if (maxWithdrawalDays > 0) {
+      const regDate = new Date(formData.reg_date);
+      regDate.setDate(regDate.getDate() + maxWithdrawalDays);
+      setFormData({ ...formData, withdrawal_until: regDate.toISOString().split('T')[0] });
+    }
+  };
+
   const handleProductChange = async (lineId: string, productId: string) => {
     updateUsageLine(lineId, 'product_id', productId);
+    updateUsageLine(lineId, 'batch_id', '');
 
     const product = products.find(p => p.id === productId);
     if (product) {
@@ -103,12 +126,36 @@ export function Treatment() {
     if (suggestedBatch) {
       updateUsageLine(lineId, 'batch_id', suggestedBatch);
     }
+
+    setTimeout(calculateWithdrawalDate, 100);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setSuccess(false);
+
+    for (const item of usageItems) {
+      if (item.product_id && item.batch_id && item.qty) {
+        const batch = batches.find(b => b.batch_id === item.batch_id);
+        if (batch) {
+          const expiryDate = batch.batches?.expiry_date || null;
+          const daysUntil = getDaysUntil(expiryDate);
+          if (daysUntil !== null && daysUntil < 0) {
+            alert(`Klaida: Partija ${batch.lot || 'N/A'} yra pasibaigusi. Negalima naudoti.`);
+            setLoading(false);
+            return;
+          }
+
+          const requestedQty = parseFloat(item.qty);
+          if (requestedQty > batch.on_hand) {
+            alert(`Klaida: Partijoje ${batch.lot || 'N/A'} nepakanka atsargų. Likutis: ${batch.on_hand}, prašoma: ${requestedQty}`);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    }
 
     try {
       const { data: treatment, error: treatmentError } = await supabase
@@ -125,6 +172,7 @@ export function Treatment() {
           outcome: formData.outcome || null,
           vet_name: formData.vet_name || null,
           notes: formData.notes || null,
+          withdrawal_until: formData.withdrawal_until || null,
         })
         .select()
         .single();
@@ -163,6 +211,7 @@ export function Treatment() {
         outcome: '',
         vet_name: '',
         notes: '',
+        withdrawal_until: '',
       });
       setUsageItems([
         { id: '1', product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'treatment' }
@@ -344,6 +393,19 @@ export function Treatment() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Karencija iki
+                </label>
+                <input
+                  type="date"
+                  value={formData.withdrawal_until}
+                  onChange={(e) => setFormData({ ...formData, withdrawal_until: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Automatiškai apskaičiuojama iš produktų</p>
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Pastabos
@@ -396,11 +458,18 @@ export function Treatment() {
                       disabled={!item.product_id}
                     >
                       <option value="">Pasirinkite partiją...</option>
-                      {getAvailableBatches(item.product_id).map((batch) => (
-                        <option key={batch.batch_id} value={batch.batch_id}>
-                          LOT: {batch.lot || 'N/A'} (Likutis: {batch.on_hand})
-                        </option>
-                      ))}
+                      {getAvailableBatches(item.product_id).map((batch) => {
+                        const expiryDate = batch.batches?.expiry_date || null;
+                        const daysUntil = getDaysUntil(expiryDate);
+                        const isExpired = daysUntil !== null && daysUntil < 0;
+                        const expiryInfo = expiryDate ? ` · Galioja iki ${formatDateLT(expiryDate)}` : '';
+
+                        return (
+                          <option key={batch.batch_id} value={batch.batch_id} disabled={isExpired}>
+                            LOT: {batch.lot || 'N/A'}{expiryInfo} · Likutis: {batch.on_hand} {isExpired ? '(PASIBAIGĘS)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
 
                     <input
@@ -415,7 +484,9 @@ export function Treatment() {
                     <select
                       value={item.unit}
                       onChange={(e) => updateUsageLine(item.id, 'unit', e.target.value as Unit)}
-                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-100"
+                      disabled
+                      title="Vienetas nustatytas iš produkto"
                     >
                       <option value="ml">ml</option>
                       <option value="l">L</option>

@@ -11,9 +11,27 @@ import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
 import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
+import { AuthForm } from './components/AuthForm';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Kraunama...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthForm />;
+  }
 
   const renderView = () => {
     switch (currentView) {

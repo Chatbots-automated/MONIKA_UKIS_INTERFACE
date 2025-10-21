@@ -11,8 +11,11 @@ import {
   Menu,
   X,
   Building2,
-  Stethoscope
+  Stethoscope,
+  LogOut,
+  User
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -36,6 +39,15 @@ const menuItems = [
 
 export function Layout({ children, currentView, onNavigate }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -93,18 +105,35 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
       <div className="lg:pl-64">
         <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
           <div className="px-4 sm:px-6 lg:px-8 py-5">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <Menu className="w-6 h-6 text-slate-700" />
-              </button>
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">
-                  {menuItems.find(item => item.id === currentView)?.label || 'Dashboard'}
-                </h2>
-                <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Valdymo Sistema</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <Menu className="w-6 h-6 text-slate-700" />
+                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    {menuItems.find(item => item.id === currentView)?.label || 'Dashboard'}
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Valdymo Sistema</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <User className="w-4 h-4 text-slate-600" />
+                  <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Atsijungti"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Atsijungti</span>
+                </button>
               </div>
             </div>
           </div>
