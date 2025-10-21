@@ -1,5 +1,4 @@
 import { ReactNode, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard,
   Package,
@@ -10,7 +9,6 @@ import {
   AlertTriangle,
   Droplet,
   Trash2,
-  LogOut,
   Menu,
   X,
   Building2,
@@ -38,16 +36,7 @@ const menuItems = [
 ];
 
 export function Layout({ children, currentView, onNavigate }: LayoutProps) {
-  const { signOut, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,19 +88,10 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
           </nav>
 
           <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm">
-                <p className="font-medium text-gray-900 truncate">{user?.email}</p>
-                <p className="text-xs text-gray-500">Veterinarian</p>
-              </div>
+            <div className="text-sm">
+              <p className="font-medium text-gray-900">VetStock Manager</p>
+              <p className="text-xs text-gray-500">Veterinary System</p>
             </div>
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
           </div>
         </div>
       </aside>

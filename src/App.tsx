@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { AuthForm } from './components/AuthForm';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Inventory } from './components/Inventory';
@@ -14,21 +12,8 @@ import { OwnerMeds } from './components/OwnerMeds';
 import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
 
-function AppContent() {
-  const { user, loading } = useAuth();
+function App() {
   const [currentView, setCurrentView] = useState('dashboard');
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthForm />;
-  }
 
   const renderView = () => {
     switch (currentView) {
@@ -63,14 +48,6 @@ function AppContent() {
     <Layout currentView={currentView} onNavigate={setCurrentView}>
       {renderView()}
     </Layout>
-  );
-}
-
-function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
   );
 }
 
