@@ -46,14 +46,9 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-600 p-2 rounded-lg">
-                  <Syringe className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="font-bold text-gray-900">VetStock</h1>
-                  <p className="text-xs text-gray-500">Manager</p>
-                </div>
+              <div>
+                <h1 className="font-bold text-lg text-gray-900">ZUB Berčiūnai</h1>
+                <p className="text-xs text-gray-500">Veterinary Management</p>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
                 <X className="w-5 h-5 text-gray-500" />
@@ -88,9 +83,9 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
           </nav>
 
           <div className="p-4 border-t border-gray-200">
-            <div className="text-sm">
-              <p className="font-medium text-gray-900">VetStock Manager</p>
-              <p className="text-xs text-gray-500">Veterinary System</p>
+            <div className="text-sm text-center">
+              <p className="font-medium text-gray-900">ZUB Berčiūnai</p>
+              <p className="text-xs text-gray-500">Veterinary Clinic</p>
             </div>
           </div>
         </div>
