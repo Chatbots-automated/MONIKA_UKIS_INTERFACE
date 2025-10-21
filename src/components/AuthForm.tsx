@@ -22,7 +22,7 @@ export function AuthForm() {
         await signUp(email, password);
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      setError(err.message || 'Įvyko klaida');
     } finally {
       setLoading(false);
     }
@@ -39,16 +39,16 @@ export function AuthForm() {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">
-            VetStock Manager
+            ZUB Berčiūnai
           </h1>
           <p className="text-gray-600 text-center mb-8">
-            Veterinary Inventory & Compliance System
+            Veterinarijos Atsargų Valdymo Sistema
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
+                El. paštas
               </label>
               <input
                 id="email"
@@ -63,7 +63,7 @@ export function AuthForm() {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
+                Slaptažodis
               </label>
               <input
                 id="password"
@@ -87,7 +87,7 @@ export function AuthForm() {
               disabled={loading}
               className="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Please wait...' : isSignIn ? 'Sign In' : 'Sign Up'}
+              {loading ? 'Prašome palaukti...' : isSignIn ? 'Prisijungti' : 'Registruotis'}
             </button>
           </form>
 
@@ -96,7 +96,7 @@ export function AuthForm() {
               onClick={() => setIsSignIn(!isSignIn)}
               className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
             >
-              {isSignIn ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              {isSignIn ? "Neturite paskyros? Registruokis" : 'Jau turite paskyrą? Prisijunkite'}
             </button>
           </div>
         </div>

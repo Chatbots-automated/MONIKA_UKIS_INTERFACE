@@ -83,7 +83,7 @@ export function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Products</p>
+              <p className="text-sm font-medium text-gray-600">Iš viso produktų</p>
               <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalProducts}</p>
             </div>
             <div className="bg-blue-50 p-3 rounded-lg">
@@ -95,7 +95,7 @@ export function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Low Stock Items</p>
+              <p className="text-sm font-medium text-gray-600">Mažos atsargos</p>
               <p className="text-3xl font-bold text-gray-900 mt-2">{stats.lowStock}</p>
             </div>
             <div className="bg-orange-50 p-3 rounded-lg">
@@ -107,7 +107,7 @@ export function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Expiring Soon</p>
+              <p className="text-sm font-medium text-gray-600">Greitai pasibaigs</p>
               <p className="text-3xl font-bold text-gray-900 mt-2">{stats.expiringSoon}</p>
             </div>
             <div className="bg-red-50 p-3 rounded-lg">
@@ -119,7 +119,7 @@ export function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Value</p>
+              <p className="text-sm font-medium text-gray-600">Bendra vertė</p>
               <p className="text-3xl font-bold text-gray-900 mt-2">€{stats.totalValue.toFixed(2)}</p>
             </div>
             <div className="bg-emerald-50 p-3 rounded-lg">
@@ -133,12 +133,12 @@ export function Dashboard() {
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-600" />
-            <h3 className="font-semibold text-gray-900">Expiring Soon</h3>
+            <h3 className="font-semibold text-gray-900">Greitai pasibaigiantys</h3>
           </div>
         </div>
         <div className="p-6">
           {expiringBatches.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No batches expiring soon</p>
+            <p className="text-gray-500 text-center py-8">Nėra greitai pasibaigiančių partijų</p>
           ) : (
             <div className="space-y-3">
               {expiringBatches.map((batch) => {
@@ -151,14 +151,14 @@ export function Dashboard() {
                   <div key={batch.batch_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">{batch.products?.name}</p>
-                      <p className="text-sm text-gray-600">LOT: {batch.lot || 'N/A'}</p>
+                      <p className="text-sm text-gray-600">PARTIJA: {batch.lot || 'N/A'}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-900">
-                        {batch.on_hand} units
+                        {batch.on_hand} vnt.
                       </p>
                       <p className={`text-xs ${daysUntilExpiry && daysUntilExpiry <= 7 ? 'text-red-600' : 'text-orange-600'}`}>
-                        Expires in {daysUntilExpiry} days
+                        Pasibaigs po {daysUntilExpiry} d.
                       </p>
                     </div>
                   </div>

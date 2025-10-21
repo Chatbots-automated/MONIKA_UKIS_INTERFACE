@@ -22,17 +22,17 @@ interface LayoutProps {
 }
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'inventory', label: 'Inventory', icon: Package },
-  { id: 'receive', label: 'Receive Stock', icon: FileText },
-  { id: 'treatment', label: 'Treatment / Write-off', icon: Syringe },
-  { id: 'products', label: 'Products', icon: Pill },
-  { id: 'animals', label: 'Animals', icon: Stethoscope },
-  { id: 'suppliers', label: 'Suppliers', icon: Building2 },
-  { id: 'biocides', label: 'Biocides', icon: Droplet },
-  { id: 'owner-meds', label: 'Owner Meds', icon: AlertTriangle },
-  { id: 'waste', label: 'Medical Waste', icon: Trash2 },
-  { id: 'reports', label: 'Reports', icon: FileText },
+  { id: 'dashboard', label: 'Pagrindinis', icon: LayoutDashboard },
+  { id: 'inventory', label: 'Atsargos', icon: Package },
+  { id: 'receive', label: 'Priėmimas', icon: FileText },
+  { id: 'treatment', label: 'Gydymas / Nurašymas', icon: Syringe },
+  { id: 'products', label: 'Produktai', icon: Pill },
+  { id: 'animals', label: 'Gyvūnai', icon: Stethoscope },
+  { id: 'suppliers', label: 'Tiekėjai', icon: Building2 },
+  { id: 'biocides', label: 'Biocidai', icon: Droplet },
+  { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle },
+  { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2 },
+  { id: 'reports', label: 'Ataskaitos', icon: FileText },
 ];
 
 export function Layout({ children, currentView, onNavigate }: LayoutProps) {
@@ -48,7 +48,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="font-bold text-xl text-white">ZUB Berčiūnai</h1>
-                <p className="text-xs text-slate-400 mt-1">Veterinary Management</p>
+                <p className="text-xs text-slate-400 mt-1">Veterinarijos Valdymas</p>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
                 <X className="w-5 h-5 text-slate-400" />
@@ -85,7 +85,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
           <div className="p-4 border-t border-slate-700">
             <div className="text-sm text-center">
               <p className="font-semibold text-white">ZUB Berčiūnai</p>
-              <p className="text-xs text-slate-400 mt-1">Veterinary Clinic</p>
+              <p className="text-xs text-slate-400 mt-1">Veterinarijos Klinika</p>
             </div>
           </div>
         </div>
@@ -105,7 +105,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
                 <h2 className="text-2xl font-bold text-slate-900">
                   {menuItems.find(item => item.id === currentView)?.label || 'Dashboard'}
                 </h2>
-                <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Management System</p>
+                <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Valdymo Sistema</p>
               </div>
             </div>
           </div>
