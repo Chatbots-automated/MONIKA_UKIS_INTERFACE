@@ -50,20 +50,32 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
       <div className={`fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setSidebarOpen(false)} />
 
-      <aside className={`fixed left-0 top-0 bottom-0 w-64 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 z-30 transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-teal-900 shadow-2xl z-30 transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-slate-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="font-bold text-xl text-white">ZUB Berčiūnai</h1>
-                <p className="text-xs text-slate-400 mt-1">Veterinarijos Valdymas</p>
-              </div>
+          <div className="p-6 border-b border-emerald-700/50">
+            <div className="flex items-center justify-between mb-4">
               <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="w-5 h-5 text-emerald-200" />
               </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0">
+                <img
+                  src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
+                  alt="ZUB Berčiūnai"
+                  className="w-16 h-16 rounded-lg bg-white p-1 shadow-lg object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+              <div>
+                <h1 className="font-bold text-xl text-white leading-tight">ZUB Berčiūnai</h1>
+                <p className="text-xs text-emerald-200 mt-1">VetStock Sistema</p>
+              </div>
             </div>
           </div>
 
@@ -79,32 +91,32 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
                       onNavigate(item.id);
                       setSidebarOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                       isActive
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
-                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        ? 'bg-white text-emerald-900 shadow-lg font-semibold'
+                        : 'text-emerald-50 hover:bg-emerald-700/50 hover:text-white'
                     }`}
                   >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-700' : ''}`} />
+                    <span className="text-sm">{item.label}</span>
                   </button>
                 );
               })}
             </div>
           </nav>
 
-          <div className="p-4 border-t border-slate-700">
-            <div className="text-sm text-center">
-              <p className="font-semibold text-white">ZUB Berčiūnai</p>
-              <p className="text-xs text-slate-400 mt-1">Veterinarijos Klinika</p>
+          <div className="p-4 border-t border-emerald-700/50">
+            <div className="text-xs text-emerald-300 text-center">
+              <p>Veterinarijos apskaita</p>
+              <p className="mt-1 text-emerald-400">v1.0.0</p>
             </div>
           </div>
         </div>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-          <div className="px-4 sm:px-6 lg:px-8 py-5">
+      <div className="lg:pl-72">
+        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+          <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button
@@ -114,21 +126,21 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
                   <Menu className="w-6 h-6 text-slate-700" />
                 </button>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
+                  <h2 className="text-2xl font-bold text-gray-900">
                     {menuItems.find(item => item.id === currentView)?.label || 'Dashboard'}
                   </h2>
-                  <p className="text-sm text-slate-500 mt-0.5">ZUB Berčiūnai Valdymo Sistema</p>
+                  <p className="text-sm text-gray-500 mt-0.5">Valdymo sistema · Real-time apskaita</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
-                  <User className="w-4 h-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+                <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200">
+                  <User className="w-4 h-4 text-emerald-700" />
+                  <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
                 </div>
                 <button
                   onClick={handleSignOut}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
                   title="Atsijungti"
                 >
                   <LogOut className="w-4 h-4" />
@@ -139,9 +151,30 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
           </div>
         </header>
 
-        <main className="p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-gray-100 min-h-screen">
+        <main className="p-4 sm:p-6 lg:p-8 min-h-screen">
           {children}
         </main>
+
+        <footer className="border-t border-gray-200 bg-white/80 backdrop-blur-sm">
+          <div className="px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <img
+                  src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
+                  alt="ZUB"
+                  className="w-6 h-6 rounded object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <span>© 2025 ZUB Berčiūnai. Visos teisės saugomos.</span>
+              </div>
+              <div className="text-xs text-gray-500">
+                VetStock Sistema · Versija 1.0.0
+              </div>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );
