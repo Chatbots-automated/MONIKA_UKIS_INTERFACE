@@ -13,7 +13,8 @@ import {
   Building2,
   Stethoscope,
   LogOut,
-  User
+  User,
+  Grid3x3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -21,6 +22,7 @@ interface LayoutProps {
   children: ReactNode;
   currentView: string;
   onNavigate: (view: string) => void;
+  onBackToModules: () => void;
 }
 
 const menuItems = [
@@ -37,7 +39,7 @@ const menuItems = [
   { id: 'reports', label: 'Ataskaitos', icon: FileText },
 ];
 
-export function Layout({ children, currentView, onNavigate }: LayoutProps) {
+export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, signOut } = useAuth();
 
@@ -105,8 +107,15 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
             </div>
           </nav>
 
-          <div className="p-4 border-t border-emerald-700/50">
-            <div className="text-xs text-emerald-300 text-center">
+          <div className="p-4 border-t border-emerald-700/50 space-y-3">
+            <button
+              onClick={onBackToModules}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-emerald-50 hover:bg-emerald-700/50 hover:text-white rounded-lg transition-all text-sm"
+            >
+              <Grid3x3 className="w-4 h-4" />
+              <span>Modulių pasirinkimas</span>
+            </button>
+            <div className="text-xs text-emerald-300 text-center pt-2">
               <p>Veterinarijos apskaita</p>
               <p className="mt-1 text-emerald-400">v1.0.0</p>
             </div>
@@ -134,6 +143,14 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  onClick={onBackToModules}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-200 hover:border-emerald-300"
+                  title="Modulių pasirinkimas"
+                >
+                  <Grid3x3 className="w-4 h-4" />
+                  <span>Moduliai</span>
+                </button>
                 <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200">
                   <User className="w-4 h-4 text-emerald-700" />
                   <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
