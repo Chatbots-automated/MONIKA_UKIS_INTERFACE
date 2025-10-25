@@ -79,7 +79,7 @@ function App() {
         <div className="max-w-7xl mx-auto p-8">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Admin Panel</h1>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Administratoriaus žurnalas</h1>
               <p className="text-gray-600">Vartotojų ir sistemos valdymas</p>
             </div>
             <button
