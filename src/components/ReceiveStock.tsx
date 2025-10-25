@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
-import { Plus, Check } from 'lucide-react';
+import { Plus, Check, Upload, FileText, X } from 'lucide-react';
 
 export function ReceiveStock() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadMessage, setUploadMessage] = useState('');
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -35,6 +38,59 @@ export function ReceiveStock() {
 
     if (productsRes.data) setProducts(productsRes.data);
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setSelectedFile(file);
+      setUploadStatus('idle');
+      setUploadMessage('');
+    } else {
+      alert('Prašome pasirinkti PDF failą');
+      e.target.value = '';
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+
+    setUploadStatus('uploading');
+    setUploadMessage('Įkeliama...');
+
+    try {
+      const arrayBuffer = await selectedFile.arrayBuffer();
+
+      const response = await fetch('https://n8n-up8s.onrender.com/webhook-test/36549f46-a08b-4790-bf56-40cdc919e4c0', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${selectedFile.name}"`,
+        },
+        body: arrayBuffer,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Serverio klaida: ${response.status}`);
+      }
+
+      setUploadStatus('success');
+      setUploadMessage('PDF sėkmingai įkeltas!');
+      setTimeout(() => {
+        setSelectedFile(null);
+        setUploadStatus('idle');
+        setUploadMessage('');
+      }, 3000);
+    } catch (error: any) {
+      setUploadStatus('error');
+      setUploadMessage(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setUploadStatus('idle');
+    setUploadMessage('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,6 +157,81 @@ export function ReceiveStock() {
             <span>Atsargos sėkmingai priimtos!</span>
           </div>
         )}
+
+        <div className="mb-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="bg-blue-600 p-2 rounded-lg">
+              <Upload className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-gray-900 mb-1">PDF dokumento įkėlimas</h3>
+              <p className="text-sm text-gray-600">Įkelkite priėmimo dokumentą (sąskaitą, važtaraštį ir kt.)</p>
+            </div>
+          </div>
+
+          {!selectedFile ? (
+            <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <FileText className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Spustelėkite arba tempkite PDF failą čia
+                </p>
+                <p className="text-xs text-gray-500">Palaikomi tik PDF failai</p>
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-4 bg-white border-2 border-blue-300 rounded-lg">
+                <FileText className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{selectedFile.name}</p>
+                  <p className="text-sm text-gray-500">
+                    {(selectedFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+                <button
+                  onClick={handleRemoveFile}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  disabled={uploadStatus === 'uploading'}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {uploadMessage && (
+                <div className={`px-4 py-3 rounded-lg flex items-center gap-2 ${
+                  uploadStatus === 'success'
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                    : uploadStatus === 'error'
+                    ? 'bg-red-50 border border-red-200 text-red-700'
+                    : 'bg-blue-50 border border-blue-200 text-blue-700'
+                }`}>
+                  {uploadStatus === 'success' && <Check className="w-5 h-5" />}
+                  <span className="text-sm font-medium">{uploadMessage}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleFileUpload}
+                disabled={uploadStatus === 'uploading'}
+                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Upload className="w-5 h-5" />
+                {uploadStatus === 'uploading' ? 'Įkeliama...' : 'Įkelti PDF'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t-2 border-gray-200 pt-6 mb-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Priėmimo duomenys</h3>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
