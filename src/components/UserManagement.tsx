@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useAuth, UserRole, UserProfile } from '../contexts/AuthContext';
+import { useAuth, UserRole, User } from '../contexts/AuthContext';
 import { formatDateLT } from '../lib/formatters';
-
-interface UserWithEmail extends UserProfile {
-  email: string;
-}
 
 export function UserManagement() {
   const { isAdmin } = useAuth();
-  const [users, setUsers] = useState<UserWithEmail[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>('viewer');
@@ -30,27 +26,14 @@ export function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
+      const { data, error: fetchError } = await supabase
+        .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (fetchError) throw fetchError;
 
-      const usersWithEmails: UserWithEmail[] = [];
-
-      for (const profile of profiles || []) {
-        const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(profile.user_id);
-
-        if (!userError && user) {
-          usersWithEmails.push({
-            ...profile,
-            email: user.email || 'No email'
-          });
-        }
-      }
-
-      setUsers(usersWithEmails);
+      setUsers(data || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch users');
     } finally {
@@ -61,9 +44,9 @@ export function UserManagement() {
   const handleUpdateRole = async (userId: string) => {
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from('users')
         .update({ role: editRole })
-        .eq('user_id', userId);
+        .eq('id', userId);
 
       if (error) throw error;
 
@@ -82,19 +65,13 @@ export function UserManagement() {
     setError('');
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: newUserEmail,
-        password: newUserPassword,
+      const { error } = await supabase.rpc('create_user', {
+        p_email: newUserEmail,
+        p_password: newUserPassword,
+        p_role: newUserRole
       });
 
       if (error) throw error;
-
-      if (data.user) {
-        await supabase
-          .from('user_profiles')
-          .update({ role: newUserRole })
-          .eq('user_id', data.user.id);
-      }
 
       setSuccess('User added successfully');
       setShowAddUser(false);
@@ -115,7 +92,10 @@ export function UserManagement() {
     }
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
 
       if (error) throw error;
 
@@ -310,7 +290,7 @@ export function UserManagement() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.user_id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
@@ -318,12 +298,12 @@ export function UserManagement() {
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">{user.email}</p>
-                          <p className="text-sm text-gray-500">ID: {user.user_id.slice(0, 8)}...</p>
+                          <p className="text-sm text-gray-500">ID: {user.id.slice(0, 8)}...</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {editingUser === user.user_id ? (
+                      {editingUser === user.id ? (
                         <select
                           value={editRole}
                           onChange={(e) => setEditRole(e.target.value as UserRole)}
@@ -349,10 +329,10 @@ export function UserManagement() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {editingUser === user.user_id ? (
+                        {editingUser === user.id ? (
                           <>
                             <button
-                              onClick={() => handleUpdateRole(user.user_id)}
+                              onClick={() => handleUpdateRole(user.id)}
                               className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                               title="Save"
                             >
@@ -370,7 +350,7 @@ export function UserManagement() {
                           <>
                             <button
                               onClick={() => {
-                                setEditingUser(user.user_id);
+                                setEditingUser(user.id);
                                 setEditRole(user.role);
                               }}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -379,7 +359,7 @@ export function UserManagement() {
                               <Edit2 className="w-5 h-5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteUser(user.user_id)}
+                              onClick={() => handleDeleteUser(user.id)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               title="Delete User"
                             >

@@ -43,7 +43,7 @@ const menuItems = [
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, profile, hasPermission, signOut } = useAuth();
+  const { user, hasPermission, signOut } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -157,9 +157,9 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                   <User className="w-4 h-4 text-emerald-700" />
                   <div className="flex flex-col">
                     <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
-                    {profile && (
+                    {user && (
                       <span className="text-xs text-emerald-600">
-                        {profile.role === 'admin' ? 'Admin' : profile.role === 'vet' ? 'Vet' : profile.role === 'tech' ? 'Tech' : 'Viewer'}
+                        {user.role === 'admin' ? 'Admin' : user.role === 'vet' ? 'Vet' : user.role === 'tech' ? 'Tech' : 'Viewer'}
                       </span>
                     )}
                   </div>

@@ -1,19 +1,19 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer';
 
-export interface UserProfile {
-  user_id: string;
+export interface User {
+  id: string;
+  email: string;
   role: UserRole;
   created_at: string;
   updated_at: string;
+  last_login: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
-  profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -26,76 +26,71 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const SESSION_KEY = 'vetstock_user_session';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
-      }
-      return data;
-    } catch (err) {
-      console.error('Exception fetching user profile:', err);
-      return null;
-    }
-  };
-
   useEffect(() => {
-    const initAuth = async () => {
+    const savedSession = localStorage.getItem(SESSION_KEY);
+    if (savedSession) {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const userProfile = await fetchUserProfile(session.user.id);
-          setProfile(userProfile);
-        }
+        const userData = JSON.parse(savedSession);
+        setUser(userData);
       } catch (err) {
-        console.error('Error initializing auth:', err);
-      } finally {
-        setLoading(false);
+        console.error('Error parsing saved session:', err);
+        localStorage.removeItem(SESSION_KEY);
       }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const userProfile = await fetchUserProfile(session.user.id);
-        setProfile(userProfile);
-      } else {
-        setProfile(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    }
+    setLoading(false);
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    try {
+      const { data, error } = await supabase
+        .rpc('verify_password', {
+          p_email: email,
+          p_password: password
+        });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        throw new Error('Invalid email or password');
+      }
+
+      const userData = data[0];
+
+      await supabase.rpc('update_last_login', {
+        p_user_id: userData.user_id
+      });
+
+      const { data: fullUser, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userData.user_id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      setUser(fullUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(fullUser));
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setProfile(null);
+    setUser(null);
+    localStorage.removeItem(SESSION_KEY);
   };
 
   const hasPermission = (action: string): boolean => {
-    if (!profile) return false;
+    if (!user) return false;
 
-    const role = profile.role;
+    const role = user.role;
 
     switch (action) {
       case 'manage_users':
@@ -122,15 +117,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAdmin = profile?.role === 'admin';
-  const isVet = profile?.role === 'vet';
-  const isTech = profile?.role === 'tech';
-  const isViewer = profile?.role === 'viewer';
+  const isAdmin = user?.role === 'admin';
+  const isVet = user?.role === 'vet';
+  const isTech = user?.role === 'tech';
+  const isViewer = user?.role === 'viewer';
 
   return (
     <AuthContext.Provider value={{
       user,
-      profile,
       loading,
       signIn,
       signOut,
