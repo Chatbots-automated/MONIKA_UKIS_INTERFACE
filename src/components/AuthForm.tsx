@@ -3,12 +3,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { Stethoscope, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export function AuthForm() {
-  const [isSignIn, setIsSignIn] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,11 +15,7 @@ export function AuthForm() {
     setLoading(true);
 
     try {
-      if (isSignIn) {
-        await signIn(email, password);
-      } else {
-        await signUp(email, password);
-      }
+      await signIn(email, password);
     } catch (err: any) {
       setError(err.message || 'Įvyko klaida');
     } finally {
@@ -60,12 +55,10 @@ export function AuthForm() {
           <div className="p-8">
             <div className="text-center mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                {isSignIn ? 'Prisijungimas' : 'Registracija'}
+                Prisijungimas
               </h2>
               <p className="text-sm text-gray-600">
-                {isSignIn
-                  ? 'Įveskite prisijungimo duomenis'
-                  : 'Sukurkite naują paskyrą'}
+                Įveskite prisijungimo duomenis
               </p>
             </div>
 
@@ -132,36 +125,12 @@ export function AuthForm() {
                   </>
                 ) : (
                   <>
-                    <span>{isSignIn ? 'Prisijungti' : 'Registruotis'}</span>
+                    <span>Prisijungti</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
               </button>
             </form>
-
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="text-center">
-                <button
-                  onClick={() => {
-                    setIsSignIn(!isSignIn);
-                    setError('');
-                  }}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1 transition-colors"
-                >
-                  {isSignIn ? (
-                    <>
-                      Neturite paskyros?
-                      <span className="underline">Registruokis čia</span>
-                    </>
-                  ) : (
-                    <>
-                      Jau turite paskyrą?
-                      <span className="underline">Prisijunkite čia</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
           </div>
 
           <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-8 py-4 border-t border-emerald-100">
