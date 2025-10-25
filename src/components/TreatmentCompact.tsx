@@ -411,6 +411,28 @@ export function TreatmentCompact() {
                     </div>
                   </div>
 
+                  {selectedProduct && selectedProduct.category === 'medicines' &&
+                   (selectedProduct.withdrawal_days_meat || selectedProduct.withdrawal_days_milk) && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <div className="text-xs">
+                        <span className="font-semibold text-amber-900">Karencinės dienos:</span>
+                        <div className="flex gap-3 mt-0.5">
+                          {selectedProduct.withdrawal_days_meat && (
+                            <span className="text-red-700 font-medium">
+                              🥩 Mėsa: {selectedProduct.withdrawal_days_meat} d.
+                            </span>
+                          )}
+                          {selectedProduct.withdrawal_days_milk && (
+                            <span className="text-blue-700 font-medium">
+                              🥛 Pienas: {selectedProduct.withdrawal_days_milk} d.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3">
                     <label className="flex items-center gap-2 text-xs">
                       <input
