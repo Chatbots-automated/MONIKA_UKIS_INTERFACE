@@ -1,10 +1,13 @@
-import { Stethoscope, Euro, ArrowRight, Package } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ModuleSelectorProps {
-  onSelectModule: (module: 'veterinarija' | 'islaidos') => void;
+  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin') => void;
 }
 
 export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
+  const { isAdmin } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-teal-800 to-emerald-900 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE0YzMuMzEgMCA2LTIuNjkgNi02cy0yLjY5LTYtNi02LTYgMi42OS02IDYgMi42OSA2IDYgNnptMCAzMGMzLjMxIDAgNi0yLjY5IDYtNnMtMi42OS02LTYtNi02IDIuNjktNiA2IDIuNjkgNiA2IDZ6TTE2IDE0YzMuMzEgMCA2LTIuNjkgNi02cy0yLjY5LTYtNi02LTYgMi42OS02IDYgMi42OSA2IDYgNnptMCAzMGMzLjMxIDAgNi0yLjY5IDYtNnMtMi42OS02LTYtNi02IDIuNjktNiA2IDIuNjkgNiA2IDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
@@ -32,7 +35,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-3 max-w-6xl' : 'md:grid-cols-2 max-w-4xl'} gap-8 mx-auto`}>
           <button
             onClick={() => onSelectModule('veterinarija')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
@@ -154,6 +157,66 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
               Greitai
             </div>
           </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => onSelectModule('admin')}
+              className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
+            >
+              <div className="bg-gradient-to-br from-red-600 to-pink-700 p-8 text-center">
+                <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Shield className="w-12 h-12 text-red-600" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">
+                  Admin
+                </h2>
+                <p className="text-red-100">
+                  Vartotojų Valdymas
+                </p>
+              </div>
+
+              <div className="p-8">
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                      <Users className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Vartotojų sąrašas</p>
+                      <p className="text-sm text-gray-600">Visų sistemos vartotojų peržiūra</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                      <Shield className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Rolių valdymas</p>
+                      <p className="text-sm text-gray-600">Keisti vartotojų teises</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Pridėti vartotojus</p>
+                      <p className="text-sm text-gray-600">Sukurti naujas paskyras</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-red-600 font-semibold group-hover:gap-4 transition-all">
+                  <span>Atidaryti sistemą</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+            </button>
+          )}
         </div>
 
         <div className="mt-12 text-center">

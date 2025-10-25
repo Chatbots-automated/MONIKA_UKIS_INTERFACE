@@ -16,7 +16,7 @@ import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { useAuth } from './contexts/AuthContext';
 
-type Module = 'veterinarija' | 'islaidos' | null;
+type Module = 'veterinarija' | 'islaidos' | 'admin' | null;
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -68,6 +68,28 @@ function App() {
               Grįžti į pradžią
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedModule === 'admin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-pink-50 to-red-50">
+        <div className="max-w-7xl mx-auto p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Admin Panel</h1>
+              <p className="text-gray-600">Vartotojų ir sistemos valdymas</p>
+            </div>
+            <button
+              onClick={() => setSelectedModule(null)}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              Grįžti į modulius
+            </button>
+          </div>
+          <UserManagement />
         </div>
       </div>
     );
