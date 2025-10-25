@@ -14,7 +14,8 @@ import {
   Stethoscope,
   LogOut,
   User,
-  Grid3x3
+  Grid3x3,
+  Users
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -26,22 +27,23 @@ interface LayoutProps {
 }
 
 const menuItems = [
-  { id: 'dashboard', label: 'Pagrindinis', icon: LayoutDashboard },
-  { id: 'inventory', label: 'Atsargos', icon: Package },
-  { id: 'receive', label: 'Priėmimas', icon: FileText },
-  { id: 'treatment', label: 'Gydymas / Nurašymas', icon: Syringe },
-  { id: 'products', label: 'Produktai', icon: Pill },
-  { id: 'animals', label: 'Gyvūnai', icon: Stethoscope },
-  { id: 'suppliers', label: 'Tiekėjai', icon: Building2 },
-  { id: 'biocides', label: 'Biocidai', icon: Droplet },
-  { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle },
-  { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2 },
-  { id: 'reports', label: 'Ataskaitos', icon: FileText },
+  { id: 'dashboard', label: 'Pagrindinis', icon: LayoutDashboard, permission: 'view' },
+  { id: 'inventory', label: 'Atsargos', icon: Package, permission: 'view' },
+  { id: 'receive', label: 'Priėmimas', icon: FileText, permission: 'receive_stock' },
+  { id: 'treatment', label: 'Gydymas / Nurašymas', icon: Syringe, permission: 'treatment' },
+  { id: 'products', label: 'Produktai', icon: Pill, permission: 'products' },
+  { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
+  { id: 'suppliers', label: 'Tiekėjai', icon: Building2, permission: 'suppliers' },
+  { id: 'biocides', label: 'Biocidai', icon: Droplet, permission: 'biocides' },
+  { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle, permission: 'products' },
+  { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2, permission: 'waste' },
+  { id: 'reports', label: 'Ataskaitos', icon: FileText, permission: 'view' },
+  { id: 'users', label: 'Vartotojai', icon: Users, permission: 'manage_users' },
 ];
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, profile, hasPermission, signOut } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -83,7 +85,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
 
           <nav className="flex-1 p-4 overflow-y-auto">
             <div className="space-y-1">
-              {menuItems.map((item) => {
+              {menuItems.filter(item => hasPermission(item.permission)).map((item) => {
                 const Icon = item.icon;
                 const isActive = currentView === item.id;
                 return (
@@ -153,7 +155,14 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                 </button>
                 <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200">
                   <User className="w-4 h-4 text-emerald-700" />
-                  <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
+                    {profile && (
+                      <span className="text-xs text-emerald-600">
+                        {profile.role === 'admin' ? 'Admin' : profile.role === 'vet' ? 'Vet' : profile.role === 'tech' ? 'Tech' : 'Viewer'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={handleSignOut}
