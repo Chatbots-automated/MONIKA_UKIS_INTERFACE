@@ -413,18 +413,18 @@ export function TreatmentCompact() {
 
                   {selectedProduct && selectedProduct.category === 'medicines' &&
                    (selectedProduct.withdrawal_days_meat || selectedProduct.withdrawal_days_milk) && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <div className="text-xs">
-                        <span className="font-semibold text-amber-900">Karencinės dienos:</span>
-                        <div className="flex gap-3 mt-0.5">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border-2 border-amber-300 rounded-lg">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <div className="text-sm">
+                        <span className="font-bold text-amber-900">Karencinės dienos:</span>
+                        <div className="flex gap-4 mt-1">
                           {selectedProduct.withdrawal_days_meat && (
-                            <span className="text-red-700 font-medium">
+                            <span className="text-red-700 font-semibold">
                               🥩 Mėsa: {selectedProduct.withdrawal_days_meat} d.
                             </span>
                           )}
                           {selectedProduct.withdrawal_days_milk && (
-                            <span className="text-blue-700 font-medium">
+                            <span className="text-blue-700 font-semibold">
                               🥛 Pienas: {selectedProduct.withdrawal_days_milk} d.
                             </span>
                           )}
@@ -488,6 +488,29 @@ export function TreatmentCompact() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
         <p><strong>Spenelio žymėjimas:</strong> LF (Kairys priekis), RF (Dešinys priekis), LR (Kairys gal.), RR (Dešinys gal.)</p>
         <p className="mt-1"><strong>Kursas:</strong> Pažymėjus "Kursas" sistema automatiškai padalins dozę per nurodytas dienas ir sukurs atskirą įrašą kiekvienai dienai.</p>
+      </div>
+
+      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3 text-xs">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-amber-900 text-sm">⚠️ SVARBU: Karencinių dienų skaičiavimas</p>
+            <p className="text-amber-800 mt-2">
+              <strong>Karencija prasideda nuo PASKUTINĖS gydymo dienos!</strong>
+            </p>
+            <div className="mt-2 space-y-1 text-amber-800">
+              <p><strong>Pavyzdys:</strong></p>
+              <p>• Gydymas pradėtas: <strong>spalio 10 d.</strong></p>
+              <p>• Kursas: <strong>3 dienos</strong> (spalio 10, 11, 12)</p>
+              <p>• Paskutinė gydymo diena: <strong>spalio 12 d.</strong></p>
+              <p>• Vaisto karencija pienui: <strong>5 dienos</strong></p>
+              <p>• Apsaugos diena: <strong>+1 diena</strong></p>
+              <p className="font-bold text-amber-900 mt-1">
+                ➜ Saugiai melžti galima: <strong>spalio 12 + 5 + 1 = spalio 19 dieną</strong>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
