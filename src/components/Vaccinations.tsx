@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Batch, Unit } from '../lib/types';
-import { Syringe, Check, Search, CheckSquare, Square } from 'lucide-react';
+import { Syringe, Check, Search, CheckSquare, Square, Calendar } from 'lucide-react';
+
+interface VaccinationGroup {
+  date: string;
+  dateLabel: string;
+  vaccinations: any[];
+}
 
 export function Vaccinations() {
   const [vaccinations, setVaccinations] = useState<any[]>([]);
@@ -123,12 +129,54 @@ export function Vaccinations() {
     }
   };
 
+  const getDateLabel = (dateStr: string): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const vacDate = new Date(dateStr);
+    vacDate.setHours(0, 0, 0, 0);
+
+    if (vacDate.getTime() === today.getTime()) {
+      return 'Šiandien';
+    } else if (vacDate.getTime() === yesterday.getTime()) {
+      return 'Vakar';
+    } else {
+      const daysDiff = Math.floor((today.getTime() - vacDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 0 && daysDiff < 7) {
+        return `Prieš ${daysDiff} d.`;
+      }
+      return dateStr;
+    }
+  };
+
+  const groupVaccinationsByDate = (): VaccinationGroup[] => {
+    const grouped = new Map<string, any[]>();
+
+    vaccinations.forEach(vac => {
+      const date = vac.vaccination_date;
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
+      grouped.get(date)!.push(vac);
+    });
+
+    return Array.from(grouped.entries()).map(([date, vacs]) => ({
+      date,
+      dateLabel: getDateLabel(date),
+      vaccinations: vacs,
+    }));
+  };
+
   const filteredAnimals = animals.filter(a =>
     a.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const availableBatches = batches.filter(b => b.product_id === massVaccinationData.product_id);
+  const groupedVaccinations = groupVaccinationsByDate();
 
   if (loading) return <div className="text-center py-8">Kraunama...</div>;
 
@@ -353,55 +401,71 @@ export function Vaccinations() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Calendar className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-bold text-gray-900">Vakcinacijų istorija</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Gyvūnas</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcina</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Dozė</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Data</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Kita vakcina</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcinavo</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {vaccinations.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    Nėra vakcinacijų
-                  </td>
-                </tr>
-              ) : (
-                vaccinations.map((vac: any) => (
-                  <tr key={vac.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {animals.find(a => a.id === vac.animal_id)?.tag_no || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {products.find(p => p.id === vac.product_id)?.name}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {vac.dose_amount} {vac.unit}
-                      {vac.dose_number > 1 && <span className="ml-1 text-xs text-gray-500">(#{vac.dose_number})</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{vac.vaccination_date}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {vac.next_booster_date || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {vac.administered_by || '-'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+
+        {groupedVaccinations.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-8 text-center">
+            <Syringe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">Nėra vakcinacijų</p>
+          </div>
+        ) : (
+          groupedVaccinations.map(group => (
+            <div key={group.date} className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200 flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-bold text-gray-900">{group.dateLabel}</h4>
+                  <p className="text-sm text-gray-600">{group.date}</p>
+                </div>
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-blue-200 shadow-sm">
+                  <Syringe className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-bold text-blue-700">
+                    {group.vaccinations.length} vakcinacij{group.vaccinations.length === 1 ? 'a' : 'os'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Gyvūnas</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcina</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Dozė</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Kita vakcina</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcinavo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {group.vaccinations.map((vac: any) => (
+                      <tr key={vac.id} className="hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {animals.find(a => a.id === vac.animal_id)?.tag_no || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {products.find(p => p.id === vac.product_id)?.name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          <span className="font-medium">{vac.dose_amount} {vac.unit}</span>
+                          {vac.dose_number > 1 && <span className="ml-1 text-xs text-gray-500">(#{vac.dose_number})</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {vac.next_booster_date || <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {vac.administered_by || <span className="text-gray-400">-</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
