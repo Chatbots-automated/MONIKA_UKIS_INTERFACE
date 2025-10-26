@@ -587,7 +587,7 @@ export function ReceiveStock() {
             </div>
 
             <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
-              <h4 className="text-lg font-bold text-gray-900 mb-4">Masinė priėmimas</h4>
+              <h4 className="text-lg font-bold text-gray-900 mb-4">Masinis priėmimas</h4>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
