@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
-import { Plus, Check, Upload, FileText, X } from 'lucide-react';
+import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle } from 'lucide-react';
 
 export function ReceiveStock() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -11,6 +11,11 @@ export function ReceiveStock() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [matchedProducts, setMatchedProducts] = useState<Map<number, Product | null>>(new Map());
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState<any>(null);
+  const [newProductCategory, setNewProductCategory] = useState('');
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -52,6 +57,15 @@ export function ReceiveStock() {
     }
   };
 
+  const searchProductMatch = async (itemDescription: string): Promise<Product | null> => {
+    const searchTerm = itemDescription.toLowerCase();
+    const match = products.find(p =>
+      p.name.toLowerCase().includes(searchTerm) ||
+      searchTerm.includes(p.name.toLowerCase())
+    );
+    return match || null;
+  };
+
   const handleFileUpload = async () => {
     if (!selectedFile) return;
 
@@ -74,13 +88,20 @@ export function ReceiveStock() {
         throw new Error(`Serverio klaida: ${response.status}`);
       }
 
+      const data = await response.json();
+      console.log('Webhook response:', data);
+
+      setInvoiceData(data[0]);
+
+      const matches = new Map<number, Product | null>();
+      for (let i = 0; i < data[0].items.length; i++) {
+        const match = await searchProductMatch(data[0].items[i].description);
+        matches.set(i, match);
+      }
+      setMatchedProducts(matches);
+
       setUploadStatus('success');
-      setUploadMessage('PDF sėkmingai įkeltas!');
-      setTimeout(() => {
-        setSelectedFile(null);
-        setUploadStatus('idle');
-        setUploadMessage('');
-      }, 3000);
+      setUploadMessage(`PDF sėkmingai įkeltas! Rasta ${data[0].items.length} prekių.`);
     } catch (error: any) {
       setUploadStatus('error');
       setUploadMessage(`Klaida: ${error.message}`);
@@ -91,6 +112,51 @@ export function ReceiveStock() {
     setSelectedFile(null);
     setUploadStatus('idle');
     setUploadMessage('');
+    setInvoiceData(null);
+    setMatchedProducts(new Map());
+  };
+
+  const handleCreateProduct = (item: any) => {
+    setCreatingProduct(item);
+    setShowCreateModal(true);
+  };
+
+  const handleSaveNewProduct = async () => {
+    if (!creatingProduct || !newProductCategory) {
+      alert('Pasirinkite produkto kategoriją');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .insert({
+          name: creatingProduct.description,
+          category: newProductCategory,
+          unit: creatingProduct.unit || 'vnt',
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await loadData();
+
+      const itemIndex = invoiceData.items.findIndex((i: any) => i.line_no === creatingProduct.line_no);
+      if (itemIndex !== -1) {
+        const newMatches = new Map(matchedProducts);
+        newMatches.set(itemIndex, data);
+        setMatchedProducts(newMatches);
+      }
+
+      setShowCreateModal(false);
+      setCreatingProduct(null);
+      setNewProductCategory('');
+      alert('Produktas sėkmingai sukurtas!');
+    } catch (error: any) {
+      alert('Klaida kuriant produktą: ' + error.message);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -229,8 +295,167 @@ export function ReceiveStock() {
           )}
         </div>
 
+        {invoiceData && (
+          <div className="mb-6 p-6 bg-white border-2 border-gray-200 rounded-xl">
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Sąskaitos duomenys</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Sąskaita Nr.</p>
+                  <p className="font-semibold text-gray-900">{invoiceData.invoice.number}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Data</p>
+                  <p className="font-semibold text-gray-900">{invoiceData.invoice.date}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Tiekėjas</p>
+                  <p className="font-semibold text-gray-900">{invoiceData.supplier.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Viso suma</p>
+                  <p className="font-semibold text-emerald-700 text-lg">
+                    €{invoiceData.invoice.total_gross.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-bold text-gray-900 mb-3">Prekės ({invoiceData.items.length})</h4>
+              <div className="space-y-3">
+                {invoiceData.items.map((item: any, index: number) => {
+                  const matchedProduct = matchedProducts.get(index);
+                  const isMatched = matchedProduct !== undefined && matchedProduct !== null;
+
+                  return (
+                    <div
+                      key={item.line_no}
+                      className={`p-4 rounded-lg border-2 ${
+                        isMatched
+                          ? 'bg-emerald-50 border-emerald-300'
+                          : 'bg-amber-50 border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {isMatched ? (
+                              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                            ) : (
+                              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                            )}
+                            <span className="font-semibold text-gray-900">
+                              #{item.line_no}: {item.description}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm ml-7">
+                            <div>
+                              <span className="text-gray-600">SKU:</span>{' '}
+                              <span className="font-medium">{item.sku}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Kiekis:</span>{' '}
+                              <span className="font-medium">{item.qty} {item.unit}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Kaina:</span>{' '}
+                              <span className="font-medium">€{item.unit_price.toFixed(2)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Suma:</span>{' '}
+                              <span className="font-medium text-emerald-700">€{item.net.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {isMatched ? (
+                            <div className="mt-3 ml-7 p-2 bg-white rounded border border-emerald-200">
+                              <p className="text-sm text-emerald-800">
+                                <strong>Rastas produktas:</strong> {matchedProduct.name} ({matchedProduct.category})
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mt-3 ml-7">
+                              <p className="text-sm text-amber-800 mb-2">
+                                <strong>Produktas nerastas sistemoje</strong>
+                              </p>
+                              <button
+                                onClick={() => handleCreateProduct(item)}
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
+                              >
+                                <PlusCircle className="w-4 h-4" />
+                                Sukurti naują produktą
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują produktą</h3>
+
+              {creatingProduct && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-1">Pavadinimas:</p>
+                  <p className="font-semibold text-gray-900">{creatingProduct.description}</p>
+                  <p className="text-sm text-gray-600 mt-2 mb-1">Vienetas:</p>
+                  <p className="font-semibold text-gray-900">{creatingProduct.unit}</p>
+                </div>
+              )}
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pasirinkite kategoriją *
+                </label>
+                <select
+                  value={newProductCategory}
+                  onChange={(e) => setNewProductCategory(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="">Pasirinkite...</option>
+                  <option value="medicines">Vaistai</option>
+                  <option value="vaccines">Vakcinos</option>
+                  <option value="supplements">Priedai</option>
+                  <option value="equipment">Įranga</option>
+                  <option value="consumables">Suvartojamos medžiagos</option>
+                  <option value="other">Kita</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreatingProduct(null);
+                    setNewProductCategory('');
+                  }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={handleSaveNewProduct}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  Sukurti
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="border-t-2 border-gray-200 pt-6 mb-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Priėmimo duomenys</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Rankinis priėmimo registravimas</h3>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
