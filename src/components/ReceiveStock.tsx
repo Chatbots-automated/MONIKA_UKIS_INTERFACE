@@ -171,12 +171,26 @@ export function ReceiveStock() {
     }
 
     try {
+      const unitMap: { [key: string]: string } = {
+        'vnt': 'pcs',
+        'Butelis': 'pcs',
+        'Buteli': 'pcs',
+        'ml': 'ml',
+        'l': 'l',
+        'g': 'g',
+        'kg': 'kg',
+        'dėž': 'pcs'
+      };
+
+      const mappedUnit = unitMap[creatingProduct.unit] || 'pcs';
+
       const { data, error } = await supabase
         .from('products')
         .insert({
           name: creatingProduct.description,
           category: newProductCategory,
-          unit: creatingProduct.unit || 'vnt',
+          primary_pack_unit: mappedUnit,
+          primary_pack_size: creatingProduct.qty || 1,
           is_active: true,
         })
         .select()
