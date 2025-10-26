@@ -336,7 +336,7 @@ export function ReceiveStock() {
 
             <div>
               <h4 className="text-lg font-bold text-gray-900 mb-3">Prekės ({invoiceData.items.length})</h4>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {invoiceData.items.map((item: any, index: number) => {
                   const matchedProduct = matchedProducts.get(index);
                   const isMatched = matchedProduct !== undefined && matchedProduct !== null;
@@ -344,66 +344,60 @@ export function ReceiveStock() {
                   return (
                     <div
                       key={item.line_no}
-                      className={`p-4 rounded-lg border-2 ${
+                      className={`p-3 rounded-lg border-2 ${
                         isMatched
                           ? 'bg-emerald-50 border-emerald-300'
                           : 'bg-amber-50 border-amber-300'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            {isMatched ? (
-                              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                            ) : (
-                              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                            )}
-                            <span className="font-semibold text-gray-900">
-                              #{item.line_no}: {item.description}
-                            </span>
-                          </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        {isMatched ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        )}
+                        <span className="font-semibold text-gray-900 text-sm">
+                          #{item.line_no}: {item.description}
+                        </span>
+                      </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm ml-7">
-                            <div>
-                              <span className="text-gray-600">SKU:</span>{' '}
-                              <span className="font-medium">{item.sku}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Kiekis:</span>{' '}
-                              <span className="font-medium">{item.qty} {item.unit}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Kaina:</span>{' '}
-                              <span className="font-medium">€{item.unit_price.toFixed(2)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Suma:</span>{' '}
-                              <span className="font-medium text-emerald-700">€{item.net.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {isMatched ? (
-                            <div className="mt-3 ml-7 p-2 bg-white rounded border border-emerald-200">
-                              <p className="text-sm text-emerald-800">
-                                <strong>Rastas produktas:</strong> {matchedProduct.name} ({matchedProduct.category})
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="mt-3 ml-7">
-                              <p className="text-sm text-amber-800 mb-2">
-                                <strong>Produktas nerastas sistemoje</strong>
-                              </p>
-                              <button
-                                onClick={() => handleCreateProduct(item)}
-                                className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
-                              >
-                                <PlusCircle className="w-4 h-4" />
-                                Sukurti naują produktą
-                              </button>
-                            </div>
-                          )}
+                      <div className="grid grid-cols-4 gap-2 text-xs mb-2">
+                        <div>
+                          <span className="text-gray-600">SKU:</span>{' '}
+                          <span className="font-medium">{item.sku}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Kiekis:</span>{' '}
+                          <span className="font-medium">{item.qty} {item.unit}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Kaina:</span>{' '}
+                          <span className="font-medium">€{item.unit_price.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Suma:</span>{' '}
+                          <span className="font-medium text-emerald-700">€{item.net.toFixed(2)}</span>
                         </div>
                       </div>
+
+                      {isMatched ? (
+                        <div className="text-xs text-emerald-800 bg-white px-2 py-1 rounded border border-emerald-200">
+                          <strong>Rastas produktas:</strong> {matchedProduct.name} ({matchedProduct.category})
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-amber-800 font-semibold">
+                            Produktas nerastas sistemoje
+                          </p>
+                          <button
+                            onClick={() => handleCreateProduct(item)}
+                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
+                          >
+                            <PlusCircle className="w-3 h-3" />
+                            Sukurti naują produktą
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
