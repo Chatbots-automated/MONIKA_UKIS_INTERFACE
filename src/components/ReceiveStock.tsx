@@ -13,9 +13,17 @@ export function ReceiveStock() {
   const [uploadMessage, setUploadMessage] = useState('');
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [matchedProducts, setMatchedProducts] = useState<Map<number, Product | null>>(new Map());
+  const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creatingProduct, setCreatingProduct] = useState<any>(null);
   const [newProductCategory, setNewProductCategory] = useState('');
+  const [bulkReceiveData, setBulkReceiveData] = useState({
+    lot: '',
+    mfg_date: '',
+    expiry_date: '',
+    doc_date: new Date().toISOString().split('T')[0],
+  });
+  const [bulkReceiving, setBulkReceiving] = useState(false);
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -127,6 +135,28 @@ export function ReceiveStock() {
     setUploadMessage('');
     setInvoiceData(null);
     setMatchedProducts(new Map());
+    setEditedItems(new Map());
+  };
+
+  const getItemData = (item: any, index: number) => {
+    const edited = editedItems.get(index);
+    return edited || item;
+  };
+
+  const handleItemEdit = (index: number, field: string, value: any) => {
+    const currentItem = invoiceData.items[index];
+    const edited = editedItems.get(index) || { ...currentItem };
+    edited[field] = value;
+    const newEdited = new Map(editedItems);
+    newEdited.set(index, edited);
+    setEditedItems(newEdited);
+  };
+
+  const handleProductMatch = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    const newMatches = new Map(matchedProducts);
+    newMatches.set(index, product || null);
+    setMatchedProducts(newMatches);
   };
 
   const handleCreateProduct = (item: any) => {
@@ -169,6 +199,108 @@ export function ReceiveStock() {
       alert('Produktas sėkmingai sukurtas!');
     } catch (error: any) {
       alert('Klaida kuriant produktą: ' + error.message);
+    }
+  };
+
+  const handleBulkReceive = async () => {
+    if (!invoiceData || !invoiceData.supplier) {
+      alert('Nėra sąskaitos duomenų');
+      return;
+    }
+
+    const matchedItems = invoiceData.items.filter((_: any, index: number) => {
+      const matched = matchedProducts.get(index);
+      return matched !== undefined && matched !== null;
+    });
+
+    if (matchedItems.length === 0) {
+      alert('Nėra susieti produktai. Prašome susieti produktus prieš priėmimą.');
+      return;
+    }
+
+    if (!bulkReceiveData.lot || !bulkReceiveData.expiry_date) {
+      alert('Įveskite partijos numerį ir galiojimo datą');
+      return;
+    }
+
+    setBulkReceiving(true);
+
+    try {
+      let supplierId = invoiceData.supplier_id;
+
+      if (!supplierId) {
+        const { data: existingSupplier } = await supabase
+          .from('suppliers')
+          .select('id')
+          .eq('name', invoiceData.supplier.name)
+          .maybeSingle();
+
+        if (existingSupplier) {
+          supplierId = existingSupplier.id;
+        } else {
+          const { data: newSupplier, error: supplierError } = await supabase
+            .from('suppliers')
+            .insert({
+              name: invoiceData.supplier.name,
+              code: invoiceData.supplier.code,
+              vat_code: invoiceData.supplier.vat_code,
+              iban: invoiceData.supplier.iban,
+              address: invoiceData.supplier.address,
+            })
+            .select()
+            .single();
+
+          if (supplierError) throw supplierError;
+          supplierId = newSupplier.id;
+        }
+      }
+
+      const stockEntries = [];
+      for (let i = 0; i < invoiceData.items.length; i++) {
+        const matched = matchedProducts.get(i);
+        if (!matched) continue;
+
+        const itemData = getItemData(invoiceData.items[i], i);
+
+        stockEntries.push({
+          product_id: matched.id,
+          lot: bulkReceiveData.lot,
+          mfg_date: bulkReceiveData.mfg_date || null,
+          expiry_date: bulkReceiveData.expiry_date,
+          supplier_id: supplierId,
+          doc_title: 'Invoice',
+          doc_number: invoiceData.invoice.number,
+          doc_date: bulkReceiveData.doc_date,
+          purchase_price: parseFloat(itemData.unit_price) || 0,
+          currency: invoiceData.invoice.currency,
+          received_qty: parseFloat(itemData.qty) || 0,
+        });
+      }
+
+      const { error: insertError } = await supabase
+        .from('stock_receipts')
+        .insert(stockEntries);
+
+      if (insertError) throw insertError;
+
+      alert(`Sėkmingai priimta ${stockEntries.length} produktų!`);
+      setInvoiceData(null);
+      setMatchedProducts(new Map());
+      setEditedItems(new Map());
+      setSelectedFile(null);
+      setUploadStatus('idle');
+      setBulkReceiveData({
+        lot: '',
+        mfg_date: '',
+        expiry_date: '',
+        doc_date: new Date().toISOString().split('T')[0],
+      });
+
+      await loadData();
+    } catch (error: any) {
+      alert('Klaida priimant produktus: ' + error.message);
+    } finally {
+      setBulkReceiving(false);
     }
   };
 
@@ -364,37 +496,87 @@ export function ReceiveStock() {
                       <div className="grid grid-cols-4 gap-2 text-xs mb-2">
                         <div>
                           <span className="text-gray-600">SKU:</span>{' '}
-                          <span className="font-medium">{item.sku}</span>
+                          <input
+                            type="text"
+                            value={getItemData(item, index).sku}
+                            onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
+                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                          />
                         </div>
                         <div>
                           <span className="text-gray-600">Kiekis:</span>{' '}
-                          <span className="font-medium">{item.qty} {item.unit}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={getItemData(item, index).qty}
+                            onChange={(e) => handleItemEdit(index, 'qty', e.target.value)}
+                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                          />
                         </div>
                         <div>
                           <span className="text-gray-600">Kaina:</span>{' '}
-                          <span className="font-medium">€{item.unit_price.toFixed(2)}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={getItemData(item, index).unit_price}
+                            onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
+                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                          />
                         </div>
                         <div>
                           <span className="text-gray-600">Suma:</span>{' '}
-                          <span className="font-medium text-emerald-700">€{item.net.toFixed(2)}</span>
+                          <span className="font-medium text-emerald-700">
+                            €{(getItemData(item, index).qty * getItemData(item, index).unit_price).toFixed(2)}
+                          </span>
                         </div>
                       </div>
 
                       {isMatched ? (
-                        <div className="text-xs text-emerald-800 bg-white px-2 py-1 rounded border border-emerald-200">
-                          <strong>Rastas produktas:</strong> {matchedProduct.name} ({matchedProduct.category})
+                        <div className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-emerald-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-800"><strong>Produktas:</strong></span>
+                            <select
+                              value={matchedProduct.id}
+                              onChange={(e) => handleProductMatch(index, e.target.value)}
+                              className="px-2 py-0.5 border border-emerald-300 rounded text-xs bg-white"
+                            >
+                              {products.filter(p => p.is_active).map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.category})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
-                          <p className="text-xs text-amber-800 font-semibold">
-                            Produktas nerastas sistemoje
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-amber-800 font-semibold">
+                              Produktas nerastas
+                            </p>
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleProductMatch(index, e.target.value);
+                                }
+                              }}
+                              className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white"
+                              defaultValue=""
+                            >
+                              <option value="">Pasirinkti esamą...</option>
+                              {products.filter(p => p.is_active).map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.category})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <button
                             onClick={() => handleCreateProduct(item)}
                             className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
                           >
                             <PlusCircle className="w-3 h-3" />
-                            Sukurti naują produktą
+                            Sukurti naują
                           </button>
                         </div>
                       )}
@@ -402,6 +584,65 @@ export function ReceiveStock() {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
+              <h4 className="text-lg font-bold text-gray-900 mb-4">Masinė priėmimas</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Partija *
+                  </label>
+                  <input
+                    type="text"
+                    value={bulkReceiveData.lot}
+                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, lot: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="LOT-12345"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Gamybos data
+                  </label>
+                  <input
+                    type="date"
+                    value={bulkReceiveData.mfg_date}
+                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, mfg_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Galiojimo data *
+                  </label>
+                  <input
+                    type="date"
+                    value={bulkReceiveData.expiry_date}
+                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, expiry_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dokumento data *
+                  </label>
+                  <input
+                    type="date"
+                    value={bulkReceiveData.doc_date}
+                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, doc_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleBulkReceive}
+                disabled={bulkReceiving}
+                className="w-full px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5" />
+                {bulkReceiving ? 'Priimama...' : `Priimti visus susietus produktus (${Array.from(matchedProducts.values()).filter(p => p !== null).length})`}
+              </button>
             </div>
           </div>
         )}
