@@ -91,17 +91,30 @@ export function ReceiveStock() {
       const data = await response.json();
       console.log('Webhook response:', data);
 
-      setInvoiceData(data[0]);
+      let invoiceObject;
+      if (Array.isArray(data) && data.length > 0) {
+        invoiceObject = data[0];
+      } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+        invoiceObject = data;
+      } else {
+        throw new Error('Netinkamas atsakymo formatas');
+      }
+
+      if (!invoiceObject.items || !Array.isArray(invoiceObject.items)) {
+        throw new Error('Atsakyme nerasta prekių sąrašo');
+      }
+
+      setInvoiceData(invoiceObject);
 
       const matches = new Map<number, Product | null>();
-      for (let i = 0; i < data[0].items.length; i++) {
-        const match = await searchProductMatch(data[0].items[i].description);
+      for (let i = 0; i < invoiceObject.items.length; i++) {
+        const match = await searchProductMatch(invoiceObject.items[i].description);
         matches.set(i, match);
       }
       setMatchedProducts(matches);
 
       setUploadStatus('success');
-      setUploadMessage(`PDF sėkmingai įkeltas! Rasta ${data[0].items.length} prekių.`);
+      setUploadMessage(`PDF sėkmingai įkeltas! Rasta ${invoiceObject.items.length} prekių.`);
     } catch (error: any) {
       setUploadStatus('error');
       setUploadMessage(`Klaida: ${error.message}`);
