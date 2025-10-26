@@ -1,13 +1,24 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Animal } from '../lib/types';
-import { Plus, Edit2, Save, X, Stethoscope } from 'lucide-react';
+import { Animal, Product, Disease } from '../lib/types';
+import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin } from 'lucide-react';
+
+interface AnimalDetail extends Animal {
+  treatments?: any[];
+  vaccinations?: any[];
+  treatment_courses?: any[];
+}
 
 export function Animals() {
   const [animals, setAnimals] = useState<Animal[]>([]);
+  const [selectedAnimal, setSelectedAnimal] = useState<AnimalDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [diseases, setDiseases] = useState<Disease[]>([]);
 
   const emptyAnimal = {
     tag_no: '',
@@ -21,22 +32,64 @@ export function Animals() {
   const [formData, setFormData] = useState(emptyAnimal);
 
   useEffect(() => {
-    loadAnimals();
+    loadData();
   }, []);
 
-  const loadAnimals = async () => {
+  const loadData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('animals')
-        .select('*')
-        .order('tag_no');
+      const [animalsRes, productsRes, diseasesRes] = await Promise.all([
+        supabase.from('animals').select('*').order('tag_no'),
+        supabase.from('products').select('*').eq('is_active', true),
+        supabase.from('diseases').select('*'),
+      ]);
 
-      if (error) throw error;
-      setAnimals(data || []);
+      setAnimals(animalsRes.data || []);
+      setProducts(productsRes.data || []);
+      setDiseases(diseasesRes.data || []);
     } catch (error) {
-      console.error('Error loading animals:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAnimalDetails = async (animalId: string) => {
+    setDetailLoading(true);
+    try {
+      const [treatmentsRes, vaccinationsRes, coursesRes] = await Promise.all([
+        supabase
+          .from('treatments')
+          .select('*')
+          .eq('animal_id', animalId)
+          .order('reg_date', { ascending: false }),
+        supabase
+          .from('vaccinations')
+          .select('*')
+          .eq('animal_id', animalId)
+          .order('vaccination_date', { ascending: false }),
+        supabase
+          .from('treatment_courses')
+          .select(`
+            *,
+            treatments!inner(animal_id)
+          `)
+          .eq('treatments.animal_id', animalId)
+          .order('start_date', { ascending: false }),
+      ]);
+
+      const animal = animals.find(a => a.id === animalId);
+      if (animal) {
+        setSelectedAnimal({
+          ...animal,
+          treatments: treatmentsRes.data || [],
+          vaccinations: vaccinationsRes.data || [],
+          treatment_courses: coursesRes.data || [],
+        });
+      }
+    } catch (error) {
+      console.error('Error loading animal details:', error);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -69,7 +122,7 @@ export function Animals() {
       }
 
       setFormData(emptyAnimal);
-      await loadAnimals();
+      await loadData();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
     }
@@ -93,6 +146,30 @@ export function Animals() {
     setFormData(emptyAnimal);
   };
 
+  const searchAnimals = (term: string): Animal[] => {
+    if (!term) return animals;
+
+    const searchLower = term.toLowerCase().trim();
+
+    return animals.filter(animal => {
+      const tagNo = animal.tag_no?.toLowerCase() || '';
+      const holderName = animal.holder_name?.toLowerCase() || '';
+      const holderAddress = animal.holder_address?.toLowerCase() || '';
+
+      if (tagNo.includes(searchLower)) return true;
+      if (holderName.includes(searchLower)) return true;
+      if (holderAddress.includes(searchLower)) return true;
+
+      const last5Digits = tagNo.slice(-5);
+      const reversed = last5Digits.split('').reverse().join('');
+      if (reversed.includes(searchLower)) return true;
+
+      return false;
+    });
+  };
+
+  const filteredAnimals = searchAnimals(searchTerm);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -101,16 +178,375 @@ export function Animals() {
     );
   }
 
+  if (selectedAnimal) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSelectedAnimal(null)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            <X className="w-4 h-4" />
+            Grįžti
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Gyvūno detalės</h2>
+            <p className="text-sm text-gray-600">Pilna informacija apie gyvūną</p>
+          </div>
+        </div>
+
+        {detailLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-6">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-white/20 p-3 rounded-lg">
+                    <Stethoscope className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-blue-100">Ženklo numeris</p>
+                    <p className="text-2xl font-bold">{selectedAnimal.tag_no || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="space-y-3 pt-4 border-t border-blue-400">
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-100">Rūšis:</span>
+                    <span className="font-semibold">{selectedAnimal.species}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-100">Lytis:</span>
+                    <span className="font-semibold">{selectedAnimal.sex === 'male' ? 'Patinas' : selectedAnimal.sex === 'female' ? 'Patelė' : 'N/A'}</span>
+                  </div>
+                  {selectedAnimal.age_months && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-blue-100">Amžius:</span>
+                      <span className="font-semibold">{selectedAnimal.age_months} mėn.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-gray-600" />
+                  Savininko informacija
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Savininkas</p>
+                    <p className="font-medium text-gray-900">{selectedAnimal.holder_name || 'N/A'}</p>
+                  </div>
+                  {selectedAnimal.holder_address && (
+                    <div>
+                      <p className="text-sm text-gray-600 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        Adresas
+                      </p>
+                      <p className="font-medium text-gray-900">{selectedAnimal.holder_address}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Statistika</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Syringe className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-900">Vakcinacijos</span>
+                    </div>
+                    <span className="text-2xl font-bold text-green-700">
+                      {selectedAnimal.vaccinations?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-900">Gydymai</span>
+                    </div>
+                    <span className="text-2xl font-bold text-blue-700">
+                      {selectedAnimal.treatments?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-purple-600" />
+                      <span className="text-sm font-medium text-purple-900">Kursai</span>
+                    </div>
+                    <span className="text-2xl font-bold text-purple-700">
+                      {selectedAnimal.treatment_courses?.length || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b-2 border-green-200">
+                  <div className="flex items-center gap-2">
+                    <Syringe className="w-5 h-5 text-green-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Vakcinacijų istorija</h3>
+                    <span className="ml-auto bg-green-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {selectedAnimal.vaccinations?.length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {!selectedAnimal.vaccinations || selectedAnimal.vaccinations.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Syringe className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">Nėra vakcinacijų įrašų</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedAnimal.vaccinations.map((vac: any) => (
+                        <div key={vac.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-green-300 transition-colors">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">
+                                {products.find(p => p.id === vac.product_id)?.name || 'Nežinoma vakcina'}
+                              </h4>
+                              <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {vac.vaccination_date}
+                                </span>
+                                <span className="font-medium">{vac.dose_amount} {vac.unit}</span>
+                                {vac.dose_number > 1 && (
+                                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">
+                                    Dozė #{vac.dose_number}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {vac.next_booster_date && (
+                            <div className="mt-2 pt-2 border-t border-gray-200 text-sm">
+                              <span className="text-gray-600">Kita vakcina: </span>
+                              <span className="font-medium text-gray-900">{vac.next_booster_date}</span>
+                            </div>
+                          )}
+                          {vac.administered_by && (
+                            <div className="mt-1 text-sm text-gray-600">
+                              <span>Vakcinavo: </span>
+                              <span className="font-medium">{vac.administered_by}</span>
+                            </div>
+                          )}
+                          {vac.notes && (
+                            <div className="mt-2 text-sm text-gray-600 italic">
+                              {vac.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Gydymų istorija</h3>
+                    <span className="ml-auto bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {selectedAnimal.treatments?.length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {!selectedAnimal.treatments || selectedAnimal.treatments.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">Nėra gydymų įrašų</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedAnimal.treatments.map((treatment: any) => {
+                        const disease = diseases.find(d => d.id === treatment.disease_id);
+                        return (
+                          <div key={treatment.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                {disease && (
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <AlertCircle className="w-4 h-4 text-red-500" />
+                                    <h4 className="font-semibold text-gray-900">
+                                      {disease.name}
+                                      {disease.code && <span className="text-gray-500 text-sm ml-2">({disease.code})</span>}
+                                    </h4>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-4 text-sm text-gray-600">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {treatment.reg_date}
+                                  </span>
+                                  {treatment.outcome && (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      treatment.outcome === 'recovered' ? 'bg-green-100 text-green-700' :
+                                      treatment.outcome === 'ongoing' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-red-100 text-red-700'
+                                    }`}>
+                                      {treatment.outcome === 'recovered' ? 'Pasveiko' :
+                                       treatment.outcome === 'ongoing' ? 'Tęsiasi' :
+                                       treatment.outcome === 'died' ? 'Žuvo' : treatment.outcome}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {treatment.clinical_diagnosis && (
+                              <div className="mt-2 text-sm">
+                                <span className="text-gray-600">Diagnozė: </span>
+                                <span className="text-gray-900">{treatment.clinical_diagnosis}</span>
+                              </div>
+                            )}
+
+                            {treatment.animal_condition && (
+                              <div className="mt-1 text-sm">
+                                <span className="text-gray-600">Būklė: </span>
+                                <span className="text-gray-900">{treatment.animal_condition}</span>
+                              </div>
+                            )}
+
+                            {treatment.mastitis_teat && (
+                              <div className="mt-1 text-sm">
+                                <span className="text-gray-600">Spenys: </span>
+                                <span className="text-gray-900">{treatment.mastitis_teat}</span>
+                                {treatment.mastitis_type && (
+                                  <span className="ml-2 text-gray-600">
+                                    ({treatment.mastitis_type === 'new' ? 'Nauja' : 'Pasikartojanti'})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {(treatment.withdrawal_until_meat || treatment.withdrawal_until_milk) && (
+                              <div className="mt-2 pt-2 border-t border-gray-200 text-sm">
+                                {treatment.withdrawal_until_meat && (
+                                  <div className="text-orange-600 font-medium">
+                                    ⚠ Skerdimo karantinas iki: {treatment.withdrawal_until_meat}
+                                  </div>
+                                )}
+                                {treatment.withdrawal_until_milk && (
+                                  <div className="text-orange-600 font-medium">
+                                    ⚠ Pieno karantinas iki: {treatment.withdrawal_until_milk}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {treatment.vet_name && (
+                              <div className="mt-2 text-sm text-gray-600">
+                                <span>Gydė: </span>
+                                <span className="font-medium">{treatment.vet_name}</span>
+                              </div>
+                            )}
+
+                            {treatment.notes && (
+                              <div className="mt-2 text-sm text-gray-600 italic">
+                                {treatment.notes}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-200">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-purple-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Gydymo kursai</h3>
+                    <span className="ml-auto bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {selectedAnimal.treatment_courses?.length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {!selectedAnimal.treatment_courses || selectedAnimal.treatment_courses.length === 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">Nėra gydymo kursų</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedAnimal.treatment_courses.map((course: any) => (
+                        <div key={course.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">
+                                {products.find(p => p.id === course.product_id)?.name || 'Nežinomas produktas'}
+                              </h4>
+                              <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Nuo {course.start_date}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  course.status === 'active' ? 'bg-green-100 text-green-700' :
+                                  course.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {course.status === 'active' ? 'Aktyvus' :
+                                   course.status === 'completed' ? 'Baigtas' :
+                                   'Atšauktas'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                            <div>
+                              <span className="text-gray-600">Dienos: </span>
+                              <span className="font-medium">{course.days}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Dozė/dieną: </span>
+                              <span className="font-medium">{course.daily_dose} {course.unit}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Viso dozė: </span>
+                              <span className="font-medium">{course.total_dose} {course.unit}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Duota dozių: </span>
+                              <span className="font-medium">{course.doses_administered || 0} / {course.days}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-blue-50 p-2 rounded-lg">
             <Stethoscope className="w-6 h-6 text-blue-600" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">Gyvūnų registras</h2>
-            <p className="text-sm text-gray-600">Valdyti gyvūnų įrašus ir savininkų informaciją</p>
+            <p className="text-sm text-gray-600">Ieškokite pagal paskutinius 5 skaitmenis (atvirkštine tvarka)</p>
           </div>
         </div>
         {!showAdd && (
@@ -122,6 +558,17 @@ export function Animals() {
             Pridėti gyvūną
           </button>
         )}
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Ieškoti pagal ženklo numerį, savininkąarba paskutinius 5 skaitmenis atvirkštine tvarka (pvz., 71517)..."
+          className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
       </div>
 
       {showAdd && (
@@ -211,7 +658,7 @@ export function Animals() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {animals.map((animal) => (
+              {filteredAnimals.map((animal) => (
                 <tr key={animal.id} className="hover:bg-gray-50 transition-colors">
                   {editing === animal.id ? (
                     <>
@@ -236,9 +683,9 @@ export function Animals() {
                             onChange={(e) => setFormData({ ...formData, sex: e.target.value })}
                             className="px-4 py-2 border border-gray-300 rounded-lg"
                           >
-                            <option value="">Select sex...</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
+                            <option value="">Pasirinkite lytį...</option>
+                            <option value="male">Patinas</option>
+                            <option value="female">Patelė</option>
                           </select>
                           <input
                             type="number"
@@ -280,9 +727,16 @@ export function Animals() {
                     </>
                   ) : (
                     <>
-                      <td className="px-6 py-4 font-medium text-gray-900">{animal.tag_no || 'N/A'}</td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => loadAnimalDetails(animal.id)}
+                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {animal.tag_no || 'N/A'}
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.species}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{animal.sex === 'male' ? 'Patinas' : animal.sex === 'female' ? 'Patelė' : 'N/A'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}
                       </td>
@@ -305,6 +759,14 @@ export function Animals() {
             </tbody>
           </table>
         </div>
+
+        {filteredAnimals.length === 0 && (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">Nerasta gyvūnų</p>
+            <p className="text-gray-400 text-sm mt-1">Pabandykite kitą paieškos užklausą</p>
+          </div>
+        )}
       </div>
     </div>
   );
