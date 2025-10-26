@@ -256,10 +256,8 @@ export function ReceiveStock() {
             .from('suppliers')
             .insert({
               name: invoiceData.supplier.name,
-              code: invoiceData.supplier.code,
-              vat_code: invoiceData.supplier.vat_code,
-              iban: invoiceData.supplier.iban,
-              address: invoiceData.supplier.address,
+              code: invoiceData.supplier.code || null,
+              vat_code: invoiceData.supplier.vat_code || null,
             })
             .select()
             .single();
@@ -292,7 +290,7 @@ export function ReceiveStock() {
       }
 
       const { error: insertError } = await supabase
-        .from('stock_receipts')
+        .from('batches')
         .insert(stockEntries);
 
       if (insertError) throw insertError;
