@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Disease, StockByBatch, Unit } from '../lib/types';
-import { Syringe, Plus, Trash2, Check } from 'lucide-react';
+import { Syringe, Plus, Trash2, Check, Search } from 'lucide-react';
 import { formatDateLT, getDaysUntil } from '../lib/formatters';
 
 interface UsageLine {
@@ -20,6 +20,7 @@ export function Treatment() {
   const [batches, setBatches] = useState<(StockByBatch & { products?: { name: string }; batches?: { expiry_date: string | null } })[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [animalSearch, setAnimalSearch] = useState('');
 
   const [formData, setFormData] = useState({
     reg_date: new Date().toISOString().split('T')[0],
@@ -283,17 +284,37 @@ export function Treatment() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Gyvūnas
                 </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Ieškoti pagal paskutinius 5 skaitmenis..."
+                    value={animalSearch}
+                    onChange={(e) => setAnimalSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+                  />
+                </div>
                 <select
                   value={formData.animal_id}
                   onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  size={5}
                 >
                   <option value="">Pasirinkite gyvūną...</option>
-                  {animals.map((animal) => (
-                    <option key={animal.id} value={animal.id}>
-                      {animal.tag_no} - {animal.species} ({animal.holder_name})
-                    </option>
-                  ))}
+                  {animals
+                    .filter(animal => {
+                      if (!animalSearch) return true;
+                      const last5 = animal.tag_no.slice(-5);
+                      const reversed = last5.split('').reverse().join('');
+                      return reversed.toLowerCase().includes(animalSearch.toLowerCase()) ||
+                             animal.tag_no.toLowerCase().includes(animalSearch.toLowerCase()) ||
+                             animal.holder_name?.toLowerCase().includes(animalSearch.toLowerCase());
+                    })
+                    .map((animal) => (
+                      <option key={animal.id} value={animal.id}>
+                        {animal.tag_no} - {animal.species} ({animal.holder_name})
+                      </option>
+                    ))}
                 </select>
               </div>
 
