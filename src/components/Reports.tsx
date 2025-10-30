@@ -246,54 +246,106 @@ export function Reports() {
   const loadReport = async () => {
     setLoading(true);
     try {
-      let query;
+      let result: any[] = [];
 
       switch (reportType) {
-        case 'drug_journal':
-          query = supabase.from('vw_vet_drug_journal').select('*');
-          if (filterProduct) query = query.eq('product_id', filterProduct);
-          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
-          if (filterInvoice) query = query.ilike('invoice_number', `%${filterInvoice}%`);
+        case 'drug_journal': {
+          let query = supabase.from('vw_vet_drug_journal').select('*');
           if (dateFrom) query = query.gte('receipt_date', dateFrom);
           if (dateTo) query = query.lte('receipt_date', dateTo);
+          if (filterProduct) query = query.eq('product_id', filterProduct);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
+
+          if (filterBatch) {
+            result = result.filter(r => r.batch_number?.toLowerCase().includes(filterBatch.toLowerCase()));
+          }
+          if (filterInvoice) {
+            result = result.filter(r => r.invoice_number?.toLowerCase().includes(filterInvoice.toLowerCase()));
+          }
           break;
-        case 'treated_animals':
-          query = supabase.from('vw_treated_animals').select('*');
-          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
-          if (filterProduct) query = query.ilike('products_used', `%${products.find(p => p.id === filterProduct)?.name}%`);
-          if (filterDisease) query = query.eq('disease_id', filterDisease);
-          if (filterVet) query = query.ilike('veterinarian', `%${filterVet}%`);
+        }
+
+        case 'treated_animals': {
+          let query = supabase.from('vw_treated_animals').select('*');
           if (dateFrom) query = query.gte('registration_date', dateFrom);
           if (dateTo) query = query.lte('registration_date', dateTo);
+          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+          if (filterDisease) query = query.eq('disease_id', filterDisease);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
+
+          if (filterProduct) {
+            const productName = products.find(p => p.id === filterProduct)?.name;
+            if (productName) {
+              result = result.filter(r => r.products_used?.toLowerCase().includes(productName.toLowerCase()));
+            }
+          }
+          if (filterVet) {
+            result = result.filter(r => r.veterinarian?.toLowerCase().includes(filterVet.toLowerCase()));
+          }
           break;
-        case 'owner_meds':
-          query = supabase.from('vw_owner_admin_meds').select('*');
+        }
+
+        case 'owner_meds': {
+          let query = supabase.from('vw_owner_admin_meds').select('*');
+          if (dateFrom) query = query.gte('first_admin_date', dateFrom);
+          if (dateTo) query = query.lte('first_admin_date', dateTo);
           if (filterAnimal) query = query.eq('animal_id', filterAnimal);
           if (filterProduct) query = query.eq('product_id', filterProduct);
           if (filterDisease) query = query.eq('disease_id', filterDisease);
-          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
-          if (dateFrom) query = query.gte('first_admin_date', dateFrom);
-          if (dateTo) query = query.lte('first_admin_date', dateTo);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
+
+          if (filterBatch) {
+            result = result.filter(r => r.batch_number?.toLowerCase().includes(filterBatch.toLowerCase()));
+          }
           break;
-        case 'biocide_journal':
-          query = supabase.from('vw_biocide_journal').select('*');
-          if (filterProduct) query = query.ilike('biocide_name', `%${products.find(p => p.id === filterProduct)?.name}%`);
-          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
+        }
+
+        case 'biocide_journal': {
+          let query = supabase.from('vw_biocide_journal').select('*');
           if (dateFrom) query = query.gte('use_date', dateFrom);
           if (dateTo) query = query.lte('use_date', dateTo);
+          if (filterProduct) query = query.eq('product_id', filterProduct);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
+
+          if (filterBatch) {
+            result = result.filter(r => r.batch_number?.toLowerCase().includes(filterBatch.toLowerCase()));
+          }
           break;
-        case 'medical_waste':
-          query = supabase.from('vw_medical_waste').select('*');
+        }
+
+        case 'medical_waste': {
+          let query = supabase.from('vw_medical_waste').select('*');
           if (dateFrom) query = query.gte('record_date', dateFrom);
           if (dateTo) query = query.lte('record_date', dateTo);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
           break;
+        }
+
         default:
           return;
       }
 
-      const { data: result, error } = await query;
-      if (error) throw error;
-      setData(result || []);
+      setData(result);
     } catch (error) {
       console.error('Error loading report:', error);
     } finally {
