@@ -14,6 +14,13 @@ import {
   BarChart3,
   Users
 } from 'lucide-react';
+import {
+  TreatedAnimalsReport,
+  MedicalWasteReport,
+  DrugJournalReport,
+  BiocideJournalReport,
+  OwnerMedsReport
+} from './ReportTemplates';
 
 interface AnalyticsData {
   totalAnimals: number;
@@ -564,7 +571,7 @@ export function Reports() {
     );
   };
 
-  const renderTable = () => {
+  const renderReport = () => {
     if (loading) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -576,42 +583,25 @@ export function Reports() {
     if (data.length === 0) {
       return (
         <div className="text-center py-12 text-gray-500">
-          No data available for this report
+          Nėra duomenų šiai ataskaitai
         </div>
       );
     }
 
-    const headers = Object.keys(data[0]);
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {headers.map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
-                >
-                  {header.replace(/_/g, ' ')}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {data.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                {headers.map((header) => (
-                  <td key={header} className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                    {row[header] !== null && row[header] !== undefined ? String(row[header]) : 'N/A'}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+    switch (reportType) {
+      case 'treated_animals':
+        return <TreatedAnimalsReport data={data} />;
+      case 'medical_waste':
+        return <MedicalWasteReport data={data} />;
+      case 'drug_journal':
+        return <DrugJournalReport data={data} />;
+      case 'biocide_journal':
+        return <BiocideJournalReport data={data} />;
+      case 'owner_meds':
+        return <OwnerMedsReport data={data} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -692,7 +682,7 @@ export function Reports() {
         renderAnalytics()
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {renderTable()}
+          {renderReport()}
         </div>
       )}
     </div>
