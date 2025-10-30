@@ -32,7 +32,7 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
                 <td className="border-2 border-black px-2 py-2 text-xs text-center">{idx + 1}</td>
                 <td className="border-2 border-black px-2 py-2 text-xs">{row.registration_date ? formatDateLT(row.registration_date) : '-'}</td>
                 <td className="border-2 border-black px-2 py-2 text-xs">{row.products_used || '-'}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">-</td>
+                <td className="border-2 border-black px-2 py-2 text-xs">{row.dose_summary || '-'}</td>
                 <td className="border-2 border-black px-2 py-2 text-xs">
                   <div>
                     <div className="font-bold">{row.animal_tag || '-'}</div>
@@ -54,7 +54,7 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
                     {!row.withdrawal_until_meat && !row.withdrawal_until_milk && '-'}
                   </div>
                 </td>
-                <td className="border-2 border-black px-2 py-2 text-xs">-</td>
+                <td className="border-2 border-black px-2 py-2 text-xs">{row.treatment_days ? `${row.treatment_days} d.` : '-'}</td>
               </tr>
             ))}
           </tbody>
