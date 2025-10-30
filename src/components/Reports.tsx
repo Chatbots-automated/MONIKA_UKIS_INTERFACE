@@ -49,13 +49,41 @@ export function Reports() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  const [filterAnimal, setFilterAnimal] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
+  const [filterDisease, setFilterDisease] = useState('');
+  const [filterInvoice, setFilterInvoice] = useState('');
+  const [filterBatch, setFilterBatch] = useState('');
+  const [filterVet, setFilterVet] = useState('');
+
+  const [animals, setAnimals] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [diseases, setDiseases] = useState<any[]>([]);
+
   useEffect(() => {
+    loadFilterOptions();
     if (reportType === 'analytics') {
       loadAnalytics();
     } else {
       loadReport();
     }
   }, [reportType]);
+
+  const loadFilterOptions = async () => {
+    try {
+      const [animalsRes, productsRes, diseasesRes] = await Promise.all([
+        supabase.from('animals').select('id, tag_no, species').order('tag_no'),
+        supabase.from('products').select('id, name').eq('is_active', true).order('name'),
+        supabase.from('diseases').select('id, name').order('name'),
+      ]);
+
+      if (animalsRes.data) setAnimals(animalsRes.data);
+      if (productsRes.data) setProducts(productsRes.data);
+      if (diseasesRes.data) setDiseases(diseasesRes.data);
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
 
   const loadAnalytics = async () => {
     setLoading(true);
@@ -223,26 +251,41 @@ export function Reports() {
       switch (reportType) {
         case 'drug_journal':
           query = supabase.from('vw_vet_drug_journal').select('*');
+          if (filterProduct) query = query.eq('product_id', filterProduct);
+          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
+          if (filterInvoice) query = query.ilike('invoice_number', `%${filterInvoice}%`);
+          if (dateFrom) query = query.gte('receipt_date', dateFrom);
+          if (dateTo) query = query.lte('receipt_date', dateTo);
           break;
         case 'treated_animals':
           query = supabase.from('vw_treated_animals').select('*');
-          if (dateFrom) query = query.gte('reg_date', dateFrom);
-          if (dateTo) query = query.lte('reg_date', dateTo);
+          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+          if (filterProduct) query = query.ilike('products_used', `%${products.find(p => p.id === filterProduct)?.name}%`);
+          if (filterDisease) query = query.eq('disease_id', filterDisease);
+          if (filterVet) query = query.ilike('veterinarian', `%${filterVet}%`);
+          if (dateFrom) query = query.gte('registration_date', dateFrom);
+          if (dateTo) query = query.lte('registration_date', dateTo);
           break;
         case 'owner_meds':
           query = supabase.from('vw_owner_admin_meds').select('*');
+          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+          if (filterProduct) query = query.eq('product_id', filterProduct);
+          if (filterDisease) query = query.eq('disease_id', filterDisease);
+          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
           if (dateFrom) query = query.gte('first_admin_date', dateFrom);
           if (dateTo) query = query.lte('first_admin_date', dateTo);
           break;
         case 'biocide_journal':
           query = supabase.from('vw_biocide_journal').select('*');
+          if (filterProduct) query = query.ilike('biocide_name', `%${products.find(p => p.id === filterProduct)?.name}%`);
+          if (filterBatch) query = query.ilike('batch_number', `%${filterBatch}%`);
           if (dateFrom) query = query.gte('use_date', dateFrom);
           if (dateTo) query = query.lte('use_date', dateTo);
           break;
         case 'medical_waste':
           query = supabase.from('vw_medical_waste').select('*');
-          if (dateFrom) query = query.gte('date', dateFrom);
-          if (dateTo) query = query.lte('date', dateTo);
+          if (dateFrom) query = query.gte('record_date', dateFrom);
+          if (dateTo) query = query.lte('record_date', dateTo);
           break;
         default:
           return;
@@ -256,6 +299,17 @@ export function Reports() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setFilterAnimal('');
+    setFilterProduct('');
+    setFilterDisease('');
+    setFilterInvoice('');
+    setFilterBatch('');
+    setFilterVet('');
   };
 
   const handleExport = () => {
@@ -617,53 +671,144 @@ export function Reports() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="mb-6">
           <select
             value={reportType}
-            onChange={(e) => setReportType(e.target.value as ReportType)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => {
+              setReportType(e.target.value as ReportType);
+              clearFilters();
+            }}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
           >
-            <option value="analytics">Analitika</option>
-            <option value="drug_journal">Veterinarinių vaistų žurnalas</option>
-            <option value="treated_animals">Gydomų gyvūnų registras</option>
-            <option value="owner_meds">Savininko duodami vaistai</option>
-            <option value="biocide_journal">Biocidų žurnalas</option>
-            <option value="medical_waste">Medicininių atliekų žurnalas</option>
+            <option value="analytics">📊 Analitika</option>
+            <option value="drug_journal">💊 Veterinarinių vaistų žurnalas</option>
+            <option value="treated_animals">🏥 Gydomų gyvūnų registras</option>
+            <option value="owner_meds">📋 Savininko duodami vaistai</option>
+            <option value="biocide_journal">🧪 Biocidų žurnalas</option>
+            <option value="medical_waste">🗑️ Medicininių atliekų žurnalas</option>
           </select>
+        </div>
 
-          {reportType !== 'analytics' && (
-            <>
+        {reportType !== 'analytics' && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <h3 className="text-sm font-bold text-gray-700 mb-3">🔍 Filtrai</h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Nuo"
                 />
               </div>
 
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Iki"
                 />
               </div>
 
+              {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
+                <select
+                  value={filterAnimal}
+                  onChange={(e) => setFilterAnimal(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visi gyvūnai</option>
+                  {animals.map((animal) => (
+                    <option key={animal.id} value={animal.id}>
+                      {animal.tag_no} - {animal.species}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(reportType === 'treated_animals' || reportType === 'owner_meds' || reportType === 'drug_journal' || reportType === 'biocide_journal') && (
+                <select
+                  value={filterProduct}
+                  onChange={(e) => setFilterProduct(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visi produktai</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
+                <select
+                  value={filterDisease}
+                  onChange={(e) => setFilterDisease(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visos ligos</option>
+                  {diseases.map((disease) => (
+                    <option key={disease.id} value={disease.id}>
+                      {disease.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(reportType === 'drug_journal' || reportType === 'owner_meds' || reportType === 'biocide_journal') && (
+                <input
+                  type="text"
+                  value={filterBatch}
+                  onChange={(e) => setFilterBatch(e.target.value)}
+                  placeholder="Serijos nr."
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {reportType === 'drug_journal' && (
+                <input
+                  type="text"
+                  value={filterInvoice}
+                  onChange={(e) => setFilterInvoice(e.target.value)}
+                  placeholder="Sąskaitos nr."
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {reportType === 'treated_animals' && (
+                <input
+                  type="text"
+                  value={filterVet}
+                  onChange={(e) => setFilterVet(e.target.value)}
+                  placeholder="Veterinaras"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-3">
               <button
                 onClick={loadReport}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
+                <FileText className="w-4 h-4" />
                 Generuoti ataskaitą
               </button>
-            </>
-          )}
-        </div>
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              >
+                Išvalyti filtrus
+              </button>
+            </div>
+          </div>
+        )}
 
         {reportType !== 'analytics' && data.length > 0 && (
           <div className="flex justify-end">

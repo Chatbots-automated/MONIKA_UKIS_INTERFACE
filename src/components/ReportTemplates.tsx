@@ -9,7 +9,6 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
     <div className="bg-white p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold mb-2">GYDOMŲ GYVŪNŲ APSKAITA</h1>
-        <p className="text-sm text-gray-600">Treated Animals Register</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -78,7 +77,6 @@ export function MedicalWasteReport({ data }: MedicalWasteReportProps) {
     <div className="bg-white p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold mb-2">VETERINARINIŲ MEDICININIŲ ATLIEKŲ SUSIDARYMO APSKAITOS ŽURNALAS</h1>
-        <p className="text-sm text-gray-600">Medical Waste Generation Register</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -137,7 +135,6 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
     <div className="bg-white p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold mb-2">VETERINARINIŲ VAISTŲ IR VAISTINIŲ PREPARATŲ APSKAITOS ŽURNALAS</h1>
-        <p className="text-sm text-gray-600">Veterinary Medicines and Pharmaceutical Products Register</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -203,7 +200,6 @@ export function BiocideJournalReport({ data }: BiocideJournalReportProps) {
     <div className="bg-white p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold mb-2">BIOCIDINIŲ PRODUKTŲ APSKAITOS ŽURNALAS</h1>
-        <p className="text-sm text-gray-600">Biocidal Products Register</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -267,7 +263,6 @@ export function OwnerMedsReport({ data }: OwnerMedsReportProps) {
     <div className="bg-white p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold mb-2">SAVININKO DUODAMI VAISTAI</h1>
-        <p className="text-sm text-gray-600">Owner-Administered Medications</p>
       </div>
 
       <div className="overflow-x-auto">
