@@ -125,8 +125,15 @@ export function TreatmentCompact() {
   };
 
   const handleSave = async () => {
-    if (!animalId || usageLines.length === 0) {
-      alert('Pasirinkite gyvūną ir pridėkite bent vieną vaistą');
+    if (!animalId) {
+      alert('Pasirinkite gyvūną');
+      return;
+    }
+
+    const completeLines = usageLines.filter(line => line.product_id && line.batch_id && line.qty);
+
+    if (completeLines.length === 0) {
+      alert('Pridėkite ir užpildykite bent vieną vaistą (produktas, serija ir kiekis)');
       return;
     }
 
