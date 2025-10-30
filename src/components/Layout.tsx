@@ -15,7 +15,8 @@ import {
   LogOut,
   User,
   Grid3x3,
-  Users
+  Users,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -32,6 +33,7 @@ const menuItems = [
   { id: 'receive', label: 'Priėmimas', icon: FileText, permission: 'receive_stock' },
   { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
   { id: 'treatment', label: 'Gydymas / Nurašymas', icon: Syringe, permission: 'treatment' },
+  { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
   { id: 'biocides', label: 'Biocidai', icon: Droplet, permission: 'biocides' },
   { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle, permission: 'products' },

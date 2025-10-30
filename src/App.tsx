@@ -13,6 +13,7 @@ import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
 import { UserManagement } from './components/UserManagement';
 import { Vaccinations } from './components/Vaccinations';
+import { TreatmentHistory } from './components/TreatmentHistory';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { useAuth } from './contexts/AuthContext';
@@ -106,6 +107,8 @@ function App() {
         return <ReceiveStock />;
       case 'treatment':
         return <Treatment />;
+      case 'treatment-history':
+        return <TreatmentHistory />;
       case 'vaccinations':
         return <Vaccinations />;
       case 'products':
