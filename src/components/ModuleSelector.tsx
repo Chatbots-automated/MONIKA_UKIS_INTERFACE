@@ -25,7 +25,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             />
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">
-            ZUB Berčiūnai
+            ŽŪB Berčiūnai
           </h1>
           <p className="text-xl text-emerald-100">
             Valdymo Sistema
@@ -221,7 +221,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
 
         <div className="mt-12 text-center">
           <p className="text-sm text-white/60">
-            © 2025 ZUB Berčiūnai · Versija 1.0.0
+            © 2025 ŽŪB Berčiūnai · Versija 1.0.0
           </p>
         </div>
       </div>
