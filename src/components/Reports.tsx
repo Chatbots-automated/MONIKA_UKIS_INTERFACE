@@ -25,6 +25,7 @@ import {
   BiocideJournalReport,
   OwnerMedsReport
 } from './ReportTemplates';
+import { SearchableSelect } from './SearchableSelect';
 
 interface AnalyticsData {
   totalAnimals: number;
@@ -803,57 +804,45 @@ export function Reports() {
                   </div>
 
                   {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Gyvūnas</label>
-                      <select
-                        value={filterAnimal}
-                        onChange={(e) => setFilterAnimal(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      >
-                        <option value="">Visi gyvūnai</option>
-                        {animals.map((animal) => (
-                          <option key={animal.id} value={animal.id}>
-                            {animal.tag_no} - {animal.species}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      label="Gyvūnas"
+                      placeholder="Pasirinkite gyvūną"
+                      emptyLabel="Visi gyvūnai"
+                      value={filterAnimal}
+                      onChange={setFilterAnimal}
+                      options={animals.map(animal => ({
+                        value: animal.id,
+                        label: `${animal.tag_no} - ${animal.species}`
+                      }))}
+                    />
                   )}
 
                   {(reportType === 'treated_animals' || reportType === 'owner_meds' || reportType === 'drug_journal' || reportType === 'biocide_journal') && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Produktas</label>
-                      <select
-                        value={filterProduct}
-                        onChange={(e) => setFilterProduct(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      >
-                        <option value="">Visi produktai</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      label="Produktas"
+                      placeholder="Pasirinkite produktą"
+                      emptyLabel="Visi produktai"
+                      value={filterProduct}
+                      onChange={setFilterProduct}
+                      options={products.map(product => ({
+                        value: product.id,
+                        label: product.name
+                      }))}
+                    />
                   )}
 
                   {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Liga</label>
-                      <select
-                        value={filterDisease}
-                        onChange={(e) => setFilterDisease(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      >
-                        <option value="">Visos ligos</option>
-                        {diseases.map((disease) => (
-                          <option key={disease.id} value={disease.id}>
-                            {disease.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      label="Liga"
+                      placeholder="Pasirinkite ligą"
+                      emptyLabel="Visos ligos"
+                      value={filterDisease}
+                      onChange={setFilterDisease}
+                      options={diseases.map(disease => ({
+                        value: disease.id,
+                        label: disease.name
+                      }))}
+                    />
                   )}
 
                   {(reportType === 'drug_journal' || reportType === 'owner_meds' || reportType === 'biocide_journal') && (

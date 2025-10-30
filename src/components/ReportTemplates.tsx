@@ -6,55 +6,60 @@ interface TreatedAnimalsReportProps {
 
 export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
   return (
-    <div className="bg-white p-8">
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold mb-2">GYDOMŲ GYVŪNŲ APSKAITA</h1>
+    <div className="bg-white">
+      <div className="text-center mb-6 no-print">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">GYDOMŲ GYVŪNŲ APSKAITA</h1>
+        <p className="text-sm text-gray-500">Sugeneruota: {formatDateLT(new Date().toISOString())}</p>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse border-2 border-black">
+      <div className="overflow-x-auto rounded-lg border-2 border-gray-300 shadow-sm">
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Eil. Nr.</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Data, kai vaistas gyvūnams duotas pirmą kartą</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Vaisto pavadinimas</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Duotas vaisto kiekis</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Gydomo gyvūno identifikavimo duomenys</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Liga / Diagnozė</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Receptą išrašiusio veterinarijos gydytojo duomenys</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Išlauka (karantinas)</th>
-              <th className="border-2 border-black px-2 py-2 text-xs font-bold">Gydymo trukmė</th>
+            <tr className="bg-gradient-to-r from-gray-100 to-gray-50">
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700 text-center">Eil. Nr.</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Data, kai vaistas gyvūnams duotas pirmą kartą</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Vaisto pavadinimas</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Duotas vaisto kiekis</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gydomo gyvūno identifikavimo duomenys</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Liga / Diagnozė</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Receptą išrašiusio veterinarijos gydytojo duomenys</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Išlauka (karantinas)</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gydymo trukmė</th>
             </tr>
           </thead>
           <tbody>
             {data.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                <td className="border-2 border-black px-2 py-2 text-xs text-center">{idx + 1}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">{row.registration_date ? formatDateLT(row.registration_date) : '-'}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">{row.products_used || '-'}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">{row.dose_summary || '-'}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">
-                  <div>
-                    <div className="font-bold">{row.animal_tag || '-'}</div>
+              <tr key={idx} className="hover:bg-blue-50 transition-colors print-break-avoid">
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-semibold text-gray-600">{idx + 1}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.registration_date ? formatDateLT(row.registration_date) : '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900 font-medium">{row.products_used || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.dose_summary || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="font-bold text-gray-900">{row.animal_tag || '-'}</div>
                     <div className="text-gray-600">{row.species || '-'}</div>
-                    <div className="text-gray-600 text-[10px]">{row.owner_name || '-'}</div>
+                    {row.owner_name && <div className="text-gray-500 text-[10px]">{row.owner_name}</div>}
                   </div>
                 </td>
-                <td className="border-2 border-black px-2 py-2 text-xs">
-                  <div>
-                    <div className="font-bold">{row.disease_name || '-'}</div>
-                    <div className="text-gray-600 text-[10px]">{row.clinical_diagnosis || '-'}</div>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="font-bold text-gray-900">{row.disease_name || '-'}</div>
+                    {row.clinical_diagnosis && <div className="text-gray-600 text-[10px]">{row.clinical_diagnosis}</div>}
                   </div>
                 </td>
-                <td className="border-2 border-black px-2 py-2 text-xs">{row.veterinarian || '-'}</td>
-                <td className="border-2 border-black px-2 py-2 text-xs">
-                  <div>
-                    {row.withdrawal_until_meat && <div>Mėsa: {formatDateLT(row.withdrawal_until_meat)}</div>}
-                    {row.withdrawal_until_milk && <div>Pienas: {formatDateLT(row.withdrawal_until_milk)}</div>}
-                    {!row.withdrawal_until_meat && !row.withdrawal_until_milk && '-'}
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.veterinarian || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
+                  <div className="space-y-1">
+                    {row.withdrawal_until_meat && <div className="text-red-700 font-medium">🥩 Mėsa: {formatDateLT(row.withdrawal_until_meat)}</div>}
+                    {row.withdrawal_until_milk && <div className="text-blue-700 font-medium">🥛 Pienas: {formatDateLT(row.withdrawal_until_milk)}</div>}
+                    {!row.withdrawal_until_meat && !row.withdrawal_until_milk && <span className="text-gray-400">-</span>}
                   </div>
                 </td>
-                <td className="border-2 border-black px-2 py-2 text-xs">{row.treatment_days ? `${row.treatment_days} d.` : '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                    {row.treatment_days ? `${row.treatment_days} d.` : '-'}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -62,7 +67,15 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
       </div>
 
       {data.length === 0 && (
-        <p className="text-center py-12 text-gray-500">Nėra duomenų</p>
+        <div className="text-center py-16">
+          <p className="text-lg text-gray-500">Nėra duomenų</p>
+        </div>
+      )}
+
+      {data.length > 0 && (
+        <div className="mt-4 text-sm text-gray-600 no-print">
+          <p>Viso įrašų: <span className="font-semibold text-gray-900">{data.length}</span></p>
+        </div>
       )}
     </div>
   );
