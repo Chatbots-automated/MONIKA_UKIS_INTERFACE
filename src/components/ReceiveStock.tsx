@@ -26,6 +26,7 @@ export function ReceiveStock() {
   const [bulkReceiving, setBulkReceiving] = useState(false);
   const [editingHeader, setEditingHeader] = useState(false);
   const [headerData, setHeaderData] = useState<any>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -61,6 +62,9 @@ export function ReceiveStock() {
       setSelectedFile(file);
       setUploadStatus('idle');
       setUploadMessage('');
+
+      const url = URL.createObjectURL(file);
+      setPdfUrl(url);
     } else {
       alert('Prašome pasirinkti PDF failą');
       e.target.value = '';
@@ -139,6 +143,10 @@ export function ReceiveStock() {
   };
 
   const handleRemoveFile = () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
     setSelectedFile(null);
     setUploadStatus('idle');
     setUploadMessage('');
@@ -400,8 +408,22 @@ export function ReceiveStock() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div className={invoiceData && pdfUrl ? "flex gap-6 h-[calc(100vh-8rem)]" : "max-w-3xl mx-auto"}>
+      {invoiceData && pdfUrl && (
+        <div className="w-1/2 flex-shrink-0 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+          <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" />
+            PDF Sąskaita
+          </h3>
+          <iframe
+            src={pdfUrl}
+            className="w-full h-[calc(100%-3rem)] border-2 border-gray-200 rounded-lg"
+            title="Invoice PDF"
+          />
+        </div>
+      )}
+      <div className={invoiceData && pdfUrl ? "flex-1 overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-100" : "bg-white rounded-xl shadow-sm border border-gray-100"}>
+        <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-emerald-50 p-2 rounded-lg">
             <Plus className="w-6 h-6 text-emerald-600" />
@@ -1085,6 +1107,7 @@ export function ReceiveStock() {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
