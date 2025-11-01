@@ -232,8 +232,15 @@ export function ReceiveStock() {
       return;
     }
 
-    if (!bulkReceiveData.lot || !bulkReceiveData.expiry_date) {
-      alert('Įveskite partijos numerį ir galiojimo datą');
+    const hasGlobalBatch = bulkReceiveData.lot && bulkReceiveData.expiry_date;
+    const allItemsHaveData = invoiceData.items.every((_: any, index: number) => {
+      if (!matchedProducts.get(index)) return true;
+      const itemData = getItemData(invoiceData.items[index], index);
+      return (itemData.batch || bulkReceiveData.lot) && (itemData.expiry || bulkReceiveData.expiry_date);
+    });
+
+    if (!hasGlobalBatch && !allItemsHaveData) {
+      alert('Prašome užpildyti serijos numerius ir galiojimo datas kažkurioje vietoje arba globaliai, arba kiekvienai prekėje.');
       return;
     }
 
@@ -276,9 +283,9 @@ export function ReceiveStock() {
 
         stockEntries.push({
           product_id: matched.id,
-          lot: bulkReceiveData.lot,
+          lot: itemData.batch || bulkReceiveData.lot || null,
           mfg_date: bulkReceiveData.mfg_date || null,
-          expiry_date: bulkReceiveData.expiry_date,
+          expiry_date: itemData.expiry || bulkReceiveData.expiry_date || null,
           supplier_id: supplierId,
           doc_title: 'Invoice',
           doc_number: invoiceData.invoice.number,
@@ -505,41 +512,64 @@ export function ReceiveStock() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-4 gap-2 text-xs mb-2">
-                        <div>
-                          <span className="text-gray-600">SKU:</span>{' '}
-                          <input
-                            type="text"
-                            value={getItemData(item, index).sku}
-                            onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
-                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
-                          />
+                      <div className="space-y-2 text-xs mb-2">
+                        <div className="grid grid-cols-4 gap-2">
+                          <div>
+                            <span className="text-gray-600">SKU:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).sku}
+                              onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Kiekis:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).qty}
+                              onChange={(e) => handleItemEdit(index, 'qty', e.target.value)}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Kaina:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).unit_price}
+                              onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Suma:</span>{' '}
+                            <span className="font-medium text-emerald-700">
+                              €{(getItemData(item, index).qty * getItemData(item, index).unit_price).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Kiekis:</span>{' '}
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={getItemData(item, index).qty}
-                            onChange={(e) => handleItemEdit(index, 'qty', e.target.value)}
-                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Kaina:</span>{' '}
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={getItemData(item, index).unit_price}
-                            onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
-                            className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Suma:</span>{' '}
-                          <span className="font-medium text-emerald-700">
-                            €{(getItemData(item, index).qty * getItemData(item, index).unit_price).toFixed(2)}
-                          </span>
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-200">
+                          <div>
+                            <span className="text-gray-600">Serija:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).batch || ''}
+                              onChange={(e) => handleItemEdit(index, 'batch', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              placeholder="Serijos Nr."
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Galioja iki:</span>{' '}
+                            <input
+                              type="date"
+                              value={getItemData(item, index).expiry || ''}
+                              onChange={(e) => handleItemEdit(index, 'expiry', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -599,18 +629,21 @@ export function ReceiveStock() {
             </div>
 
             <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
-              <h4 className="text-lg font-bold text-gray-900 mb-4">Masinis priėmimas</h4>
+              <h4 className="text-lg font-bold text-gray-900 mb-2">Masinis priėmimas</h4>
+              <p className="text-xs text-gray-600 mb-4">
+                💡 <strong>Patarimas:</strong> Jei kiekviena prekė turi savo seriją ir galiojimo datą (automatiškai ištraukta iš PDF), galite priimti be šių laukų pildymo. Arba užpildinkit šiuos laukus, jei norite naudoti tą pačią datą visoms prekėms.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Partija *
+                    Partija (global)
                   </label>
                   <input
                     type="text"
                     value={bulkReceiveData.lot}
                     onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, lot: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="LOT-12345"
+                    placeholder="Jei neustatyta prekėje"
                   />
                 </div>
                 <div>
@@ -626,13 +659,14 @@ export function ReceiveStock() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Galiojimo data *
+                    Galiojimo data (global)
                   </label>
                   <input
                     type="date"
                     value={bulkReceiveData.expiry_date}
                     onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, expiry_date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="Jei neustatyta prekėje"
                   />
                 </div>
                 <div>
