@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
-import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle } from 'lucide-react';
+import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save } from 'lucide-react';
 
 export function ReceiveStock() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -24,6 +24,8 @@ export function ReceiveStock() {
     doc_date: new Date().toISOString().split('T')[0],
   });
   const [bulkReceiving, setBulkReceiving] = useState(false);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerData, setHeaderData] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -113,6 +115,13 @@ export function ReceiveStock() {
       }
 
       setInvoiceData(invoiceObject);
+      setHeaderData({
+        invoice_number: invoiceObject.invoice.number,
+        invoice_date: invoiceObject.invoice.date,
+        supplier_name: invoiceObject.supplier.name,
+        supplier_code: invoiceObject.supplier.code,
+        supplier_vat: invoiceObject.supplier.vat_code,
+      });
 
       const matches = new Map<number, Product | null>();
       for (let i = 0; i < invoiceObject.items.length; i++) {
@@ -136,6 +145,28 @@ export function ReceiveStock() {
     setInvoiceData(null);
     setMatchedProducts(new Map());
     setEditedItems(new Map());
+    setHeaderData(null);
+    setEditingHeader(false);
+  };
+
+  const handleSaveHeader = () => {
+    if (headerData && invoiceData) {
+      setInvoiceData({
+        ...invoiceData,
+        invoice: {
+          ...invoiceData.invoice,
+          number: headerData.invoice_number,
+          date: headerData.invoice_date,
+        },
+        supplier: {
+          ...invoiceData.supplier,
+          name: headerData.supplier_name,
+          code: headerData.supplier_code,
+          vat_code: headerData.supplier_vat,
+        },
+      });
+    }
+    setEditingHeader(false);
   };
 
   const getItemData = (item: any, index: number) => {
@@ -459,30 +490,161 @@ export function ReceiveStock() {
           )}
         </div>
 
-        {invoiceData && (
+        {invoiceData && headerData && (
           <div className="mb-6 p-6 bg-white border-2 border-gray-200 rounded-xl">
             <div className="mb-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Sąskaitos duomenys</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-xs text-gray-600 mb-1">Sąskaita Nr.</p>
-                  <p className="font-semibold text-gray-900">{invoiceData.invoice.number}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 mb-1">Data</p>
-                  <p className="font-semibold text-gray-900">{invoiceData.invoice.date}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 mb-1">Tiekėjas</p>
-                  <p className="font-semibold text-gray-900">{invoiceData.supplier.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 mb-1">Viso suma</p>
-                  <p className="font-semibold text-emerald-700 text-lg">
-                    €{invoiceData.invoice.total_gross.toFixed(2)}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
+                {!editingHeader ? (
+                  <button
+                    onClick={() => setEditingHeader(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Redaguoti
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSaveHeader}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <Save className="w-4 h-4" />
+                    Išsaugoti
+                  </button>
+                )}
               </div>
+
+              {!editingHeader ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Sąskaita Nr.</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.invoice.number}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Data</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.invoice.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Valiuta</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.invoice.currency}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Tiekėjas</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.supplier.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Tiekėjo kodas</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.supplier.code || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">PVM kodas</p>
+                      <p className="font-semibold text-gray-900">{invoiceData.supplier.vat_code || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 p-4 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-lg border-2 border-emerald-200">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Suma be PVM</p>
+                      <p className="font-bold text-blue-700 text-lg">
+                        €{invoiceData.invoice.total_net?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">PVM ({invoiceData.invoice.vat_rate || 0}%)</p>
+                      <p className="font-bold text-orange-700 text-lg">
+                        €{invoiceData.invoice.total_vat?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Viso su PVM</p>
+                      <p className="font-bold text-emerald-700 text-xl">
+                        €{invoiceData.invoice.total_gross?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-300">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Sąskaita Nr.</label>
+                      <input
+                        type="text"
+                        value={headerData.invoice_number}
+                        onChange={(e) => setHeaderData({ ...headerData, invoice_number: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Data</label>
+                      <input
+                        type="date"
+                        value={headerData.invoice_date}
+                        onChange={(e) => setHeaderData({ ...headerData, invoice_date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Valiuta</label>
+                      <input
+                        type="text"
+                        value={invoiceData.invoice.currency}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-100"
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Tiekėjas</label>
+                      <input
+                        type="text"
+                        value={headerData.supplier_name}
+                        onChange={(e) => setHeaderData({ ...headerData, supplier_name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Tiekėjo kodas</label>
+                      <input
+                        type="text"
+                        value={headerData.supplier_code || ''}
+                        onChange={(e) => setHeaderData({ ...headerData, supplier_code: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">PVM kodas</label>
+                      <input
+                        type="text"
+                        value={headerData.supplier_vat || ''}
+                        onChange={(e) => setHeaderData({ ...headerData, supplier_vat: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 p-4 bg-white rounded-lg border border-gray-300">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Suma be PVM</p>
+                      <p className="font-bold text-blue-700 text-lg">
+                        €{invoiceData.invoice.total_net?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">PVM ({invoiceData.invoice.vat_rate || 0}%)</p>
+                      <p className="font-bold text-orange-700 text-lg">
+                        €{invoiceData.invoice.total_vat?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Viso su PVM</p>
+                      <p className="font-bold text-emerald-700 text-xl">
+                        €{invoiceData.invoice.total_gross?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -507,9 +669,15 @@ export function ReceiveStock() {
                         ) : (
                           <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
                         )}
-                        <span className="font-semibold text-gray-900 text-sm">
-                          #{item.line_no}: {item.description}
-                        </span>
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="font-semibold text-gray-700 text-sm">#{item.line_no}:</span>
+                          <input
+                            type="text"
+                            value={getItemData(item, index).description}
+                            onChange={(e) => handleItemEdit(index, 'description', e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-xs mb-2">
