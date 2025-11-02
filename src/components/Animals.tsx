@@ -7,6 +7,7 @@ interface AnimalDetail extends Animal {
   treatments?: any[];
   vaccinations?: any[];
   treatment_courses?: any[];
+  visits?: any[];
 }
 
 export function Animals() {
@@ -83,7 +84,7 @@ export function Animals() {
   const loadAnimalDetails = async (animalId: string) => {
     setDetailLoading(true);
     try {
-      const [treatmentsRes, vaccinationsRes, coursesRes] = await Promise.all([
+      const [treatmentsRes, vaccinationsRes, coursesRes, visitsRes] = await Promise.all([
         supabase
           .from('treatments')
           .select('*')
@@ -102,6 +103,11 @@ export function Animals() {
           `)
           .eq('treatments.animal_id', animalId)
           .order('start_date', { ascending: false }),
+        supabase
+          .from('animal_visits')
+          .select('*')
+          .eq('animal_id', animalId)
+          .order('visit_date', { ascending: false }),
       ]);
 
       const animal = animals.find(a => a.id === animalId);
@@ -111,6 +117,7 @@ export function Animals() {
           treatments: treatmentsRes.data || [],
           vaccinations: vaccinationsRes.data || [],
           treatment_courses: coursesRes.data || [],
+          visits: visitsRes.data || [],
         });
       }
     } catch (error) {
@@ -333,6 +340,150 @@ export function Animals() {
             </div>
 
             <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b-2 border-amber-200">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-amber-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Planuojamas vizitas</h3>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {(() => {
+                    const futureVisits = selectedAnimal.visits?.filter((v: any) =>
+                      new Date(v.visit_date) >= new Date() && v.status === 'scheduled'
+                    ).sort((a: any, b: any) =>
+                      new Date(a.visit_date).getTime() - new Date(b.visit_date).getTime()
+                    ) || [];
+
+                    const nextVisit = futureVisits[0];
+
+                    if (!nextVisit) {
+                      return (
+                        <div className="text-center py-8">
+                          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-gray-500">Nėra suplanuotų vizitų</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border-2 border-amber-200">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-2xl font-bold text-amber-700">
+                                {new Date(nextVisit.visit_date).toLocaleDateString('lt-LT')}
+                              </span>
+                              <span className="bg-amber-600 text-white px-3 py-1 rounded-full text-xs font-semibold">
+                                {nextVisit.visit_type === 'checkup' ? 'Patikrinimas' :
+                                 nextVisit.visit_type === 'vaccination' ? 'Vakcinacija' :
+                                 nextVisit.visit_type === 'treatment' ? 'Gydymas' :
+                                 nextVisit.visit_type === 'follow-up' ? 'Pakartotinis' :
+                                 nextVisit.visit_type === 'emergency' ? 'Skubus' : 'Kita'}
+                              </span>
+                            </div>
+                            {nextVisit.purpose && (
+                              <p className="text-gray-900 font-medium mb-2">{nextVisit.purpose}</p>
+                            )}
+                            {nextVisit.vet_name && (
+                              <p className="text-sm text-gray-600">
+                                <span className="font-medium">Veterinaras:</span> {nextVisit.vet_name}
+                              </p>
+                            )}
+                            {nextVisit.notes && (
+                              <p className="text-sm text-gray-600 italic mt-2">{nextVisit.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        {futureVisits.length > 1 && (
+                          <div className="mt-3 pt-3 border-t border-amber-200 text-sm text-gray-600">
+                            Dar {futureVisits.length - 1} būsimas(-i) vizitas(-ai)
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-gray-50 border-b-2 border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-slate-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Vizitų istorija</h3>
+                    <span className="ml-auto bg-slate-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {selectedAnimal.visits?.filter((v: any) => v.status === 'completed').length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {(() => {
+                    const pastVisits = selectedAnimal.visits?.filter((v: any) =>
+                      v.status === 'completed'
+                    ).sort((a: any, b: any) =>
+                      new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
+                    ) || [];
+
+                    if (pastVisits.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-gray-500">Nėra įvykusių vizitų</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {pastVisits.slice(0, 5).map((visit: any) => (
+                          <div key={visit.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-slate-300 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-1">
+                                  <span className="font-semibold text-gray-900">
+                                    {new Date(visit.visit_date).toLocaleDateString('lt-LT')}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    visit.visit_type === 'checkup' ? 'bg-blue-100 text-blue-700' :
+                                    visit.visit_type === 'vaccination' ? 'bg-green-100 text-green-700' :
+                                    visit.visit_type === 'treatment' ? 'bg-red-100 text-red-700' :
+                                    visit.visit_type === 'follow-up' ? 'bg-purple-100 text-purple-700' :
+                                    visit.visit_type === 'emergency' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {visit.visit_type === 'checkup' ? 'Patikrinimas' :
+                                     visit.visit_type === 'vaccination' ? 'Vakcinacija' :
+                                     visit.visit_type === 'treatment' ? 'Gydymas' :
+                                     visit.visit_type === 'follow-up' ? 'Pakartotinis' :
+                                     visit.visit_type === 'emergency' ? 'Skubus' : 'Kita'}
+                                  </span>
+                                </div>
+                                {visit.purpose && (
+                                  <p className="text-sm text-gray-700 mb-1">{visit.purpose}</p>
+                                )}
+                                {visit.vet_name && (
+                                  <p className="text-xs text-gray-600">
+                                    Veterinaras: {visit.vet_name}
+                                  </p>
+                                )}
+                                {visit.notes && (
+                                  <p className="text-xs text-gray-500 italic mt-1">{visit.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {pastVisits.length > 5 && (
+                          <p className="text-sm text-gray-500 text-center pt-2">
+                            Ir dar {pastVisits.length - 5} vizitas(-ai)
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
               <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b-2 border-green-200">
                   <div className="flex items-center gap-2">
