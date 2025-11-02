@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
-import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save } from 'lucide-react';
+import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save, AlertTriangle } from 'lucide-react';
 
 export function ReceiveStock() {
   const [products, setProducts] = useState<Product[]>([]);
