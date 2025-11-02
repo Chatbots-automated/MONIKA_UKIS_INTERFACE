@@ -182,6 +182,11 @@ export function Treatment() {
 
       if (treatmentError) throw treatmentError;
 
+      console.log('Treatment created:', treatment);
+
+      const selectedAnimal = animals.find(a => a.id === formData.animal_id);
+      const selectedDisease = diseases.find(d => d.id === formData.disease_id);
+
       await logAction(
         'create_treatment',
         'treatments',
@@ -189,9 +194,13 @@ export function Treatment() {
         null,
         {
           animal_id: formData.animal_id,
+          animal_tag: selectedAnimal?.tag_no || 'N/A',
           disease_id: formData.disease_id,
+          disease_name: selectedDisease?.name || 'N/A',
           vet_name: formData.vet_name,
           reg_date: formData.reg_date,
+          clinical_diagnosis: formData.clinical_diagnosis,
+          outcome: formData.outcome,
         }
       );
 

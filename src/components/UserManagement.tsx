@@ -627,14 +627,29 @@ export function UserManagement() {
                                   <span className="font-medium">Puslapis:</span> {log.new_data.label}
                                 </p>
                               )}
-                              {log.new_data.animal_id && (
+                              {log.new_data.animal_tag && (
                                 <p>
-                                  <span className="font-medium">Gyvūno ID:</span> {log.new_data.animal_id}
+                                  <span className="font-medium">Gyvūno auskaras:</span> {log.new_data.animal_tag}
+                                </p>
+                              )}
+                              {log.new_data.disease_name && (
+                                <p>
+                                  <span className="font-medium">Liga:</span> {log.new_data.disease_name}
                                 </p>
                               )}
                               {log.new_data.tag_no && (
                                 <p>
                                   <span className="font-medium">Auskaras:</span> {log.new_data.tag_no}
+                                </p>
+                              )}
+                              {log.new_data.species && (
+                                <p>
+                                  <span className="font-medium">Rūšis:</span> {log.new_data.species}
+                                </p>
+                              )}
+                              {log.new_data.holder_name && (
+                                <p>
+                                  <span className="font-medium">Savininkas:</span> {log.new_data.holder_name}
                                 </p>
                               )}
                               {log.new_data.vet_name && (
@@ -647,9 +662,39 @@ export function UserManagement() {
                                   <span className="font-medium">Registracijos data:</span> {formatDateLT(log.new_data.reg_date)}
                                 </p>
                               )}
+                              {log.new_data.clinical_diagnosis && (
+                                <p>
+                                  <span className="font-medium">Diagnozė:</span> {log.new_data.clinical_diagnosis}
+                                </p>
+                              )}
+                              {log.new_data.outcome && (
+                                <p>
+                                  <span className="font-medium">Rezultatas:</span> {log.new_data.outcome}
+                                </p>
+                              )}
                               {log.new_data.count !== undefined && (
                                 <p>
                                   <span className="font-medium">Panaudotų vaistų kiekis:</span> {log.new_data.count}
+                                </p>
+                              )}
+                              {log.new_data.visit_type && (
+                                <p>
+                                  <span className="font-medium">Vizito tipas:</span> {log.new_data.visit_type}
+                                </p>
+                              )}
+                              {log.new_data.status && (
+                                <p>
+                                  <span className="font-medium">Statusas:</span> {log.new_data.status}
+                                </p>
+                              )}
+                              {log.new_data.name && (
+                                <p>
+                                  <span className="font-medium">Pavadinimas:</span> {log.new_data.name}
+                                </p>
+                              )}
+                              {log.new_data.category && (
+                                <p>
+                                  <span className="font-medium">Kategorija:</span> {log.new_data.category}
                                 </p>
                               )}
                               {log.new_data.received_qty && (
@@ -665,6 +710,26 @@ export function UserManagement() {
                               {log.new_data.doc_number && (
                                 <p>
                                   <span className="font-medium">Dokumento nr.:</span> {log.new_data.doc_number}
+                                </p>
+                              )}
+                              {log.new_data.qty && (
+                                <p>
+                                  <span className="font-medium">Kiekis:</span> {log.new_data.qty}
+                                </p>
+                              )}
+                              {log.new_data.used_by_name && (
+                                <p>
+                                  <span className="font-medium">Panaudojo:</span> {log.new_data.used_by_name}
+                                </p>
+                              )}
+                              {log.new_data.animal_ident && (
+                                <p>
+                                  <span className="font-medium">Gyvūno identifikacija:</span> {log.new_data.animal_ident}
+                                </p>
+                              )}
+                              {log.new_data.first_admin_date && (
+                                <p>
+                                  <span className="font-medium">Pirmasis davimo laikas:</span> {formatDateLT(log.new_data.first_admin_date)}
                                 </p>
                               )}
                             </div>

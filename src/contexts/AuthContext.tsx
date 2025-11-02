@@ -119,10 +119,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     oldData?: any,
     newData?: any
   ) => {
-    if (!user) return;
+    if (!user) {
+      console.warn('Cannot log action: no user logged in');
+      return;
+    }
 
     try {
-      await supabase.rpc('log_user_action', {
+      console.log('Logging action:', { action, tableName, recordId, newData });
+      const { data, error } = await supabase.rpc('log_user_action', {
         p_user_id: user.id,
         p_action: action,
         p_table_name: tableName || null,
@@ -130,6 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         p_old_data: oldData || null,
         p_new_data: newData || null,
       });
+
+      if (error) {
+        console.error('Error logging action:', error);
+        throw error;
+      }
+
+      console.log('Action logged successfully:', data);
     } catch (error) {
       console.error('Failed to log action:', error);
     }
