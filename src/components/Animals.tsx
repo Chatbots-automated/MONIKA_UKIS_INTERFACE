@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
-import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
   treatments?: any[];
@@ -173,6 +173,21 @@ export function Animals() {
     setFormData(emptyAnimal);
   };
 
+  const handleOpenExternalSearch = () => {
+    if (!selectedAnimal?.tag_no) {
+      alert('Nėra ženklo numerio');
+      return;
+    }
+
+    navigator.clipboard.writeText(selectedAnimal.tag_no).then(() => {
+      alert(`Ženklo numeris nukopijuotas: ${selectedAnimal.tag_no}\n\nDabar galite įklijuoti jį VIC sistemoje.`);
+    }).catch(() => {
+      alert(`Ženklo numeris: ${selectedAnimal.tag_no}\n\nPrašome nukopijuoti rankiniu būdu.`);
+    });
+
+    window.open('https://app.brolisherdline.com/animals?page=1', '_blank', 'noopener,noreferrer');
+  };
+
   const searchAnimals = (term: string): Animal[] => {
     if (!term) return animals;
 
@@ -216,10 +231,17 @@ export function Animals() {
             <X className="w-4 h-4" />
             Grįžti
           </button>
-          <div>
+          <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-900">Gyvūno detalės</h2>
             <p className="text-sm text-gray-600">Pilna informacija apie gyvūną</p>
           </div>
+          <button
+            onClick={handleOpenExternalSearch}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-md hover:shadow-lg"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Ieškoti VIC sistemoje
+          </button>
         </div>
 
         {detailLoading ? (
