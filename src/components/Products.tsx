@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, Unit } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';
 
 export function Products() {
+  const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
@@ -59,19 +61,40 @@ export function Products() {
       };
 
       if (editing) {
+        const oldProduct = products.find(p => p.id === editing);
         const { error } = await supabase
           .from('products')
           .update(productData)
           .eq('id', editing);
 
         if (error) throw error;
+
+        await logAction(
+          'update_product',
+          'products',
+          editing,
+          oldProduct,
+          productData
+        );
+
         setEditing(null);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('products')
-          .insert(productData);
+          .insert(productData)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await logAction(
+          'create_product',
+          'products',
+          data.id,
+          null,
+          productData
+        );
+
         setShowAdd(false);
       }
 

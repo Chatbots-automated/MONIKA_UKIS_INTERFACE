@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Calendar, Plus, Edit2, Save, X, Check, XCircle, Clock, Search, AlertCircle } from 'lucide-react';
 import { SearchableSelect } from './SearchableSelect';
 
@@ -22,6 +23,7 @@ interface VisitWithAnimal extends Visit {
 }
 
 export function Visits() {
+  const { user, logAction } = useAuth();
   const [visits, setVisits] = useState<VisitWithAnimal[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,10 @@ export function Visits() {
     vet_name: '',
   };
 
-  const [formData, setFormData] = useState(emptyVisit);
+  const [formData, setFormData] = useState({
+    ...emptyVisit,
+    vet_name: user?.full_name || user?.email || '',
+  });
 
   useEffect(() => {
     loadData();
@@ -86,23 +91,47 @@ export function Visits() {
       };
 
       if (editing) {
+        const oldVisit = visits.find(v => v.id === editing);
         const { error } = await supabase
           .from('animal_visits')
           .update(visitData)
           .eq('id', editing);
 
         if (error) throw error;
+
+        await logAction(
+          'update_visit',
+          'animal_visits',
+          editing,
+          oldVisit,
+          visitData
+        );
+
         setEditing(null);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('animal_visits')
-          .insert(visitData);
+          .insert(visitData)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await logAction(
+          'create_visit',
+          'animal_visits',
+          data.id,
+          null,
+          visitData
+        );
+
         setShowAdd(false);
       }
 
-      setFormData(emptyVisit);
+      setFormData({
+        ...emptyVisit,
+        vet_name: user?.full_name || user?.email || '',
+      });
       await loadData();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
@@ -138,6 +167,16 @@ export function Visits() {
         .eq('id', id);
 
       if (error) throw error;
+
+      const deletedVisit = visits.find(v => v.id === id);
+      await logAction(
+        'delete_visit',
+        'animal_visits',
+        id,
+        deletedVisit,
+        null
+      );
+
       await loadData();
     } catch (error: any) {
       alert('Klaida: ' + error.message);

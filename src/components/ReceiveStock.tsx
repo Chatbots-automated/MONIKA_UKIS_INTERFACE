@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save, AlertTriangle } from 'lucide-react';
 
 export function ReceiveStock() {
+  const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
@@ -413,6 +415,19 @@ export function ReceiveStock() {
       });
 
       if (error) throw error;
+
+      await logAction(
+        'receive_stock',
+        'batches',
+        null,
+        null,
+        {
+          product_id: formData.product_id,
+          lot: formData.lot,
+          received_qty: formData.received_qty,
+          doc_number: formData.doc_number,
+        }
+      );
 
       setSuccess(true);
       setFormData({

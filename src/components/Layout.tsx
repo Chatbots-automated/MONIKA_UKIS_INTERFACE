@@ -48,7 +48,7 @@ const menuItems = [
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, hasPermission, signOut, isFrozen } = useAuth();
+  const { user, hasPermission, signOut, isFrozen, logAction } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -99,6 +99,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                     onClick={() => {
                       onNavigate(item.id);
                       setSidebarOpen(false);
+                      logAction('navigate_to_page', null, null, null, { page: item.id, label: item.label });
                     }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                       isActive

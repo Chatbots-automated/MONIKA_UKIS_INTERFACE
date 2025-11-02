@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
@@ -11,6 +12,7 @@ interface AnimalDetail extends Animal {
 }
 
 export function Animals() {
+  const { logAction } = useAuth();
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [selectedAnimal, setSelectedAnimal] = useState<AnimalDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,19 +141,40 @@ export function Animals() {
       };
 
       if (editing) {
+        const oldAnimal = animals.find(a => a.id === editing);
         const { error } = await supabase
           .from('animals')
           .update(animalData)
           .eq('id', editing);
 
         if (error) throw error;
+
+        await logAction(
+          'update_animal',
+          'animals',
+          editing,
+          oldAnimal,
+          animalData
+        );
+
         setEditing(null);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('animals')
-          .insert(animalData);
+          .insert(animalData)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await logAction(
+          'create_animal',
+          'animals',
+          data.id,
+          null,
+          animalData
+        );
+
         setShowAdd(false);
       }
 
@@ -163,6 +186,7 @@ export function Animals() {
   };
 
   const handleEdit = (animal: Animal) => {
+    logAction('view_animal_edit', 'animals', animal.id, null, { tag_no: animal.tag_no });
     setEditing(animal.id);
     setFormData({
       tag_no: animal.tag_no || '',

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Droplet, Check } from 'lucide-react';
 
 export function Biocides() {
+  const { user, logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [usageRecords, setUsageRecords] = useState<any[]>([]);
@@ -18,7 +20,7 @@ export function Biocides() {
     work_scope: '',
     qty: '',
     unit: 'l' as Unit,
-    used_by_name: '',
+    used_by_name: user?.full_name || user?.email || '',
   });
 
   useEffect(() => {
@@ -56,6 +58,19 @@ export function Biocides() {
 
       if (error) throw error;
 
+      await logAction(
+        'create_biocide_usage',
+        'biocide_usage',
+        null,
+        null,
+        {
+          product_id: formData.product_id,
+          use_date: formData.use_date,
+          qty: formData.qty,
+          used_by_name: formData.used_by_name,
+        }
+      );
+
       setSuccess(true);
       setFormData({
         product_id: '',
@@ -65,7 +80,7 @@ export function Biocides() {
         work_scope: '',
         qty: '',
         unit: 'l',
-        used_by_name: '',
+        used_by_name: user?.full_name || user?.email || '',
       });
 
       setTimeout(() => setSuccess(false), 3000);

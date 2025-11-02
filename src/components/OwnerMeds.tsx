@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
 import { AlertTriangle, Check } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export function OwnerMeds() {
+  const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,6 +62,18 @@ export function OwnerMeds() {
       });
 
       if (error) throw error;
+
+      await logAction(
+        'create_owner_med_admin',
+        'owner_med_admin',
+        null,
+        null,
+        {
+          first_admin_date: formData.first_admin_date,
+          product_id: formData.product_id,
+          animal_ident: formData.animal_ident,
+        }
+      );
 
       setSuccess(true);
       setFormData({

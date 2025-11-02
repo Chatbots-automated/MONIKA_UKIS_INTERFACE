@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Supplier } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import { Plus, Edit2, Save, X, Building2 } from 'lucide-react';
 
 export function Suppliers() {
+  const { logAction } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
@@ -50,19 +52,40 @@ export function Suppliers() {
       };
 
       if (editing) {
+        const oldSupplier = suppliers.find(s => s.id === editing);
         const { error } = await supabase
           .from('suppliers')
           .update(supplierData)
           .eq('id', editing);
 
         if (error) throw error;
+
+        await logAction(
+          'update_supplier',
+          'suppliers',
+          editing,
+          oldSupplier,
+          supplierData
+        );
+
         setEditing(null);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('suppliers')
-          .insert(supplierData);
+          .insert(supplierData)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await logAction(
+          'create_supplier',
+          'suppliers',
+          data.id,
+          null,
+          supplierData
+        );
+
         setShowAdd(false);
       }
 

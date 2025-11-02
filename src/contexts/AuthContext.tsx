@@ -82,6 +82,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(fullUser);
       localStorage.setItem(SESSION_KEY, JSON.stringify(fullUser));
+
+      await supabase.rpc('log_user_action', {
+        p_user_id: fullUser.id,
+        p_action: 'user_login',
+        p_table_name: null,
+        p_record_id: null,
+        p_old_data: null,
+        p_new_data: JSON.stringify({ email: fullUser.email, role: fullUser.role }),
+      });
     } catch (error: any) {
       console.error('Sign in error:', error);
       throw error;
@@ -89,6 +98,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (user) {
+      await supabase.rpc('log_user_action', {
+        p_user_id: user.id,
+        p_action: 'user_logout',
+        p_table_name: null,
+        p_record_id: null,
+        p_old_data: null,
+        p_new_data: null,
+      });
+    }
     setUser(null);
     localStorage.removeItem(SESSION_KEY);
   };

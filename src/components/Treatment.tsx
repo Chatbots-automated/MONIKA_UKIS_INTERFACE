@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Product, Animal, Disease, StockByBatch, Unit } from '../lib/types';
 import { Syringe, Plus, Trash2, Check, Search } from 'lucide-react';
 import { formatDateLT, getDaysUntil } from '../lib/formatters';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UsageLine {
   id: string;
@@ -14,6 +15,7 @@ interface UsageLine {
 }
 
 export function Treatment() {
+  const { user, logAction } = useAuth();
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [diseases, setDiseases] = useState<Disease[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,7 +34,7 @@ export function Treatment() {
     clinical_diagnosis: '',
     services: '',
     outcome: '',
-    vet_name: '',
+    vet_name: user?.full_name || user?.email || '',
     notes: '',
     withdrawal_until: '',
   });
@@ -180,6 +182,19 @@ export function Treatment() {
 
       if (treatmentError) throw treatmentError;
 
+      await logAction(
+        'create_treatment',
+        'treatments',
+        treatment.id,
+        null,
+        {
+          animal_id: formData.animal_id,
+          disease_id: formData.disease_id,
+          vet_name: formData.vet_name,
+          reg_date: formData.reg_date,
+        }
+      );
+
       const usageInserts = usageItems
         .filter(item => item.product_id && item.batch_id && item.qty)
         .map(item => ({
@@ -197,6 +212,14 @@ export function Treatment() {
           .insert(usageInserts);
 
         if (usageError) throw usageError;
+
+        await logAction(
+          'create_usage_items',
+          'usage_items',
+          treatment.id,
+          null,
+          { count: usageInserts.length, items: usageInserts }
+        );
       }
 
       setSuccess(true);
@@ -210,7 +233,7 @@ export function Treatment() {
         clinical_diagnosis: '',
         services: '',
         outcome: '',
-        vet_name: '',
+        vet_name: user?.full_name || user?.email || '',
         notes: '',
         withdrawal_until: '',
       });
