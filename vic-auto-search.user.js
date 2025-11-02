@@ -31,37 +31,57 @@
             if (inputElement) {
                 console.log('Found input element, filling with:', tagNo);
 
+                inputElement.focus();
                 inputElement.value = tagNo;
-                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
 
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
                 nativeInputValueSetter.call(inputElement, tagNo);
-                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
 
-                setTimeout(() => {
+                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+
+                inputElement.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true
+                }));
+                inputElement.dispatchEvent(new KeyboardEvent('keypress', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true
+                }));
+                inputElement.dispatchEvent(new KeyboardEvent('keyup', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true
+                }));
+
+                console.log('Enter key pressed, waiting for results...');
+
+                clearInterval(intervalId);
+
+                const checkForRow = setInterval(() => {
                     const clickableRow = document.querySelector('.row.clickable.darker.MuiBox-root');
 
                     if (clickableRow) {
                         console.log('Found clickable row, clicking...');
                         clickableRow.click();
-                        clearInterval(intervalId);
+                        clearInterval(checkForRow);
                         window.location.hash = '';
-                    } else {
-                        console.log('Clickable row not found yet, waiting...');
-                        setTimeout(() => {
-                            const retryRow = document.querySelector('.row.clickable.darker.MuiBox-root');
-                            if (retryRow) {
-                                console.log('Found clickable row on retry, clicking...');
-                                retryRow.click();
-                                window.location.hash = '';
-                            }
-                        }, 1000);
-                        clearInterval(intervalId);
                     }
-                }, 1500);
+                }, 500);
 
-                clearInterval(intervalId);
+                setTimeout(() => {
+                    clearInterval(checkForRow);
+                    console.log('Timeout waiting for clickable row');
+                }, 10000);
+
             } else if (attempts >= maxAttempts) {
                 console.log('Could not find input element after', maxAttempts, 'attempts');
                 clearInterval(intervalId);
