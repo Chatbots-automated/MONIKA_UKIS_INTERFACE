@@ -6,6 +6,7 @@ import { ReceiveStock } from './components/ReceiveStock';
 import { TreatmentCompact as Treatment } from './components/TreatmentCompact';
 import { Products } from './components/Products';
 import { Animals } from './components/Animals';
+import { Visits } from './components/Visits';
 import { Suppliers } from './components/Suppliers';
 import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
@@ -115,6 +116,8 @@ function App() {
         return <Products />;
       case 'animals':
         return <Animals />;
+      case 'visits':
+        return <Visits />;
       case 'suppliers':
         return <Suppliers />;
       case 'biocides':
