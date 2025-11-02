@@ -48,7 +48,7 @@ const menuItems = [
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, hasPermission, signOut } = useAuth();
+  const { user, hasPermission, signOut, isFrozen } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -161,10 +161,12 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                 <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200">
                   <User className="w-4 h-4 text-emerald-700" />
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium text-emerald-900">{user?.email}</span>
+                    <span className="text-sm font-medium text-emerald-900">
+                      {user?.full_name || user?.email}
+                    </span>
                     {user && (
                       <span className="text-xs text-emerald-600">
-                        {user.role === 'admin' ? 'Admin' : user.role === 'vet' ? 'Vet' : user.role === 'tech' ? 'Tech' : 'Viewer'}
+                        {user.role === 'admin' ? 'Admin' : user.role === 'vet' ? 'Veterinaras' : user.role === 'tech' ? 'Technikas' : 'Žiūrėtojas'}
                       </span>
                     )}
                   </div>
@@ -183,6 +185,20 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8 min-h-screen">
+          {isFrozen && (
+            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-red-800">Paskyra užšaldyta</h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    Jūsų paskyra yra laikinai užšaldyta. Negalite atlikti jokių veiksmų sistemoje.
+                    Kreipkitės į administratorių dėl daugiau informacijos.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {children}
         </main>
 

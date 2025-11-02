@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth, UserRole, User } from '../contexts/AuthContext';
 import { formatDateLT } from '../lib/formatters';
 
 export function UserManagement() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -14,6 +14,10 @@ export function UserManagement() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('viewer');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -65,19 +69,29 @@ export function UserManagement() {
     setError('');
 
     try {
-      const { error } = await supabase.rpc('create_user', {
+      const { data: newUserId, error: createError } = await supabase.rpc('create_user', {
         p_email: newUserEmail,
         p_password: newUserPassword,
         p_role: newUserRole
       });
 
-      if (error) throw error;
+      if (createError) throw createError;
+
+      if (newUserId && newUserFullName) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ full_name: newUserFullName })
+          .eq('id', newUserId);
+
+        if (updateError) throw updateError;
+      }
 
       setSuccess('User added successfully');
       setShowAddUser(false);
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserRole('viewer');
+      setNewUserFullName('');
       fetchUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -104,6 +118,64 @@ export function UserManagement() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to delete user');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const handleFreezeUser = async (userId: string, currentUser: User) => {
+    try {
+      const { data: adminUser } = await supabase.auth.getUser();
+      if (!adminUser) throw new Error('No admin user found');
+
+      const { error } = await supabase.rpc('freeze_user', {
+        p_user_id: userId,
+        p_admin_id: currentUser.id
+      });
+
+      if (error) throw error;
+
+      setSuccess('User frozen successfully');
+      fetchUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to freeze user');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const handleUnfreezeUser = async (userId: string, currentUser: User) => {
+    try {
+      const { data: adminUser } = await supabase.auth.getUser();
+      if (!adminUser) throw new Error('No admin user found');
+
+      const { error } = await supabase.rpc('unfreeze_user', {
+        p_user_id: userId,
+        p_admin_id: currentUser.id
+      });
+
+      if (error) throw error;
+
+      setSuccess('User unfrozen successfully');
+      fetchUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to unfreeze user');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const fetchAuditLogs = async (userId?: string) => {
+    try {
+      const { data, error } = await supabase.rpc('get_user_audit_logs', {
+        p_user_id: userId || null,
+        p_limit: 100,
+        p_offset: 0
+      });
+
+      if (error) throw error;
+      setAuditLogs(data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch audit logs');
       setTimeout(() => setError(''), 3000);
     }
   };
@@ -201,6 +273,18 @@ export function UserManagement() {
             <form onSubmit={handleAddUser} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pilnas vardas
+                </label>
+                <input
+                  type="text"
+                  value={newUserFullName}
+                  onChange={(e) => setNewUserFullName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   El. paštas
                 </label>
                 <input
@@ -253,6 +337,7 @@ export function UserManagement() {
                     setNewUserEmail('');
                     setNewUserPassword('');
                     setNewUserRole('viewer');
+                    setNewUserFullName('');
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
                 >
@@ -281,6 +366,9 @@ export function UserManagement() {
                     Rolė
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Statusas
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Sukurta
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -290,15 +378,15 @@ export function UserManagement() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${user.is_frozen ? 'bg-red-50' : ''}`}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
                           <Mail className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{user.email}</p>
-                          <p className="text-sm text-gray-500">ID: {user.id.slice(0, 8)}...</p>
+                          <p className="font-medium text-gray-900">{user.full_name || user.email}</p>
+                          <p className="text-sm text-gray-500">{user.email}</p>
                         </div>
                       </div>
                     </td>
@@ -318,6 +406,19 @@ export function UserManagement() {
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border ${getRoleColor(user.role)}`}>
                           {getRoleIcon(user.role)}
                           {getRoleLabel(user.role)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {user.is_frozen ? (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border bg-red-100 text-red-800 border-red-200">
+                          <Snowflake className="w-4 h-4" />
+                          Užšaldyta
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border bg-green-100 text-green-800 border-green-200">
+                          <Play className="w-4 h-4" />
+                          Aktyvi
                         </span>
                       )}
                     </td>
@@ -358,6 +459,34 @@ export function UserManagement() {
                             >
                               <Edit2 className="w-5 h-5" />
                             </button>
+                            <button
+                              onClick={() => {
+                                setSelectedUserId(user.id);
+                                setShowAuditLogs(true);
+                                fetchAuditLogs(user.id);
+                              }}
+                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="View Audit Logs"
+                            >
+                              <Activity className="w-5 h-5" />
+                            </button>
+                            {user.is_frozen ? (
+                              <button
+                                onClick={() => currentUser && handleUnfreezeUser(user.id, currentUser)}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Unfreeze User"
+                              >
+                                <Play className="w-5 h-5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => currentUser && handleFreezeUser(user.id, currentUser)}
+                                className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                title="Freeze User"
+                              >
+                                <Snowflake className="w-5 h-5" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteUser(user.id)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -413,6 +542,89 @@ export function UserManagement() {
           </div>
         </div>
       </div>
+
+      {showAuditLogs && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="w-6 h-6 text-purple-600" />
+                <h2 className="text-2xl font-bold text-gray-900">Vartotojo Veiksmų Istorija</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAuditLogs(false);
+                  setSelectedUserId(null);
+                  setAuditLogs([]);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-600" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {auditLogs.length === 0 ? (
+                <div className="text-center py-12">
+                  <Activity className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600">Veiksmų istorija nerasata</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-semibold rounded-full">
+                              {log.action}
+                            </span>
+                            <span className="text-sm text-gray-600">
+                              {log.user_name || log.user_email}
+                            </span>
+                          </div>
+                          {log.table_name && (
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Lentelė:</span> {log.table_name}
+                            </p>
+                          )}
+                          {log.record_id && (
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Įrašo ID:</span> {log.record_id}
+                            </p>
+                          )}
+                          {(log.old_data || log.new_data) && (
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              {log.old_data && (
+                                <div className="text-xs">
+                                  <p className="font-medium text-gray-700 mb-1">Seni duomenys:</p>
+                                  <pre className="bg-white p-2 rounded border border-gray-200 overflow-x-auto">
+                                    {JSON.stringify(log.old_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                              {log.new_data && (
+                                <div className="text-xs">
+                                  <p className="font-medium text-gray-700 mb-1">Nauji duomenys:</p>
+                                  <pre className="bg-white p-2 rounded border border-gray-200 overflow-x-auto">
+                                    {JSON.stringify(log.new_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right text-sm text-gray-500">
+                          <p>{formatDateLT(log.created_at)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
