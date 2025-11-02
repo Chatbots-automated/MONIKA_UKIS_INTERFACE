@@ -16,7 +16,17 @@ export function ReceiveStock() {
   const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creatingProduct, setCreatingProduct] = useState<any>(null);
-  const [newProductCategory, setNewProductCategory] = useState('');
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    category: 'medicines' as const,
+    primary_pack_unit: 'ml' as const,
+    primary_pack_size: '',
+    active_substance: '',
+    registration_code: '',
+    withdrawal_days_meat: '',
+    withdrawal_days_milk: '',
+    dosage_notes: '',
+  });
   const [bulkReceiveData, setBulkReceiveData] = useState({
     lot: '',
     mfg_date: '',
@@ -200,38 +210,48 @@ export function ReceiveStock() {
 
   const handleCreateProduct = (item: any) => {
     setCreatingProduct(item);
+    setNewProductForm({
+      name: item.description || '',
+      category: 'medicines',
+      primary_pack_unit: 'ml',
+      primary_pack_size: item.qty?.toString() || '',
+      active_substance: '',
+      registration_code: '',
+      withdrawal_days_meat: '',
+      withdrawal_days_milk: '',
+      dosage_notes: '',
+    });
     setShowCreateModal(true);
   };
 
   const handleSaveNewProduct = async () => {
-    if (!creatingProduct || !newProductCategory) {
-      alert('Pasirinkite produkto kategoriją');
+    if (!newProductForm.name || !newProductForm.category) {
+      alert('Užpildykite privalomus laukus');
+      return;
+    }
+
+    if (newProductForm.category === 'medicines' && (!newProductForm.withdrawal_days_meat || !newProductForm.withdrawal_days_milk)) {
+      alert('Vaistams privaloma nurodyti karencines dienas');
       return;
     }
 
     try {
-      const unitMap: { [key: string]: string } = {
-        'vnt': 'pcs',
-        'Butelis': 'pcs',
-        'Buteli': 'pcs',
-        'ml': 'ml',
-        'l': 'l',
-        'g': 'g',
-        'kg': 'kg',
-        'dėž': 'pcs'
+      const productData = {
+        name: newProductForm.name,
+        category: newProductForm.category,
+        primary_pack_unit: newProductForm.primary_pack_unit,
+        primary_pack_size: newProductForm.primary_pack_size ? parseFloat(newProductForm.primary_pack_size) : null,
+        active_substance: newProductForm.active_substance || null,
+        registration_code: newProductForm.registration_code || null,
+        withdrawal_days_meat: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_meat) ? parseInt(newProductForm.withdrawal_days_meat) : null,
+        withdrawal_days_milk: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_milk) ? parseInt(newProductForm.withdrawal_days_milk) : null,
+        dosage_notes: newProductForm.dosage_notes || null,
+        is_active: true,
       };
-
-      const mappedUnit = unitMap[creatingProduct.unit] || 'pcs';
 
       const { data, error } = await supabase
         .from('products')
-        .insert({
-          name: creatingProduct.description,
-          category: newProductCategory,
-          primary_pack_unit: mappedUnit,
-          primary_pack_size: creatingProduct.qty || 1,
-          is_active: true,
-        })
+        .insert(productData)
         .select()
         .single();
 
@@ -248,7 +268,17 @@ export function ReceiveStock() {
 
       setShowCreateModal(false);
       setCreatingProduct(null);
-      setNewProductCategory('');
+      setNewProductForm({
+        name: '',
+        category: 'medicines',
+        primary_pack_unit: 'ml',
+        primary_pack_size: '',
+        active_substance: '',
+        registration_code: '',
+        withdrawal_days_meat: '',
+        withdrawal_days_milk: '',
+        dosage_notes: '',
+      });
       alert('Produktas sėkmingai sukurtas!');
     } catch (error: any) {
       alert('Klaida kuriant produktą: ' + error.message);
@@ -885,43 +915,183 @@ export function ReceiveStock() {
 
         {showCreateModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują produktą</h3>
 
-              {creatingProduct && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Pavadinimas:</p>
-                  <p className="font-semibold text-gray-900">{creatingProduct.description}</p>
-                  <p className="text-sm text-gray-600 mt-2 mb-1">Vienetas:</p>
-                  <p className="font-semibold text-gray-900">{creatingProduct.unit}</p>
-                </div>
-              )}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Pavadinimas *
+                    </label>
+                    <input
+                      type="text"
+                      value={newProductForm.name}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="Produkto pavadinimas"
+                    />
+                  </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pasirinkite kategoriją *
-                </label>
-                <select
-                  value={newProductCategory}
-                  onChange={(e) => setNewProductCategory(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                >
-                  <option value="">Pasirinkite...</option>
-                  <option value="medicines">Vaistai</option>
-                  <option value="vaccines">Vakcinos</option>
-                  <option value="supplements">Priedai</option>
-                  <option value="equipment">Įranga</option>
-                  <option value="consumables">Suvartojamos medžiagos</option>
-                  <option value="other">Kita</option>
-                </select>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Kategorija *
+                    </label>
+                    <select
+                      value={newProductForm.category}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value as any })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    >
+                      <option value="medicines">Vaistai</option>
+                      <option value="prevention">Prevencija</option>
+                      <option value="hygiene">Higiena</option>
+                      <option value="biocide">Biocidas</option>
+                      <option value="technical">Techniniai</option>
+                      <option value="treatment_materials">Gydymo medžiagos</option>
+                      <option value="reproduction">Reprodukcija</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Pakuotės dydis
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newProductForm.primary_pack_size}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, primary_pack_size: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Vienetas
+                    </label>
+                    <select
+                      value={newProductForm.primary_pack_unit}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, primary_pack_unit: e.target.value as any })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    >
+                      <option value="ml">ml</option>
+                      <option value="l">L</option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="pcs">pcs</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Veiklioji medžiaga
+                    </label>
+                    <input
+                      type="text"
+                      value={newProductForm.active_substance}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, active_substance: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="Pvz: Penicilinas"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Registracijos kodas
+                    </label>
+                    <input
+                      type="text"
+                      value={newProductForm.registration_code}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, registration_code: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="REG-12345"
+                    />
+                  </div>
+
+                  {newProductForm.category === 'medicines' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <span className="flex items-center gap-2">
+                            Karencija: Mėsa (dienų) *
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          </span>
+                        </label>
+                        <input
+                          type="number"
+                          value={newProductForm.withdrawal_days_meat}
+                          onChange={(e) => setNewProductForm({ ...newProductForm, withdrawal_days_meat: e.target.value })}
+                          className="w-full px-4 py-2.5 border-2 border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-amber-50"
+                          placeholder="7"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <span className="flex items-center gap-2">
+                            Karencija: Pienas (dienų) *
+                            <AlertTriangle className="w-4 h-4 text-blue-600" />
+                          </span>
+                        </label>
+                        <input
+                          type="number"
+                          value={newProductForm.withdrawal_days_milk}
+                          onChange={(e) => setNewProductForm({ ...newProductForm, withdrawal_days_milk: e.target.value })}
+                          className="w-full px-4 py-2.5 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                          placeholder="5"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Dozavimo pastabos
+                    </label>
+                    <textarea
+                      value={newProductForm.dosage_notes}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, dosage_notes: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="Papildomos dozavimo instrukcijos..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                {newProductForm.category === 'medicines' && (
+                  <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-900 mb-1">
+                          Karencijos dienų nurodymas yra privalomas vaistams!
+                        </p>
+                        <p className="text-xs text-amber-700">
+                          Šie duomenys naudojami apskaičiuoti gyvulių gydymo periodo pabaigą ir užtikrinti maisto saugą.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => {
                     setShowCreateModal(false);
                     setCreatingProduct(null);
-                    setNewProductCategory('');
+                    setNewProductForm({
+                      name: '',
+                      category: 'medicines',
+                      primary_pack_unit: 'ml',
+                      primary_pack_size: '',
+                      active_substance: '',
+                      registration_code: '',
+                      withdrawal_days_meat: '',
+                      withdrawal_days_milk: '',
+                      dosage_notes: '',
+                    });
                   }}
                   className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
                 >
@@ -931,7 +1101,7 @@ export function ReceiveStock() {
                   onClick={handleSaveNewProduct}
                   className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
                 >
-                  Sukurti
+                  Sukurti produktą
                 </button>
               </div>
             </div>
