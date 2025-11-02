@@ -46,7 +46,31 @@
                 inputElement.dispatchEvent(changeEvent);
 
                 setTimeout(() => {
+                    const form = inputElement.closest('form');
+                    if (form) {
+                        console.log('Found form, submitting...');
+                        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    }
+
                     inputElement.dispatchEvent(new KeyboardEvent('keydown', {
+                        key: 'Enter',
+                        code: 'Enter',
+                        keyCode: 13,
+                        which: 13,
+                        bubbles: true,
+                        cancelable: true
+                    }));
+
+                    inputElement.dispatchEvent(new KeyboardEvent('keypress', {
+                        key: 'Enter',
+                        code: 'Enter',
+                        keyCode: 13,
+                        which: 13,
+                        bubbles: true,
+                        cancelable: true
+                    }));
+
+                    inputElement.dispatchEvent(new KeyboardEvent('keyup', {
                         key: 'Enter',
                         code: 'Enter',
                         keyCode: 13,
@@ -72,7 +96,7 @@
                         clearInterval(checkForRow);
                         console.log('Timeout waiting for clickable row');
                     }, 10000);
-                }, 100);
+                }, 300);
 
                 clearInterval(intervalId);
 
