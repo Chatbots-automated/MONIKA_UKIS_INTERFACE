@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         p_table_name: null,
         p_record_id: null,
         p_old_data: null,
-        p_new_data: JSON.stringify({ email: fullUser.email, role: fullUser.role }),
+        p_new_data: { email: fullUser.email, role: fullUser.role, full_name: fullUser.full_name },
       });
     } catch (error: any) {
       console.error('Sign in error:', error);
@@ -127,8 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         p_action: action,
         p_table_name: tableName || null,
         p_record_id: recordId || null,
-        p_old_data: oldData ? JSON.stringify(oldData) : null,
-        p_new_data: newData ? JSON.stringify(newData) : null,
+        p_old_data: oldData || null,
+        p_new_data: newData || null,
       });
     } catch (error) {
       console.error('Failed to log action:', error);

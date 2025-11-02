@@ -219,6 +219,44 @@ export function UserManagement() {
     }
   };
 
+  const getActionLabel = (action: string) => {
+    const actionMap: { [key: string]: string } = {
+      'user_login': 'Prisijungė prie sistemos',
+      'user_logout': 'Atsijungė nuo sistemos',
+      'navigate_to_page': 'Peržiūrėjo puslapį',
+      'create_treatment': 'Sukūrė gydymą',
+      'update_treatment': 'Atnaujino gydymą',
+      'delete_treatment': 'Ištrynė gydymą',
+      'create_usage_items': 'Panaudojo medikamentus',
+      'create_animal': 'Pridėjo gyvūną',
+      'update_animal': 'Atnaujino gyvūno duomenis',
+      'delete_animal': 'Ištrynė gyvūną',
+      'view_animal_edit': 'Žiūrėjo gyvūno redagavimą',
+      'create_visit': 'Sukūrė vizitą',
+      'update_visit': 'Atnaujino vizitą',
+      'delete_visit': 'Ištrynė vizitą',
+      'create_product': 'Pridėjo produktą',
+      'update_product': 'Atnaujino produktą',
+      'delete_product': 'Ištrynė produktą',
+      'receive_stock': 'Priėmė atsargas',
+      'create_biocide_usage': 'Panaudojo biocidą',
+      'create_owner_med_admin': 'Užregistravo savininko vaistus',
+      'create_supplier': 'Pridėjo tiekėją',
+      'update_supplier': 'Atnaujino tiekėją',
+      'delete_supplier': 'Ištrynė tiekėją',
+      'freeze_user': 'Užšaldė vartotoją',
+      'unfreeze_user': 'Atšildė vartotoją',
+    };
+    return actionMap[action] || action;
+  };
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const dateStr = formatDateLT(dateString);
+    const timeStr = date.toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `${dateStr} ${timeStr}`;
+  };
+
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -571,50 +609,95 @@ export function UserManagement() {
               ) : (
                 <div className="space-y-3">
                   {auditLogs.map((log) => (
-                    <div key={log.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div key={log.id} className="bg-white rounded-lg p-4 border-l-4 border-purple-500 shadow-sm">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-semibold rounded-full">
-                              {log.action}
+                            <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-semibold rounded-lg">
+                              {getActionLabel(log.action)}
                             </span>
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-gray-600 font-medium">
                               {log.user_name || log.user_email}
                             </span>
                           </div>
-                          {log.table_name && (
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Lentelė:</span> {log.table_name}
-                            </p>
-                          )}
-                          {log.record_id && (
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Įrašo ID:</span> {log.record_id}
-                            </p>
-                          )}
-                          {(log.old_data || log.new_data) && (
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              {log.old_data && (
-                                <div className="text-xs">
-                                  <p className="font-medium text-gray-700 mb-1">Seni duomenys:</p>
-                                  <pre className="bg-white p-2 rounded border border-gray-200 overflow-x-auto">
-                                    {JSON.stringify(log.old_data, null, 2)}
-                                  </pre>
-                                </div>
+                          {log.new_data && typeof log.new_data === 'object' && (
+                            <div className="mt-2 text-sm text-gray-700 space-y-1">
+                              {log.new_data.page && log.new_data.label && (
+                                <p>
+                                  <span className="font-medium">Puslapis:</span> {log.new_data.label}
+                                </p>
                               )}
-                              {log.new_data && (
-                                <div className="text-xs">
-                                  <p className="font-medium text-gray-700 mb-1">Nauji duomenys:</p>
-                                  <pre className="bg-white p-2 rounded border border-gray-200 overflow-x-auto">
-                                    {JSON.stringify(log.new_data, null, 2)}
-                                  </pre>
-                                </div>
+                              {log.new_data.animal_id && (
+                                <p>
+                                  <span className="font-medium">Gyvūno ID:</span> {log.new_data.animal_id}
+                                </p>
+                              )}
+                              {log.new_data.tag_no && (
+                                <p>
+                                  <span className="font-medium">Auskaras:</span> {log.new_data.tag_no}
+                                </p>
+                              )}
+                              {log.new_data.vet_name && (
+                                <p>
+                                  <span className="font-medium">Veterinaras:</span> {log.new_data.vet_name}
+                                </p>
+                              )}
+                              {log.new_data.reg_date && (
+                                <p>
+                                  <span className="font-medium">Registracijos data:</span> {formatDateLT(log.new_data.reg_date)}
+                                </p>
+                              )}
+                              {log.new_data.count !== undefined && (
+                                <p>
+                                  <span className="font-medium">Panaudotų vaistų kiekis:</span> {log.new_data.count}
+                                </p>
+                              )}
+                              {log.new_data.received_qty && (
+                                <p>
+                                  <span className="font-medium">Priimtas kiekis:</span> {log.new_data.received_qty}
+                                </p>
+                              )}
+                              {log.new_data.lot && (
+                                <p>
+                                  <span className="font-medium">Partija:</span> {log.new_data.lot}
+                                </p>
+                              )}
+                              {log.new_data.doc_number && (
+                                <p>
+                                  <span className="font-medium">Dokumento nr.:</span> {log.new_data.doc_number}
+                                </p>
                               )}
                             </div>
                           )}
+                          {log.old_data && log.action.includes('update') && (
+                            <details className="mt-2">
+                              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                                Rodyti detalius duomenis
+                              </summary>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <div className="text-xs">
+                                  <p className="font-medium text-gray-700 mb-1">Seni duomenys:</p>
+                                  <pre className="bg-gray-50 p-2 rounded border border-gray-200 overflow-x-auto text-xs">
+                                    {JSON.stringify(log.old_data, null, 2)}
+                                  </pre>
+                                </div>
+                                <div className="text-xs">
+                                  <p className="font-medium text-gray-700 mb-1">Nauji duomenys:</p>
+                                  <pre className="bg-gray-50 p-2 rounded border border-gray-200 overflow-x-auto text-xs">
+                                    {JSON.stringify(log.new_data, null, 2)}
+                                  </pre>
+                                </div>
+                              </div>
+                            </details>
+                          )}
                         </div>
-                        <div className="text-right text-sm text-gray-500">
-                          <p>{formatDateLT(log.created_at)}</p>
+                        <div className="text-right text-sm flex flex-col items-end gap-1">
+                          <span className="text-gray-900 font-medium">{formatDateTime(log.created_at)}</span>
+                          {log.table_name && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                              {log.table_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
