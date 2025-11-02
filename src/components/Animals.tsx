@@ -179,13 +179,10 @@ export function Animals() {
       return;
     }
 
-    navigator.clipboard.writeText(selectedAnimal.tag_no).then(() => {
-      alert(`Ženklo numeris nukopijuotas: ${selectedAnimal.tag_no}\n\nDabar galite įklijuoti jį VIC sistemoje.`);
-    }).catch(() => {
-      alert(`Ženklo numeris: ${selectedAnimal.tag_no}\n\nPrašome nukopijuoti rankiniu būdu.`);
-    });
+    const tagNo = encodeURIComponent(selectedAnimal.tag_no);
+    const url = `https://app.brolisherdline.com/animals?page=1#search=${tagNo}`;
 
-    window.open('https://app.brolisherdline.com/animals?page=1', '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const searchAnimals = (term: string): Animal[] => {
