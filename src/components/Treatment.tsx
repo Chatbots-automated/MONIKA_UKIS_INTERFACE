@@ -135,9 +135,12 @@ export function Treatment() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 FORM SUBMITTED - handleSubmit called');
+    alert('DEBUG: Form submitted, starting treatment creation...');
     setLoading(true);
     setSuccess(false);
 
+    console.log('🔍 Validating usage items...');
     for (const item of usageItems) {
       if (item.product_id && item.batch_id && item.qty) {
         const batch = batches.find(b => b.batch_id === item.batch_id);
@@ -145,6 +148,7 @@ export function Treatment() {
           const expiryDate = batch.batches?.expiry_date || null;
           const daysUntil = getDaysUntil(expiryDate);
           if (daysUntil !== null && daysUntil < 0) {
+            console.log('❌ Expired batch detected');
             alert(`Klaida: Partija ${batch.lot || 'N/A'} yra pasibaigusi. Negalima naudoti.`);
             setLoading(false);
             return;
@@ -152,6 +156,7 @@ export function Treatment() {
 
           const requestedQty = parseFloat(item.qty);
           if (requestedQty > batch.on_hand) {
+            console.log('❌ Insufficient stock');
             alert(`Klaida: Partijoje ${batch.lot || 'N/A'} nepakanka atsargų. Likutis: ${batch.on_hand}, prašoma: ${requestedQty}`);
             setLoading(false);
             return;
@@ -160,6 +165,8 @@ export function Treatment() {
       }
     }
 
+    console.log('✅ Validation passed, inserting treatment...');
+    alert('DEBUG: Validation passed, creating treatment in database...');
     try {
       const { data: treatment, error: treatmentError } = await supabase
         .from('treatments')

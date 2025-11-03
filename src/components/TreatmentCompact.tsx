@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Animal, Product, Batch, Disease, Unit } from '../lib/types';
 import { Syringe, Plus, Save, X, AlertTriangle, Calendar } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
+import { useAuth } from '../contexts/AuthContext';
 
 interface WithdrawalStatus {
   animal_id: string;
@@ -25,6 +26,7 @@ interface UsageLine {
 }
 
 export function TreatmentCompact() {
+  const { logAction } = useAuth();
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [diseases, setDiseases] = useState<Disease[]>([]);
@@ -154,6 +156,31 @@ export function TreatmentCompact() {
 
       if (treatmentError) throw treatmentError;
 
+      console.log('✅ Treatment created:', treatment);
+
+      const selectedAnimal = animals.find(a => a.id === animalId);
+      const selectedDisease = diseases.find(d => d.id === diseaseId);
+
+      await logAction(
+        'create_treatment',
+        'treatments',
+        treatment.id,
+        null,
+        {
+          animal_id: animalId,
+          animal_tag: selectedAnimal?.tag_no || 'N/A',
+          disease_id: diseaseId,
+          disease_name: selectedDisease?.name || 'N/A',
+          vet_name: vetName,
+          reg_date: regDate,
+          mastitis_teat: teat,
+          mastitis_type: caseType,
+          notes: notes,
+        }
+      );
+
+      console.log('✅ Treatment logged successfully');
+
       for (const line of usageLines) {
         if (!line.product_id || !line.batch_id || !line.qty) continue;
 
@@ -195,6 +222,16 @@ export function TreatmentCompact() {
       }
 
       await supabase.rpc('calculate_withdrawal_dates', { p_treatment_id: treatment.id });
+
+      await logAction(
+        'create_usage_items',
+        'usage_items',
+        treatment.id,
+        null,
+        { count: completeLines.length, items: completeLines }
+      );
+
+      console.log('✅ Usage items logged');
 
       alert('Gydymas sėkmingai užregistruotas!');
 
