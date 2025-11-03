@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface VaccinationGroup {
   date: string;
@@ -10,6 +11,7 @@ interface VaccinationGroup {
 }
 
 export function Vaccinations() {
+  const { logAction } = useAuth();
   const [vaccinations, setVaccinations] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
@@ -104,6 +106,23 @@ export function Vaccinations() {
       const { error } = await supabase.from('vaccinations').insert(vaccinationEntries);
 
       if (error) throw error;
+
+      const selectedProduct = products.find(p => p.id === massVaccinationData.product_id);
+      await logAction(
+        'create_mass_vaccination',
+        'vaccinations',
+        null,
+        null,
+        {
+          animal_count: selectedAnimals.size,
+          product_id: massVaccinationData.product_id,
+          product_name: selectedProduct?.name || 'N/A',
+          batch_id: massVaccinationData.batch_id,
+          vaccination_date: massVaccinationData.vaccination_date,
+          dose_amount: massVaccinationData.dose_amount,
+          dose_number: massVaccinationData.dose_number,
+        }
+      );
 
       alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų!`);
 

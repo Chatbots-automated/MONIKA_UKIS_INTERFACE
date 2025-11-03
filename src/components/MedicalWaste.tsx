@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Trash2, Check } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export function MedicalWaste() {
+  const { logAction } = useAuth();
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -56,6 +58,21 @@ export function MedicalWaste() {
       });
 
       if (error) throw error;
+
+      await logAction(
+        'create_medical_waste',
+        'medical_waste',
+        null,
+        null,
+        {
+          waste_code: formData.waste_code,
+          name: formData.name,
+          qty_generated: formData.qty_generated,
+          qty_transferred: formData.qty_transferred,
+          carrier: formData.carrier,
+          transfer_date: formData.transfer_date,
+        }
+      );
 
       setSuccess(true);
       setFormData({
