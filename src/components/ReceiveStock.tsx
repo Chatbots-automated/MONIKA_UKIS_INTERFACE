@@ -101,7 +101,7 @@ export function ReceiveStock() {
     try {
       const arrayBuffer = await selectedFile.arrayBuffer();
 
-      const response = await fetch('https://n8n-up8s.onrender.com/webhook-test/36549f46-a08b-4790-bf56-40cdc919e4c0', {
+      const response = await fetch('https://n8n-up8s.onrender.com/webhook/36549f46-a08b-4790-bf56-40cdc919e4c0', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/pdf',
