@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { FileText, Download, Filter, Search, Calendar, User, RefreshCw } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
+import { translateAction, getActionCategory } from '../lib/actionTranslations';
 
 interface AuditLog {
   id: string;
@@ -212,7 +213,7 @@ export function AuditLogViewer() {
           >
             <option value="">Visi veiksmai</option>
             {actions.map(action => (
-              <option key={action} value={action}>{action}</option>
+              <option key={action} value={action}>{translateAction(action)}</option>
             ))}
           </select>
 
@@ -285,7 +286,7 @@ export function AuditLogViewer() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getActionBadgeColor(log.action)}`}>
-                        {log.action}
+                        {translateAction(log.action)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

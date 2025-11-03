@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Activity, Users, TrendingUp, Clock, BarChart3, Award } from 'lucide-react';
+import { translateAction } from '../lib/actionTranslations';
 
 interface ActivityStats {
   totalActions: number;
@@ -192,7 +193,7 @@ export function UserActivityDashboard() {
           {stats.mostUsedFeature ? (
             <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
               <div>
-                <p className="font-medium text-gray-900">{stats.mostUsedFeature.action}</p>
+                <p className="font-medium text-gray-900">{translateAction(stats.mostUsedFeature.action)}</p>
                 <p className="text-sm text-gray-600">{stats.mostUsedFeature.count} kartų</p>
               </div>
               <BarChart3 className="h-8 w-8 text-green-600" />
@@ -241,7 +242,7 @@ export function UserActivityDashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-900">{item.action}</span>
+                  <span className="text-sm font-medium text-gray-900">{translateAction(item.action)}</span>
                   <span className="text-sm text-gray-600">{item.count}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
