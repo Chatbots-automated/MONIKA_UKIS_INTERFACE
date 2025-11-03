@@ -13,6 +13,7 @@ import { OwnerMeds } from './components/OwnerMeds';
 import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
 import { UserManagement } from './components/UserManagement';
+import { AdminDashboard } from './components/AdminDashboard';
 import { Vaccinations } from './components/Vaccinations';
 import { TreatmentHistory } from './components/TreatmentHistory';
 import { AuthForm } from './components/AuthForm';
@@ -82,8 +83,8 @@ function App() {
         <div className="max-w-7xl mx-auto p-8">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Administratoriaus žurnalas</h1>
-              <p className="text-gray-600">Vartotojų ir sistemos valdymas</p>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Administratoriaus pultas</h1>
+              <p className="text-gray-600">Sistemos valdymas ir stebėjimas</p>
             </div>
             <button
               onClick={() => setSelectedModule(null)}
@@ -92,7 +93,7 @@ function App() {
               Grįžti į modulius
             </button>
           </div>
-          <UserManagement />
+          <AdminDashboard />
         </div>
       </div>
     );
