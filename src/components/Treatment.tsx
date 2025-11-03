@@ -182,27 +182,38 @@ export function Treatment() {
 
       if (treatmentError) throw treatmentError;
 
-      console.log('Treatment created:', treatment);
+      console.log('✅ Treatment created:', treatment);
+      alert('DEBUG: Treatment created with ID: ' + treatment.id);
 
       const selectedAnimal = animals.find(a => a.id === formData.animal_id);
       const selectedDisease = diseases.find(d => d.id === formData.disease_id);
 
-      await logAction(
-        'create_treatment',
-        'treatments',
-        treatment.id,
-        null,
-        {
-          animal_id: formData.animal_id,
-          animal_tag: selectedAnimal?.tag_no || 'N/A',
-          disease_id: formData.disease_id,
-          disease_name: selectedDisease?.name || 'N/A',
-          vet_name: formData.vet_name,
-          reg_date: formData.reg_date,
-          clinical_diagnosis: formData.clinical_diagnosis,
-          outcome: formData.outcome,
-        }
-      );
+      console.log('🔍 About to log action...');
+      alert('DEBUG: About to log action for treatment ' + treatment.id);
+
+      try {
+        await logAction(
+          'create_treatment',
+          'treatments',
+          treatment.id,
+          null,
+          {
+            animal_id: formData.animal_id,
+            animal_tag: selectedAnimal?.tag_no || 'N/A',
+            disease_id: formData.disease_id,
+            disease_name: selectedDisease?.name || 'N/A',
+            vet_name: formData.vet_name,
+            reg_date: formData.reg_date,
+            clinical_diagnosis: formData.clinical_diagnosis,
+            outcome: formData.outcome,
+          }
+        );
+        console.log('✅ Action logged successfully');
+        alert('DEBUG: Action logged successfully!');
+      } catch (logError: any) {
+        console.error('❌ Failed to log action:', logError);
+        alert('DEBUG ERROR: Failed to log action: ' + logError.message);
+      }
 
       const usageInserts = usageItems
         .filter(item => item.product_id && item.batch_id && item.qty)
@@ -222,13 +233,19 @@ export function Treatment() {
 
         if (usageError) throw usageError;
 
-        await logAction(
-          'create_usage_items',
-          'usage_items',
-          treatment.id,
-          null,
-          { count: usageInserts.length, items: usageInserts }
-        );
+        console.log('📦 Logging usage items...');
+        try {
+          await logAction(
+            'create_usage_items',
+            'usage_items',
+            treatment.id,
+            null,
+            { count: usageInserts.length, items: usageInserts }
+          );
+          console.log('✅ Usage items logged');
+        } catch (logError: any) {
+          console.error('❌ Failed to log usage items:', logError);
+        }
       }
 
       setSuccess(true);
