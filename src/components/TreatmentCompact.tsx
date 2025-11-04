@@ -94,12 +94,12 @@ export function TreatmentCompact() {
   const fetchStockLevel = async (productId: string) => {
     const { data, error } = await supabase
       .from('stock_by_batch')
-      .select('qty_remaining')
+      .select('on_hand')
       .eq('product_id', productId);
 
     if (error || !data) return 0;
 
-    const total = data.reduce((sum, batch) => sum + (batch.qty_remaining || 0), 0);
+    const total = data.reduce((sum, batch) => sum + (batch.on_hand || 0), 0);
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
   };
