@@ -11,10 +11,11 @@ interface Vaccination {
   product_id: string;
   vaccination_date: string;
   batch_id: string | null;
-  dose_qty: number;
-  dose_unit: string;
-  next_vaccination_date: string | null;
-  vet_name: string | null;
+  dose_amount: number;
+  unit: string;
+  dose_number: number;
+  next_booster_date: string | null;
+  administered_by: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -548,55 +549,85 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
           <div className="space-y-4">
             {vaccinations.length > 0 ? (
               vaccinations.map(vaccination => (
-                <div key={vaccination.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="font-semibold text-gray-900 flex items-center gap-2">
-                        <Syringe className="w-4 h-4 text-blue-600" />
+                <div key={vaccination.id} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                        <Syringe className="w-5 h-5 text-blue-600" />
                         {vaccination.product?.name || 'Nežinoma vakcina'}
                       </div>
-                      <div className="text-sm text-gray-600 mt-1">
+                      <div className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" />
                         {formatDateLT(vaccination.vaccination_date)}
                       </div>
                     </div>
+                    <div className="text-right">
+                      <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Dozė #{vaccination.dose_number}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Dozė:</span>
-                      <span className="font-medium text-gray-900">
-                        {vaccination.dose_qty} {vaccination.dose_unit}
-                      </span>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Dozė</div>
+                      <div className="font-semibold text-gray-900">
+                        {vaccination.dose_amount} {vaccination.unit}
+                      </div>
                     </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Serija</div>
+                      <div className="font-semibold text-gray-900 text-sm truncate">
+                        {vaccination.batch_id ? vaccination.batch_id.slice(0, 8) : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
 
-                    {vaccination.next_vaccination_date && (
-                      <div className="flex items-center justify-between text-sm bg-green-50 rounded px-3 py-2">
-                        <span className="text-gray-600">Kita vakcina:</span>
-                        <span className="font-medium text-green-700">
-                          {formatDateLT(vaccination.next_vaccination_date)}
+                  {vaccination.next_booster_date && (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3 mb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-gray-700">Kita vakcina:</span>
+                        </div>
+                        <span className="font-bold text-green-700">
+                          {formatDateLT(vaccination.next_booster_date)}
                         </span>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {vaccination.vet_name && (
-                      <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
-                        Gyd.: {vaccination.vet_name}
+                  {vaccination.administered_by && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-semibold text-blue-700">
+                          {vaccination.administered_by.charAt(0).toUpperCase()}
+                        </span>
                       </div>
-                    )}
+                      <span>Atliko: <span className="font-medium text-gray-900">{vaccination.administered_by}</span></span>
+                    </div>
+                  )}
 
-                    {vaccination.notes && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <div className="text-xs font-medium text-gray-600 mb-1">Pastabos:</div>
-                        <p className="text-sm text-gray-700">{vaccination.notes}</p>
+                  {vaccination.notes && (
+                    <div className="pt-3 border-t border-gray-200">
+                      <div className="flex items-start gap-2">
+                        <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex-1">
+                          <div className="text-xs font-medium text-gray-500 mb-1">Pastabos</div>
+                          <p className="text-sm text-gray-700 leading-relaxed">{vaccination.notes}</p>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <Syringe className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p>Nėra vakcinacijų</p>
+              <div className="text-center py-16 text-gray-500">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Syringe className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="text-lg font-medium">Nėra vakcinacijų</p>
+                <p className="text-sm mt-1">Pridėkite vakcinaciją per vizitą</p>
               </div>
             )}
           </div>
@@ -604,69 +635,180 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
 
         {activeTab === 'logs' && (
           <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-600" />
-                Gyvūno istorija
+                Gyvūno statistika
               </h3>
-              <div className="space-y-3">
-                <div className="bg-white rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Iš viso vizitų:</span>
-                    <span className="text-lg font-bold text-blue-600">{visits.length}</span>
-                  </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">{visits.length}</div>
+                  <div className="text-xs text-gray-600">Vizitų</div>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Iš viso gydymų:</span>
-                    <span className="text-lg font-bold text-green-600">{treatments.length}</span>
-                  </div>
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-green-600 mb-1">{treatments.length}</div>
+                  <div className="text-xs text-gray-600">Gydymų</div>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Iš viso vakcinacijų:</span>
-                    <span className="text-lg font-bold text-purple-600">{vaccinations.length}</span>
-                  </div>
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-purple-600 mb-1">{vaccinations.length}</div>
+                  <div className="text-xs text-gray-600">Vakcinacijų</div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Paskutiniai įvykiai</h3>
-              <div className="space-y-2 text-sm">
-                {visits.slice(0, 5).map(visit => (
-                  <div key={visit.id} className="flex items-center gap-2 text-gray-700">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">{formatDateLT(visit.visit_datetime)}</span>
-                    <span>•</span>
-                    <span>Vizitas ({visit.procedures.join(', ')})</span>
-                  </div>
-                ))}
-                {treatments.slice(0, 3).map(treatment => (
-                  <div key={treatment.id} className="flex items-center gap-2 text-gray-700">
-                    <Pill className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">{formatDateLT(treatment.reg_date)}</span>
-                    <span>•</span>
-                    <span>Gydymas{treatment.disease_name ? `: ${treatment.disease_name}` : ''}</span>
-                  </div>
-                ))}
-                {vaccinations.slice(0, 3).map(vaccination => (
-                  <div key={vaccination.id} className="flex items-center gap-2 text-gray-700">
-                    <Syringe className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">{formatDateLT(vaccination.vaccination_date)}</span>
-                    <span>•</span>
-                    <span>Vakcina: {vaccination.product?.name}</span>
-                  </div>
-                ))}
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="bg-gray-50 border-b border-gray-200 px-5 py-3">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-gray-600" />
+                  Pilna istorija
+                </h3>
+              </div>
+              <div className="p-5">
+                {(() => {
+                  const allEvents = [
+                    ...visits.map(v => ({ type: 'visit', date: v.visit_datetime, data: v })),
+                    ...treatments.map(t => ({ type: 'treatment', date: t.reg_date, data: t })),
+                    ...vaccinations.map(v => ({ type: 'vaccination', date: v.vaccination_date, data: v }))
+                  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                  if (allEvents.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-gray-500">
+                        <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileText className="w-10 h-10 text-gray-400" />
+                        </div>
+                        <p className="text-lg font-medium">Nėra įvykių</p>
+                        <p className="text-sm mt-1">Istorija prasidės po pirmojo vizito</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {allEvents.map((event, idx) => {
+                        if (event.type === 'visit') {
+                          const visit = event.data as AnimalVisit;
+                          return (
+                            <div key={`visit-${visit.id}`} className="flex gap-3 group hover:bg-blue-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <Calendar className="w-5 h-5 text-blue-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-gray-900">Vizitas</div>
+                                    <div className="text-sm text-gray-600 mt-0.5">
+                                      {visit.procedures.join(', ')}
+                                    </div>
+                                    {visit.notes && (
+                                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">{visit.notes}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateTimeLT(visit.visit_datetime)}
+                                  </div>
+                                </div>
+                                {visit.status && (
+                                  <div className="mt-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                      visit.status === 'Užbaigtas' ? 'bg-green-100 text-green-800' :
+                                      visit.status === 'Planuojamas' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {visit.status}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else if (event.type === 'treatment') {
+                          const treatment = event.data as TreatmentWithDetails;
+                          return (
+                            <div key={`treatment-${treatment.id}`} className="flex gap-3 group hover:bg-green-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                  <Pill className="w-5 h-5 text-green-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-gray-900">Gydymas</div>
+                                    {treatment.disease_name && (
+                                      <div className="text-sm text-gray-600 mt-0.5">{treatment.disease_name}</div>
+                                    )}
+                                    {treatment.notes && (
+                                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">{treatment.notes}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateLT(treatment.reg_date)}
+                                  </div>
+                                </div>
+                                {treatment.usage_items && treatment.usage_items.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {treatment.usage_items.slice(0, 3).map((item, i) => (
+                                      <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                        {item.product?.name || 'Produktas'}
+                                      </span>
+                                    ))}
+                                    {treatment.usage_items.length > 3 && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                        +{treatment.usage_items.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          const vaccination = event.data as VaccinationWithProduct;
+                          return (
+                            <div key={`vaccination-${vaccination.id}`} className="flex gap-3 group hover:bg-purple-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                  <Syringe className="w-5 h-5 text-purple-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-gray-900">Vakcinacija</div>
+                                    <div className="text-sm text-gray-600 mt-0.5">
+                                      {vaccination.product?.name || 'Nežinoma vakcina'}
+                                    </div>
+                                    {vaccination.notes && (
+                                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">{vaccination.notes}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateLT(vaccination.vaccination_date)}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-800">
+                                    Dozė #{vaccination.dose_number}
+                                  </span>
+                                  {vaccination.next_booster_date && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                      Kita: {formatDateLT(vaccination.next_booster_date)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
-
-            {visits.length === 0 && treatments.length === 0 && vaccinations.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p>Nėra įvykių</p>
-              </div>
-            )}
           </div>
         )}
       </div>
