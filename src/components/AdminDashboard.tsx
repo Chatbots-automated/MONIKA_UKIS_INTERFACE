@@ -3,9 +3,10 @@ import { UserManagement } from './UserManagement';
 import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
 import { SecurityMonitor } from './SecurityMonitor';
-import { Users, Activity, Shield, FileText } from 'lucide-react';
+import { CriticalDataEditor } from './CriticalDataEditor';
+import { Users, Activity, Shield, FileText, Settings } from 'lucide-react';
 
-type AdminTab = 'users' | 'activity' | 'audit' | 'security';
+type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'maintenance';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>('activity');
@@ -15,6 +16,7 @@ export function AdminDashboard() {
     { id: 'users' as AdminTab, label: 'Vartotojai', icon: Users },
     { id: 'audit' as AdminTab, label: 'Audito žurnalas', icon: FileText },
     { id: 'security' as AdminTab, label: 'Saugumas', icon: Shield },
+    { id: 'maintenance' as AdminTab, label: 'Techninė priežiūra', icon: Settings },
   ];
 
   return (
@@ -51,6 +53,7 @@ export function AdminDashboard() {
         {activeTab === 'users' && <UserManagement />}
         {activeTab === 'audit' && <AuditLogViewer />}
         {activeTab === 'security' && <SecurityMonitor />}
+        {activeTab === 'maintenance' && <CriticalDataEditor />}
       </div>
     </div>
   );
