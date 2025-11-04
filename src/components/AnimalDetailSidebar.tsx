@@ -1198,7 +1198,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                             <option value="">Serija *</option>
                             {availableBatches.map(b => (
                               <option key={b.id} value={b.id}>
-                                {b.lot || b.serial_number || b.id.slice(0, 8)}
+                                {b.lot || b.serial_number || (b.id ? b.id.slice(0, 8) : 'N/A')}
                               </option>
                             ))}
                           </select>
