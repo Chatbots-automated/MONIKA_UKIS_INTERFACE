@@ -23,6 +23,81 @@ interface VaccinationWithProduct extends Vaccination {
   product?: Product;
 }
 
+interface WithdrawalStatus {
+  animal_id: string;
+  milk_active: boolean;
+  milk_until: string | null;
+  meat_active: boolean;
+  meat_until: string | null;
+}
+
+function WithdrawalStatusCard({ animalId }: { animalId: string }) {
+  const [withdrawalStatus, setWithdrawalStatus] = useState<WithdrawalStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadWithdrawalStatus();
+  }, [animalId]);
+
+  const loadWithdrawalStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vw_withdrawal_status')
+        .select('*')
+        .eq('animal_id', animalId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setWithdrawalStatus(data);
+    } catch (error) {
+      console.error('Error loading withdrawal status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <p className="text-sm text-gray-500">Kraunama...</p>
+      </div>
+    );
+  }
+
+  if (!withdrawalStatus || (!withdrawalStatus.milk_active && !withdrawalStatus.meat_active)) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-green-600" />
+          <h4 className="font-semibold text-gray-900">Karencija</h4>
+        </div>
+        <p className="text-sm text-green-700 mt-2">Karencijos laikotarpis nėra aktyvus</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertCircle className="w-5 h-5 text-amber-600" />
+        <h4 className="font-semibold text-gray-900">Karencijos Laikotarpis</h4>
+      </div>
+      <div className="space-y-2 text-sm">
+        {withdrawalStatus.milk_active && withdrawalStatus.milk_until && (
+          <p className="text-amber-800">
+            🥛 Pienas iki: <strong>{formatDateLT(withdrawalStatus.milk_until)}</strong>
+          </p>
+        )}
+        {withdrawalStatus.meat_active && withdrawalStatus.meat_until && (
+          <p className="text-amber-800">
+            🥩 Mėsa iki: <strong>{formatDateLT(withdrawalStatus.meat_until)}</strong>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface TreatmentWithDetails extends Treatment {
   usage_items?: UsageItemWithProduct[];
   disease_name?: string;
@@ -313,6 +388,8 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
                 </div>
               </div>
             </div>
+
+            <WithdrawalStatusCard animalId={animal.id} />
           </div>
         )}
 
@@ -742,9 +819,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
   const [vaccinationData, setVaccinationData] = useState({
     product_id: '',
     batch_id: '',
-    dose_qty: '',
-    dose_unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
-    next_vaccination_date: '',
+    dose_amount: '',
+    dose_number: '1',
+    unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
+    next_booster_date: '',
+    administered_by: '',
     notes: '',
   });
 
@@ -893,7 +972,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
       // 3. If Vakcina procedure, create vaccination
       if (formData.procedures.includes('Vakcina')) {
-        if (!vaccinationData.product_id || !vaccinationData.batch_id || !vaccinationData.dose_qty) {
+        if (!vaccinationData.product_id || !vaccinationData.batch_id || !vaccinationData.dose_amount) {
           throw new Error('Visi vakcinacijos laukai privalomi: produktas, serija ir dozė');
         }
 
@@ -904,10 +983,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             product_id: vaccinationData.product_id,
             batch_id: vaccinationData.batch_id,
             vaccination_date: formData.visit_datetime.split('T')[0],
-            dose_qty: parseFloat(vaccinationData.dose_qty),
-            dose_unit: vaccinationData.dose_unit,
-            next_vaccination_date: vaccinationData.next_vaccination_date ? vaccinationData.next_vaccination_date : null,
-            vet_name: formData.vet_name ? formData.vet_name : null,
+            dose_amount: parseFloat(vaccinationData.dose_amount),
+            dose_number: parseInt(vaccinationData.dose_number),
+            unit: vaccinationData.unit,
+            next_booster_date: vaccinationData.next_booster_date ? vaccinationData.next_booster_date : null,
+            administered_by: vaccinationData.administered_by ? vaccinationData.administered_by : formData.vet_name,
             notes: vaccinationData.notes ? vaccinationData.notes : null,
           })
           .select()
@@ -1371,14 +1451,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 </select>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dozė *</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={vaccinationData.dose_qty}
-                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_qty: e.target.value })}
+                    value={vaccinationData.dose_amount}
+                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_amount: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                     required
                   />
@@ -1386,8 +1466,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
                   <select
-                    value={vaccinationData.dose_unit}
-                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_unit: e.target.value as any })}
+                    value={vaccinationData.unit}
+                    onChange={(e) => setVaccinationData({ ...vaccinationData, unit: e.target.value as any })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="ml">ml</option>
@@ -1397,15 +1477,35 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     <option value="pcs">vnt</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dozės Nr.</label>
+                  <input
+                    type="number"
+                    value={vaccinationData.dose_number}
+                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_number: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Kita vakcina (data)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pakartotinė vakcinacija (data)</label>
                 <input
                   type="date"
-                  value={vaccinationData.next_vaccination_date}
-                  onChange={(e) => setVaccinationData({ ...vaccinationData, next_vaccination_date: e.target.value })}
+                  value={vaccinationData.next_booster_date}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, next_booster_date: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Atliko (vardas)</label>
+                <input
+                  type="text"
+                  value={vaccinationData.administered_by}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, administered_by: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  placeholder="Veterinaras"
                 />
               </div>
 
