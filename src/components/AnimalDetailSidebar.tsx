@@ -674,6 +674,64 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     treatment_required: false,
   });
   const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [diseases, setDiseases] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
+
+  // Treatment form data
+  const [treatmentData, setTreatmentData] = useState({
+    disease_id: '',
+    clinical_diagnosis: '',
+    tests: '',
+    animal_condition: '',
+    outcome: '',
+    services: '',
+    withdrawal_until: '',
+    notes: '',
+    medications: [] as Array<{
+      product_id: string;
+      batch_id: string;
+      qty: string;
+      unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      purpose: string;
+    }>,
+  });
+
+  // Vaccination form data
+  const [vaccinationData, setVaccinationData] = useState({
+    product_id: '',
+    batch_id: '',
+    dose_qty: '',
+    dose_unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
+    next_vaccination_date: '',
+    notes: '',
+  });
+
+  // Prevention form data
+  const [preventionData, setPreventionData] = useState({
+    product_id: '',
+    batch_id: '',
+    dose_qty: '',
+    dose_unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
+    purpose: '',
+    notes: '',
+  });
+
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  const loadResources = async () => {
+    const [productsRes, diseasesRes, batchesRes] = await Promise.all([
+      supabase.from('products').select('*').eq('is_active', true),
+      supabase.from('diseases').select('*'),
+      supabase.from('stock_by_batch').select('*'),
+    ]);
+
+    if (productsRes.data) setProducts(productsRes.data);
+    if (diseasesRes.data) setDiseases(diseasesRes.data);
+    if (batchesRes.data) setBatches(batchesRes.data);
+  };
 
   const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Kita'];
 
@@ -692,9 +750,26 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
       return;
     }
 
+    // Validate procedure-specific data
+    if (formData.procedures.includes('Gydymas') && treatmentData.medications.length === 0) {
+      alert('Gydymui reikia pasirinkti bent vieną vaistą');
+      return;
+    }
+
+    if (formData.procedures.includes('Vakcina') && !vaccinationData.product_id) {
+      alert('Vakcinai reikia pasirinkti produktą');
+      return;
+    }
+
+    if (formData.procedures.includes('Profilaktika') && !preventionData.product_id) {
+      alert('Profilaktikai reikia pasirinkti produktą');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. Create the visit
+      const { data: visitData, error: visitError } = await supabase
         .from('animal_visits')
         .insert({
           animal_id: animalId,
@@ -707,14 +782,103 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           vet_name: formData.vet_name || null,
           next_visit_required: formData.next_visit_required,
           next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
-          treatment_required: formData.treatment_required,
+          treatment_required: formData.procedures.includes('Gydymas'),
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (visitError) throw visitError;
 
-      await logAction('create_visit', 'animal_visits', data.id);
+      await logAction('create_visit', 'animal_visits', visitData.id);
+
+      // 2. If Gydymas procedure, create treatment
+      if (formData.procedures.includes('Gydymas')) {
+        const { data: treatmentRecord, error: treatmentError } = await supabase
+          .from('treatments')
+          .insert({
+            animal_id: animalId,
+            visit_id: visitData.id,
+            reg_date: formData.visit_datetime.split('T')[0],
+            disease_id: treatmentData.disease_id || null,
+            clinical_diagnosis: treatmentData.clinical_diagnosis || null,
+            tests: treatmentData.tests || null,
+            animal_condition: treatmentData.animal_condition || null,
+            outcome: treatmentData.outcome || null,
+            services: treatmentData.services || null,
+            withdrawal_until: treatmentData.withdrawal_until || null,
+            vet_name: formData.vet_name || null,
+            notes: treatmentData.notes || null,
+          })
+          .select()
+          .single();
+
+        if (treatmentError) throw treatmentError;
+
+        // Create usage items for medications
+        for (const med of treatmentData.medications) {
+          const { error: usageError } = await supabase
+            .from('usage_items')
+            .insert({
+              treatment_id: treatmentRecord.id,
+              product_id: med.product_id,
+              batch_id: med.batch_id,
+              qty: parseFloat(med.qty),
+              unit: med.unit,
+              purpose: med.purpose,
+            });
+
+          if (usageError) throw usageError;
+        }
+
+        await logAction('create_treatment', 'treatments', treatmentRecord.id);
+      }
+
+      // 3. If Vakcina procedure, create vaccination
+      if (formData.procedures.includes('Vakcina')) {
+        const { data: vaccinationRecord, error: vaccinationError } = await supabase
+          .from('vaccinations')
+          .insert({
+            animal_id: animalId,
+            product_id: vaccinationData.product_id,
+            batch_id: vaccinationData.batch_id || null,
+            vaccination_date: formData.visit_datetime.split('T')[0],
+            dose_qty: parseFloat(vaccinationData.dose_qty),
+            dose_unit: vaccinationData.dose_unit,
+            next_vaccination_date: vaccinationData.next_vaccination_date || null,
+            vet_name: formData.vet_name || null,
+            notes: vaccinationData.notes || null,
+          })
+          .select()
+          .single();
+
+        if (vaccinationError) throw vaccinationError;
+
+        await logAction('create_vaccination', 'vaccinations', vaccinationRecord.id);
+      }
+
+      // 4. If Profilaktika procedure, create prevention record (using biocide_usage table)
+      if (formData.procedures.includes('Profilaktika')) {
+        const { data: preventionRecord, error: preventionError } = await supabase
+          .from('biocide_usage')
+          .insert({
+            product_id: preventionData.product_id,
+            batch_id: preventionData.batch_id || null,
+            use_date: formData.visit_datetime.split('T')[0],
+            purpose: preventionData.purpose || 'Profilaktika',
+            work_scope: `Gyvūnas: ${animalId}`,
+            qty: parseFloat(preventionData.dose_qty),
+            unit: preventionData.dose_unit,
+            used_by_name: formData.vet_name || null,
+          })
+          .select()
+          .single();
+
+        if (preventionError) throw preventionError;
+
+        await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+      }
+
+      alert('Vizitas ir visi susiję įrašai sėkmingai sukurti!');
       onSuccess();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
@@ -869,22 +1033,272 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             )}
           </div>
 
-          <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.treatment_required}
-                onChange={(e) => setFormData({ ...formData, treatment_required: e.target.checked })}
-                className="w-5 h-5 text-orange-600 rounded focus:ring-2 focus:ring-orange-500"
-              />
-              <span className="font-medium text-gray-900">Reikia gydymo?</span>
-            </label>
-            {formData.treatment_required && (
-              <p className="text-xs text-gray-600 mt-2">
-                Po vizito sukūrimo galėsite pridėti gydymą
-              </p>
-            )}
-          </div>
+          {/* GYDYMAS FORM */}
+          {formData.procedures.includes('Gydymas') && (
+            <div className="p-4 bg-orange-50 border-2 border-orange-300 rounded-lg space-y-4">
+              <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                <Pill className="w-5 h-5 text-orange-600" />
+                Gydymo informacija
+              </h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Liga</label>
+                  <select
+                    value={treatmentData.disease_id}
+                    onChange={(e) => setTreatmentData({ ...treatmentData, disease_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Pasirinkite ligą</option>
+                    {diseases.map(disease => (
+                      <option key={disease.id} value={disease.id}>{disease.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nurašymas iki</label>
+                  <input
+                    type="date"
+                    value={treatmentData.withdrawal_until}
+                    onChange={(e) => setTreatmentData({ ...treatmentData, withdrawal_until: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Klinikinis diagnozas</label>
+                <textarea
+                  value={treatmentData.clinical_diagnosis}
+                  onChange={(e) => setTreatmentData({ ...treatmentData, clinical_diagnosis: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  rows={2}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vaistai *</label>
+                <div className="space-y-2">
+                  {treatmentData.medications.map((med, idx) => (
+                    <div key={idx} className="flex gap-2 bg-white p-2 rounded border border-gray-300">
+                      <select
+                        value={med.product_id}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentData.medications];
+                          newMeds[idx].product_id = e.target.value;
+                          setTreatmentData({ ...treatmentData, medications: newMeds });
+                        }}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      >
+                        <option value="">Pasirinkite vaistą</option>
+                        {products.filter(p => p.category === 'medicines').map(product => (
+                          <option key={product.id} value={product.id}>{product.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Kiekis"
+                        value={med.qty}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentData.medications];
+                          newMeds[idx].qty = e.target.value;
+                          setTreatmentData({ ...treatmentData, medications: newMeds });
+                        }}
+                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                      />
+                      <select
+                        value={med.unit}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentData.medications];
+                          newMeds[idx].unit = e.target.value as any;
+                          setTreatmentData({ ...treatmentData, medications: newMeds });
+                        }}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      >
+                        <option value="ml">ml</option>
+                        <option value="l">l</option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                        <option value="pcs">vnt</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newMeds = treatmentData.medications.filter((_, i) => i !== idx);
+                          setTreatmentData({ ...treatmentData, medications: newMeds });
+                        }}
+                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTreatmentData({
+                        ...treatmentData,
+                        medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas' }]
+                      });
+                    }}
+                    className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pridėti vaistą
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VAKCINA FORM */}
+          {formData.procedures.includes('Vakcina') && (
+            <div className="p-4 bg-purple-50 border-2 border-purple-300 rounded-lg space-y-4">
+              <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                <Syringe className="w-5 h-5 text-purple-600" />
+                Vakcinacijos informacija
+              </h4>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vakcina *</label>
+                <select
+                  value={vaccinationData.product_id}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, product_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  required
+                >
+                  <option value="">Pasirinkite vakciną</option>
+                  {products.filter(p => p.category === 'prevention').map(product => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dozė *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={vaccinationData.dose_qty}
+                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_qty: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                  <select
+                    value={vaccinationData.dose_unit}
+                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_unit: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="ml">ml</option>
+                    <option value="l">l</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="pcs">vnt</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kita vakcina (data)</label>
+                <input
+                  type="date"
+                  value={vaccinationData.next_vaccination_date}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, next_vaccination_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={vaccinationData.notes}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* PROFILAKTIKA FORM */}
+          {formData.procedures.includes('Profilaktika') && (
+            <div className="p-4 bg-green-50 border-2 border-green-300 rounded-lg space-y-4">
+              <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                <Package className="w-5 h-5 text-green-600" />
+                Profilaktikos informacija
+              </h4>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
+                <select
+                  value={preventionData.product_id}
+                  onChange={(e) => setPreventionData({ ...preventionData, product_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  required
+                >
+                  <option value="">Pasirinkite produktą</option>
+                  {products.filter(p => p.category === 'prevention' || p.category === 'biocide').map(product => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={preventionData.dose_qty}
+                    onChange={(e) => setPreventionData({ ...preventionData, dose_qty: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                  <select
+                    value={preventionData.dose_unit}
+                    onChange={(e) => setPreventionData({ ...preventionData, dose_unit: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="ml">ml</option>
+                    <option value="l">l</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="pcs">vnt</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paskirtis</label>
+                <input
+                  type="text"
+                  value={preventionData.purpose}
+                  onChange={(e) => setPreventionData({ ...preventionData, purpose: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  placeholder="Parazitų prevencija, dezinfekcija, kt."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={preventionData.notes}
+                  onChange={(e) => setPreventionData({ ...preventionData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4 border-t border-gray-200">
             <button
