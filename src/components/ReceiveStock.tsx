@@ -31,9 +31,6 @@ export function ReceiveStock() {
   });
   const [bulkReceiveData, setBulkReceiveData] = useState({
     lot: '',
-    mfg_date: '',
-    expiry_date: '',
-    doc_date: new Date().toISOString().split('T')[0],
   });
   const [bulkReceiving, setBulkReceiving] = useState(false);
   const [editingHeader, setEditingHeader] = useState(false);
@@ -303,15 +300,14 @@ export function ReceiveStock() {
       return;
     }
 
-    const hasGlobalBatch = bulkReceiveData.lot && bulkReceiveData.expiry_date;
     const allItemsHaveData = invoiceData.items.every((_: any, index: number) => {
       if (!matchedProducts.get(index)) return true;
       const itemData = getItemData(invoiceData.items[index], index);
-      return (itemData.batch || bulkReceiveData.lot) && (itemData.expiry || bulkReceiveData.expiry_date);
+      return (itemData.batch || bulkReceiveData.lot) && itemData.expiry;
     });
 
-    if (!hasGlobalBatch && !allItemsHaveData) {
-      alert('Prašome užpildyti serijos numerius ir galiojimo datas kažkurioje vietoje arba globaliai, arba kiekvienai prekėje.');
+    if (!allItemsHaveData) {
+      alert('Prašome užpildyti serijos numerius ir galiojimo datas kiekvienai prekėje.');
       return;
     }
 
@@ -355,12 +351,12 @@ export function ReceiveStock() {
         stockEntries.push({
           product_id: matched.id,
           lot: itemData.batch || bulkReceiveData.lot || null,
-          mfg_date: bulkReceiveData.mfg_date || null,
-          expiry_date: itemData.expiry || bulkReceiveData.expiry_date || null,
+          mfg_date: null,
+          expiry_date: itemData.expiry || null,
           supplier_id: supplierId,
           doc_title: 'Invoice',
           doc_number: invoiceData.invoice.number,
-          doc_date: bulkReceiveData.doc_date,
+          doc_date: new Date().toISOString().split('T')[0],
           purchase_price: parseFloat(itemData.unit_price) || 0,
           currency: invoiceData.invoice.currency,
           received_qty: parseFloat(itemData.qty) || 0,
@@ -381,9 +377,6 @@ export function ReceiveStock() {
       setUploadStatus('idle');
       setBulkReceiveData({
         lot: '',
-        mfg_date: '',
-        expiry_date: '',
-        doc_date: new Date().toISOString().split('T')[0],
       });
 
       await loadData();
@@ -879,40 +872,6 @@ export function ReceiveStock() {
                     onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, lot: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                     placeholder="Jei neustatyta prekėje"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Gamybos data
-                  </label>
-                  <input
-                    type="date"
-                    value={bulkReceiveData.mfg_date}
-                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, mfg_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Galiojimo data (global)
-                  </label>
-                  <input
-                    type="date"
-                    value={bulkReceiveData.expiry_date}
-                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, expiry_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="Jei neustatyta prekėje"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dokumento data *
-                  </label>
-                  <input
-                    type="date"
-                    value={bulkReceiveData.doc_date}
-                    onChange={(e) => setBulkReceiveData({ ...bulkReceiveData, doc_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
