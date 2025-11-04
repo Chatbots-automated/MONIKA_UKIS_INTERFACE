@@ -98,7 +98,24 @@ export function VisitsModern() {
     return true;
   });
 
+  // Categorize visits by time
   const todayVisits = filteredVisits.filter(v => isToday(v.visit_datetime));
+  const futureVisits = filteredVisits.filter(v => new Date(v.visit_datetime) > new Date());
+  const pastVisits = filteredVisits.filter(v => {
+    const visitDate = new Date(v.visit_datetime);
+    const today = new Date();
+    return visitDate < today && visitDate.toDateString() !== today.toDateString();
+  });
+
+  // Separate by completion status
+  const todayIncomplete = todayVisits.filter(v => v.status !== 'Baigtas');
+  const todayCompleted = todayVisits.filter(v => v.status === 'Baigtas');
+
+  const futureIncomplete = futureVisits.filter(v => v.status !== 'Baigtas');
+  const futureCompleted = futureVisits.filter(v => v.status === 'Baigtas');
+
+  const pastIncomplete = pastVisits.filter(v => v.status !== 'Baigtas');
+  const pastCompleted = pastVisits.filter(v => v.status === 'Baigtas');
 
   const getStatusColor = (status: VisitStatus) => {
     switch (status) {
@@ -219,14 +236,15 @@ export function VisitsModern() {
         </div>
       </div>
 
-      {todayVisits.length > 0 && (
-        <div>
+      {/* MISSED/OVERDUE VISITS */}
+      {pastIncomplete.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-4">
-            <Calendar className="w-6 h-6 text-orange-500" />
-            <h3 className="text-xl font-bold text-gray-900">Šiandienos vizitai ({todayVisits.length})</h3>
+            <AlertCircle className="w-6 h-6 text-red-600" />
+            <h3 className="text-xl font-bold text-red-700">⚠️ Praleisti vizitai - Reikia atlikti! ({pastIncomplete.length})</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {todayVisits.map(visit => (
+            {pastIncomplete.map(visit => (
               <VisitCard
                 key={visit.id}
                 visit={visit}
@@ -239,72 +257,174 @@ export function VisitsModern() {
         </div>
       )}
 
-      <div>
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Visi vizitai ({filteredVisits.length})</h3>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data/Laikas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvūnas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Procedūros</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statusas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydytojas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pastabos</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredVisits.map(visit => (
-                  <tr
-                    key={visit.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
-                  >
-                    <td className="px-4 py-3 text-sm">
-                      <div className="font-medium text-gray-900">{formatDateTimeLT(visit.visit_datetime)}</div>
-                      {isToday(visit.visit_datetime) && (
-                        <span className="text-xs text-orange-600 font-semibold">ŠIANDIEN</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="font-medium text-gray-900">{visit.animal?.tag_no || '-'}</div>
-                      <div className="text-gray-600">{visit.animal?.species}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {visit.procedures.map((proc, idx) => (
-                          <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                            {proc}
-                          </span>
-                        ))}
-                      </div>
-                      {visit.temperature && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
-                          <Thermometer className="w-3 h-3" />
-                          {visit.temperature}°C
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit border ${getStatusColor(visit.status)}`}>
-                        {getStatusIcon(visit.status)}
-                        {visit.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {visit.vet_name || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                      {visit.notes || '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* TODAY'S VISITS */}
+      {todayVisits.length > 0 && (
+        <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-6 h-6 text-orange-600" />
+            <h3 className="text-xl font-bold text-orange-700">Šiandienos vizitai ({todayVisits.length})</h3>
           </div>
+
+          {todayIncomplete.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Reikia atlikti</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {todayIncomplete.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {todayCompleted.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-green-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" />
+                Atlikta šiandien
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {todayCompleted.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* FUTURE VISITS */}
+      {futureVisits.length > 0 && (
+        <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-6 h-6 text-blue-600" />
+            <h3 className="text-xl font-bold text-blue-700">Būsimi vizitai ({futureVisits.length})</h3>
+          </div>
+
+          {futureIncomplete.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Suplanuota</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {futureIncomplete.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {futureCompleted.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-green-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" />
+                Atlikta iš anksto
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {futureCompleted.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PAST COMPLETED VISITS */}
+      {pastCompleted.length > 0 && (
+        <div className="border-t-4 border-gray-300 pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+            <h3 className="text-xl font-bold text-green-700">Ankstesni užbaigti vizitai ({pastCompleted.length})</h3>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data/Laikas</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvūnas</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Procedūros</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statusas</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydytojas</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pastabos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {pastCompleted.slice(0, 20).map(visit => (
+                    <tr
+                      key={visit.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    >
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-gray-900">{formatDateTimeLT(visit.visit_datetime)}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-gray-900">{visit.animal?.tag_no || '-'}</div>
+                        <div className="text-gray-600">{visit.animal?.species}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {visit.procedures.map((proc, idx) => (
+                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                              {proc}
+                            </span>
+                          ))}
+                        </div>
+                        {visit.temperature && (
+                          <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
+                            <Thermometer className="w-3 h-3" />
+                            {visit.temperature}°C
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit border ${getStatusColor(visit.status)}`}>
+                          {getStatusIcon(visit.status)}
+                          {visit.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        {visit.vet_name || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                        {visit.notes || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {pastCompleted.length > 20 && (
+            <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-lg mt-2">
+              + dar {pastCompleted.length - 20} užbaigti vizitai
+            </p>
+          )}
+        </div>
+      )}
 
       {filteredVisits.length === 0 && (
         <div className="text-center py-12 text-gray-500">
