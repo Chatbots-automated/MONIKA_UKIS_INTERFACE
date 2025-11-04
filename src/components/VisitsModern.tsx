@@ -316,6 +316,7 @@ export function VisitsModern() {
       {selectedAnimal && (
         <AnimalDetailSidebar
           animal={selectedAnimal}
+          defaultTab="visits"
           onClose={() => {
             setSelectedAnimal(null);
             loadData();

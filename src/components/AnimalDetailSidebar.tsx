@@ -111,13 +111,14 @@ interface UsageItemWithProduct extends UsageItem {
 interface AnimalDetailSidebarProps {
   animal: Animal;
   onClose: () => void;
+  defaultTab?: TabType;
 }
 
 type TabType = 'overview' | 'visits' | 'treatments' | 'vaccinations' | 'logs';
 
-export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProps) {
+export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: AnimalDetailSidebarProps) {
   const { logAction } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('visits');
+  const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [visits, setVisits] = useState<AnimalVisit[]>([]);
   const [treatments, setTreatments] = useState<TreatmentWithDetails[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationWithProduct[]>([]);
@@ -1908,9 +1909,12 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState(visit.notes || '');
   const [status, setStatus] = useState(visit.status);
+  const [showFutureVisitForm, setShowFutureVisitForm] = useState(false);
+  const [futureVisitDate, setFutureVisitDate] = useState('');
+  const [futureVisitNotes, setFutureVisitNotes] = useState('');
 
   const handleCompleteVisit = async () => {
-    if (status === 'Užbaigtas') {
+    if (status === 'Baigtas') {
       alert('Šis vizitas jau užbaigtas');
       return;
     }
@@ -1924,7 +1928,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       const { error } = await supabase
         .from('animal_visits')
         .update({
-          status: 'Užbaigtas',
+          status: 'Baigtas',
           notes: notes
         })
         .eq('id', visit.id);
@@ -1963,11 +1967,53 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
     }
   };
 
+  const handleCreateFutureVisit = async () => {
+    if (!futureVisitDate) {
+      alert('Prašome pasirinkti datą');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('animal_visits')
+        .insert({
+          animal_id: animalId,
+          visit_datetime: futureVisitDate,
+          procedures: visit.procedures,
+          status: 'Planuojamas',
+          notes: futureVisitNotes || `Pakartotinis vizitas po: ${visit.procedures.join(', ')}`,
+          vet_name: visit.vet_name,
+          next_visit_required: false,
+          treatment_required: false,
+        });
+
+      if (error) throw error;
+
+      await logAction('create_future_visit', 'animal_visits', null, null, {
+        from_visit_id: visit.id,
+        scheduled_date: futureVisitDate
+      });
+
+      alert('Būsimas vizitas sėkmingai sukurtas!');
+      setShowFutureVisitForm(false);
+      setFutureVisitDate('');
+      setFutureVisitNotes('');
+      onSuccess();
+    } catch (error: any) {
+      alert('Klaida: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status: VisitStatus) => {
     switch (status) {
-      case 'Užbaigtas': return 'bg-green-100 text-green-800 border-green-300';
+      case 'Baigtas': return 'bg-green-100 text-green-800 border-green-300';
       case 'Planuojamas': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       case 'Atšauktas': return 'bg-red-100 text-red-800 border-red-300';
+      case 'Vykdomas': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'Neįvykęs': return 'bg-gray-100 text-gray-800 border-gray-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
@@ -2002,8 +2048,10 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                   className={`w-full px-3 py-2 rounded-lg border-2 font-medium ${getStatusColor(status)}`}
                 >
                   <option value="Planuojamas">Planuojamas</option>
-                  <option value="Užbaigtas">Užbaigtas</option>
+                  <option value="Vykdomas">Vykdomas</option>
+                  <option value="Baigtas">Užbaigtas</option>
                   <option value="Atšauktas">Atšauktas</option>
+                  <option value="Neįvykęs">Neįvykęs</option>
                 </select>
               </div>
               {visit.vet_name && (
@@ -2084,6 +2132,63 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
             />
           </div>
 
+          {showFutureVisitForm ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  Suplanuoti būsimą vizitą
+                </h3>
+                <button
+                  onClick={() => setShowFutureVisitForm(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data ir laikas
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={futureVisitDate}
+                    onChange={(e) => setFutureVisitDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pastabos (neprivaloma)
+                  </label>
+                  <textarea
+                    value={futureVisitNotes}
+                    onChange={(e) => setFutureVisitNotes(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Papildomos pastabos būsimam vizitui..."
+                  />
+                </div>
+                <button
+                  onClick={handleCreateFutureVisit}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+                >
+                  {loading ? 'Kuriama...' : 'Sukurti būsimą vizitą'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowFutureVisitForm(true)}
+              className="w-full px-4 py-2 border-2 border-blue-300 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors font-medium flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Suplanuoti būsimą vizitą
+            </button>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={onClose}
@@ -2099,7 +2204,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
             >
               {loading ? 'Saugoma...' : 'Išsaugoti'}
             </button>
-            {status !== 'Užbaigtas' && (
+            {status !== 'Baigtas' && (
               <button
                 onClick={handleCompleteVisit}
                 disabled={loading}
