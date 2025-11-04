@@ -818,8 +818,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           temperature: formData.temperature ? parseFloat(formData.temperature) : null,
           temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
           status: formData.status,
-          notes: formData.notes || null,
-          vet_name: formData.vet_name || null,
+          notes: formData.notes ? formData.notes : null,
+          vet_name: formData.vet_name ? formData.vet_name : null,
           next_visit_required: formData.next_visit_required,
           next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
           treatment_required: formData.procedures.includes('Gydymas'),
@@ -839,15 +839,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             animal_id: animalId,
             visit_id: visitData.id,
             reg_date: formData.visit_datetime.split('T')[0],
-            disease_id: treatmentData.disease_id || null,
-            clinical_diagnosis: treatmentData.clinical_diagnosis || null,
-            tests: treatmentData.tests || null,
-            animal_condition: treatmentData.animal_condition || null,
-            outcome: treatmentData.outcome || null,
-            services: treatmentData.services || null,
-            withdrawal_until: treatmentData.withdrawal_until || null,
-            vet_name: formData.vet_name || null,
-            notes: treatmentData.notes || null,
+            disease_id: treatmentData.disease_id ? treatmentData.disease_id : null,
+            clinical_diagnosis: treatmentData.clinical_diagnosis ? treatmentData.clinical_diagnosis : null,
+            tests: treatmentData.tests ? treatmentData.tests : null,
+            animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
+            outcome: treatmentData.outcome ? treatmentData.outcome : null,
+            services: treatmentData.services ? treatmentData.services : null,
+            withdrawal_until: treatmentData.withdrawal_until ? treatmentData.withdrawal_until : null,
+            vet_name: formData.vet_name ? formData.vet_name : null,
+            notes: treatmentData.notes ? treatmentData.notes : null,
           })
           .select()
           .single();
@@ -860,11 +860,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             .from('usage_items')
             .insert({
               treatment_id: treatmentRecord.id,
-              product_id: med.product_id,
-              batch_id: med.batch_id,
+              product_id: med.product_id ? med.product_id : null,
+              batch_id: med.batch_id ? med.batch_id : null,
               qty: parseFloat(med.qty),
               unit: med.unit,
-              purpose: med.purpose,
+              purpose: med.purpose ? med.purpose : null,
             });
 
           if (usageError) throw usageError;
@@ -879,14 +879,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           .from('vaccinations')
           .insert({
             animal_id: animalId,
-            product_id: vaccinationData.product_id,
-            batch_id: vaccinationData.batch_id || null,
+            product_id: vaccinationData.product_id ? vaccinationData.product_id : null,
+            batch_id: vaccinationData.batch_id ? vaccinationData.batch_id : null,
             vaccination_date: formData.visit_datetime.split('T')[0],
             dose_qty: parseFloat(vaccinationData.dose_qty),
             dose_unit: vaccinationData.dose_unit,
-            next_vaccination_date: vaccinationData.next_vaccination_date || null,
-            vet_name: formData.vet_name || null,
-            notes: vaccinationData.notes || null,
+            next_vaccination_date: vaccinationData.next_vaccination_date ? vaccinationData.next_vaccination_date : null,
+            vet_name: formData.vet_name ? formData.vet_name : null,
+            notes: vaccinationData.notes ? vaccinationData.notes : null,
           })
           .select()
           .single();
@@ -901,14 +901,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
         const { data: preventionRecord, error: preventionError } = await supabase
           .from('biocide_usage')
           .insert({
-            product_id: preventionData.product_id,
-            batch_id: preventionData.batch_id || null,
+            product_id: preventionData.product_id ? preventionData.product_id : null,
+            batch_id: preventionData.batch_id ? preventionData.batch_id : null,
             use_date: formData.visit_datetime.split('T')[0],
-            purpose: preventionData.purpose || 'Profilaktika',
+            purpose: preventionData.purpose ? preventionData.purpose : 'Profilaktika',
             work_scope: `Gyvūnas: ${animalId}`,
             qty: parseFloat(preventionData.dose_qty),
             unit: preventionData.dose_unit,
-            used_by_name: formData.vet_name || null,
+            used_by_name: formData.vet_name ? formData.vet_name : null,
           })
           .select()
           .single();
