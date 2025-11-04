@@ -1,9 +1,36 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
+
+interface Vaccination {
+  id: string;
+  animal_id: string;
+  product_id: string;
+  vaccination_date: string;
+  batch_id: string | null;
+  dose_qty: number;
+  dose_unit: string;
+  next_vaccination_date: string | null;
+  vet_name: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+interface VaccinationWithProduct extends Vaccination {
+  product?: Product;
+}
+
+interface TreatmentWithDetails extends Treatment {
+  usage_items?: UsageItemWithProduct[];
+  disease_name?: string;
+}
+
+interface UsageItemWithProduct extends UsageItem {
+  product?: Product;
+}
 
 interface AnimalDetailSidebarProps {
   animal: Animal;
@@ -16,16 +43,26 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
   const { logAction } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('visits');
   const [visits, setVisits] = useState<AnimalVisit[]>([]);
-  const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [treatments, setTreatments] = useState<TreatmentWithDetails[]>([]);
+  const [vaccinations, setVaccinations] = useState<VaccinationWithProduct[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
-  const [showTreatmentModal, setShowTreatmentModal] = useState(false);
-  const [selectedVisitForTreatment, setSelectedVisitForTreatment] = useState<string | null>(null);
 
   useEffect(() => {
-    loadVisits();
-    loadTreatments();
+    loadAllData();
   }, [animal.id]);
+
+  const loadAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      loadVisits(),
+      loadTreatments(),
+      loadVaccinations(),
+      loadProducts()
+    ]);
+    setLoading(false);
+  };
 
   const loadVisits = async () => {
     const { data, error } = await supabase
@@ -40,14 +77,52 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
   };
 
   const loadTreatments = async () => {
-    const { data, error } = await supabase
+    const { data: treatmentsData, error } = await supabase
       .from('treatments')
-      .select('*')
+      .select('*, disease:diseases(name)')
       .eq('animal_id', animal.id)
       .order('reg_date', { ascending: false });
 
+    if (!error && treatmentsData) {
+      const treatmentsWithItems = await Promise.all(
+        treatmentsData.map(async (treatment: any) => {
+          const { data: usageData } = await supabase
+            .from('usage_items')
+            .select('*, product:products(*)')
+            .eq('treatment_id', treatment.id);
+
+          return {
+            ...treatment,
+            disease_name: treatment.disease?.name,
+            usage_items: usageData || []
+          };
+        })
+      );
+
+      setTreatments(treatmentsWithItems);
+    }
+  };
+
+  const loadVaccinations = async () => {
+    const { data, error } = await supabase
+      .from('vaccinations')
+      .select('*, product:products(*)')
+      .eq('animal_id', animal.id)
+      .order('vaccination_date', { ascending: false });
+
     if (!error && data) {
-      setTreatments(data);
+      setVaccinations(data);
+    }
+  };
+
+  const loadProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true);
+
+    if (!error && data) {
+      setProducts(data);
     }
   };
 
@@ -304,29 +379,217 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
 
         {activeTab === 'treatments' && (
           <div className="space-y-4">
-            <div className="text-center py-12 text-gray-500">
-              <Pill className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Gydymų istorija</p>
-              <p className="text-sm mt-2">Gydymai kuriami per vizitus</p>
-            </div>
+            {treatments.length > 0 ? (
+              treatments.map(treatment => (
+                <div key={treatment.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {formatDateLT(treatment.reg_date)}
+                      </div>
+                      {treatment.disease_name && (
+                        <div className="text-sm text-red-600 font-medium">
+                          Diagnozė: {treatment.disease_name}
+                        </div>
+                      )}
+                    </div>
+                    {treatment.vet_name && (
+                      <div className="text-xs text-gray-500">
+                        Gyd.: {treatment.vet_name}
+                      </div>
+                    )}
+                  </div>
+
+                  {treatment.clinical_diagnosis && (
+                    <div className="mb-2">
+                      <span className="text-xs font-medium text-gray-600">Klinikinis diagnozas:</span>
+                      <p className="text-sm text-gray-700">{treatment.clinical_diagnosis}</p>
+                    </div>
+                  )}
+
+                  {treatment.usage_items && treatment.usage_items.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-600 mb-2 flex items-center gap-2">
+                        <Pill className="w-4 h-4" />
+                        Panaudoti vaistai:
+                      </div>
+                      <div className="space-y-2">
+                        {treatment.usage_items.map((item: UsageItemWithProduct) => (
+                          <div key={item.id} className="flex items-center justify-between bg-blue-50 rounded px-3 py-2">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {item.product?.name || 'Nežinomas produktas'}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {item.purpose}
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-700">
+                              {item.qty} {item.unit}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {treatment.withdrawal_until && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertCircle className="w-4 h-4 text-orange-500" />
+                        <span className="text-gray-600">Nurašymas iki:</span>
+                        <span className="font-medium text-orange-600">{formatDateLT(treatment.withdrawal_until)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {treatment.notes && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Pastabos:</div>
+                      <p className="text-sm text-gray-700">{treatment.notes}</p>
+                    </div>
+                  )}
+
+                  {treatment.outcome && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-600 mb-1">Rezultatas:</div>
+                      <p className="text-sm text-gray-700">{treatment.outcome}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Pill className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>Nėra gydymų</p>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'vaccinations' && (
           <div className="space-y-4">
-            <div className="text-center py-12 text-gray-500">
-              <Syringe className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Vakcinacijos istorija</p>
-            </div>
+            {vaccinations.length > 0 ? (
+              vaccinations.map(vaccination => (
+                <div key={vaccination.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="font-semibold text-gray-900 flex items-center gap-2">
+                        <Syringe className="w-4 h-4 text-blue-600" />
+                        {vaccination.product?.name || 'Nežinoma vakcina'}
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {formatDateLT(vaccination.vaccination_date)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Dozė:</span>
+                      <span className="font-medium text-gray-900">
+                        {vaccination.dose_qty} {vaccination.dose_unit}
+                      </span>
+                    </div>
+
+                    {vaccination.next_vaccination_date && (
+                      <div className="flex items-center justify-between text-sm bg-green-50 rounded px-3 py-2">
+                        <span className="text-gray-600">Kita vakcina:</span>
+                        <span className="font-medium text-green-700">
+                          {formatDateLT(vaccination.next_vaccination_date)}
+                        </span>
+                      </div>
+                    )}
+
+                    {vaccination.vet_name && (
+                      <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
+                        Gyd.: {vaccination.vet_name}
+                      </div>
+                    )}
+
+                    {vaccination.notes && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <div className="text-xs font-medium text-gray-600 mb-1">Pastabos:</div>
+                        <p className="text-sm text-gray-700">{vaccination.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Syringe className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>Nėra vakcinacijų</p>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'logs' && (
           <div className="space-y-4">
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Žurnalai ir ataskaitos</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Gyvūno istorija
+              </h3>
+              <div className="space-y-3">
+                <div className="bg-white rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Iš viso vizitų:</span>
+                    <span className="text-lg font-bold text-blue-600">{visits.length}</span>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Iš viso gydymų:</span>
+                    <span className="text-lg font-bold text-green-600">{treatments.length}</span>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Iš viso vakcinacijų:</span>
+                    <span className="text-lg font-bold text-purple-600">{vaccinations.length}</span>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3">Paskutiniai įvykiai</h3>
+              <div className="space-y-2 text-sm">
+                {visits.slice(0, 5).map(visit => (
+                  <div key={visit.id} className="flex items-center gap-2 text-gray-700">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-500">{formatDateLT(visit.visit_datetime)}</span>
+                    <span>•</span>
+                    <span>Vizitas ({visit.procedures.join(', ')})</span>
+                  </div>
+                ))}
+                {treatments.slice(0, 3).map(treatment => (
+                  <div key={treatment.id} className="flex items-center gap-2 text-gray-700">
+                    <Pill className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-500">{formatDateLT(treatment.reg_date)}</span>
+                    <span>•</span>
+                    <span>Gydymas{treatment.disease_name ? `: ${treatment.disease_name}` : ''}</span>
+                  </div>
+                ))}
+                {vaccinations.slice(0, 3).map(vaccination => (
+                  <div key={vaccination.id} className="flex items-center gap-2 text-gray-700">
+                    <Syringe className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-500">{formatDateLT(vaccination.vaccination_date)}</span>
+                    <span>•</span>
+                    <span>Vakcina: {vaccination.product?.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {visits.length === 0 && treatments.length === 0 && vaccinations.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>Nėra įvykių</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -336,7 +599,7 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
           animalId={animal.id}
           onClose={() => setShowVisitModal(false)}
           onSuccess={() => {
-            loadVisits();
+            loadAllData();
             setShowVisitModal(false);
           }}
         />
