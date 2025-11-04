@@ -766,7 +766,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     const [productsRes, diseasesRes, batchesRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('diseases').select('*'),
-      supabase.from('stock_by_batch').select('*'),
+      supabase.from('batches').select('*').order('expiry_date'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
@@ -893,12 +893,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
       // 3. If Vakcina procedure, create vaccination
       if (formData.procedures.includes('Vakcina')) {
+        if (!vaccinationData.product_id || !vaccinationData.batch_id || !vaccinationData.dose_qty) {
+          throw new Error('Visi vakcinacijos laukai privalomi: produktas, serija ir dozė');
+        }
+
         const { data: vaccinationRecord, error: vaccinationError } = await supabase
           .from('vaccinations')
           .insert({
             animal_id: animalId,
-            product_id: vaccinationData.product_id ? vaccinationData.product_id : null,
-            batch_id: vaccinationData.batch_id ? vaccinationData.batch_id : null,
+            product_id: vaccinationData.product_id,
+            batch_id: vaccinationData.batch_id,
             vaccination_date: formData.visit_datetime.split('T')[0],
             dose_qty: parseFloat(vaccinationData.dose_qty),
             dose_unit: vaccinationData.dose_unit,
@@ -916,11 +920,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
       // 4. If Profilaktika procedure, create prevention record (using biocide_usage table)
       if (formData.procedures.includes('Profilaktika')) {
+        if (!preventionData.product_id || !preventionData.batch_id || !preventionData.dose_qty) {
+          throw new Error('Visi profilaktikos laukai privalomi: produktas, serija ir kiekis');
+        }
+
         const { data: preventionRecord, error: preventionError } = await supabase
           .from('biocide_usage')
           .insert({
-            product_id: preventionData.product_id ? preventionData.product_id : null,
-            batch_id: preventionData.batch_id ? preventionData.batch_id : null,
+            product_id: preventionData.product_id,
+            batch_id: preventionData.batch_id,
             use_date: formData.visit_datetime.split('T')[0],
             purpose: preventionData.purpose ? preventionData.purpose : 'Profilaktika',
             work_scope: `Gyvūnas: ${animalId}`,
@@ -1198,7 +1206,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                             <option value="">Serija *</option>
                             {availableBatches.map(b => (
                               <option key={b.id} value={b.id}>
-                                {b.lot || b.serial_number || (b.id ? b.id.slice(0, 8) : 'N/A')}
+                                {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
                               </option>
                             ))}
                           </select>
@@ -1325,7 +1333,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <select
                   value={vaccinationData.product_id}
                   onChange={(e) => {
-                    setVaccinationData({ ...vaccinationData, product_id: e.target.value });
+                    setVaccinationData({ ...vaccinationData, product_id: e.target.value, batch_id: '' });
                     if (e.target.value) fetchStockLevel(e.target.value);
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
@@ -1343,6 +1351,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     </span> {products.find(p => p.id === vaccinationData.product_id)?.unit}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
+                <select
+                  value={vaccinationData.batch_id}
+                  onChange={(e) => setVaccinationData({ ...vaccinationData, batch_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  disabled={!vaccinationData.product_id}
+                  required
+                >
+                  <option value="">Pasirinkite seriją</option>
+                  {batches.filter(b => b.product_id === vaccinationData.product_id).map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1408,7 +1434,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <select
                   value={preventionData.product_id}
                   onChange={(e) => {
-                    setPreventionData({ ...preventionData, product_id: e.target.value });
+                    setPreventionData({ ...preventionData, product_id: e.target.value, batch_id: '' });
                     if (e.target.value) fetchStockLevel(e.target.value);
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
@@ -1426,6 +1452,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     </span> {products.find(p => p.id === preventionData.product_id)?.unit}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
+                <select
+                  value={preventionData.batch_id}
+                  onChange={(e) => setPreventionData({ ...preventionData, batch_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  disabled={!preventionData.product_id}
+                  required
+                >
+                  <option value="">Pasirinkite seriją</option>
+                  {batches.filter(b => b.product_id === preventionData.product_id).map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
