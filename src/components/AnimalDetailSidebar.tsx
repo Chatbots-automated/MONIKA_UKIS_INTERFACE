@@ -205,6 +205,30 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
     }
   };
 
+  // Separate incomplete (not Baigtas) and completed visits
+  const incompleteVisits = visits.filter(v => v.status !== 'Baigtas');
+  const completedVisits = visits.filter(v => v.status === 'Baigtas');
+
+  // Categorize incomplete visits by time
+  const todayIncomplete = incompleteVisits.filter(v => {
+    const visitDate = new Date(v.visit_datetime);
+    const today = new Date();
+    return visitDate.toDateString() === today.toDateString();
+  });
+
+  const futureIncomplete = incompleteVisits.filter(v => {
+    const visitDate = new Date(v.visit_datetime);
+    const today = new Date();
+    return visitDate > today;
+  });
+
+  const pastIncomplete = incompleteVisits.filter(v => {
+    const visitDate = new Date(v.visit_datetime);
+    const today = new Date();
+    return visitDate < today && visitDate.toDateString() !== today.toDateString();
+  });
+
+  // For stats
   const todayVisits = visits.filter(v => {
     const visitDate = new Date(v.visit_datetime);
     const today = new Date();
@@ -215,12 +239,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
     const visitDate = new Date(v.visit_datetime);
     const today = new Date();
     return visitDate > today;
-  });
-
-  const pastVisits = visits.filter(v => {
-    const visitDate = new Date(v.visit_datetime);
-    const today = new Date();
-    return visitDate < today && visitDate.toDateString() !== today.toDateString();
   });
 
   const getStatusColor = (status: VisitStatus) => {
@@ -375,20 +393,31 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-gray-900 mb-2">Statistika</h4>
-              <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                <div>
-                  <p className="text-2xl font-bold text-blue-600">{visits.length}</p>
-                  <p className="text-gray-600">Vizitų</p>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5">
+              <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Statistika
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-3xl font-bold text-blue-600">{incompleteVisits.length}</p>
+                  <p className="text-xs text-gray-600">Neužbaigti vizitai</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-600">{treatments.length}</p>
-                  <p className="text-gray-600">Gydymų</p>
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-3xl font-bold text-green-600">{completedVisits.length}</p>
+                  <p className="text-xs text-gray-600">Užbaigti vizitai</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-purple-600">{futureVisits.length}</p>
-                  <p className="text-gray-600">Būsimų</p>
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-3xl font-bold text-orange-600">{todayVisits.length}</p>
+                  <p className="text-xs text-gray-600">Šiandien</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-3xl font-bold text-purple-600">{futureVisits.length}</p>
+                  <p className="text-xs text-gray-600">Būsimų</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 shadow-sm col-span-2">
+                  <p className="text-3xl font-bold text-teal-600">{treatments.length}</p>
+                  <p className="text-xs text-gray-600">Iš viso gydymų</p>
                 </div>
               </div>
             </div>
@@ -407,14 +436,38 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               Naujas vizitas
             </button>
 
-            {todayVisits.length > 0 && (
+            {/* INCOMPLETE VISITS - TOP PRIORITY */}
+            {pastIncomplete.length > 0 && (
               <div>
-                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-orange-500" />
+                <h3 className="font-bold text-red-700 mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  Praleisti vizitai (Reikia atlikti)
+                </h3>
+                <div className="space-y-3">
+                  {pastIncomplete.map(visit => (
+                    <VisitCard
+                      key={visit.id}
+                      visit={visit}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                      onClick={() => {
+                        setSelectedVisit(visit);
+                        setShowVisitDetailModal(true);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {todayIncomplete.length > 0 && (
+              <div>
+                <h3 className="font-bold text-orange-700 mb-3 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-orange-600" />
                   Šiandien
                 </h3>
                 <div className="space-y-3">
-                  {todayVisits.map(visit => (
+                  {todayIncomplete.map(visit => (
                     <VisitCard
                       key={visit.id}
                       visit={visit}
@@ -430,14 +483,14 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               </div>
             )}
 
-            {futureVisits.length > 0 && (
+            {futureIncomplete.length > 0 && (
               <div>
-                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-green-500" />
-                  Ateities
+                <h3 className="font-bold text-blue-700 mb-3 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  Būsimi vizitai
                 </h3>
                 <div className="space-y-3">
-                  {futureVisits.map(visit => (
+                  {futureIncomplete.map(visit => (
                     <VisitCard
                       key={visit.id}
                       visit={visit}
@@ -453,14 +506,15 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               </div>
             )}
 
-            {pastVisits.length > 0 && (
-              <div>
-                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-gray-500" />
-                  Praeities
+            {/* COMPLETED VISITS - BOTTOM */}
+            {completedVisits.length > 0 && (
+              <div className="pt-6 border-t-2 border-gray-300">
+                <h3 className="font-bold text-green-700 mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  Užbaigti vizitai ({completedVisits.length})
                 </h3>
                 <div className="space-y-3">
-                  {pastVisits.slice(0, 5).map(visit => (
+                  {completedVisits.slice(0, 5).map(visit => (
                     <VisitCard
                       key={visit.id}
                       visit={visit}
@@ -472,6 +526,11 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                       }}
                     />
                   ))}
+                  {completedVisits.length > 5 && (
+                    <p className="text-sm text-gray-500 text-center py-2">
+                      + dar {completedVisits.length - 5} užbaigti vizitai
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1906,6 +1965,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 }
 
 function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: AnimalVisit; animalId: string; onClose: () => void; onSuccess: () => void }) {
+  const { logAction } = useAuth();
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState(visit.notes || '');
   const [status, setStatus] = useState(visit.status);
