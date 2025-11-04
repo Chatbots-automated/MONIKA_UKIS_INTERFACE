@@ -150,3 +150,31 @@ export interface StockByProduct {
   category: ProductCategory;
   on_hand: number;
 }
+
+export type VisitStatus = 'Planuojamas' | 'Vykdomas' | 'Baigtas' | 'Atšauktas' | 'Neįvykęs';
+export type VisitProcedure = 'Temperatūra' | 'Apžiūra' | 'Profilaktika' | 'Gydymas' | 'Vakcina' | 'Kita';
+
+export interface AnimalVisit {
+  id: string;
+  animal_id: string;
+  visit_datetime: string;
+  procedures: VisitProcedure[];
+  temperature: number | null;
+  temperature_measured_at: string | null;
+  status: VisitStatus;
+  notes: string | null;
+  vet_name: string | null;
+  next_visit_required: boolean;
+  next_visit_date: string | null;
+  treatment_required: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnimalVisitSummary {
+  animal_id: string;
+  tag_no: string | null;
+  species: string;
+  next_visit: string | null;
+  last_visit: string | null;
+}
