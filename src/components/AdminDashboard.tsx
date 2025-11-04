@@ -16,7 +16,7 @@ export function AdminDashboard() {
     { id: 'users' as AdminTab, label: 'Vartotojai', icon: Users },
     { id: 'audit' as AdminTab, label: 'Audito žurnalas', icon: FileText },
     { id: 'security' as AdminTab, label: 'Saugumas', icon: Shield },
-    { id: 'maintenance' as AdminTab, label: 'Techninė priežiūra', icon: Settings },
+    { id: 'maintenance' as AdminTab, label: 'ŽURNALAS', icon: Settings },
   ];
 
   return (
