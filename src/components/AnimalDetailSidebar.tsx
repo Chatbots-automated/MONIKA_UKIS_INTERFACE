@@ -205,30 +205,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
     }
   };
 
-  // Separate incomplete (not Baigtas) and completed visits
-  const incompleteVisits = visits.filter(v => v.status !== 'Baigtas');
-  const completedVisits = visits.filter(v => v.status === 'Baigtas');
-
-  // Categorize incomplete visits by time
-  const todayIncomplete = incompleteVisits.filter(v => {
-    const visitDate = new Date(v.visit_datetime);
-    const today = new Date();
-    return visitDate.toDateString() === today.toDateString();
-  });
-
-  const futureIncomplete = incompleteVisits.filter(v => {
-    const visitDate = new Date(v.visit_datetime);
-    const today = new Date();
-    return visitDate > today;
-  });
-
-  const pastIncomplete = incompleteVisits.filter(v => {
-    const visitDate = new Date(v.visit_datetime);
-    const today = new Date();
-    return visitDate < today && visitDate.toDateString() !== today.toDateString();
-  });
-
-  // For stats
+  // Categorize all visits by time
   const todayVisits = visits.filter(v => {
     const visitDate = new Date(v.visit_datetime);
     const today = new Date();
@@ -240,6 +217,26 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
     const today = new Date();
     return visitDate > today;
   });
+
+  const pastVisits = visits.filter(v => {
+    const visitDate = new Date(v.visit_datetime);
+    const today = new Date();
+    return visitDate < today && visitDate.toDateString() !== today.toDateString();
+  });
+
+  // Separate by completion status
+  const todayIncomplete = todayVisits.filter(v => v.status !== 'Baigtas');
+  const todayCompleted = todayVisits.filter(v => v.status === 'Baigtas');
+
+  const futureIncomplete = futureVisits.filter(v => v.status !== 'Baigtas');
+  const futureCompleted = futureVisits.filter(v => v.status === 'Baigtas');
+
+  const pastIncomplete = pastVisits.filter(v => v.status !== 'Baigtas');
+  const pastCompleted = pastVisits.filter(v => v.status === 'Baigtas');
+
+  // For stats
+  const incompleteVisits = visits.filter(v => v.status !== 'Baigtas');
+  const completedVisits = visits.filter(v => v.status === 'Baigtas');
 
   const getStatusColor = (status: VisitStatus) => {
     switch (status) {
@@ -460,61 +457,119 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               </div>
             )}
 
-            {todayIncomplete.length > 0 && (
+            {todayVisits.length > 0 && (
               <div>
                 <h3 className="font-bold text-orange-700 mb-3 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-orange-600" />
-                  Šiandien
+                  Šiandien ({todayVisits.length})
                 </h3>
-                <div className="space-y-3">
-                  {todayIncomplete.map(visit => (
-                    <VisitCard
-                      key={visit.id}
-                      visit={visit}
-                      getStatusColor={getStatusColor}
-                      getStatusIcon={getStatusIcon}
-                      onClick={() => {
-                        setSelectedVisit(visit);
-                        setShowVisitDetailModal(true);
-                      }}
-                    />
-                  ))}
-                </div>
+
+                {todayIncomplete.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 mb-2 uppercase">Reikia atlikti</h4>
+                    <div className="space-y-3">
+                      {todayIncomplete.map(visit => (
+                        <VisitCard
+                          key={visit.id}
+                          visit={visit}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                          onClick={() => {
+                            setSelectedVisit(visit);
+                            setShowVisitDetailModal(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {todayCompleted.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-green-600 mb-2 uppercase flex items-center gap-1">
+                      <CheckCircle className="w-4 h-4" />
+                      Atlikta šiandien
+                    </h4>
+                    <div className="space-y-3">
+                      {todayCompleted.map(visit => (
+                        <VisitCard
+                          key={visit.id}
+                          visit={visit}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                          onClick={() => {
+                            setSelectedVisit(visit);
+                            setShowVisitDetailModal(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {futureIncomplete.length > 0 && (
+            {futureVisits.length > 0 && (
               <div>
                 <h3 className="font-bold text-blue-700 mb-3 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-blue-600" />
-                  Būsimi vizitai
+                  Būsimi vizitai ({futureVisits.length})
                 </h3>
-                <div className="space-y-3">
-                  {futureIncomplete.map(visit => (
-                    <VisitCard
-                      key={visit.id}
-                      visit={visit}
-                      getStatusColor={getStatusColor}
-                      getStatusIcon={getStatusIcon}
-                      onClick={() => {
-                        setSelectedVisit(visit);
-                        setShowVisitDetailModal(true);
-                      }}
-                    />
-                  ))}
-                </div>
+
+                {futureIncomplete.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 mb-2 uppercase">Suplanuota</h4>
+                    <div className="space-y-3">
+                      {futureIncomplete.map(visit => (
+                        <VisitCard
+                          key={visit.id}
+                          visit={visit}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                          onClick={() => {
+                            setSelectedVisit(visit);
+                            setShowVisitDetailModal(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {futureCompleted.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-green-600 mb-2 uppercase flex items-center gap-1">
+                      <CheckCircle className="w-4 h-4" />
+                      Atlikta iš anksto
+                    </h4>
+                    <div className="space-y-3">
+                      {futureCompleted.map(visit => (
+                        <VisitCard
+                          key={visit.id}
+                          visit={visit}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                          onClick={() => {
+                            setSelectedVisit(visit);
+                            setShowVisitDetailModal(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* COMPLETED VISITS - BOTTOM */}
-            {completedVisits.length > 0 && (
+            {/* PAST COMPLETED VISITS */}
+            {pastCompleted.length > 0 && (
               <div className="pt-6 border-t-2 border-gray-300">
                 <h3 className="font-bold text-green-700 mb-3 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-green-600" />
-                  Užbaigti vizitai ({completedVisits.length})
+                  Ankstesni užbaigti vizitai ({pastCompleted.length})
                 </h3>
                 <div className="space-y-3">
-                  {completedVisits.slice(0, 5).map(visit => (
+                  {pastCompleted.slice(0, 5).map(visit => (
                     <VisitCard
                       key={visit.id}
                       visit={visit}
@@ -526,9 +581,9 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                       }}
                     />
                   ))}
-                  {completedVisits.length > 5 && (
+                  {pastCompleted.length > 5 && (
                     <p className="text-sm text-gray-500 text-center py-2">
-                      + dar {completedVisits.length - 5} užbaigti vizitai
+                      + dar {pastCompleted.length - 5} užbaigti vizitai
                     </p>
                   )}
                 </div>
