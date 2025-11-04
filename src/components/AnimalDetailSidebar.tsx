@@ -870,12 +870,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
         // Create usage items for medications
         for (const med of treatmentData.medications) {
+          if (!med.product_id || !med.batch_id || !med.qty) {
+            throw new Error('Visi vaistų laukai privalomi: produktas, serija ir kiekis');
+          }
+
           const { error: usageError } = await supabase
             .from('usage_items')
             .insert({
               treatment_id: treatmentRecord.id,
-              product_id: med.product_id ? med.product_id : null,
-              batch_id: med.batch_id ? med.batch_id : null,
+              product_id: med.product_id,
+              batch_id: med.batch_id,
               qty: parseFloat(med.qty),
               unit: med.unit,
               purpose: med.purpose ? med.purpose : null,
@@ -1153,15 +1157,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     const totalDays = treatmentDays + withdrawalDays + 1;
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
 
+                    const availableBatches = batches.filter(b => b.product_id === med.product_id);
+
                     return (
                       <div key={idx} className="bg-white p-3 rounded border-2 border-gray-300 space-y-2">
-                        <div className="flex gap-2">
-                          <div className="flex-1">
+                        <div className="grid grid-cols-12 gap-2">
+                          <div className="col-span-4">
                             <select
                               value={med.product_id}
                               onChange={(e) => {
                                 const newMeds = [...treatmentData.medications];
                                 newMeds[idx].product_id = e.target.value;
+                                newMeds[idx].batch_id = '';
                                 setTreatmentData({ ...treatmentData, medications: newMeds });
                                 if (e.target.value) fetchStockLevel(e.target.value);
                               }}
@@ -1178,6 +1185,23 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                               </div>
                             )}
                           </div>
+                          <select
+                            value={med.batch_id}
+                            onChange={(e) => {
+                              const newMeds = [...treatmentData.medications];
+                              newMeds[idx].batch_id = e.target.value;
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="col-span-3 px-2 py-1 border border-gray-300 rounded text-sm"
+                            disabled={!med.product_id}
+                          >
+                            <option value="">Serija *</option>
+                            {availableBatches.map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.lot || b.serial_number || b.id.slice(0, 8)}
+                              </option>
+                            ))}
+                          </select>
                           <input
                             type="number"
                             step="0.01"
@@ -1188,7 +1212,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                               newMeds[idx].qty = e.target.value;
                               setTreatmentData({ ...treatmentData, medications: newMeds });
                             }}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
                           />
                           <select
                             value={med.unit}
@@ -1197,7 +1221,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                               newMeds[idx].unit = e.target.value as any;
                               setTreatmentData({ ...treatmentData, medications: newMeds });
                             }}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
                           >
                             <option value="ml">ml</option>
                             <option value="l">l</option>
@@ -1211,7 +1235,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                               const newMeds = treatmentData.medications.filter((_, i) => i !== idx);
                               setTreatmentData({ ...treatmentData, medications: newMeds });
                             }}
-                            className="px-2 py-1 text-red-600 hover:bg-red-50 rounded"
+                            className="col-span-1 px-2 py-1 text-red-600 hover:bg-red-50 rounded"
                           >
                             <X className="w-4 h-4" />
                           </button>
