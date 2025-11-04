@@ -686,6 +686,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     animal_condition: '',
     outcome: '',
     services: '',
+    treatment_duration_days: '1',
     withdrawal_until: '',
     notes: '',
     medications: [] as Array<{
@@ -696,6 +697,45 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
       purpose: string;
     }>,
   });
+
+  // Calculate withdrawal date automatically
+  const calculateWithdrawalDate = () => {
+    if (treatmentData.medications.length === 0 || !treatmentData.treatment_duration_days) {
+      return null;
+    }
+
+    const visitDate = new Date(formData.visit_datetime);
+    const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
+
+    let maxWithdrawalDays = 0;
+
+    // Find the medicine with longest withdrawal period
+    treatmentData.medications.forEach(med => {
+      const product = products.find(p => p.id === med.product_id);
+      if (product && product.withdrawal_days) {
+        maxWithdrawalDays = Math.max(maxWithdrawalDays, product.withdrawal_days);
+      }
+    });
+
+    if (maxWithdrawalDays === 0) return null;
+
+    // Calculate: visit_date + treatment_duration + max_withdrawal + 1 safety day
+    const totalDays = treatmentDays + maxWithdrawalDays + 1;
+    const withdrawalDate = new Date(visitDate);
+    withdrawalDate.setDate(withdrawalDate.getDate() + totalDays);
+
+    return withdrawalDate.toISOString().split('T')[0];
+  };
+
+  // Update withdrawal date whenever medications or duration changes
+  useEffect(() => {
+    if (formData.procedures.includes('Gydymas')) {
+      const calculatedDate = calculateWithdrawalDate();
+      if (calculatedDate && calculatedDate !== treatmentData.withdrawal_until) {
+        setTreatmentData(prev => ({ ...prev, withdrawal_until: calculatedDate }));
+      }
+    }
+  }, [treatmentData.medications, treatmentData.treatment_duration_days, formData.visit_datetime, formData.procedures]);
 
   // Vaccination form data
   const [vaccinationData, setVaccinationData] = useState({
@@ -1041,7 +1081,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 Gydymo informacija
               </h4>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Liga</label>
                   <select
@@ -1057,12 +1097,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nurašymas iki</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Gydymo trukmė (dienų) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={treatmentData.treatment_duration_days}
+                    onChange={(e) => setTreatmentData({ ...treatmentData, treatment_duration_days: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nurašymas iki (automatinis)</label>
                   <input
                     type="date"
                     value={treatmentData.withdrawal_until}
-                    onChange={(e) => setTreatmentData({ ...treatmentData, withdrawal_until: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
               </div>
@@ -1079,62 +1131,85 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Vaistai *</label>
-                <div className="space-y-2">
-                  {treatmentData.medications.map((med, idx) => (
-                    <div key={idx} className="flex gap-2 bg-white p-2 rounded border border-gray-300">
-                      <select
-                        value={med.product_id}
-                        onChange={(e) => {
-                          const newMeds = [...treatmentData.medications];
-                          newMeds[idx].product_id = e.target.value;
-                          setTreatmentData({ ...treatmentData, medications: newMeds });
-                        }}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value="">Pasirinkite vaistą</option>
-                        {products.filter(p => p.category === 'medicines').map(product => (
-                          <option key={product.id} value={product.id}>{product.name}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Kiekis"
-                        value={med.qty}
-                        onChange={(e) => {
-                          const newMeds = [...treatmentData.medications];
-                          newMeds[idx].qty = e.target.value;
-                          setTreatmentData({ ...treatmentData, medications: newMeds });
-                        }}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                      <select
-                        value={med.unit}
-                        onChange={(e) => {
-                          const newMeds = [...treatmentData.medications];
-                          newMeds[idx].unit = e.target.value as any;
-                          setTreatmentData({ ...treatmentData, medications: newMeds });
-                        }}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value="ml">ml</option>
-                        <option value="l">l</option>
-                        <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="pcs">vnt</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newMeds = treatmentData.medications.filter((_, i) => i !== idx);
-                          setTreatmentData({ ...treatmentData, medications: newMeds });
-                        }}
-                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  {treatmentData.medications.map((med, idx) => {
+                    const selectedProduct = products.find(p => p.id === med.product_id);
+                    const withdrawalDays = selectedProduct?.withdrawal_days || 0;
+                    const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
+                    const totalDays = treatmentDays + withdrawalDays + 1;
+
+                    return (
+                      <div key={idx} className="bg-white p-3 rounded border-2 border-gray-300 space-y-2">
+                        <div className="flex gap-2">
+                          <select
+                            value={med.product_id}
+                            onChange={(e) => {
+                              const newMeds = [...treatmentData.medications];
+                              newMeds[idx].product_id = e.target.value;
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="">Pasirinkite vaistą</option>
+                            {products.filter(p => p.category === 'medicines').map(product => (
+                              <option key={product.id} value={product.id}>{product.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Kiekis"
+                            value={med.qty}
+                            onChange={(e) => {
+                              const newMeds = [...treatmentData.medications];
+                              newMeds[idx].qty = e.target.value;
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                          />
+                          <select
+                            value={med.unit}
+                            onChange={(e) => {
+                              const newMeds = [...treatmentData.medications];
+                              newMeds[idx].unit = e.target.value as any;
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="ml">ml</option>
+                            <option value="l">l</option>
+                            <option value="g">g</option>
+                            <option value="kg">kg</option>
+                            <option value="pcs">vnt</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newMeds = treatmentData.medications.filter((_, i) => i !== idx);
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="px-2 py-1 text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {selectedProduct && withdrawalDays > 0 && (
+                          <div className="text-xs bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-700">
+                                <strong>Karencija:</strong> {withdrawalDays} d.
+                                <span className="mx-1">•</span>
+                                Gydymas: {treatmentDays} d.
+                                <span className="mx-1">•</span>
+                                Saugumas: +1 d.
+                              </span>
+                              <span className="font-bold text-orange-700">= {totalDays} dienų</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => {
@@ -1148,6 +1223,43 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     <Plus className="w-4 h-4" />
                     Pridėti vaistą
                   </button>
+
+                  {/* WITHDRAWAL CALCULATION SUMMARY */}
+                  {treatmentData.medications.length > 0 && treatmentData.medications.some(m => m.product_id) && (
+                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 space-y-2">
+                      <h5 className="font-bold text-red-900 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" />
+                        Karencijos skaičiavimas
+                      </h5>
+                      <div className="text-sm space-y-1">
+                        {treatmentData.medications
+                          .filter(m => m.product_id)
+                          .map((med, idx) => {
+                            const product = products.find(p => p.id === med.product_id);
+                            const withdrawalDays = product?.withdrawal_days || 0;
+                            const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
+                            const totalForThis = treatmentDays + withdrawalDays + 1;
+
+                            return (
+                              <div key={idx} className="text-gray-700">
+                                <strong>{product?.name}:</strong> {withdrawalDays} d. karencija → {totalForThis} d. iš viso
+                              </div>
+                            );
+                          })}
+                        <div className="pt-2 mt-2 border-t-2 border-red-300">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-red-900">GALUTINIS NURAŠYMAS:</span>
+                            <span className="text-xl font-bold text-red-900">
+                              {treatmentData.withdrawal_until ? formatDateLT(treatmentData.withdrawal_until) : '-'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">
+                            (Skaičiuojama nuo ilgiausios karencijos)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
