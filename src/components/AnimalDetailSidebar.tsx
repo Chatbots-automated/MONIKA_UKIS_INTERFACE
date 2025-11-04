@@ -996,6 +996,26 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
         if (vaccinationError) throw vaccinationError;
 
         await logAction('create_vaccination', 'vaccinations', vaccinationRecord.id);
+
+        // If there's a next booster date, create a planned visit for it
+        if (vaccinationData.next_booster_date) {
+          const { error: futureVisitError } = await supabase
+            .from('animal_visits')
+            .insert({
+              animal_id: animalId,
+              visit_datetime: `${vaccinationData.next_booster_date}T10:00:00`,
+              procedures: ['Vakcina'],
+              status: 'Planuojamas',
+              notes: `Pakartotinė vakcina: ${products.find(p => p.id === vaccinationData.product_id)?.name || 'N/A'}`,
+              vet_name: vaccinationData.administered_by || formData.vet_name || null,
+              next_visit_required: false,
+              treatment_required: false,
+            });
+
+          if (futureVisitError) {
+            console.error('Error creating future vaccination visit:', futureVisitError);
+          }
+        }
       }
 
       // 4. If Profilaktika procedure, create prevention record (using biocide_usage table)

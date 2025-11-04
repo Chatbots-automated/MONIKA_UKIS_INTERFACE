@@ -124,6 +124,28 @@ export function Vaccinations() {
         }
       );
 
+      // If there's a next booster date, create planned visits for all vaccinated animals
+      if (massVaccinationData.next_booster_date) {
+        const futureVisits = Array.from(selectedAnimals).map(animalId => ({
+          animal_id: animalId,
+          visit_datetime: `${massVaccinationData.next_booster_date}T10:00:00`,
+          procedures: ['Vakcina'],
+          status: 'Planuojamas',
+          notes: `Pakartotinė vakcina: ${selectedProduct?.name || 'N/A'}`,
+          vet_name: massVaccinationData.administered_by || null,
+          next_visit_required: false,
+          treatment_required: false,
+        }));
+
+        const { error: futureVisitsError } = await supabase
+          .from('animal_visits')
+          .insert(futureVisits);
+
+        if (futureVisitsError) {
+          console.error('Error creating future vaccination visits:', futureVisitsError);
+        }
+      }
+
       alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų!`);
 
       setSelectedAnimals(new Set());
