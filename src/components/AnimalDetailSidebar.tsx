@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package } from 'lucide-react';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -124,6 +124,8 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
+  const [selectedVisit, setSelectedVisit] = useState<AnimalVisit | null>(null);
+  const [showVisitDetailModal, setShowVisitDetailModal] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -412,7 +414,16 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
                 </h3>
                 <div className="space-y-3">
                   {todayVisits.map(visit => (
-                    <VisitCard key={visit.id} visit={visit} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
+                    <VisitCard
+                      key={visit.id}
+                      visit={visit}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                      onClick={() => {
+                        setSelectedVisit(visit);
+                        setShowVisitDetailModal(true);
+                      }}
+                    />
                   ))}
                 </div>
               </div>
@@ -426,7 +437,16 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
                 </h3>
                 <div className="space-y-3">
                   {futureVisits.map(visit => (
-                    <VisitCard key={visit.id} visit={visit} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
+                    <VisitCard
+                      key={visit.id}
+                      visit={visit}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                      onClick={() => {
+                        setSelectedVisit(visit);
+                        setShowVisitDetailModal(true);
+                      }}
+                    />
                   ))}
                 </div>
               </div>
@@ -440,7 +460,16 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
                 </h3>
                 <div className="space-y-3">
                   {pastVisits.slice(0, 5).map(visit => (
-                    <VisitCard key={visit.id} visit={visit} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
+                    <VisitCard
+                      key={visit.id}
+                      visit={visit}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                      onClick={() => {
+                        setSelectedVisit(visit);
+                        setShowVisitDetailModal(true);
+                      }}
+                    />
                   ))}
                 </div>
               </div>
@@ -459,51 +488,79 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
           <div className="space-y-4">
             {treatments.length > 0 ? (
               treatments.map(treatment => (
-                <div key={treatment.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {formatDateLT(treatment.reg_date)}
+                <div key={treatment.id} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Pill className="w-5 h-5 text-green-600" />
+                        <div className="font-semibold text-lg text-gray-900">
+                          {formatDateLT(treatment.reg_date)}
+                        </div>
                       </div>
                       {treatment.disease_name && (
-                        <div className="text-sm text-red-600 font-medium">
-                          Diagnozė: {treatment.disease_name}
+                        <div className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-red-100 text-red-800 border border-red-200">
+                          <AlertCircle className="w-4 h-4 mr-1.5" />
+                          {treatment.disease_name}
                         </div>
                       )}
                     </div>
                     {treatment.vet_name && (
-                      <div className="text-xs text-gray-500">
-                        Gyd.: {treatment.vet_name}
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-semibold text-green-700">
+                            {treatment.vet_name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="font-medium text-gray-900">{treatment.vet_name}</span>
                       </div>
                     )}
                   </div>
 
                   {treatment.clinical_diagnosis && (
-                    <div className="mb-2">
-                      <span className="text-xs font-medium text-gray-600">Klinikinis diagnozas:</span>
-                      <p className="text-sm text-gray-700">{treatment.clinical_diagnosis}</p>
+                    <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <FileText className="w-4 h-4 text-amber-600 mt-0.5" />
+                        <div className="flex-1">
+                          <div className="text-xs font-semibold text-amber-900 mb-1">Klinikinis diagnozas</div>
+                          <p className="text-sm text-amber-900 leading-relaxed">{treatment.clinical_diagnosis}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {treatment.usage_items && treatment.usage_items.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-xs font-medium text-gray-600 mb-2 flex items-center gap-2">
-                        <Pill className="w-4 h-4" />
-                        Panaudoti vaistai:
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Pill className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          Panaudoti vaistai ({treatment.usage_items.length})
+                        </div>
                       </div>
                       <div className="space-y-2">
                         {treatment.usage_items.map((item: UsageItemWithProduct) => (
-                          <div key={item.id} className="flex items-center justify-between bg-blue-50 rounded px-3 py-2">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {item.product?.name || 'Nežinomas produktas'}
+                          <div key={item.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="font-semibold text-gray-900 mb-1">
+                                  {item.product?.name || 'Nežinomas produktas'}
+                                </div>
+                                <div className="text-xs text-gray-600 mb-2">
+                                  {item.purpose}
+                                </div>
+                                {item.batch_id && (
+                                  <div className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-white border border-blue-200 text-gray-700">
+                                    Serija: {item.batch_id.slice(0, 10)}
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-xs text-gray-600">
-                                {item.purpose}
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-blue-700">
+                                  {item.qty} {item.unit}
+                                </div>
+                                <div className="text-xs text-gray-500">Kiekis</div>
                               </div>
-                            </div>
-                            <div className="text-sm font-medium text-gray-700">
-                              {item.qty} {item.unit}
                             </div>
                           </div>
                         ))}
@@ -512,34 +569,58 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
                   )}
 
                   {treatment.withdrawal_until && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex items-center gap-2 text-sm">
-                        <AlertCircle className="w-4 h-4 text-orange-500" />
-                        <span className="text-gray-600">Nurašymas iki:</span>
-                        <span className="font-medium text-orange-600">{formatDateLT(treatment.withdrawal_until)}</span>
+                    <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-300 rounded-lg p-4 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                          <AlertCircle className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-xs font-semibold text-orange-900 mb-0.5">Nurašymo periodas</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-700">Galioja iki:</span>
+                            <span className="font-bold text-orange-700">{formatDateLT(treatment.withdrawal_until)}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {treatment.notes && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-xs font-medium text-gray-600 mb-1">Pastabos:</div>
-                      <p className="text-sm text-gray-700">{treatment.notes}</p>
-                    </div>
-                  )}
+                  {(treatment.notes || treatment.outcome) && (
+                    <div className="space-y-3 pt-4 border-t border-gray-200">
+                      {treatment.notes && (
+                        <div className="flex items-start gap-2">
+                          <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                          <div className="flex-1">
+                            <div className="text-xs font-medium text-gray-500 mb-1">Pastabos</div>
+                            <p className="text-sm text-gray-700 leading-relaxed">{treatment.notes}</p>
+                          </div>
+                        </div>
+                      )}
 
-                  {treatment.outcome && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-xs font-medium text-gray-600 mb-1">Rezultatas:</div>
-                      <p className="text-sm text-gray-700">{treatment.outcome}</p>
+                      {treatment.outcome && (
+                        <div className="flex items-start gap-2">
+                          <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-xs font-medium text-gray-500 mb-1">Rezultatas</div>
+                            <p className="text-sm text-gray-700 leading-relaxed font-medium">{treatment.outcome}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <Pill className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p>Nėra gydymų</p>
+              <div className="text-center py-16 text-gray-500">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Pill className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="text-lg font-medium">Nėra gydymų</p>
+                <p className="text-sm mt-1">Gydymai bus rodomi čia</p>
               </div>
             )}
           </div>
@@ -823,13 +904,29 @@ export function AnimalDetailSidebar({ animal, onClose }: AnimalDetailSidebarProp
           }}
         />
       )}
+
+      {showVisitDetailModal && selectedVisit && (
+        <VisitDetailModal
+          visit={selectedVisit}
+          animalId={animal.id}
+          onClose={() => {
+            setShowVisitDetailModal(false);
+            setSelectedVisit(null);
+          }}
+          onSuccess={() => {
+            loadAllData();
+            setShowVisitDetailModal(false);
+            setSelectedVisit(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function VisitCard({ visit, getStatusColor, getStatusIcon }: { visit: AnimalVisit; getStatusColor: (status: VisitStatus) => string; getStatusIcon: (status: VisitStatus) => JSX.Element }) {
+function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: { visit: AnimalVisit; getStatusColor: (status: VisitStatus) => string; getStatusIcon: (status: VisitStatus) => JSX.Element; onClick: () => void }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+    <div onClick={onClick} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all cursor-pointer transform hover:scale-[1.01]">
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(visit.status)}`}>
@@ -1802,6 +1899,218 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: AnimalVisit; animalId: string; onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [notes, setNotes] = useState(visit.notes || '');
+  const [status, setStatus] = useState(visit.status);
+
+  const handleCompleteVisit = async () => {
+    if (status === 'Užbaigtas') {
+      alert('Šis vizitas jau užbaigtas');
+      return;
+    }
+
+    if (!confirm('Ar tikrai norite pažymėti šį vizitą kaip užbaigtą?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('animal_visits')
+        .update({
+          status: 'Užbaigtas',
+          notes: notes
+        })
+        .eq('id', visit.id);
+
+      if (error) throw error;
+
+      await logAction('complete_visit', 'animal_visits', visit.id);
+      onSuccess();
+    } catch (error: any) {
+      alert('Klaida: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateNotes = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('animal_visits')
+        .update({
+          notes: notes,
+          status: status
+        })
+        .eq('id', visit.id);
+
+      if (error) throw error;
+
+      await logAction('update_visit', 'animal_visits', visit.id);
+      alert('Vizitas atnaujintas!');
+      onSuccess();
+    } catch (error: any) {
+      alert('Klaida: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: VisitStatus) => {
+    switch (status) {
+      case 'Užbaigtas': return 'bg-green-100 text-green-800 border-green-300';
+      case 'Planuojamas': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'Atšauktas': return 'bg-red-100 text-red-800 border-red-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white border-b border-blue-800">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">Vizito informacija</h2>
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5" />
+            <span className="text-lg">{formatDateTimeLT(visit.visit_datetime)}</span>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-medium text-gray-500 mb-1">Statusas</div>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as VisitStatus)}
+                  className={`w-full px-3 py-2 rounded-lg border-2 font-medium ${getStatusColor(status)}`}
+                >
+                  <option value="Planuojamas">Planuojamas</option>
+                  <option value="Užbaigtas">Užbaigtas</option>
+                  <option value="Atšauktas">Atšauktas</option>
+                </select>
+              </div>
+              {visit.vet_name && (
+                <div>
+                  <div className="text-xs font-medium text-gray-500 mb-1">Veterinaras</div>
+                  <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-300">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-semibold text-blue-700">
+                        {visit.vet_name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="font-medium text-gray-900">{visit.vet_name}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-gray-900 mb-2">Procedūros</div>
+            <div className="flex flex-wrap gap-2">
+              {visit.procedures.map((proc, idx) => (
+                <span key={idx} className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium border border-blue-200">
+                  {proc}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {visit.temperature && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <Thermometer className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-600">Temperatūra</div>
+                  <div className="text-2xl font-bold text-red-700">{visit.temperature}°C</div>
+                  {visit.temperature_measured_at && (
+                    <div className="text-xs text-gray-500">{formatDateTimeLT(visit.temperature_measured_at)}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {visit.treatment_required && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-orange-700">
+                <Pill className="w-4 h-4" />
+                <span className="font-medium">Reikalingas gydymas</span>
+              </div>
+            </div>
+          )}
+
+          {visit.next_visit_required && visit.next_visit_date && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-green-700">
+                  <Calendar className="w-4 h-4" />
+                  <span className="font-medium">Sekantis vizitas</span>
+                </div>
+                <span className="font-bold text-green-800">{formatDateTimeLT(visit.next_visit_date)}</span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Pastabos ir komentarai
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={6}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Pridėkite pastabas apie vizitą, gydymo rezultatus, rekomendacijas..."
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+            >
+              Atšaukti
+            </button>
+            <button
+              onClick={handleUpdateNotes}
+              disabled={loading}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+            >
+              {loading ? 'Saugoma...' : 'Išsaugoti'}
+            </button>
+            {status !== 'Užbaigtas' && (
+              <button
+                onClick={handleCompleteVisit}
+                disabled={loading}
+                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5" />
+                {loading ? 'Užbaigiama...' : 'Užbaigti'}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
