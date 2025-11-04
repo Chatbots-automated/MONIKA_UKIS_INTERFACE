@@ -677,6 +677,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
   const [products, setProducts] = useState<Product[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [stockLevels, setStockLevels] = useState<Record<string, number>>({});
 
   // Treatment form data
   const [treatmentData, setTreatmentData] = useState({
@@ -771,6 +772,19 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     if (productsRes.data) setProducts(productsRes.data);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (batchesRes.data) setBatches(batchesRes.data);
+  };
+
+  const fetchStockLevel = async (productId: string) => {
+    const { data, error } = await supabase
+      .from('stock_by_batch')
+      .select('qty_remaining')
+      .eq('product_id', productId);
+
+    if (error || !data) return 0;
+
+    const total = data.reduce((sum, batch) => sum + (batch.qty_remaining || 0), 0);
+    setStockLevels(prev => ({ ...prev, [productId]: total }));
+    return total;
   };
 
   const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Kita'];
@@ -1137,24 +1151,33 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     const withdrawalDays = selectedProduct?.withdrawal_days || 0;
                     const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
                     const totalDays = treatmentDays + withdrawalDays + 1;
+                    const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
 
                     return (
                       <div key={idx} className="bg-white p-3 rounded border-2 border-gray-300 space-y-2">
                         <div className="flex gap-2">
-                          <select
-                            value={med.product_id}
-                            onChange={(e) => {
-                              const newMeds = [...treatmentData.medications];
-                              newMeds[idx].product_id = e.target.value;
-                              setTreatmentData({ ...treatmentData, medications: newMeds });
-                            }}
-                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="">Pasirinkite vaistą</option>
-                            {products.filter(p => p.category === 'medicines').map(product => (
-                              <option key={product.id} value={product.id}>{product.name}</option>
-                            ))}
-                          </select>
+                          <div className="flex-1">
+                            <select
+                              value={med.product_id}
+                              onChange={(e) => {
+                                const newMeds = [...treatmentData.medications];
+                                newMeds[idx].product_id = e.target.value;
+                                setTreatmentData({ ...treatmentData, medications: newMeds });
+                                if (e.target.value) fetchStockLevel(e.target.value);
+                              }}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            >
+                              <option value="">Pasirinkite vaistą</option>
+                              {products.filter(p => p.category === 'medicines').map(product => (
+                                <option key={product.id} value={product.id}>{product.name}</option>
+                              ))}
+                            </select>
+                            {stockLevel !== undefined && (
+                              <div className="text-xs text-gray-500 mt-0.5 px-1">
+                                Likutis: <span className={stockLevel > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>{stockLevel.toFixed(2)}</span> {selectedProduct?.unit}
+                              </div>
+                            )}
+                          </div>
                           <input
                             type="number"
                             step="0.01"
@@ -1277,7 +1300,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Vakcina *</label>
                 <select
                   value={vaccinationData.product_id}
-                  onChange={(e) => setVaccinationData({ ...vaccinationData, product_id: e.target.value })}
+                  onChange={(e) => {
+                    setVaccinationData({ ...vaccinationData, product_id: e.target.value });
+                    if (e.target.value) fetchStockLevel(e.target.value);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   required
                 >
@@ -1286,6 +1312,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     <option key={product.id} value={product.id}>{product.name}</option>
                   ))}
                 </select>
+                {vaccinationData.product_id && stockLevels[vaccinationData.product_id] !== undefined && (
+                  <div className="text-xs text-gray-500 mt-1 px-1">
+                    Likutis: <span className={stockLevels[vaccinationData.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
+                      {stockLevels[vaccinationData.product_id].toFixed(2)}
+                    </span> {products.find(p => p.id === vaccinationData.product_id)?.unit}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1350,7 +1383,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
                 <select
                   value={preventionData.product_id}
-                  onChange={(e) => setPreventionData({ ...preventionData, product_id: e.target.value })}
+                  onChange={(e) => {
+                    setPreventionData({ ...preventionData, product_id: e.target.value });
+                    if (e.target.value) fetchStockLevel(e.target.value);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   required
                 >
@@ -1359,6 +1395,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     <option key={product.id} value={product.id}>{product.name}</option>
                   ))}
                 </select>
+                {preventionData.product_id && stockLevels[preventionData.product_id] !== undefined && (
+                  <div className="text-xs text-gray-500 mt-1 px-1">
+                    Likutis: <span className={stockLevels[preventionData.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
+                      {stockLevels[preventionData.product_id].toFixed(2)}
+                    </span> {products.find(p => p.id === preventionData.product_id)?.unit}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-4">
