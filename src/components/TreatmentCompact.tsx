@@ -42,6 +42,7 @@ export function TreatmentCompact() {
   const [notes, setNotes] = useState('');
   const [usageLines, setUsageLines] = useState<UsageLine[]>([]);
   const [withdrawalStatus, setWithdrawalStatus] = useState<WithdrawalStatus | null>(null);
+  const [stockLevels, setStockLevels] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadData();
@@ -88,6 +89,19 @@ export function TreatmentCompact() {
     } catch (error) {
       console.error('Error loading withdrawal status:', error);
     }
+  };
+
+  const fetchStockLevel = async (productId: string) => {
+    const { data, error } = await supabase
+      .from('stock_by_batch')
+      .select('qty_remaining')
+      .eq('product_id', productId);
+
+    if (error || !data) return 0;
+
+    const total = data.reduce((sum, batch) => sum + (batch.qty_remaining || 0), 0);
+    setStockLevels(prev => ({ ...prev, [productId]: total }));
+    return total;
   };
 
   const addUsageLine = () => {
@@ -399,24 +413,35 @@ export function TreatmentCompact() {
             {usageLines.map(line => {
               const selectedProduct = products.find(p => p.id === line.product_id);
               const availBatches = getAvailableBatches(line.product_id);
+              const stockLevel = line.product_id ? stockLevels[line.product_id] : undefined;
 
               return (
                 <div key={line.id} className="bg-gray-50 rounded-lg p-3 space-y-2">
                   <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                    <select
-                      value={line.product_id}
-                      onChange={(e) => updateUsageLine(line.id, {
-                        product_id: e.target.value,
-                        batch_id: '',
-                        unit: products.find(p => p.id === e.target.value)?.primary_pack_unit || 'ml'
-                      })}
-                      className="col-span-2 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">Produktas *</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
+                    <div className="col-span-2">
+                      <select
+                        value={line.product_id}
+                        onChange={(e) => {
+                          updateUsageLine(line.id, {
+                            product_id: e.target.value,
+                            batch_id: '',
+                            unit: products.find(p => p.id === e.target.value)?.primary_pack_unit || 'ml'
+                          });
+                          if (e.target.value) fetchStockLevel(e.target.value);
+                        }}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Produktas *</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {stockLevel !== undefined && (
+                        <div className="text-xs text-gray-500 mt-0.5 px-1">
+                          Likutis: <span className={stockLevel > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-bold'}>{stockLevel.toFixed(2)}</span> {selectedProduct?.primary_pack_unit}
+                        </div>
+                      )}
+                    </div>
 
                     <select
                       value={line.batch_id}
