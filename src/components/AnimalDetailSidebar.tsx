@@ -1411,6 +1411,31 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     return total;
   };
 
+  const getOldestBatchWithStock = async (productId: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase
+        .from('stock_by_batch')
+        .select('batch_id, on_hand, expiry_date')
+        .eq('product_id', productId)
+        .gt('on_hand', 0)
+        .order('expiry_date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching batch stock:', error);
+        return '';
+      }
+
+      if (data && data.length > 0) {
+        return data[0].batch_id;
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Error in getOldestBatchWithStock:', error);
+      return '';
+    }
+  };
+
   const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Kita'];
 
   const toggleProcedure = (proc: VisitProcedure) => {
@@ -1818,12 +1843,20 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                           <div className="col-span-4">
                             <select
                               value={med.product_id}
-                              onChange={(e) => {
+                              onChange={async (e) => {
+                                const productId = e.target.value;
                                 const newMeds = [...treatmentData.medications];
-                                newMeds[idx].product_id = e.target.value;
-                                newMeds[idx].batch_id = '';
+                                newMeds[idx].product_id = productId;
+
+                                if (productId) {
+                                  const oldestBatchId = await getOldestBatchWithStock(productId);
+                                  newMeds[idx].batch_id = oldestBatchId;
+                                  fetchStockLevel(productId);
+                                } else {
+                                  newMeds[idx].batch_id = '';
+                                }
+
                                 setTreatmentData({ ...treatmentData, medications: newMeds });
-                                if (e.target.value) fetchStockLevel(e.target.value);
                               }}
                               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             >
@@ -1977,9 +2010,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Vakcina *</label>
                 <select
                   value={vaccinationData.product_id}
-                  onChange={(e) => {
-                    setVaccinationData({ ...vaccinationData, product_id: e.target.value, batch_id: '' });
-                    if (e.target.value) fetchStockLevel(e.target.value);
+                  onChange={async (e) => {
+                    const productId = e.target.value;
+
+                    if (productId) {
+                      const oldestBatchId = await getOldestBatchWithStock(productId);
+                      setVaccinationData({ ...vaccinationData, product_id: productId, batch_id: oldestBatchId });
+                      fetchStockLevel(productId);
+                    } else {
+                      setVaccinationData({ ...vaccinationData, product_id: '', batch_id: '' });
+                    }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                   required
@@ -2098,9 +2138,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
                 <select
                   value={preventionData.product_id}
-                  onChange={(e) => {
-                    setPreventionData({ ...preventionData, product_id: e.target.value, batch_id: '' });
-                    if (e.target.value) fetchStockLevel(e.target.value);
+                  onChange={async (e) => {
+                    const productId = e.target.value;
+
+                    if (productId) {
+                      const oldestBatchId = await getOldestBatchWithStock(productId);
+                      setPreventionData({ ...preventionData, product_id: productId, batch_id: oldestBatchId });
+                      fetchStockLevel(productId);
+                    } else {
+                      setPreventionData({ ...preventionData, product_id: '', batch_id: '' });
+                    }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   required

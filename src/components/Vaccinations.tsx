@@ -62,6 +62,31 @@ export function Vaccinations() {
     }
   };
 
+  const getOldestBatchWithStock = async (productId: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase
+        .from('stock_by_batch')
+        .select('batch_id, on_hand, expiry_date')
+        .eq('product_id', productId)
+        .gt('on_hand', 0)
+        .order('expiry_date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching batch stock:', error);
+        return '';
+      }
+
+      if (data && data.length > 0) {
+        return data[0].batch_id;
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Error in getOldestBatchWithStock:', error);
+      return '';
+    }
+  };
+
   const handleToggleAnimal = (animalId: string) => {
     const newSelected = new Set(selectedAnimals);
     if (newSelected.has(animalId)) {
@@ -300,7 +325,16 @@ export function Vaccinations() {
               </label>
               <select
                 value={massVaccinationData.product_id}
-                onChange={(e) => setMassVaccinationData({ ...massVaccinationData, product_id: e.target.value, batch_id: '' })}
+                onChange={async (e) => {
+                  const productId = e.target.value;
+
+                  if (productId) {
+                    const oldestBatchId = await getOldestBatchWithStock(productId);
+                    setMassVaccinationData({ ...massVaccinationData, product_id: productId, batch_id: oldestBatchId });
+                  } else {
+                    setMassVaccinationData({ ...massVaccinationData, product_id: '', batch_id: '' });
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Pasirinkite vakciną</option>

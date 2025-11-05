@@ -140,6 +140,31 @@ export function TreatmentCompact() {
       });
   };
 
+  const getOldestBatchWithStock = async (productId: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase
+        .from('stock_by_batch')
+        .select('batch_id, on_hand, expiry_date')
+        .eq('product_id', productId)
+        .gt('on_hand', 0)
+        .order('expiry_date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching batch stock:', error);
+        return '';
+      }
+
+      if (data && data.length > 0) {
+        return data[0].batch_id;
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Error in getOldestBatchWithStock:', error);
+      return '';
+    }
+  };
+
   const handleSave = async () => {
     if (!animalId) {
       alert('Pasirinkite gyvūną');
@@ -421,13 +446,25 @@ export function TreatmentCompact() {
                     <div className="col-span-2">
                       <select
                         value={line.product_id}
-                        onChange={(e) => {
-                          updateUsageLine(line.id, {
-                            product_id: e.target.value,
-                            batch_id: '',
-                            unit: products.find(p => p.id === e.target.value)?.primary_pack_unit || 'ml'
-                          });
-                          if (e.target.value) fetchStockLevel(e.target.value);
+                        onChange={async (e) => {
+                          const productId = e.target.value;
+                          const unit = products.find(p => p.id === productId)?.primary_pack_unit || 'ml';
+
+                          if (productId) {
+                            const oldestBatchId = await getOldestBatchWithStock(productId);
+                            updateUsageLine(line.id, {
+                              product_id: productId,
+                              batch_id: oldestBatchId,
+                              unit: unit
+                            });
+                            fetchStockLevel(productId);
+                          } else {
+                            updateUsageLine(line.id, {
+                              product_id: '',
+                              batch_id: '',
+                              unit: unit
+                            });
+                          }
                         }}
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-emerald-500"
                       >
