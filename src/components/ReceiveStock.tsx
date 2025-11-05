@@ -98,11 +98,21 @@ export function ReceiveStock() {
     try {
       const arrayBuffer = await selectedFile.arrayBuffer();
 
+      const sanitizeFilename = (filename: string): string => {
+        return filename
+          .replace(/[()]/g, '')
+          .replace(/[^\w\s.-]/g, '_')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_');
+      };
+
+      const sanitizedFilename = sanitizeFilename(selectedFile.name);
+
       const response = await fetch('https://n8n-up8s.onrender.com/webhook/36549f46-a08b-4790-bf56-40cdc919e4c0', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${selectedFile.name}"`,
+          'Content-Disposition': `attachment; filename="${sanitizedFilename}"`,
         },
         body: arrayBuffer,
       });
