@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Batch, Unit } from '../lib/types';
-import { Syringe, Check, Search, CheckSquare, Square, Calendar } from 'lucide-react';
+import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface VaccinationGroup {
@@ -21,6 +21,10 @@ export function Vaccinations() {
   const [selectedAnimals, setSelectedAnimals] = useState<Set<string>>(new Set());
   const [showMassVaccination, setShowMassVaccination] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [vacDateFrom, setVacDateFrom] = useState('');
+  const [vacDateTo, setVacDateTo] = useState('');
+  const [vacSearch, setVacSearch] = useState('');
 
   const [massVaccinationData, setMassVaccinationData] = useState({
     product_id: '',
@@ -216,8 +220,56 @@ export function Vaccinations() {
     a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const filteredVaccinations = vaccinations.filter(vac => {
+    let match = true;
+
+    if (vacDateFrom) {
+      match = match && vac.vaccination_date >= vacDateFrom;
+    }
+
+    if (vacDateTo) {
+      match = match && vac.vaccination_date <= vacDateTo;
+    }
+
+    if (vacSearch) {
+      const search = vacSearch.toLowerCase();
+      const animal = animals.find(a => a.id === vac.animal_id);
+      const product = products.find(p => p.id === vac.product_id);
+
+      match = match && (
+        animal?.tag_no?.toLowerCase().includes(search) ||
+        animal?.holder_name?.toLowerCase().includes(search) ||
+        product?.name?.toLowerCase().includes(search) ||
+        vac.administered_by?.toLowerCase().includes(search) ||
+        vac.notes?.toLowerCase().includes(search) ||
+        vac.batch_id?.toLowerCase().includes(search)
+      );
+    }
+
+    return match;
+  });
+
   const availableBatches = batches.filter(b => b.product_id === massVaccinationData.product_id);
-  const groupedVaccinations = groupVaccinationsByDate();
+
+  const groupVaccinationsByDateFiltered = (): VaccinationGroup[] => {
+    const grouped = new Map<string, any[]>();
+
+    filteredVaccinations.forEach(vac => {
+      const date = vac.vaccination_date;
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
+      grouped.get(date)!.push(vac);
+    });
+
+    return Array.from(grouped.entries()).map(([date, vacs]) => ({
+      date,
+      dateLabel: getDateLabel(date),
+      vaccinations: vacs,
+    }));
+  };
+
+  const groupedVaccinations = groupVaccinationsByDateFiltered();
 
   if (loading) return <div className="text-center py-8">Kraunama...</div>;
 
@@ -446,6 +498,63 @@ export function Vaccinations() {
         <div className="flex items-center gap-2 mb-2">
           <Calendar className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-bold text-gray-900">Vakcinacijų istorija</h3>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className="w-4 h-4 text-gray-600" />
+            <h4 className="font-semibold text-gray-900">Filtrai</h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Data nuo</label>
+              <input
+                type="date"
+                value={vacDateFrom}
+                onChange={(e) => setVacDateFrom(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Data iki</label>
+              <input
+                type="date"
+                value={vacDateTo}
+                onChange={(e) => setVacDateTo(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Paieška</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={vacSearch}
+                  onChange={(e) => setVacSearch(e.target.value)}
+                  placeholder="Gyvūnas, vakcina, serija..."
+                  className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-gray-600">
+              Rasta: <strong>{filteredVaccinations.length}</strong> iš {vaccinations.length}
+            </span>
+            {(vacDateFrom || vacDateTo || vacSearch) && (
+              <button
+                onClick={() => {
+                  setVacDateFrom('');
+                  setVacDateTo('');
+                  setVacSearch('');
+                }}
+                className="text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Išvalyti filtrus
+              </button>
+            )}
+          </div>
         </div>
 
         {groupedVaccinations.length === 0 ? (

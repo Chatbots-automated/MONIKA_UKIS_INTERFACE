@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Activity, Calendar, FileText, Pill, Syringe, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, Calendar, FileText, Pill, Syringe, AlertCircle, ChevronDown, ChevronUp, Filter, Search } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
 
 interface TreatmentHistoryItem {
@@ -41,6 +41,9 @@ export function TreatmentHistory() {
   const [treatments, setTreatments] = useState<TreatmentHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTreatments, setExpandedTreatments] = useState<Set<string>>(new Set());
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     loadTreatments();
@@ -72,6 +75,32 @@ export function TreatmentHistory() {
     setExpandedTreatments(newExpanded);
   };
 
+  const filteredTreatments = treatments.filter(treatment => {
+    let match = true;
+
+    if (dateFrom) {
+      match = match && treatment.reg_date >= dateFrom;
+    }
+
+    if (dateTo) {
+      match = match && treatment.reg_date <= dateTo;
+    }
+
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      match = match && (
+        treatment.animal_tag?.toLowerCase().includes(search) ||
+        treatment.disease_name?.toLowerCase().includes(search) ||
+        treatment.owner_name?.toLowerCase().includes(search) ||
+        treatment.vet_name?.toLowerCase().includes(search) ||
+        treatment.clinical_diagnosis?.toLowerCase().includes(search) ||
+        treatment.notes?.toLowerCase().includes(search)
+      );
+    }
+
+    return match;
+  });
+
   const groupTreatmentsByDate = (treatments: TreatmentHistoryItem[]): TreatmentGroup[] => {
     const groups: { [key: string]: TreatmentHistoryItem[] } = {};
 
@@ -90,7 +119,7 @@ export function TreatmentHistory() {
     }));
   };
 
-  const treatmentGroups = groupTreatmentsByDate(treatments);
+  const treatmentGroups = groupTreatmentsByDate(filteredTreatments);
 
   if (loading) {
     return (
@@ -111,6 +140,63 @@ export function TreatmentHistory() {
           <Activity className="w-5 h-5" />
           <span className="font-semibold">{treatments.length}</span>
           <span>gydymų</span>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-4 h-4 text-gray-600" />
+          <h4 className="font-semibold text-gray-900">Filtrai</h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Data nuo</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Data iki</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Paieška</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Gyvūnas, liga, vet..."
+                className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <span className="text-gray-600">
+            Rasta: <strong>{filteredTreatments.length}</strong> iš {treatments.length}
+          </span>
+          {(dateFrom || dateTo || searchTerm) && (
+            <button
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+                setSearchTerm('');
+              }}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Išvalyti filtrus
+            </button>
+          )}
         </div>
       </div>
 
