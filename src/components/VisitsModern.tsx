@@ -82,13 +82,7 @@ export function VisitsModern() {
     return date.toDateString() === today.toDateString();
   };
 
-  const shouldHideVisit = (visit: VisitWithAnimal) => {
-    if (!isToday(visit.visit_datetime)) return false;
-    return visit.status === 'Baigtas' && (!visit.notes || visit.notes.trim() === '');
-  };
-
   const filteredVisits = visits.filter(visit => {
-    if (shouldHideVisit(visit)) return false;
 
     if (filterStatus !== 'all' && visit.status !== filterStatus) return false;
     if (filterProcedure !== 'all' && !visit.procedures.includes(filterProcedure)) return false;
