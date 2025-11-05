@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search } from 'lucide-react';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -402,10 +402,22 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-900 mb-4 text-lg flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                Gyvūno informacija
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Gyvūno informacija
+                </h3>
+                <button
+                  onClick={() => {
+                    const url = `https://app.brolisherdline.com/animals#search=${encodeURIComponent(animal.tag_no || '')}`;
+                    window.open(url, '_blank');
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Atidaryti brolio sistemą
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white rounded-lg p-3 border border-blue-100">
                   <span className="text-xs text-gray-500 block mb-1">Ausies numeris</span>
