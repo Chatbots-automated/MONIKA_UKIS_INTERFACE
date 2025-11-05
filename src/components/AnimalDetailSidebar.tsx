@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check } from 'lucide-react';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -128,6 +128,24 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const [selectedVisit, setSelectedVisit] = useState<AnimalVisit | null>(null);
   const [showVisitDetailModal, setShowVisitDetailModal] = useState(false);
 
+  const [treatmentDateFrom, setTreatmentDateFrom] = useState('');
+  const [treatmentDateTo, setTreatmentDateTo] = useState('');
+  const [treatmentSearch, setTreatmentSearch] = useState('');
+
+  const [vaccinationDateFrom, setVaccinationDateFrom] = useState('');
+  const [vaccinationDateTo, setVaccinationDateTo] = useState('');
+  const [vaccinationSearch, setVaccinationSearch] = useState('');
+
+  const contentRef = useState<HTMLDivElement | null>(null)[0];
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const content = document.querySelector('.flex-1.overflow-y-auto.p-6');
+    if (content) {
+      content.scrollTop = 0;
+    }
+  };
+
   useEffect(() => {
     loadAllData();
   }, [animal.id]);
@@ -238,6 +256,54 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const incompleteVisits = visits.filter(v => v.status !== 'Baigtas');
   const completedVisits = visits.filter(v => v.status === 'Baigtas');
 
+  const filteredTreatments = treatments.filter(treatment => {
+    let match = true;
+
+    if (treatmentDateFrom) {
+      match = match && treatment.reg_date >= treatmentDateFrom;
+    }
+
+    if (treatmentDateTo) {
+      match = match && treatment.reg_date <= treatmentDateTo;
+    }
+
+    if (treatmentSearch) {
+      const search = treatmentSearch.toLowerCase();
+      match = match && (
+        treatment.disease_name?.toLowerCase().includes(search) ||
+        treatment.vet_name?.toLowerCase().includes(search) ||
+        treatment.clinical_diagnosis?.toLowerCase().includes(search) ||
+        treatment.notes?.toLowerCase().includes(search)
+      );
+    }
+
+    return match;
+  });
+
+  const filteredVaccinations = vaccinations.filter(vaccination => {
+    let match = true;
+
+    if (vaccinationDateFrom) {
+      match = match && vaccination.vaccination_date >= vaccinationDateFrom;
+    }
+
+    if (vaccinationDateTo) {
+      match = match && vaccination.vaccination_date <= vaccinationDateTo;
+    }
+
+    if (vaccinationSearch) {
+      const search = vaccinationSearch.toLowerCase();
+      match = match && (
+        vaccination.product?.name?.toLowerCase().includes(search) ||
+        vaccination.administered_by?.toLowerCase().includes(search) ||
+        vaccination.notes?.toLowerCase().includes(search) ||
+        vaccination.batch_id?.toLowerCase().includes(search)
+      );
+    }
+
+    return match;
+  });
+
   const getStatusColor = (status: VisitStatus) => {
     switch (status) {
       case 'Planuojamas': return 'bg-blue-100 text-blue-800';
@@ -281,7 +347,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
 
       <div className="flex border-b border-gray-200 bg-gray-50">
         <button
-          onClick={() => setActiveTab('overview')}
+          onClick={() => handleTabChange('overview')}
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'overview'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
@@ -291,7 +357,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
           Apžvalga
         </button>
         <button
-          onClick={() => setActiveTab('visits')}
+          onClick={() => handleTabChange('visits')}
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'visits'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
@@ -301,7 +367,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
           Vizitai
         </button>
         <button
-          onClick={() => setActiveTab('treatments')}
+          onClick={() => handleTabChange('treatments')}
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'treatments'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
@@ -311,7 +377,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
           Gydymas
         </button>
         <button
-          onClick={() => setActiveTab('vaccinations')}
+          onClick={() => handleTabChange('vaccinations')}
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'vaccinations'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
@@ -321,7 +387,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
           Vakcinos
         </button>
         <button
-          onClick={() => setActiveTab('logs')}
+          onClick={() => handleTabChange('logs')}
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'logs'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
@@ -335,32 +401,31 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
       <div className="flex-1 overflow-y-auto p-6">
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Informacija</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">ID:</span>
-                  <span className="ml-2 font-medium">{animal.tag_no || '-'}</span>
+            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
+              <h3 className="font-bold text-gray-900 mb-4 text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Gyvūno informacija
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-1">Ausies numeris</span>
+                  <span className="font-bold text-gray-900 text-lg">{animal.tag_no || '-'}</span>
                 </div>
-                <div>
-                  <span className="text-gray-600">Rūšis:</span>
-                  <span className="ml-2 font-medium">{animal.species}</span>
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-1">Rūšis</span>
+                  <span className="font-bold text-gray-900 text-lg">{animal.species}</span>
                 </div>
-                <div>
-                  <span className="text-gray-600">Lytis:</span>
-                  <span className="ml-2 font-medium">{animal.sex || '-'}</span>
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-1">Lytis</span>
+                  <span className="font-bold text-gray-900 text-lg">{animal.sex || '-'}</span>
                 </div>
-                <div>
-                  <span className="text-gray-600">Amžius:</span>
-                  <span className="ml-2 font-medium">{animal.age_months ? `${animal.age_months} mėn.` : '-'}</span>
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-1">Amžius</span>
+                  <span className="font-bold text-gray-900 text-lg">{animal.age_months ? `${animal.age_months} mėn.` : '-'}</span>
                 </div>
-                <div className="col-span-2">
-                  <span className="text-gray-600">Laikytojas:</span>
-                  <span className="ml-2 font-medium">{animal.holder_name || '-'}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-gray-600">Adresas:</span>
-                  <span className="ml-2 font-medium">{animal.holder_address || '-'}</span>
+                <div className="bg-white rounded-lg p-3 border border-blue-100 col-span-2">
+                  <span className="text-xs text-gray-500 block mb-1">Gyvūno ID sistemoje</span>
+                  <span className="font-mono text-gray-700 text-sm">{animal.id}</span>
                 </div>
               </div>
             </div>
@@ -601,8 +666,65 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
 
         {activeTab === 'treatments' && (
           <div className="space-y-4">
-            {treatments.length > 0 ? (
-              treatments.map(treatment => (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Filter className="w-4 h-4 text-gray-600" />
+                <h4 className="font-semibold text-gray-900">Filtrai</h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Data nuo</label>
+                  <input
+                    type="date"
+                    value={treatmentDateFrom}
+                    onChange={(e) => setTreatmentDateFrom(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Data iki</label>
+                  <input
+                    type="date"
+                    value={treatmentDateTo}
+                    onChange={(e) => setTreatmentDateTo(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Paieška</label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={treatmentSearch}
+                      onChange={(e) => setTreatmentSearch(e.target.value)}
+                      placeholder="Liga, vet., pastabos..."
+                      className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  Rasta: <strong>{filteredTreatments.length}</strong> iš {treatments.length}
+                </span>
+                {(treatmentDateFrom || treatmentDateTo || treatmentSearch) && (
+                  <button
+                    onClick={() => {
+                      setTreatmentDateFrom('');
+                      setTreatmentDateTo('');
+                      setTreatmentSearch('');
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Išvalyti filtrus
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {filteredTreatments.length > 0 ? (
+              filteredTreatments.map(treatment => (
                 <div key={treatment.id} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
@@ -743,8 +865,65 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
 
         {activeTab === 'vaccinations' && (
           <div className="space-y-4">
-            {vaccinations.length > 0 ? (
-              vaccinations.map(vaccination => (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Filter className="w-4 h-4 text-gray-600" />
+                <h4 className="font-semibold text-gray-900">Filtrai</h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Data nuo</label>
+                  <input
+                    type="date"
+                    value={vaccinationDateFrom}
+                    onChange={(e) => setVaccinationDateFrom(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Data iki</label>
+                  <input
+                    type="date"
+                    value={vaccinationDateTo}
+                    onChange={(e) => setVaccinationDateTo(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Paieška</label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={vaccinationSearch}
+                      onChange={(e) => setVaccinationSearch(e.target.value)}
+                      placeholder="Vakcina, serija, atliko..."
+                      className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  Rasta: <strong>{filteredVaccinations.length}</strong> iš {vaccinations.length}
+                </span>
+                {(vaccinationDateFrom || vaccinationDateTo || vaccinationSearch) && (
+                  <button
+                    onClick={() => {
+                      setVaccinationDateFrom('');
+                      setVaccinationDateTo('');
+                      setVaccinationSearch('');
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Išvalyti filtrus
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {filteredVaccinations.length > 0 ? (
+              filteredVaccinations.map(vaccination => (
                 <div key={vaccination.id} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
