@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 interface VisitWithAnimal extends AnimalVisit {
   animal?: Animal;
@@ -26,6 +27,28 @@ export function VisitsModern() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Real-time subscription for animal_visits
+  useRealtimeSubscription({
+    table: 'animal_visits',
+    onInsert: useCallback((payload) => {
+      const newVisit = payload.new as AnimalVisit;
+      const animal = animals.find(a => a.id === newVisit.animal_id);
+      setVisits(prev => [{ ...newVisit, animal }, ...prev].sort((a, b) =>
+        new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime()
+      ));
+    }, [animals]),
+    onUpdate: useCallback((payload) => {
+      const updatedVisit = payload.new as AnimalVisit;
+      const animal = animals.find(a => a.id === updatedVisit.animal_id);
+      setVisits(prev => prev.map(visit =>
+        visit.id === updatedVisit.id ? { ...updatedVisit, animal } : visit
+      ));
+    }, [animals]),
+    onDelete: useCallback((payload) => {
+      setVisits(prev => prev.filter(visit => visit.id !== payload.old.id));
+    }, []),
+  });
 
   const loadData = async () => {
     try {

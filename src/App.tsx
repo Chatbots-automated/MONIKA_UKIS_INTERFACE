@@ -19,6 +19,7 @@ import { TreatmentHistory } from './components/TreatmentHistory';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { useAuth } from './contexts/AuthContext';
+import { RealtimeProvider } from './contexts/RealtimeContext';
 
 type Module = 'veterinarija' | 'islaidos' | 'admin' | null;
 
@@ -137,13 +138,15 @@ function App() {
   };
 
   return (
-    <Layout
-      currentView={currentView}
-      onNavigate={setCurrentView}
-      onBackToModules={() => setSelectedModule(null)}
-    >
-      {renderView()}
-    </Layout>
+    <RealtimeProvider>
+      <Layout
+        currentView={currentView}
+        onNavigate={setCurrentView}
+        onBackToModules={() => setSelectedModule(null)}
+      >
+        {renderView()}
+      </Layout>
+    </RealtimeProvider>
   );
 }
 

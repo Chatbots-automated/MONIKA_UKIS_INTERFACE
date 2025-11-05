@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisitSummary } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide-react';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 export function AnimalsCompact() {
   const { logAction } = useAuth();
@@ -31,6 +32,30 @@ export function AnimalsCompact() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Real-time subscription for animals
+  useRealtimeSubscription({
+    table: 'animals',
+    onInsert: useCallback((payload) => {
+      setAnimals(prev => [...prev, payload.new as Animal].sort((a, b) =>
+        (a.tag_no || '').localeCompare(b.tag_no || '')
+      ));
+    }, []),
+    onUpdate: useCallback((payload) => {
+      setAnimals(prev => prev.map(animal =>
+        animal.id === payload.new.id ? payload.new as Animal : animal
+      ));
+      if (selectedAnimal?.id === payload.new.id) {
+        setSelectedAnimal(payload.new as Animal);
+      }
+    }, [selectedAnimal]),
+    onDelete: useCallback((payload) => {
+      setAnimals(prev => prev.filter(animal => animal.id !== payload.old.id));
+      if (selectedAnimal?.id === payload.old.id) {
+        setSelectedAnimal(null);
+      }
+    }, [selectedAnimal]),
+  });
 
   const loadData = async () => {
     try {

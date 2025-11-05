@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Batch, Disease, Unit } from '../lib/types';
 import { Syringe, Plus, Save, X, AlertTriangle, Calendar } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 interface WithdrawalStatus {
   animal_id: string;
@@ -47,6 +48,35 @@ export function TreatmentCompact() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Real-time subscriptions
+  useRealtimeSubscription({
+    table: 'batches',
+    onInsert: useCallback((payload) => {
+      setBatches(prev => [...prev, payload.new as Batch].sort((a, b) => {
+        const dateA = a.expiry_date ? new Date(a.expiry_date).getTime() : Infinity;
+        const dateB = b.expiry_date ? new Date(b.expiry_date).getTime() : Infinity;
+        return dateA - dateB;
+      }));
+    }, []),
+    onUpdate: useCallback((payload) => {
+      setBatches(prev => prev.map(batch =>
+        batch.id === payload.new.id ? payload.new as Batch : batch
+      ));
+    }, []),
+    onDelete: useCallback((payload) => {
+      setBatches(prev => prev.filter(batch => batch.id !== payload.old.id));
+    }, []),
+  });
+
+  useRealtimeSubscription({
+    table: 'products',
+    onUpdate: useCallback((payload) => {
+      setProducts(prev => prev.map(product =>
+        product.id === payload.new.id ? payload.new as Product : product
+      ));
+    }, []),
+  });
 
   useEffect(() => {
     if (animalId) {
