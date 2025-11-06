@@ -181,6 +181,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
       .order('reg_date', { ascending: false });
 
     if (!error && treatmentsData) {
+      console.log('📥 Loaded treatments:', treatmentsData.length);
+
       const treatmentsWithItems = await Promise.all(
         treatmentsData.map(async (treatment: any) => {
           // Load both usage_items (single doses) and treatment_courses (multi-day courses)
@@ -194,6 +196,13 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               .select('*, product:products(*), batch:batches(*)')
               .eq('treatment_id', treatment.id)
           ]);
+
+          console.log(`📦 Treatment ${treatment.id.slice(0, 8)}:`, {
+            withdrawal_milk: treatment.withdrawal_until_milk,
+            withdrawal_meat: treatment.withdrawal_until_meat,
+            usage_items: usageResult.data?.length || 0,
+            courses: coursesResult.data?.length || 0
+          });
 
           return {
             ...treatment,
@@ -1605,7 +1614,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
         }
 
         // Calculate withdrawal dates using database function
-        await supabase.rpc('calculate_withdrawal_dates', { p_treatment_id: treatmentRecord.id });
+        console.log('🔧 Calling calculate_withdrawal_dates for treatment:', treatmentRecord.id);
+        const { data: rpcData, error: rpcError } = await supabase.rpc('calculate_withdrawal_dates', { p_treatment_id: treatmentRecord.id });
+
+        if (rpcError) {
+          console.error('❌ RPC Error calculating withdrawal dates:', rpcError);
+          alert('Įspėjimas: Karencinių dienų skaičiavimas nepavyko. Klaida: ' + rpcError.message);
+        } else {
+          console.log('✅ Withdrawal dates calculated successfully');
+        }
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
       }
