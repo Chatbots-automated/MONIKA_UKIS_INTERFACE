@@ -817,17 +817,27 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                     </div>
                   )}
 
-                  {treatment.withdrawal_until && (
-                    <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-300 rounded-lg p-4 mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                  {(treatment.withdrawal_until_milk || treatment.withdrawal_until_meat) && (
+                    <div className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-lg p-4 mb-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
                           <AlertCircle className="w-5 h-5 text-orange-600" />
                         </div>
                         <div className="flex-1">
-                          <div className="text-xs font-semibold text-orange-900 mb-0.5">Nurašymo periodas</div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-700">Galioja iki:</span>
-                            <span className="font-bold text-orange-700">{formatDateLT(treatment.withdrawal_until)}</span>
+                          <div className="text-sm font-bold text-orange-900 mb-2">⚠️ Karencinės dienos</div>
+                          <div className="space-y-1">
+                            {treatment.withdrawal_until_milk && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-700">🥛 Pienas iki:</span>
+                                <span className="font-bold text-blue-700">{formatDateLT(treatment.withdrawal_until_milk)}</span>
+                              </div>
+                            )}
+                            {treatment.withdrawal_until_meat && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-700">🥩 Mėsa iki:</span>
+                                <span className="font-bold text-red-700">{formatDateLT(treatment.withdrawal_until_meat)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1309,7 +1319,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     animal_condition: '',
     outcome: '',
     services: '',
-    treatment_duration_days: '1',
     withdrawal_until: '',
     notes: '',
     medications: [] as Array<{
@@ -1318,47 +1327,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
       qty: string;
       unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
       purpose: string;
+      is_course: boolean;
+      course_days: string;
     }>,
   });
 
-  // Calculate withdrawal date automatically
-  const calculateWithdrawalDate = () => {
-    if (treatmentData.medications.length === 0 || !treatmentData.treatment_duration_days) {
-      return null;
-    }
+  // Note: Withdrawal dates are now calculated by the database function
+  // after treatment is saved, using per-medicine course durations
 
-    const visitDate = new Date(formData.visit_datetime);
-    const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
-
-    let maxWithdrawalDays = 0;
-
-    // Find the medicine with longest withdrawal period
-    treatmentData.medications.forEach(med => {
-      const product = products.find(p => p.id === med.product_id);
-      if (product && product.withdrawal_days) {
-        maxWithdrawalDays = Math.max(maxWithdrawalDays, product.withdrawal_days);
-      }
-    });
-
-    if (maxWithdrawalDays === 0) return null;
-
-    // Calculate: visit_date + treatment_duration + max_withdrawal + 1 safety day
-    const totalDays = treatmentDays + maxWithdrawalDays + 1;
-    const withdrawalDate = new Date(visitDate);
-    withdrawalDate.setDate(withdrawalDate.getDate() + totalDays);
-
-    return withdrawalDate.toISOString().split('T')[0];
-  };
-
-  // Update withdrawal date whenever medications or duration changes
-  useEffect(() => {
-    if (formData.procedures.includes('Gydymas')) {
-      const calculatedDate = calculateWithdrawalDate();
-      if (calculatedDate && calculatedDate !== treatmentData.withdrawal_until) {
-        setTreatmentData(prev => ({ ...prev, withdrawal_until: calculatedDate }));
-      }
-    }
-  }, [treatmentData.medications, treatmentData.treatment_duration_days, formData.visit_datetime, formData.procedures]);
+  // Withdrawal dates are calculated by database, no need for client-side calculation
 
   // Vaccination form data
   const [vaccinationData, setVaccinationData] = useState({
@@ -1508,7 +1485,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
             outcome: treatmentData.outcome ? treatmentData.outcome : null,
             services: treatmentData.services ? treatmentData.services : null,
-            withdrawal_until: treatmentData.withdrawal_until ? treatmentData.withdrawal_until : null,
             vet_name: formData.vet_name ? formData.vet_name : null,
             notes: treatmentData.notes ? treatmentData.notes : null,
           })
@@ -1517,25 +1493,51 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
         if (treatmentError) throw treatmentError;
 
-        // Create usage items for medications
+        // Create usage items or courses for medications
         for (const med of treatmentData.medications) {
           if (!med.product_id || !med.batch_id || !med.qty) {
             throw new Error('Visi vaistų laukai privalomi: produktas, serija ir kiekis');
           }
 
-          const { error: usageError } = await supabase
-            .from('usage_items')
-            .insert({
-              treatment_id: treatmentRecord.id,
-              product_id: med.product_id,
-              batch_id: med.batch_id,
-              qty: parseFloat(med.qty),
-              unit: med.unit,
-              purpose: med.purpose ? med.purpose : null,
-            });
+          // If this is a multi-day course, create a course entry
+          if (med.is_course && parseInt(med.course_days) > 1) {
+            const totalQty = parseFloat(med.qty);
+            const days = parseInt(med.course_days);
+            const dailyDose = totalQty / days;
 
-          if (usageError) throw usageError;
+            const { error: courseError } = await supabase
+              .from('treatment_courses')
+              .insert({
+                treatment_id: treatmentRecord.id,
+                product_id: med.product_id,
+                batch_id: med.batch_id,
+                total_dose: totalQty,
+                days: days,
+                daily_dose: dailyDose,
+                unit: med.unit,
+                start_date: formData.visit_datetime.split('T')[0],
+              });
+
+            if (courseError) throw courseError;
+          } else {
+            // Single dose - create normal usage item
+            const { error: usageError } = await supabase
+              .from('usage_items')
+              .insert({
+                treatment_id: treatmentRecord.id,
+                product_id: med.product_id,
+                batch_id: med.batch_id,
+                qty: parseFloat(med.qty),
+                unit: med.unit,
+                purpose: med.purpose ? med.purpose : null,
+              });
+
+            if (usageError) throw usageError;
+          }
         }
+
+        // Calculate withdrawal dates using database function
+        await supabase.rpc('calculate_withdrawal_dates', { p_treatment_id: treatmentRecord.id });
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
       }
@@ -1792,27 +1794,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Gydymo trukmė (dienų) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={treatmentData.treatment_duration_days}
-                    onChange={(e) => setTreatmentData({ ...treatmentData, treatment_duration_days: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nurašymas iki (automatinis)</label>
-                  <input
-                    type="date"
-                    value={treatmentData.withdrawal_until}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
               </div>
 
               <div>
@@ -1830,9 +1811,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 <div className="space-y-3">
                   {treatmentData.medications.map((med, idx) => {
                     const selectedProduct = products.find(p => p.id === med.product_id);
-                    const withdrawalDays = selectedProduct?.withdrawal_days || 0;
-                    const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
-                    const totalDays = treatmentDays + withdrawalDays + 1;
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
 
                     const availableBatches = batches.filter(b => b.product_id === med.product_id);
@@ -1926,17 +1904,60 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                        {selectedProduct && withdrawalDays > 0 && (
-                          <div className="text-xs bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-700">
-                                <strong>Karencija:</strong> {withdrawalDays} d.
-                                <span className="mx-1">•</span>
-                                Gydymas: {treatmentDays} d.
-                                <span className="mx-1">•</span>
-                                Saugumas: +1 d.
-                              </span>
-                              <span className="font-bold text-orange-700">= {totalDays} dienų</span>
+                        {/* Course duration checkbox and fields */}
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={med.is_course}
+                              onChange={(e) => {
+                                const newMeds = [...treatmentData.medications];
+                                newMeds[idx].is_course = e.target.checked;
+                                setTreatmentData({ ...treatmentData, medications: newMeds });
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="text-gray-700">Kursas (keli dienas)</span>
+                          </label>
+                          {med.is_course && (
+                            <>
+                              <input
+                                type="number"
+                                min="2"
+                                placeholder="Dienų"
+                                value={med.course_days}
+                                onChange={(e) => {
+                                  const newMeds = [...treatmentData.medications];
+                                  newMeds[idx].course_days = e.target.value;
+                                  setTreatmentData({ ...treatmentData, medications: newMeds });
+                                }}
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
+                              />
+                              {parseInt(med.course_days) > 1 && med.qty && (
+                                <span className="text-xs text-gray-600">
+                                  = {(parseFloat(med.qty) / parseInt(med.course_days)).toFixed(2)} {med.unit} / dieną
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        {selectedProduct && (selectedProduct.withdrawal_days_milk || selectedProduct.withdrawal_days_meat) && (
+                          <div className="text-xs bg-amber-50 border-2 border-amber-300 rounded px-3 py-2">
+                            <div className="flex items-center gap-1 mb-1">
+                              <AlertCircle className="w-4 h-4 text-amber-600" />
+                              <span className="font-bold text-amber-900">Karencinės dienos:</span>
+                            </div>
+                            <div className="flex gap-4">
+                              {selectedProduct.withdrawal_days_milk && (
+                                <span className="text-blue-700 font-semibold">
+                                  🥛 Pienas: {selectedProduct.withdrawal_days_milk} d.
+                                </span>
+                              )}
+                              {selectedProduct.withdrawal_days_meat && (
+                                <span className="text-red-700 font-semibold">
+                                  🥩 Mėsa: {selectedProduct.withdrawal_days_meat} d.
+                                </span>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1948,7 +1969,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     onClick={() => {
                       setTreatmentData({
                         ...treatmentData,
-                        medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas' }]
+                        medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas', is_course: false, course_days: '1' }]
                       });
                     }}
                     className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
@@ -1957,38 +1978,45 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     Pridėti vaistą
                   </button>
 
-                  {/* WITHDRAWAL CALCULATION SUMMARY */}
+                  {/* WITHDRAWAL CALCULATION PREVIEW */}
                   {treatmentData.medications.length > 0 && treatmentData.medications.some(m => m.product_id) && (
-                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 space-y-2">
-                      <h5 className="font-bold text-red-900 flex items-center gap-2">
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 space-y-3">
+                      <h5 className="font-bold text-amber-900 flex items-center gap-2">
                         <AlertCircle className="w-5 h-5" />
-                        Karencijos skaičiavimas
+                        Karencijos skaičiavimas (po išsaugojimo)
                       </h5>
-                      <div className="text-sm space-y-1">
+                      <div className="text-sm space-y-2">
                         {treatmentData.medications
                           .filter(m => m.product_id)
                           .map((med, idx) => {
                             const product = products.find(p => p.id === med.product_id);
-                            const withdrawalDays = product?.withdrawal_days || 0;
-                            const treatmentDays = parseInt(treatmentData.treatment_duration_days) || 1;
-                            const totalForThis = treatmentDays + withdrawalDays + 1;
+                            const courseDays = med.is_course ? parseInt(med.course_days) || 1 : 0;
+                            const milkDays = product?.withdrawal_days_milk || 0;
+                            const meatDays = product?.withdrawal_days_meat || 0;
 
                             return (
-                              <div key={idx} className="text-gray-700">
-                                <strong>{product?.name}:</strong> {withdrawalDays} d. karencija → {totalForThis} d. iš viso
+                              <div key={idx} className="bg-white rounded border border-amber-300 p-2">
+                                <div className="font-semibold text-gray-900 mb-1">{product?.name}</div>
+                                <div className="text-xs text-gray-700 space-y-0.5">
+                                  {courseDays > 0 && (
+                                    <div>• Kursas: {courseDays} dienų</div>
+                                  )}
+                                  {milkDays > 0 && (
+                                    <div className="text-blue-700">
+                                      • 🥛 Pienas: {courseDays} + {milkDays} + 1 = <strong>{courseDays + milkDays + 1} dienų</strong>
+                                    </div>
+                                  )}
+                                  {meatDays > 0 && (
+                                    <div className="text-red-700">
+                                      • 🥩 Mėsa: {courseDays} + {meatDays} + 1 = <strong>{courseDays + meatDays + 1} dienų</strong>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
-                        <div className="pt-2 mt-2 border-t-2 border-red-300">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-red-900">GALUTINIS NURAŠYMAS:</span>
-                            <span className="text-xl font-bold text-red-900">
-                              {treatmentData.withdrawal_until ? formatDateLT(treatmentData.withdrawal_until) : '-'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">
-                            (Skaičiuojama nuo ilgiausios karencijos)
-                          </p>
+                        <div className="pt-2 mt-2 border-t-2 border-amber-400 text-xs text-gray-600">
+                          ℹ️ Tikslios datos bus apskaičiuotos automatiškai po išsaugojimo ir bus matomos gyvūno apžvalgoje.
                         </div>
                       </div>
                     </div>
