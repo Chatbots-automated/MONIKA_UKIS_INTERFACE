@@ -794,6 +794,34 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                     </div>
                   )}
 
+                  {/* Withdrawal dates - MOST IMPORTANT, SHOWN FIRST */}
+                  {(treatment.withdrawal_until_milk || treatment.withdrawal_until_meat) && (
+                    <div className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-lg p-4 mb-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <AlertCircle className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-orange-900 mb-2">⚠️ Karencinės dienos</div>
+                          <div className="space-y-1">
+                            {treatment.withdrawal_until_milk && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-700">🥛 Pienas iki:</span>
+                                <span className="font-bold text-blue-700">{formatDateLT(treatment.withdrawal_until_milk)}</span>
+                              </div>
+                            )}
+                            {treatment.withdrawal_until_meat && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-700">🥩 Mėsa iki:</span>
+                                <span className="font-bold text-red-700">{formatDateLT(treatment.withdrawal_until_meat)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Single-dose medicines */}
                   {treatment.usage_items && treatment.usage_items.length > 0 && (
                     <div className="mb-4">
@@ -882,33 +910,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                             </div>
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {(treatment.withdrawal_until_milk || treatment.withdrawal_until_meat) && (
-                    <div className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-lg p-4 mb-4">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <AlertCircle className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-bold text-orange-900 mb-2">⚠️ Karencinės dienos</div>
-                          <div className="space-y-1">
-                            {treatment.withdrawal_until_milk && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-700">🥛 Pienas iki:</span>
-                                <span className="font-bold text-blue-700">{formatDateLT(treatment.withdrawal_until_milk)}</span>
-                              </div>
-                            )}
-                            {treatment.withdrawal_until_meat && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-700">🥩 Mėsa iki:</span>
-                                <span className="font-bold text-red-700">{formatDateLT(treatment.withdrawal_until_meat)}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     </div>
                   )}
@@ -2504,6 +2505,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Status and Key Info Section */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -2530,6 +2532,31 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                       </span>
                     </div>
                     <span className="font-medium text-gray-900">{visit.vet_name}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Metadata Section - Shows creation/update info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-xs font-semibold text-blue-900 mb-2">Vizito duomenys</div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Sukurta:</span>
+                <span className="font-medium text-gray-900">{formatDateTimeLT(visit.created_at)}</span>
+              </div>
+              {visit.updated_at && visit.updated_at !== visit.created_at && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Atnaujinta:</span>
+                  <span className="font-medium text-gray-900">{formatDateTimeLT(visit.updated_at)}</span>
+                </div>
+              )}
+              {status === 'Baigtas' && (
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="font-semibold">Vizitas užbaigtas</span>
                   </div>
                 </div>
               )}
