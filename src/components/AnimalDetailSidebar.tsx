@@ -183,15 +183,23 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
     if (!error && treatmentsData) {
       const treatmentsWithItems = await Promise.all(
         treatmentsData.map(async (treatment: any) => {
-          const { data: usageData } = await supabase
-            .from('usage_items')
-            .select('*, product:products(*)')
-            .eq('treatment_id', treatment.id);
+          // Load both usage_items (single doses) and treatment_courses (multi-day courses)
+          const [usageResult, coursesResult] = await Promise.all([
+            supabase
+              .from('usage_items')
+              .select('*, product:products(*)')
+              .eq('treatment_id', treatment.id),
+            supabase
+              .from('treatment_courses')
+              .select('*, product:products(*), batch:batches(*)')
+              .eq('treatment_id', treatment.id)
+          ]);
 
           return {
             ...treatment,
             disease_name: treatment.disease?.name,
-            usage_items: usageData || []
+            usage_items: usageResult.data || [],
+            treatment_courses: coursesResult.data || []
           };
         })
       );
@@ -777,6 +785,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                     </div>
                   )}
 
+                  {/* Single-dose medicines */}
                   {treatment.usage_items && treatment.usage_items.length > 0 && (
                     <div className="mb-4">
                       <div className="flex items-center gap-2 mb-3">
@@ -784,7 +793,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                           <Pill className="w-4 h-4 text-blue-600" />
                         </div>
                         <div className="text-sm font-semibold text-gray-900">
-                          Panaudoti vaistai ({treatment.usage_items.length})
+                          Panaudoti vaistai - vienkartinės dozės ({treatment.usage_items.length})
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -809,6 +818,57 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                                   {item.qty} {item.unit}
                                 </div>
                                 <div className="text-xs text-gray-500">Kiekis</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Multi-day course medicines */}
+                  {treatment.treatment_courses && treatment.treatment_courses.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                          <Calendar className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          Gydymo kursai ({treatment.treatment_courses.length})
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {treatment.treatment_courses.map((course: any) => (
+                          <div key={course.id} className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="font-semibold text-gray-900 mb-1">
+                                  {course.product?.name || 'Nežinomas produktas'}
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-xs mb-2">
+                                  <span className="inline-flex items-center px-2 py-1 rounded bg-white border border-purple-200 text-gray-700">
+                                    📅 Kursas: {course.days} dienų
+                                  </span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded bg-white border border-purple-200 text-gray-700">
+                                    💊 Dienos dozė: {course.daily_dose} {course.unit}
+                                  </span>
+                                  {course.start_date && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded bg-white border border-purple-200 text-gray-700">
+                                      🗓️ Pradžia: {formatDateLT(course.start_date)}
+                                    </span>
+                                  )}
+                                </div>
+                                {course.batch && (
+                                  <div className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-white border border-purple-200 text-gray-700">
+                                    Serija: {course.batch.lot || course.batch_id.slice(0, 10)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-purple-700">
+                                  {course.total_dose} {course.unit}
+                                </div>
+                                <div className="text-xs text-gray-500">Visa dozė</div>
                               </div>
                             </div>
                           </div>
@@ -1145,16 +1205,24 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                                     {formatDateLT(treatment.reg_date)}
                                   </div>
                                 </div>
-                                {treatment.usage_items && treatment.usage_items.length > 0 && (
+                                {((treatment.usage_items && treatment.usage_items.length > 0) || (treatment.treatment_courses && treatment.treatment_courses.length > 0)) && (
                                   <div className="mt-2 flex flex-wrap gap-1">
-                                    {treatment.usage_items.slice(0, 3).map((item, i) => (
-                                      <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                    {/* Show single doses */}
+                                    {treatment.usage_items && treatment.usage_items.slice(0, 2).map((item, i) => (
+                                      <span key={`usage-${i}`} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
                                         {item.product?.name || 'Produktas'}
                                       </span>
                                     ))}
-                                    {treatment.usage_items.length > 3 && (
+                                    {/* Show courses */}
+                                    {treatment.treatment_courses && treatment.treatment_courses.slice(0, 2).map((course, i) => (
+                                      <span key={`course-${i}`} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
+                                        {course.product?.name || 'Produktas'} ({course.days}d)
+                                      </span>
+                                    ))}
+                                    {/* Show "more" indicator */}
+                                    {((treatment.usage_items?.length || 0) + (treatment.treatment_courses?.length || 0)) > 2 && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
-                                        +{treatment.usage_items.length - 3}
+                                        +{((treatment.usage_items?.length || 0) + (treatment.treatment_courses?.length || 0)) - 2}
                                       </span>
                                     )}
                                   </div>
