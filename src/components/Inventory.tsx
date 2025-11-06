@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Search, AlertCircle, Package } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface StockItem {
   batch_id: string;
@@ -15,6 +16,7 @@ interface StockItem {
 }
 
 export function Inventory() {
+  const { logAction } = useAuth();
   const [inventory, setInventory] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -96,7 +98,13 @@ export function Inventory() {
             type="text"
             placeholder="Ieškoti pagal produkto pavadinimą arba PARTIJĄ..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              setSearchTerm(newValue);
+              if (newValue.length >= 3) {
+                logAction('search_inventory', null, null, null, { search_term: newValue });
+              }
+            }}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           />
         </div>

@@ -176,7 +176,13 @@ export function AnimalsCompact() {
             type="text"
             placeholder="Ieškoti pagal ID, rūšį, laikytoją..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              setSearchTerm(newValue);
+              if (newValue.length >= 3) {
+                logAction('search_animals', null, null, null, { search_term: newValue });
+              }
+            }}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -220,7 +226,14 @@ export function AnimalsCompact() {
                   <tr
                     key={animal.id}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => setSelectedAnimal(animal)}
+                    onClick={() => {
+                      setSelectedAnimal(animal);
+                      logAction('view_animal_detail', 'animals', animal.id, null, {
+                        tag_no: animal.tag_no,
+                        species: animal.species,
+                        holder_name: animal.holder_name
+                      });
+                    }}
                   >
                     {editing === animal.id ? (
                       <>

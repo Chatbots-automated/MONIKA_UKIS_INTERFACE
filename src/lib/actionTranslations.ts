@@ -13,6 +13,8 @@ export const actionTranslations: { [key: string]: string } = {
   'update_animal': 'Gyvūno redagavimas',
   'delete_animal': 'Gyvūno ištrynimas',
   'view_animal_edit': 'Gyvūno peržiūra',
+  'view_animal_detail': 'Gyvūno detalių peržiūra',
+  'search_animals': 'Gyvūnų paieška',
 
   // Products
   'create_product': 'Produkto sukūrimas',
@@ -39,6 +41,7 @@ export const actionTranslations: { [key: string]: string } = {
   'receive_stock': 'Atsargų gavimas',
   'update_stock': 'Atsargų atnaujinimas',
   'stock_adjustment': 'Atsargų koregavimas',
+  'search_inventory': 'Atsargų paieška',
 
   // Suppliers
   'create_supplier': 'Tiekėjo sukūrimas',
@@ -49,13 +52,18 @@ export const actionTranslations: { [key: string]: string } = {
   'create_visit': 'Vizito sukūrimas',
   'update_visit': 'Vizito redagavimas',
   'delete_visit': 'Vizito ištrynimas',
+  'complete_visit': 'Vizito užbaigimas',
+  'create_future_visit': 'Būsimo vizito sukūrimas',
+  'create_prevention': 'Profilaktikos sukūrimas',
 
   // Biocides
   'create_biocide': 'Biocido sukūrimas',
+  'create_biocide_usage': 'Biocido naudojimas',
   'update_biocide': 'Biocido redagavimas',
 
   // Owner Medications
   'create_owner_med': 'Savininko vaistų sukūrimas',
+  'create_owner_med_admin': 'Savininko vaistų administravimas',
   'update_owner_med': 'Savininko vaistų redagavimas',
 
   // Medical Waste
@@ -69,6 +77,8 @@ export const actionTranslations: { [key: string]: string } = {
   'update_user': 'Vartotojo redagavimas',
   'update_user_role': 'Vartotojo rolės keitimas',
   'delete_user': 'Vartotojo ištrynimas',
+  'access_critical_editor': 'Kritinių duomenų redaktoriaus atvėrimas',
+  'critical_data_edit': 'Kritinių duomenų redagavimas',
 
   // Reports
   'generate_report': 'Ataskaitos generavimas',
@@ -92,15 +102,15 @@ export function getActionCategory(action: string): string {
   if (action.includes('product')) return 'Produktai';
   if (action.includes('treatment') || action.includes('usage_items')) return 'Gydymas';
   if (action.includes('vaccination')) return 'Vakcinavimas';
-  if (action.includes('stock')) return 'Atsargos';
+  if (action.includes('stock') || action.includes('inventory')) return 'Atsargos';
   if (action.includes('supplier')) return 'Tiekėjai';
-  if (action.includes('visit')) return 'Vizitai';
+  if (action.includes('visit') || action.includes('prevention')) return 'Vizitai';
   if (action.includes('biocide')) return 'Biocidai';
   if (action.includes('owner_med')) return 'Savininko vaistai';
   if (action.includes('medical_waste')) return 'Medicininės atliekos';
-  if (action.includes('user') || action.includes('freeze') || action.includes('unfreeze')) return 'Vartotojai';
+  if (action.includes('user') || action.includes('freeze') || action.includes('unfreeze') || action.includes('critical')) return 'Vartotojai';
   if (action.includes('report')) return 'Ataskaitos';
-  if (action.includes('navigate')) return 'Navigacija';
+  if (action.includes('navigate') || action.includes('search')) return 'Navigacija';
   return 'Kita';
 }
 
