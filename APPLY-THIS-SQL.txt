@@ -1,0 +1,78 @@
+═══════════════════════════════════════════════════════════════════════
+  🚨 URGENT: APPLY THIS FIX TO YOUR DATABASE NOW 🚨
+═══════════════════════════════════════════════════════════════════════
+
+PROBLEM: Withdrawal periods (karencines dienos) are NOT calculating when
+         you use gydymo trukmė (treatment duration).
+
+WHAT'S BROKEN:
+  ❌ When you add medicines with course durations, withdrawal dates are NULL
+  ❌ The "karencinės dienos" don't show up in the system
+  ❌ You can't see when it's safe to use milk/meat
+
+WHAT NEEDS TO HAPPEN:
+  ✅ Each medicine calculates its OWN withdrawal based on its OWN course
+  ✅ System takes the MAXIMUM date across all medicines
+  ✅ Formula: start_date + course_days + withdrawal_days + 1
+
+═══════════════════════════════════════════════════════════════════════
+  📋 HOW TO FIX IT (takes 2 minutes)
+═══════════════════════════════════════════════════════════════════════
+
+STEP 1: Go to Supabase
+  → https://supabase.com/dashboard
+  → Select your project
+  → Click "SQL Editor" (left sidebar)
+
+STEP 2: Open this file and COPY ALL contents:
+  → supabase/migrations/20251106000000_fix_withdrawal_with_individual_course_duration.sql
+
+STEP 3: Paste into SQL Editor and click "Run"
+
+STEP 4: Verify it worked:
+  → Run: node test-withdrawal-calculation.js
+  → You should see: ✅ ALL TESTS PASSED!
+
+═══════════════════════════════════════════════════════════════════════
+  🧪 EXAMPLE OF CORRECT BEHAVIOR
+═══════════════════════════════════════════════════════════════════════
+
+Treatment starts: November 6
+
+Medicine 1:
+  • 5-day withdrawal
+  • 4-day course
+  → Calculation: 6 + 4 + 5 + 1 = DAY 16
+
+Medicine 2:
+  • 6-day withdrawal
+  • 6-day course
+  → Calculation: 6 + 6 + 6 + 1 = DAY 19
+
+RESULT: Safe on DAY 19 (the maximum)
+
+═══════════════════════════════════════════════════════════════════════
+  📁 FILES CREATED
+═══════════════════════════════════════════════════════════════════════
+
+1. supabase/migrations/20251106000000_fix_withdrawal_with_individual_course_duration.sql
+   → THE FIX - Apply this SQL in Supabase!
+
+2. test-withdrawal-calculation.js
+   → Test to verify the fix works
+
+3. WITHDRAWAL-FIX-INSTRUCTIONS.md
+   → Detailed instructions and troubleshooting
+
+4. APPLY-THIS-SQL.txt
+   → This file (quick reference)
+
+═══════════════════════════════════════════════════════════════════════
+  ⏰ DO THIS NOW - IT'S CRITICAL!
+═══════════════════════════════════════════════════════════════════════
+
+Without this fix, you CANNOT SAFELY track withdrawal periods for
+multi-day treatments. This is a REGULATORY REQUIREMENT for veterinary
+medicine tracking!
+
+Questions? Check WITHDRAWAL-FIX-INSTRUCTIONS.md for details.
