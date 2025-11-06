@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink } from 'lucide-react';
@@ -127,6 +127,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState<AnimalVisit | null>(null);
   const [showVisitDetailModal, setShowVisitDetailModal] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const [treatmentDateFrom, setTreatmentDateFrom] = useState('');
   const [treatmentDateTo, setTreatmentDateTo] = useState('');
@@ -136,19 +137,22 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const [vaccinationDateTo, setVaccinationDateTo] = useState('');
   const [vaccinationSearch, setVaccinationSearch] = useState('');
 
-  const contentRef = useState<HTMLDivElement | null>(null)[0];
-
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
-    const content = document.querySelector('.flex-1.overflow-y-auto.p-6');
-    if (content) {
-      content.scrollTop = 0;
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
     }
   };
 
   useEffect(() => {
     loadAllData();
   }, [animal.id]);
+
+  useEffect(() => {
+    if (showVisitModal || showVisitDetailModal) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [showVisitModal, showVisitDetailModal]);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -344,8 +348,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   };
 
   return (
-    <div className="fixed right-0 top-0 h-full w-[800px] bg-white shadow-2xl z-50 flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
+    <div className="fixed right-0 top-0 h-full w-full md:w-[600px] lg:w-[700px] xl:w-[800px] bg-white shadow-2xl z-50 flex flex-col">
+      <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
             {animal.tag_no || 'Nenurodytas ID'}
@@ -356,16 +360,16 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </div>
         <button
           onClick={onClose}
-          className="p-2 hover:bg-blue-200 rounded-lg transition-colors"
+          className="p-2 hover:bg-blue-200 rounded-lg transition-colors min-w-[44px] min-h-[44px] touch-manipulation active:bg-blue-300"
         >
           <X className="w-6 h-6 text-gray-600" />
         </button>
       </div>
 
-      <div className="flex border-b border-gray-200 bg-gray-50">
+      <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto">
         <button
           onClick={() => handleTabChange('overview')}
-          className={`px-6 py-3 font-medium transition-colors ${
+          className={`px-4 md:px-6 py-3 font-medium transition-colors whitespace-nowrap min-h-[44px] touch-manipulation ${
             activeTab === 'overview'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -375,7 +379,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </button>
         <button
           onClick={() => handleTabChange('visits')}
-          className={`px-6 py-3 font-medium transition-colors ${
+          className={`px-4 md:px-6 py-3 font-medium transition-colors whitespace-nowrap min-h-[44px] touch-manipulation ${
             activeTab === 'visits'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -385,7 +389,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </button>
         <button
           onClick={() => handleTabChange('treatments')}
-          className={`px-6 py-3 font-medium transition-colors ${
+          className={`px-4 md:px-6 py-3 font-medium transition-colors whitespace-nowrap min-h-[44px] touch-manipulation ${
             activeTab === 'treatments'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -395,7 +399,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </button>
         <button
           onClick={() => handleTabChange('vaccinations')}
-          className={`px-6 py-3 font-medium transition-colors ${
+          className={`px-4 md:px-6 py-3 font-medium transition-colors whitespace-nowrap min-h-[44px] touch-manipulation ${
             activeTab === 'vaccinations'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -405,7 +409,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </button>
         <button
           onClick={() => handleTabChange('logs')}
-          className={`px-6 py-3 font-medium transition-colors ${
+          className={`px-4 md:px-6 py-3 font-medium transition-colors whitespace-nowrap min-h-[44px] touch-manipulation ${
             activeTab === 'logs'
               ? 'bg-white text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -415,7 +419,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div ref={contentRef} className="flex-1 overflow-y-auto p-6">
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">

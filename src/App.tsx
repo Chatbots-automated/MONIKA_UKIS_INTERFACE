@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Inventory } from './components/Inventory';
@@ -27,6 +27,10 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedModule, setSelectedModule] = useState<Module>(null);
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentView, selectedModule]);
 
   if (loading) {
     return (

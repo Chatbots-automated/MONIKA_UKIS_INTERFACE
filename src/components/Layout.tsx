@@ -62,7 +62,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
       <div className={`fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setSidebarOpen(false)} />
 
-      <aside className={`fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-teal-900 shadow-2xl z-30 transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed left-0 top-0 bottom-0 w-72 md:w-64 lg:w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-teal-900 shadow-2xl z-30 transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-emerald-700/50">
             <div className="flex items-center justify-between mb-4">
@@ -88,7 +88,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
             </div>
           </div>
 
-          <nav className="flex-1 p-4 overflow-y-auto">
+          <nav className="flex-1 p-4 overflow-y-auto overflow-x-hidden">
             <div className="space-y-1">
               {menuItems.filter(item => hasPermission(item.permission)).map((item) => {
                 const Icon = item.icon;
@@ -101,14 +101,14 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                       setSidebarOpen(false);
                       logAction('navigate_to_page', null, null, null, { page: item.id, label: item.label });
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 md:py-2.5 lg:py-3 rounded-lg transition-all duration-200 min-h-[44px] touch-manipulation ${
                       isActive
                         ? 'bg-white text-emerald-900 shadow-lg font-semibold'
-                        : 'text-emerald-50 hover:bg-emerald-700/50 hover:text-white'
+                        : 'text-emerald-50 hover:bg-emerald-700/50 hover:text-white active:bg-emerald-600/50'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-700' : ''}`} />
-                    <span className="text-sm">{item.label}</span>
+                    <Icon className={`w-5 h-5 md:w-4 md:h-4 lg:w-5 lg:h-5 flex-shrink-0 ${isActive ? 'text-emerald-700' : ''}`} />
+                    <span className="text-sm md:text-xs lg:text-sm truncate">{item.label}</span>
                   </button>
                 );
               })}
@@ -118,7 +118,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
           <div className="p-4 border-t border-emerald-700/50 space-y-3">
             <button
               onClick={onBackToModules}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-emerald-50 hover:bg-emerald-700/50 hover:text-white rounded-lg transition-all text-sm"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-emerald-50 hover:bg-emerald-700/50 hover:text-white rounded-lg transition-all text-sm min-h-[44px] touch-manipulation active:bg-emerald-600/50"
             >
               <Grid3x3 className="w-4 h-4" />
               <span>Modulių pasirinkimas</span>
@@ -131,14 +131,14 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
         </div>
       </aside>
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-72 md:pl-64">
         <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10 shadow-sm">
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setSidebarOpen(true)}
-                  className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] touch-manipulation active:bg-slate-200"
                 >
                   <Menu className="w-6 h-6 text-slate-700" />
                 </button>
