@@ -459,6 +459,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
               </div>
             </div>
 
+            <WithdrawalStatusCard animalId={animal.id} />
+
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -512,8 +514,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                 </div>
               </div>
             </div>
-
-            <WithdrawalStatusCard animalId={animal.id} />
           </div>
         )}
 
