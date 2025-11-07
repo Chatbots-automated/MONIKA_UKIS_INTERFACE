@@ -137,6 +137,12 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const [vaccinationDateTo, setVaccinationDateTo] = useState('');
   const [vaccinationSearch, setVaccinationSearch] = useState('');
 
+  // Refs for auto-scrolling to sections
+  const treatmentSectionRef = useRef<HTMLDivElement>(null);
+  const vaccinationSectionRef = useRef<HTMLDivElement>(null);
+  const preventionSectionRef = useRef<HTMLDivElement>(null);
+  const temperatureSectionRef = useRef<HTMLDivElement>(null);
+
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     if (contentRef.current) {
@@ -1498,10 +1504,26 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
   const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Kita'];
 
   const toggleProcedure = (proc: VisitProcedure) => {
+    const isAdding = !formData.procedures.includes(proc);
+
     if (formData.procedures.includes(proc)) {
       setFormData({ ...formData, procedures: formData.procedures.filter(p => p !== proc) });
     } else {
       setFormData({ ...formData, procedures: [...formData.procedures, proc] });
+
+      // Auto-scroll to relevant section after a short delay (for tablet UX)
+      setTimeout(() => {
+        let targetRef: React.RefObject<HTMLDivElement> | null = null;
+
+        if (proc === 'Gydymas') targetRef = treatmentSectionRef;
+        else if (proc === 'Vakcina') targetRef = vaccinationSectionRef;
+        else if (proc === 'Profilaktika') targetRef = preventionSectionRef;
+        else if (proc === 'Temperatūra') targetRef = temperatureSectionRef;
+
+        if (targetRef?.current) {
+          targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
     }
   };
 
@@ -1762,7 +1784,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           </div>
 
           {formData.procedures.includes('Temperatūra') && (
-            <div className="grid grid-cols-2 gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div ref={temperatureSectionRef} className="grid grid-cols-2 gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Temperatūra (°C)
@@ -1863,7 +1885,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
           {/* GYDYMAS FORM */}
           {formData.procedures.includes('Gydymas') && (
-            <div className="p-4 bg-orange-50 border-2 border-orange-300 rounded-lg space-y-4">
+            <div ref={treatmentSectionRef} className="p-4 bg-orange-50 border-2 border-orange-300 rounded-lg space-y-4">
               <h4 className="font-bold text-gray-900 flex items-center gap-2">
                 <Pill className="w-5 h-5 text-orange-600" />
                 Gydymo informacija
@@ -2118,7 +2140,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
           {/* VAKCINA FORM */}
           {formData.procedures.includes('Vakcina') && (
-            <div className="p-4 bg-purple-50 border-2 border-purple-300 rounded-lg space-y-4">
+            <div ref={vaccinationSectionRef} className="p-4 bg-purple-50 border-2 border-purple-300 rounded-lg space-y-4">
               <h4 className="font-bold text-gray-900 flex items-center gap-2">
                 <Syringe className="w-5 h-5 text-purple-600" />
                 Vakcinacijos informacija
@@ -2246,7 +2268,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
           {/* PROFILAKTIKA FORM */}
           {formData.procedures.includes('Profilaktika') && (
-            <div className="p-4 bg-green-50 border-2 border-green-300 rounded-lg space-y-4">
+            <div ref={preventionSectionRef} className="p-4 bg-green-50 border-2 border-green-300 rounded-lg space-y-4">
               <h4 className="font-bold text-gray-900 flex items-center gap-2">
                 <Package className="w-5 h-5 text-green-600" />
                 Profilaktikos informacija
