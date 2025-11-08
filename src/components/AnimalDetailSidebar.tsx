@@ -1449,6 +1449,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     notes: '',
   });
 
+  const [showNewDiseaseModal, setShowNewDiseaseModal] = useState(false);
+  const [newDiseaseName, setNewDiseaseName] = useState('');
+
   useEffect(() => {
     loadResources();
   }, []);
@@ -1463,6 +1466,32 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     if (productsRes.data) setProducts(productsRes.data);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (batchesRes.data) setBatches(batchesRes.data);
+  };
+
+  const handleCreateDisease = async () => {
+    if (!newDiseaseName.trim()) {
+      alert('Įveskite ligos pavadinimą');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('diseases')
+        .insert({ name: newDiseaseName.trim() })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setDiseases([...diseases, data]);
+      setTreatmentData({ ...treatmentData, disease_id: data.id });
+      setNewDiseaseName('');
+      setShowNewDiseaseModal(false);
+
+      await logAction('create_disease', 'diseases', data.id, null, { name: data.name });
+    } catch (error: any) {
+      alert('Klaida kuriant ligą: ' + error.message);
+    }
   };
 
   const fetchStockLevel = async (productId: string) => {
@@ -1907,13 +1936,20 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                   <label className="block text-sm font-medium text-gray-700 mb-1">Liga</label>
                   <select
                     value={treatmentData.disease_id}
-                    onChange={(e) => setTreatmentData({ ...treatmentData, disease_id: e.target.value })}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setShowNewDiseaseModal(true);
+                      } else {
+                        setTreatmentData({ ...treatmentData, disease_id: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="">Pasirinkite ligą</option>
                     {diseases.map(disease => (
                       <option key={disease.id} value={disease.id}>{disease.name}</option>
                     ))}
+                    <option value="__new__">+ Sukurti naują ligą</option>
                   </select>
                 </div>
 
@@ -2404,6 +2440,54 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           </div>
         </form>
       </div>
+
+      {showNewDiseaseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują ligą</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ligos pavadinimas *
+                </label>
+                <input
+                  type="text"
+                  value={newDiseaseName}
+                  onChange={(e) => setNewDiseaseName(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Įveskite ligos pavadinimą..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCreateDisease();
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewDiseaseModal(false);
+                    setNewDiseaseName('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateDisease}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Sukurti
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
