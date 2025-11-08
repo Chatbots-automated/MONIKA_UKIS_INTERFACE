@@ -1381,6 +1381,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: { visit: A
 
 function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; onClose: () => void; onSuccess: () => void }) {
   const { logAction } = useAuth();
+  const modalContentRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     visit_datetime: new Date().toISOString().slice(0, 16),
     procedures: [] as VisitProcedure[],
@@ -1520,8 +1521,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
         else if (proc === 'Profilaktika') targetRef = preventionSectionRef;
         else if (proc === 'Temperatūra') targetRef = temperatureSectionRef;
 
-        if (targetRef?.current) {
-          targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (targetRef?.current && modalContentRef.current) {
+          // Calculate position relative to modal container
+          const modalTop = modalContentRef.current.scrollTop;
+          const targetTop = targetRef.current.offsetTop;
+          const modalHeight = modalContentRef.current.clientHeight;
+
+          // Scroll within modal to position element near top (with some padding)
+          modalContentRef.current.scrollTo({
+            top: targetTop - 100,
+            behavior: 'smooth'
+          });
         }
       }, 100);
     }
@@ -1739,7 +1749,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div ref={modalContentRef} className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-xl font-bold text-gray-900">Naujas vizitas</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
