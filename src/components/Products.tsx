@@ -126,14 +126,6 @@ export function Products() {
     setFormData(emptyProduct);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  };
-
   const formFields = useMemo(() => (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <input
@@ -240,7 +232,15 @@ export function Products() {
         </button>
       </div>
     </div>
-  ), [formData]);
+  ), [formData, handleSave, handleCancel]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
