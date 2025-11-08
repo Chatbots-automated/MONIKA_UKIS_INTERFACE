@@ -137,12 +137,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
   const [vaccinationDateTo, setVaccinationDateTo] = useState('');
   const [vaccinationSearch, setVaccinationSearch] = useState('');
 
-  // Refs for auto-scrolling to sections
-  const treatmentSectionRef = useRef<HTMLDivElement>(null);
-  const vaccinationSectionRef = useRef<HTMLDivElement>(null);
-  const preventionSectionRef = useRef<HTMLDivElement>(null);
-  const temperatureSectionRef = useRef<HTMLDivElement>(null);
-
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     if (contentRef.current) {
@@ -1382,6 +1376,13 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: { visit: A
 function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; onClose: () => void; onSuccess: () => void }) {
   const { logAction } = useAuth();
   const modalContentRef = useRef<HTMLDivElement>(null);
+
+  // Refs for auto-scrolling to sections in modal
+  const treatmentSectionRef = useRef<HTMLDivElement>(null);
+  const vaccinationSectionRef = useRef<HTMLDivElement>(null);
+  const preventionSectionRef = useRef<HTMLDivElement>(null);
+  const temperatureSectionRef = useRef<HTMLDivElement>(null);
+
   const [formData, setFormData] = useState({
     visit_datetime: new Date().toISOString().slice(0, 16),
     procedures: [] as VisitProcedure[],
