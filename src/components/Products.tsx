@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, Unit } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -134,7 +134,7 @@ export function Products() {
     );
   };
 
-  const FormFields = () => (
+  const formFields = useMemo(() => (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <input
         type="text"
@@ -240,7 +240,7 @@ export function Products() {
         </button>
       </div>
     </div>
-  );
+  ), [formData]);
 
   return (
     <div className="space-y-4">
@@ -263,7 +263,7 @@ export function Products() {
       {showAdd && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Naujas produktas</h3>
-          <FormFields />
+          {formFields}
         </div>
       )}
 
@@ -284,7 +284,7 @@ export function Products() {
               editing === product.id ? (
                 <tr key={product.id} className="bg-amber-50">
                   <td colSpan={6} className="px-3 py-3">
-                    <FormFields />
+                    {formFields}
                   </td>
                 </tr>
               ) : (
