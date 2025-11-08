@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
 import { AlertTriangle, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 export function OwnerMeds() {
   const { logAction } = useAuth();
@@ -29,6 +30,19 @@ export function OwnerMeds() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'owner_med_admin',
+    onInsert: useCallback(() => {
+      loadData();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadData();
+    }, []),
+    onDelete: useCallback(() => {
+      loadData();
+    }, []),
+  });
 
   const loadData = async () => {
     const [productsRes, recordsRes] = await Promise.all([

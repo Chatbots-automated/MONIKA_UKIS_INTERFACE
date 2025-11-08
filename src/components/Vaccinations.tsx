@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 interface VaccinationGroup {
   date: string;
@@ -41,6 +42,19 @@ export function Vaccinations() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'vaccinations',
+    onInsert: useCallback(() => {
+      loadData();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadData();
+    }, []),
+    onDelete: useCallback(() => {
+      loadData();
+    }, []),
+  });
 
   const loadData = async () => {
     try {

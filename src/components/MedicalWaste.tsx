@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Trash2, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 export function MedicalWaste() {
   const { logAction } = useAuth();
@@ -26,6 +27,19 @@ export function MedicalWaste() {
   useEffect(() => {
     loadRecords();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'medical_waste',
+    onInsert: useCallback(() => {
+      loadRecords();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadRecords();
+    }, []),
+    onDelete: useCallback(() => {
+      loadRecords();
+    }, []),
+  });
 
   const loadRecords = async () => {
     const { data } = await supabase

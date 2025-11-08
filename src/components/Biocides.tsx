@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Unit } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Droplet, Check } from 'lucide-react';
 
 export function Biocides() {
@@ -26,6 +27,19 @@ export function Biocides() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'biocide_usage',
+    onInsert: useCallback(() => {
+      loadData();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadData();
+    }, []),
+    onDelete: useCallback(() => {
+      loadData();
+    }, []),
+  });
 
   const loadData = async () => {
     const [productsRes, batchesRes, usageRes] = await Promise.all([

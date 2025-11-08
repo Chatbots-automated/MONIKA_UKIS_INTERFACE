@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, Unit } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';
 
 export function Products() {
@@ -28,6 +29,19 @@ export function Products() {
   useEffect(() => {
     loadProducts();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'products',
+    onInsert: useCallback((payload) => {
+      setProducts(prev => [...prev, payload.new].sort((a, b) => a.name.localeCompare(b.name)));
+    }, []),
+    onUpdate: useCallback((payload) => {
+      setProducts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p));
+    }, []),
+    onDelete: useCallback((payload) => {
+      setProducts(prev => prev.filter(p => p.id !== payload.old.id));
+    }, []),
+  });
 
   const loadProducts = async () => {
     try {

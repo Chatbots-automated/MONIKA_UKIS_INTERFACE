@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save, AlertTriangle } from 'lucide-react';
 
 export function ReceiveStock() {
@@ -54,6 +55,16 @@ export function ReceiveStock() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'products',
+    onInsert: useCallback(() => {
+      loadData();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadData();
+    }, []),
+  });
 
   const loadData = async () => {
     const [productsRes, suppliersRes] = await Promise.all([

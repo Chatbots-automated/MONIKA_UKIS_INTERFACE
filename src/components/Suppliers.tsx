@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Building2 } from 'lucide-react';
 
 export function Suppliers() {
@@ -24,6 +25,19 @@ export function Suppliers() {
   useEffect(() => {
     loadSuppliers();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'suppliers',
+    onInsert: useCallback((payload) => {
+      setSuppliers(prev => [...prev, payload.new].sort((a, b) => a.name.localeCompare(b.name)));
+    }, []),
+    onUpdate: useCallback((payload) => {
+      setSuppliers(prev => prev.map(s => s.id === payload.new.id ? payload.new : s));
+    }, []),
+    onDelete: useCallback((payload) => {
+      setSuppliers(prev => prev.filter(s => s.id !== payload.old.id));
+    }, []),
+  });
 
   const loadSuppliers = async () => {
     try {

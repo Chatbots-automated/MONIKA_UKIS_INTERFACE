@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Search, AlertCircle, Package } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
 interface StockItem {
   batch_id: string;
@@ -25,6 +26,26 @@ export function Inventory() {
   useEffect(() => {
     loadInventory();
   }, []);
+
+  useRealtimeSubscription({
+    table: 'batches',
+    onInsert: useCallback(() => {
+      loadInventory();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadInventory();
+    }, []),
+    onDelete: useCallback(() => {
+      loadInventory();
+    }, []),
+  });
+
+  useRealtimeSubscription({
+    table: 'inventory_transactions',
+    onInsert: useCallback(() => {
+      loadInventory();
+    }, []),
+  });
 
   const loadInventory = async () => {
     try {
