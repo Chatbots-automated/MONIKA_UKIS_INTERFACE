@@ -122,7 +122,7 @@ export function Vaccinations() {
 
   const handleMassVaccinate = async () => {
     if (!massVaccinationData.product_id || !massVaccinationData.dose_amount) {
-      alert('Pasirinkite vakciną ir įveskite dozę');
+      alert('Pasirinkite vakciną/prevenciją ir įveskite dozę');
       return;
     }
 
@@ -318,25 +318,25 @@ export function Vaccinations() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Syringe className="w-6 h-6 text-blue-600" />
-          <h2 className="text-2xl font-bold text-gray-900">Vakcinacijos</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Vakcinacijos ir prevencija</h2>
         </div>
         <button
           onClick={() => setShowMassVaccination(!showMassVaccination)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
         >
           <Syringe className="w-5 h-5" />
-          Masinė vakcinacija
+          Masinė vakcina/prevencija
         </button>
       </div>
 
       {showMassVaccination && (
         <div className="bg-white border-2 border-blue-300 rounded-xl p-6 shadow-lg">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Masinė vakcinacija</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-4">Masinė vakcina/prevencija</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Vakcina *
+                Vakcina / prevencija *
               </label>
               <select
                 value={massVaccinationData.product_id}
@@ -352,7 +352,7 @@ export function Vaccinations() {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Pasirinkite vakciną</option>
+                <option value="">Pasirinkite vakciną / prevenciją</option>
                 {products.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -546,7 +546,7 @@ export function Vaccinations() {
       <div className="space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Calendar className="w-5 h-5 text-gray-600" />
-          <h3 className="text-lg font-bold text-gray-900">Vakcinacijų istorija</h3>
+          <h3 className="text-lg font-bold text-gray-900">Vakcinacijų ir prevencijos istorija</h3>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
@@ -581,7 +581,7 @@ export function Vaccinations() {
                   type="text"
                   value={vacSearch}
                   onChange={(e) => setVacSearch(e.target.value)}
-                  placeholder="Gyvūnas, vakcina, serija..."
+                  placeholder="Gyvūnas, vakcina/prevencija, serija..."
                   className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -609,7 +609,7 @@ export function Vaccinations() {
         {groupedVaccinations.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-8 text-center">
             <Syringe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">Nėra vakcinacijų</p>
+            <p className="text-gray-500 text-lg">Nėra vakcinacijų ar prevencijos</p>
           </div>
         ) : (
           groupedVaccinations.map(group => (
@@ -632,7 +632,7 @@ export function Vaccinations() {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Gyvūnas</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcina</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcina / prevencija</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Dozė</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Kita vakcina</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcinavo</th>
