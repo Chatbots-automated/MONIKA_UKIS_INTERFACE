@@ -1042,28 +1042,26 @@ export function ReceiveStock() {
                 <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
                   <h4 className="text-sm font-bold text-blue-900 mb-2">Duomenys iš sąskaitos:</h4>
                   <div className="grid grid-cols-3 gap-3 text-sm">
-                    {creatingProduct.package_size && (
-                      <div>
-                        <span className="text-blue-700 font-medium">Pakuotės dydis:</span>
-                        <p className="font-bold text-blue-900">{creatingProduct.package_size}</p>
-                      </div>
-                    )}
-                    {creatingProduct.package_count && (
-                      <div>
-                        <span className="text-blue-700 font-medium">Pakuočių kiekis:</span>
-                        <p className="font-bold text-blue-900">{creatingProduct.package_count}</p>
-                      </div>
-                    )}
-                    {creatingProduct.qty && (
-                      <div>
-                        <span className="text-blue-700 font-medium">Viso:</span>
-                        <p className="font-bold text-emerald-700">{creatingProduct.qty}</p>
-                      </div>
-                    )}
+                    <div>
+                      <span className="text-blue-700 font-medium">Pakuotės dydis:</span>
+                      <p className="font-bold text-blue-900">{creatingProduct.package_size || 'Nenustatyta'}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Pakuočių skaičius:</span>
+                      <p className="font-bold text-blue-900">{creatingProduct.package_count || 'Nenustatyta'}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Viso:</span>
+                      <p className="font-bold text-emerald-700">{creatingProduct.qty || 'Nenustatyta'}</p>
+                    </div>
                   </div>
-                  {creatingProduct.package_size && creatingProduct.package_count && (
+                  {creatingProduct.package_size && creatingProduct.package_count ? (
                     <p className="text-xs text-blue-600 mt-2 font-medium">
                       {creatingProduct.package_count} pak. × {creatingProduct.package_size} = {creatingProduct.qty} viso
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-600 mt-2 font-medium">
+                      Pakuočių informacija nebuvo automatiškai ištraukta iš PDF
                     </p>
                   )}
                 </div>
@@ -1095,6 +1093,8 @@ export function ReceiveStock() {
                         setNewProductForm({
                           ...newProductForm,
                           category: newCategory,
+                          // Force vnt unit for Švirkštukai category
+                          primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : newProductForm.primary_pack_unit,
                           // Auto-fill withdrawal days with 0 when switching to medicines
                           withdrawal_days_meat: newCategory === 'medicines' ? '0' : newProductForm.withdrawal_days_meat,
                           withdrawal_days_milk: newCategory === 'medicines' ? '0' : newProductForm.withdrawal_days_milk,
@@ -1137,6 +1137,7 @@ export function ReceiveStock() {
                       value={newProductForm.primary_pack_unit}
                       onChange={(e) => setNewProductForm({ ...newProductForm, primary_pack_unit: e.target.value as any })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      disabled={newProductForm.category === 'svirkstukai'}
                     >
                       <option value="ml">ml</option>
                       <option value="l">L</option>
