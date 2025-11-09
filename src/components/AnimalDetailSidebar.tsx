@@ -1373,7 +1373,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: { visit: A
   );
 }
 
-function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; onClose: () => void; onSuccess: () => void }) {
+function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { animalId: string; onClose: () => void; onSuccess: () => void; visitToEdit?: AnimalVisit }) {
   const { logAction } = useAuth();
   const modalContentRef = useRef<HTMLDivElement>(null);
 
@@ -1383,17 +1383,19 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
   const preventionSectionRef = useRef<HTMLDivElement>(null);
   const temperatureSectionRef = useRef<HTMLDivElement>(null);
 
+  const isEditMode = !!visitToEdit;
+
   const [formData, setFormData] = useState({
-    visit_datetime: new Date().toISOString().slice(0, 16),
-    procedures: [] as VisitProcedure[],
-    temperature: '',
-    temperature_measured_at: new Date().toISOString().slice(0, 16),
-    status: 'Planuojamas' as VisitStatus,
-    notes: '',
-    vet_name: '',
-    next_visit_required: false,
-    next_visit_date: '',
-    treatment_required: false,
+    visit_datetime: visitToEdit?.visit_datetime.slice(0, 16) || new Date().toISOString().slice(0, 16),
+    procedures: visitToEdit?.procedures || [] as VisitProcedure[],
+    temperature: visitToEdit?.temperature?.toString() || '',
+    temperature_measured_at: visitToEdit?.temperature_measured_at?.slice(0, 16) || new Date().toISOString().slice(0, 16),
+    status: visitToEdit?.status || 'Planuojamas' as VisitStatus,
+    notes: visitToEdit?.notes || '',
+    vet_name: visitToEdit?.vet_name || '',
+    next_visit_required: visitToEdit?.next_visit_required || false,
+    next_visit_date: visitToEdit?.next_visit_date?.slice(0, 16) || '',
+    treatment_required: visitToEdit?.treatment_required || false,
   });
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -1456,7 +1458,87 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
   useEffect(() => {
     loadResources();
+    if (isEditMode && visitToEdit) {
+      loadExistingData();
+    }
   }, []);
+
+  const loadExistingData = async () => {
+    if (!visitToEdit) return;
+
+    // Load existing treatment data if visit has Gydymas procedure
+    if (visitToEdit.procedures.includes('Gydymas')) {
+      const { data: treatmentRecords } = await supabase
+        .from('treatments')
+        .select('*, treatment_medications(*)')
+        .eq('visit_id', visitToEdit.id);
+
+      if (treatmentRecords && treatmentRecords.length > 0) {
+        const treatment = treatmentRecords[0];
+        setTreatmentData({
+          disease_id: treatment.disease_id || '',
+          clinical_diagnosis: treatment.clinical_diagnosis || '',
+          tests: treatment.tests || '',
+          animal_condition: treatment.animal_condition || '',
+          outcome: treatment.outcome || '',
+          services: treatment.services || '',
+          withdrawal_until: treatment.withdrawal_until || '',
+          notes: treatment.notes || '',
+          recurring_days: [],
+          medications: (treatment.treatment_medications || []).map((med: any) => ({
+            product_id: med.product_id,
+            batch_id: med.batch_id,
+            qty: med.qty?.toString() || '',
+            unit: med.unit || 'ml',
+            purpose: med.purpose || '',
+            is_course: med.is_course || false,
+            course_days: med.course_days?.toString() || '',
+            teat: med.teat || '',
+          })),
+        });
+      }
+    }
+
+    // Load existing vaccination data if visit has Vakcina procedure
+    if (visitToEdit.procedures.includes('Vakcina')) {
+      const { data: vaccinationRecords } = await supabase
+        .from('vaccinations')
+        .select('*')
+        .eq('visit_id', visitToEdit.id);
+
+      if (vaccinationRecords && vaccinationRecords.length > 0) {
+        const vacc = vaccinationRecords[0];
+        setVaccinationData({
+          product_id: vacc.product_id || '',
+          batch_id: vacc.batch_id || '',
+          dose_qty: vacc.dose_qty?.toString() || '',
+          dose_unit: vacc.dose_unit || 'ml',
+          purpose: vacc.purpose || '',
+          notes: vacc.notes || '',
+        });
+      }
+    }
+
+    // Load existing prevention data if visit has Profilaktika procedure
+    if (visitToEdit.procedures.includes('Profilaktika')) {
+      const { data: preventionRecords } = await supabase
+        .from('preventions')
+        .select('*')
+        .eq('visit_id', visitToEdit.id);
+
+      if (preventionRecords && preventionRecords.length > 0) {
+        const prev = preventionRecords[0];
+        setPreventionData({
+          product_id: prev.product_id || '',
+          batch_id: prev.batch_id || '',
+          dose_qty: prev.dose_qty?.toString() || '',
+          dose_unit: prev.dose_unit || 'ml',
+          purpose: prev.purpose || '',
+          notes: prev.notes || '',
+        });
+      }
+    }
+  };
 
   const loadResources = async () => {
     const [productsRes, diseasesRes, batchesRes] = await Promise.all([
@@ -1594,53 +1676,159 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
     setLoading(true);
     try {
-      // 1. Create the visit
-      const { data: visitData, error: visitError } = await supabase
-        .from('animal_visits')
-        .insert({
-          animal_id: animalId,
-          visit_datetime: formData.visit_datetime,
-          procedures: formData.procedures,
-          temperature: formData.temperature ? parseFloat(formData.temperature) : null,
-          temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
-          status: formData.status,
-          notes: formData.notes ? formData.notes : null,
-          vet_name: formData.vet_name ? formData.vet_name : null,
-          next_visit_required: formData.next_visit_required,
-          next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
-          treatment_required: formData.procedures.includes('Gydymas'),
-        })
-        .select()
-        .single();
+      let visitData;
 
-      if (visitError) throw visitError;
+      if (isEditMode && visitToEdit) {
+        // Update existing visit
+        const { data, error: visitError } = await supabase
+          .from('animal_visits')
+          .update({
+            visit_datetime: formData.visit_datetime,
+            procedures: formData.procedures,
+            temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+            temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
+            status: formData.status,
+            notes: formData.notes ? formData.notes : null,
+            vet_name: formData.vet_name ? formData.vet_name : null,
+            next_visit_required: formData.next_visit_required,
+            next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
+            treatment_required: formData.procedures.includes('Gydymas'),
+          })
+          .eq('id', visitToEdit.id)
+          .select()
+          .single();
 
-      await logAction('create_visit', 'animal_visits', visitData.id);
+        if (visitError) throw visitError;
+        visitData = data;
 
-      // 2. If Gydymas procedure, create treatment
-      if (formData.procedures.includes('Gydymas')) {
-        const hasRecurringDays = treatmentData.recurring_days.length > 0;
+        // Delete existing treatment/vaccination/prevention records if procedures changed
+        if (visitToEdit.procedures.includes('Gydymas') && !formData.procedures.includes('Gydymas')) {
+          await supabase.from('treatment_medications').delete().eq('treatment_id', (await supabase.from('treatments').select('id').eq('visit_id', visitToEdit.id).maybeSingle()).data?.id);
+          await supabase.from('treatments').delete().eq('visit_id', visitToEdit.id);
+        }
+        if (visitToEdit.procedures.includes('Vakcina') && !formData.procedures.includes('Vakcina')) {
+          await supabase.from('vaccinations').delete().eq('visit_id', visitToEdit.id);
+        }
+        if (visitToEdit.procedures.includes('Profilaktika') && !formData.procedures.includes('Profilaktika')) {
+          await supabase.from('preventions').delete().eq('visit_id', visitToEdit.id);
+        }
 
-        const { data: treatmentRecord, error: treatmentError } = await supabase
-          .from('treatments')
+        await logAction('update_visit', 'animal_visits', visitData.id);
+      } else {
+        // Create new visit
+        const { data, error: visitError } = await supabase
+          .from('animal_visits')
           .insert({
             animal_id: animalId,
-            visit_id: visitData.id,
-            reg_date: formData.visit_datetime.split('T')[0],
-            disease_id: treatmentData.disease_id ? treatmentData.disease_id : null,
-            clinical_diagnosis: treatmentData.clinical_diagnosis ? treatmentData.clinical_diagnosis : null,
-            tests: treatmentData.tests ? treatmentData.tests : null,
-            animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
-            outcome: treatmentData.outcome ? treatmentData.outcome : null,
-            services: treatmentData.services ? treatmentData.services : null,
+            visit_datetime: formData.visit_datetime,
+            procedures: formData.procedures,
+            temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+            temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
+            status: formData.status,
+            notes: formData.notes ? formData.notes : null,
             vet_name: formData.vet_name ? formData.vet_name : null,
-            notes: treatmentData.notes ? treatmentData.notes : null,
-            creates_future_visits: hasRecurringDays,
+            next_visit_required: formData.next_visit_required,
+            next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
+            treatment_required: formData.procedures.includes('Gydymas'),
           })
           .select()
           .single();
 
-        if (treatmentError) throw treatmentError;
+        if (visitError) throw visitError;
+        visitData = data;
+
+        await logAction('create_visit', 'animal_visits', visitData.id);
+      }
+
+      // 2. If Gydymas procedure, create or update treatment
+      if (formData.procedures.includes('Gydymas')) {
+        const hasRecurringDays = treatmentData.recurring_days.length > 0;
+
+        let treatmentRecord;
+
+        if (isEditMode && visitToEdit) {
+          // Check if treatment exists for this visit
+          const { data: existingTreatment } = await supabase
+            .from('treatments')
+            .select('id')
+            .eq('visit_id', visitToEdit.id)
+            .maybeSingle();
+
+          if (existingTreatment) {
+            // Update existing treatment
+            const { data, error: treatmentError } = await supabase
+              .from('treatments')
+              .update({
+                reg_date: formData.visit_datetime.split('T')[0],
+                disease_id: treatmentData.disease_id ? treatmentData.disease_id : null,
+                clinical_diagnosis: treatmentData.clinical_diagnosis ? treatmentData.clinical_diagnosis : null,
+                tests: treatmentData.tests ? treatmentData.tests : null,
+                animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
+                outcome: treatmentData.outcome ? treatmentData.outcome : null,
+                services: treatmentData.services ? treatmentData.services : null,
+                vet_name: formData.vet_name ? formData.vet_name : null,
+                notes: treatmentData.notes ? treatmentData.notes : null,
+                creates_future_visits: hasRecurringDays,
+              })
+              .eq('id', existingTreatment.id)
+              .select()
+              .single();
+
+            if (treatmentError) throw treatmentError;
+            treatmentRecord = data;
+
+            // Delete existing medications and courses
+            await supabase.from('usage_items').delete().eq('treatment_id', existingTreatment.id);
+            await supabase.from('treatment_courses').delete().eq('treatment_id', existingTreatment.id);
+            await supabase.from('treatment_medications').delete().eq('treatment_id', existingTreatment.id);
+          } else {
+            // Create new treatment
+            const { data, error: treatmentError } = await supabase
+              .from('treatments')
+              .insert({
+                animal_id: animalId,
+                visit_id: visitData.id,
+                reg_date: formData.visit_datetime.split('T')[0],
+                disease_id: treatmentData.disease_id ? treatmentData.disease_id : null,
+                clinical_diagnosis: treatmentData.clinical_diagnosis ? treatmentData.clinical_diagnosis : null,
+                tests: treatmentData.tests ? treatmentData.tests : null,
+                animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
+                outcome: treatmentData.outcome ? treatmentData.outcome : null,
+                services: treatmentData.services ? treatmentData.services : null,
+                vet_name: formData.vet_name ? formData.vet_name : null,
+                notes: treatmentData.notes ? treatmentData.notes : null,
+                creates_future_visits: hasRecurringDays,
+              })
+              .select()
+              .single();
+
+            if (treatmentError) throw treatmentError;
+            treatmentRecord = data;
+          }
+        } else {
+          // Create new treatment (non-edit mode)
+          const { data, error: treatmentError } = await supabase
+            .from('treatments')
+            .insert({
+              animal_id: animalId,
+              visit_id: visitData.id,
+              reg_date: formData.visit_datetime.split('T')[0],
+              disease_id: treatmentData.disease_id ? treatmentData.disease_id : null,
+              clinical_diagnosis: treatmentData.clinical_diagnosis ? treatmentData.clinical_diagnosis : null,
+              tests: treatmentData.tests ? treatmentData.tests : null,
+              animal_condition: treatmentData.animal_condition ? treatmentData.animal_condition : null,
+              outcome: treatmentData.outcome ? treatmentData.outcome : null,
+              services: treatmentData.services ? treatmentData.services : null,
+              vet_name: formData.vet_name ? formData.vet_name : null,
+              notes: treatmentData.notes ? treatmentData.notes : null,
+              creates_future_visits: hasRecurringDays,
+            })
+            .select()
+            .single();
+
+          if (treatmentError) throw treatmentError;
+          treatmentRecord = data;
+        }
 
         // Create usage items or courses for medications
         for (const med of treatmentData.medications) {
@@ -1821,7 +2009,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div ref={modalContentRef} className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Naujas vizitas</h3>
+          <h3 className="text-xl font-bold text-gray-900">{isEditMode ? 'Redaguoti vizitą' : 'Naujas vizitas'}</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5" />
           </button>
@@ -2579,7 +2767,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
               disabled={loading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Kuriama...' : 'Sukurti vizitą'}
+              {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti pakeitimus' : 'Sukurti vizitą')}
             </button>
           </div>
         </form>
@@ -2644,6 +2832,21 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const [showFutureVisitForm, setShowFutureVisitForm] = useState(false);
   const [futureVisitDate, setFutureVisitDate] = useState('');
   const [futureVisitNotes, setFutureVisitNotes] = useState('');
+  const [showEditMode, setShowEditMode] = useState(false);
+
+  if (showEditMode) {
+    return (
+      <VisitCreateModal
+        animalId={animalId}
+        visitToEdit={visit}
+        onClose={() => setShowEditMode(false)}
+        onSuccess={() => {
+          setShowEditMode(false);
+          onSuccess();
+        }}
+      />
+    );
+  }
 
   const handleCompleteVisit = async () => {
     if (status === 'Baigtas') {
@@ -2947,31 +3150,43 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
             </button>
           )}
 
-          <div className="flex gap-3">
+          <div className="space-y-3">
             <button
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+              onClick={() => setShowEditMode(true)}
+              className="w-full px-4 py-3 border-2 border-orange-400 text-orange-700 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors font-medium flex items-center justify-center gap-2"
             >
-              Atšaukti
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Redaguoti vizitą
             </button>
-            <button
-              onClick={handleUpdateNotes}
-              disabled={loading}
-              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
-            >
-              {loading ? 'Saugoma...' : 'Išsaugoti'}
-            </button>
-            {status !== 'Baigtas' && (
+
+            <div className="flex gap-3">
               <button
-                onClick={handleCompleteVisit}
+                onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
               >
-                <Check className="w-5 h-5" />
-                {loading ? 'Užbaigiama...' : 'Užbaigti'}
+                Atšaukti
               </button>
-            )}
+              <button
+                onClick={handleUpdateNotes}
+                disabled={loading}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+              >
+                {loading ? 'Saugoma...' : 'Išsaugoti'}
+              </button>
+              {status !== 'Baigtas' && (
+                <button
+                  onClick={handleCompleteVisit}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Check className="w-5 h-5" />
+                  {loading ? 'Užbaigiama...' : 'Užbaigti'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
