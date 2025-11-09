@@ -155,6 +155,9 @@ export function ReceiveStock() {
         supplier_name: invoiceObject.supplier.name,
         supplier_code: invoiceObject.supplier.code,
         supplier_vat: invoiceObject.supplier.vat_code,
+        total_net: invoiceObject.invoice.total_net,
+        total_vat: invoiceObject.invoice.total_vat,
+        total_gross: invoiceObject.invoice.total_gross,
       });
 
       const matches = new Map<number, Product | null>();
@@ -195,6 +198,9 @@ export function ReceiveStock() {
           ...invoiceData.invoice,
           number: headerData.invoice_number,
           date: headerData.invoice_date,
+          total_net: parseFloat(headerData.total_net) || 0,
+          total_vat: parseFloat(headerData.total_vat) || 0,
+          total_gross: parseFloat(headerData.total_gross) || 0,
         },
         supplier: {
           ...invoiceData.supplier,
@@ -228,17 +234,19 @@ export function ReceiveStock() {
     setMatchedProducts(newMatches);
   };
 
-  const handleCreateProduct = (item: any) => {
-    setCreatingProduct(item);
+  const handleCreateProduct = (item: any, index: number) => {
+    // Get the edited data if it exists
+    const itemData = getItemData(item, index);
+    setCreatingProduct({ ...itemData, index });
     setNewProductForm({
-      name: item.description || '',
+      name: itemData.description || '',
       category: 'medicines',
       primary_pack_unit: 'ml',
-      primary_pack_size: item.qty?.toString() || '',
+      primary_pack_size: itemData.qty?.toString() || '',
       active_substance: '',
       registration_code: '',
-      withdrawal_days_meat: '',
-      withdrawal_days_milk: '',
+      withdrawal_days_meat: '0',
+      withdrawal_days_milk: '0',
       dosage_notes: '',
     });
     setShowCreateModal(true);
@@ -279,10 +287,10 @@ export function ReceiveStock() {
 
       await loadData();
 
-      const itemIndex = invoiceData.items.findIndex((i: any) => i.line_no === creatingProduct.line_no);
-      if (itemIndex !== -1) {
+      // Use the stored index from creatingProduct
+      if (creatingProduct.index !== undefined) {
         const newMatches = new Map(matchedProducts);
-        newMatches.set(itemIndex, data);
+        newMatches.set(creatingProduct.index, data);
         setMatchedProducts(newMatches);
       }
 
@@ -706,22 +714,34 @@ export function ReceiveStock() {
 
                   <div className="grid grid-cols-3 gap-4 p-4 bg-white rounded-lg border border-gray-300">
                     <div>
-                      <p className="text-xs text-gray-600 mb-1">Suma be PVM</p>
-                      <p className="font-bold text-blue-700 text-lg">
-                        €{invoiceData.invoice.total_net?.toFixed(2) || '0.00'}
-                      </p>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Suma be PVM (€)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_net || 0}
+                        onChange={(e) => setHeaderData({ ...headerData, total_net: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-blue-700 focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-600 mb-1">PVM ({invoiceData.invoice.vat_rate || 0}%)</p>
-                      <p className="font-bold text-orange-700 text-lg">
-                        €{invoiceData.invoice.total_vat?.toFixed(2) || '0.00'}
-                      </p>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">PVM (€)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_vat || 0}
+                        onChange={(e) => setHeaderData({ ...headerData, total_vat: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-orange-700 focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-600 mb-1">Viso su PVM</p>
-                      <p className="font-bold text-emerald-700 text-xl">
-                        €{invoiceData.invoice.total_gross?.toFixed(2) || '0.00'}
-                      </p>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Viso su PVM (€)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_gross || 0}
+                        onChange={(e) => setHeaderData({ ...headerData, total_gross: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-emerald-700 focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
                   </div>
                 </div>
@@ -863,7 +883,7 @@ export function ReceiveStock() {
                             </select>
                           </div>
                           <button
-                            onClick={() => handleCreateProduct(item)}
+                            onClick={() => handleCreateProduct(item, index)}
                             className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
                           >
                             <PlusCircle className="w-3 h-3" />
@@ -934,7 +954,16 @@ export function ReceiveStock() {
                     </label>
                     <select
                       value={newProductForm.category}
-                      onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value as any })}
+                      onChange={(e) => {
+                        const newCategory = e.target.value as any;
+                        setNewProductForm({
+                          ...newProductForm,
+                          category: newCategory,
+                          // Auto-fill withdrawal days with 0 when switching to medicines
+                          withdrawal_days_meat: newCategory === 'medicines' ? '0' : newProductForm.withdrawal_days_meat,
+                          withdrawal_days_milk: newCategory === 'medicines' ? '0' : newProductForm.withdrawal_days_milk,
+                        });
+                      }}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                     >
                       <option value="medicines">Vaistai</option>
