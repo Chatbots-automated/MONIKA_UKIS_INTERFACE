@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
@@ -57,7 +58,7 @@ export function VisitsModern() {
           .from('animal_visits')
           .select('*')
           .order('visit_datetime', { ascending: false }),
-        supabase.from('animals').select('*').limit(10000),
+        fetchAllRows('animals'),
       ]);
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => ({

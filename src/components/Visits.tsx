@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/helpers';
 import { Animal } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { Calendar, Plus, Edit2, Save, X, Check, XCircle, Clock, Search, AlertCircle } from 'lucide-react';
@@ -55,7 +56,7 @@ export function Visits() {
     try {
       const [visitsRes, animalsRes] = await Promise.all([
         supabase.from('animal_visits').select('*').order('visit_date', { ascending: false }),
-        supabase.from('animals').select('*').order('tag_no').limit(10000),
+        fetchAllRows('animals', '*', 'tag_no'),
       ]);
 
       const animalsData = animalsRes.data || [];

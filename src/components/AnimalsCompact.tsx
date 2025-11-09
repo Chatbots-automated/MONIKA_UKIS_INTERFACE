@@ -6,6 +6,7 @@ import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { fetchAllRows } from '../lib/helpers';
 
 export function AnimalsCompact() {
   const { logAction } = useAuth();
@@ -59,23 +60,18 @@ export function AnimalsCompact() {
 
   const loadData = async () => {
     try {
-      // Get total count first
-      const { count } = await supabase
-        .from('animals')
-        .select('*', { count: 'exact', head: true });
+      // Fetch ALL animals using pagination helper
+      const allAnimals = await fetchAllRows<Animal>('animals', '*', 'tag_no');
 
-      // Now fetch all animals (Supabase default limit is 1000, we need to override)
-      const [animalsRes, summariesRes] = await Promise.all([
-        supabase.from('animals').select('*').order('tag_no').limit(count || 10000),
-        supabase.from('animal_visit_summary').select('*').limit(count || 10000),
-      ]);
+      // Fetch visit summaries
+      const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
-      console.log('🐄 Animals loaded:', animalsRes.data?.length, 'Total in DB:', count);
+      console.log('🐄 Animals loaded:', allAnimals.length);
 
-      setAnimals(animalsRes.data || []);
+      setAnimals(allAnimals);
 
       const summaryMap = new Map<string, AnimalVisitSummary>();
-      (summariesRes.data || []).forEach((summary: AnimalVisitSummary) => {
+      (summariesData || []).forEach((summary: AnimalVisitSummary) => {
         summaryMap.set(summary.animal_id, summary);
       });
       setVisitSummaries(summaryMap);

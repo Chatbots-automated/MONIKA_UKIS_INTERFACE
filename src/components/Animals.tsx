@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchAllRows } from '../lib/helpers';
 import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
@@ -41,13 +42,13 @@ export function Animals() {
 
   const loadData = async () => {
     try {
-      const [animalsRes, productsRes, diseasesRes] = await Promise.all([
-        supabase.from('animals').select('*').order('tag_no').limit(10000),
+      const [allAnimals, productsRes, diseasesRes] = await Promise.all([
+        fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
       ]);
 
-      setAnimals(animalsRes.data || []);
+      setAnimals(allAnimals);
       setProducts(productsRes.data || []);
       setDiseases(diseasesRes.data || []);
     } catch (error) {
