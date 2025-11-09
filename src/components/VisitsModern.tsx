@@ -75,19 +75,19 @@ export function VisitsModern() {
 
   const loadData = async () => {
     try {
-      const [visitsRes, animalsRes] = await Promise.all([
+      const [visitsRes, animalsData] = await Promise.all([
         supabase
           .from('animal_visits')
           .select('*')
           .order('visit_datetime', { ascending: false }),
-        fetchAllRows('animals'),
+        fetchAllRows<Animal>('animals'),
       ]);
 
       console.log('📊 Loaded visits:', visitsRes.data?.length);
-      console.log('📊 Loaded animals:', animalsRes.data?.length);
+      console.log('📊 Loaded animals:', animalsData.length);
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => {
-        const animal = (animalsRes.data || []).find((a: Animal) => a.id === visit.animal_id);
+        const animal = animalsData.find((a: Animal) => a.id === visit.animal_id);
         console.log(`Visit ${visit.id} with animal_id ${visit.animal_id} -> Found animal:`, animal?.tag_number);
         return {
           ...visit,
@@ -97,7 +97,7 @@ export function VisitsModern() {
 
       console.log('📊 Visits with animals:', visitsWithAnimals.filter(v => v.animal).length);
       setVisits(visitsWithAnimals);
-      setAnimals(animalsRes.data || []);
+      setAnimals(animalsData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
