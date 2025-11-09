@@ -25,7 +25,6 @@ export function ReceiveStock() {
     primary_pack_unit: 'ml' as const,
     primary_pack_size: '',
     active_substance: '',
-    registration_code: '',
     withdrawal_days_meat: '',
     withdrawal_days_milk: '',
     dosage_notes: '',
@@ -272,7 +271,6 @@ export function ReceiveStock() {
         primary_pack_unit: newProductForm.primary_pack_unit,
         primary_pack_size: newProductForm.primary_pack_size ? parseFloat(newProductForm.primary_pack_size) : null,
         active_substance: newProductForm.active_substance || null,
-        registration_code: newProductForm.registration_code || null,
         withdrawal_days_meat: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_meat) ? parseInt(newProductForm.withdrawal_days_meat) : null,
         withdrawal_days_milk: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_milk) ? parseInt(newProductForm.withdrawal_days_milk) : null,
         dosage_notes: newProductForm.dosage_notes || null,
@@ -304,7 +302,6 @@ export function ReceiveStock() {
         primary_pack_unit: 'ml',
         primary_pack_size: '',
         active_substance: '',
-        registration_code: '',
         withdrawal_days_meat: '',
         withdrawal_days_milk: '',
         dosage_notes: '',
@@ -863,15 +860,54 @@ export function ReceiveStock() {
                             />
                           </div>
                           <div>
-                            <span className="text-gray-600">Kiekis:</span>{' '}
+                            <span className="text-gray-600">Pak. dydis:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_size || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_size', e.target.value);
+                                const pkgSize = parseFloat(e.target.value) || 0;
+                                const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
+                                if (pkgSize && pkgCount) {
+                                  handleItemEdit(index, 'qty', (pkgSize * pkgCount).toString());
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="10"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Kiek pak.:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_count || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_count', e.target.value);
+                                const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
+                                const pkgCount = parseFloat(e.target.value) || 0;
+                                if (pkgSize && pkgCount) {
+                                  handleItemEdit(index, 'qty', (pkgSize * pkgCount).toString());
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="6"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Viso:</span>{' '}
                             <input
                               type="number"
                               step="0.01"
                               value={getItemData(item, index).qty}
                               onChange={(e) => handleItemEdit(index, 'qty', e.target.value)}
-                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              className="w-16 px-1 py-0.5 border border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
+                              readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
                             />
                           </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
                             <span className="text-gray-600">Kaina:</span>{' '}
                             <input
@@ -879,7 +915,7 @@ export function ReceiveStock() {
                               step="0.01"
                               value={getItemData(item, index).unit_price}
                               onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
-                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs"
                             />
                           </div>
                           <div>
@@ -1039,6 +1075,8 @@ export function ReceiveStock() {
                       <option value="medicines">Vaistai</option>
                       <option value="prevention">Prevencija</option>
                       <option value="vakcina">Vakcina</option>
+                      <option value="bolusas">Bolusas</option>
+                      <option value="svirkstukai">Švirkštukai</option>
                       <option value="hygiene">Higiena</option>
                       <option value="biocide">Biocidas</option>
                       <option value="technical">Techniniai</option>
@@ -1074,14 +1112,14 @@ export function ReceiveStock() {
                       <option value="l">L</option>
                       <option value="g">g</option>
                       <option value="kg">kg</option>
-                      <option value="pcs">pcs</option>
+                      <option value="vnt">vnt</option>
                       <option value="tablet">tablet</option>
                       <option value="bolus">bolus</option>
                       <option value="syringe">syringe</option>
                     </select>
                   </div>
 
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Veiklioji medžiaga
                     </label>
@@ -1091,19 +1129,6 @@ export function ReceiveStock() {
                       onChange={(e) => setNewProductForm({ ...newProductForm, active_substance: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       placeholder="Pvz: Penicilinas"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Registracijos kodas
-                    </label>
-                    <input
-                      type="text"
-                      value={newProductForm.registration_code}
-                      onChange={(e) => setNewProductForm({ ...newProductForm, registration_code: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      placeholder="REG-12345"
                     />
                   </div>
 
@@ -1185,7 +1210,6 @@ export function ReceiveStock() {
                       primary_pack_unit: 'ml',
                       primary_pack_size: '',
                       active_substance: '',
-                      registration_code: '',
                       withdrawal_days_meat: '',
                       withdrawal_days_milk: '',
                       dosage_notes: '',

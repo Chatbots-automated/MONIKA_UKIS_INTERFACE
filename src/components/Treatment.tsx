@@ -608,7 +608,10 @@ export function Treatment() {
                       <option value="l">L</option>
                       <option value="g">g</option>
                       <option value="kg">kg</option>
-                      <option value="pcs">pcs</option>
+                      <option value="vnt">vnt</option>
+                      <option value="tablet">tablet</option>
+                      <option value="bolus">bolus</option>
+                      <option value="syringe">syringe</option>
                     </select>
                   </div>
 

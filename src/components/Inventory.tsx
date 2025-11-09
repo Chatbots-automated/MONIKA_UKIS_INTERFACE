@@ -202,6 +202,9 @@ export function Inventory() {
           <option value="all">Visos kategorijos</option>
           <option value="medicines">Vaistai</option>
           <option value="prevention">Prevencija</option>
+          <option value="vakcina">Vakcina</option>
+          <option value="bolusas">Bolusas</option>
+          <option value="svirkstukai">Švirkštukai</option>
           <option value="hygiene">Higiena</option>
           <option value="biocide">Biocidas</option>
           <option value="technical">Techniniai</option>

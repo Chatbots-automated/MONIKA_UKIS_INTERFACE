@@ -18,7 +18,6 @@ export function Products() {
     primary_pack_unit: 'ml' as Unit,
     primary_pack_size: '',
     active_substance: '',
-    registration_code: '',
     withdrawal_days_meat: '',
     withdrawal_days_milk: '',
     dosage_notes: '',
@@ -67,7 +66,6 @@ export function Products() {
         primary_pack_unit: formData.primary_pack_unit,
         primary_pack_size: formData.primary_pack_size ? parseFloat(formData.primary_pack_size) : null,
         active_substance: formData.active_substance || null,
-        registration_code: formData.registration_code || null,
         withdrawal_days_meat: (formData.category === 'medicines' && formData.withdrawal_days_meat) ? parseInt(formData.withdrawal_days_meat) : null,
         withdrawal_days_milk: (formData.category === 'medicines' && formData.withdrawal_days_milk) ? parseInt(formData.withdrawal_days_milk) : null,
         dosage_notes: formData.dosage_notes || null,
@@ -127,7 +125,6 @@ export function Products() {
       primary_pack_unit: product.primary_pack_unit,
       primary_pack_size: product.primary_pack_size?.toString() || '',
       active_substance: product.active_substance || '',
-      registration_code: product.registration_code || '',
       withdrawal_days_meat: product.withdrawal_days_meat?.toString() || '',
       withdrawal_days_milk: product.withdrawal_days_milk?.toString() || '',
       dosage_notes: product.dosage_notes || '',
@@ -158,6 +155,8 @@ export function Products() {
         <option value="medicines">Vaistai</option>
         <option value="prevention">Prevencija</option>
         <option value="vakcina">Vakcina</option>
+        <option value="bolusas">Bolusas</option>
+        <option value="svirkstukai">Švirkštukai</option>
         <option value="hygiene">Higiena</option>
         <option value="biocide">Biocidas</option>
         <option value="technical">Techniniai</option>
@@ -182,7 +181,7 @@ export function Products() {
           <option value="l">L</option>
           <option value="g">g</option>
           <option value="kg">kg</option>
-          <option value="pcs">pcs</option>
+          <option value="vnt">vnt</option>
           <option value="tablet">tablet</option>
           <option value="bolus">bolus</option>
           <option value="syringe">syringe</option>
@@ -194,14 +193,6 @@ export function Products() {
         placeholder="Veiklioji medžiaga"
         value={formData.active_substance}
         onChange={(e) => setFormData({ ...formData, active_substance: e.target.value })}
-        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-      />
-
-      <input
-        type="text"
-        placeholder="Reg. kodas"
-        value={formData.registration_code}
-        onChange={(e) => setFormData({ ...formData, registration_code: e.target.value })}
         className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
       />
 
@@ -312,6 +303,8 @@ export function Products() {
                     {product.category === 'medicines' && 'Vaistai'}
                     {product.category === 'prevention' && 'Prevencija'}
                     {product.category === 'vakcina' && 'Vakcina'}
+                    {product.category === 'bolusas' && 'Bolusas'}
+                    {product.category === 'svirkstukai' && 'Švirkštukai'}
                     {product.category === 'hygiene' && 'Higiena'}
                     {product.category === 'biocide' && 'Biocidas'}
                     {product.category === 'technical' && 'Techniniai'}
