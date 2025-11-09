@@ -29,30 +29,6 @@ export function VisitsModern() {
     loadData();
   }, []);
 
-  // Force load missing animal data
-  useEffect(() => {
-    const loadMissingAnimals = async () => {
-      const visitsNeedingAnimals = visits.filter(v => !v.animal && v.animal_id);
-      if (visitsNeedingAnimals.length === 0) return;
-
-      for (const visit of visitsNeedingAnimals) {
-        const { data: animalData } = await supabase
-          .from('animals')
-          .select('*')
-          .eq('id', visit.animal_id)
-          .maybeSingle();
-
-        if (animalData) {
-          setVisits(prev => prev.map(v =>
-            v.id === visit.id ? { ...v, animal: animalData } : v
-          ));
-        }
-      }
-    };
-
-    loadMissingAnimals();
-  }, [visits]);
-
   // Real-time subscription for animal_visits
   useRealtimeSubscription({
     table: 'animal_visits',
