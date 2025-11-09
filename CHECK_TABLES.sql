@@ -45,7 +45,7 @@ SELECT
     is_nullable
 FROM information_schema.columns
 WHERE table_name = 'products'
-    AND column_name IN ('product_id', 'name', 'category', 'primary_pack_size', 'primary_pack_unit')
+    AND column_name IN ('id', 'name', 'category', 'primary_pack_size', 'primary_pack_unit')
 ORDER BY column_name;
 
 -- 6. Sample data from batches to verify package tracking
