@@ -32,20 +32,42 @@ export function VisitsModern() {
   // Real-time subscription for animal_visits
   useRealtimeSubscription({
     table: 'animal_visits',
-    onInsert: useCallback((payload) => {
+    onInsert: useCallback(async (payload) => {
       const newVisit = payload.new as AnimalVisit;
-      const animal = animals.find(a => a.id === newVisit.animal_id);
-      setVisits(prev => [{ ...newVisit, animal }, ...prev].sort((a, b) =>
+      // Fetch the animal data to ensure it's loaded
+      const { data: animalData } = await supabase
+        .from('animals')
+        .select('*')
+        .eq('id', newVisit.animal_id)
+        .maybeSingle();
+
+      setVisits(prev => [{ ...newVisit, animal: animalData || undefined }, ...prev].sort((a, b) =>
         new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime()
       ));
-    }, [animals]),
-    onUpdate: useCallback((payload) => {
+
+      // Update animals list if this is a new animal
+      if (animalData) {
+        setAnimals(prev => {
+          if (!prev.find(a => a.id === animalData.id)) {
+            return [...prev, animalData];
+          }
+          return prev;
+        });
+      }
+    }, []),
+    onUpdate: useCallback(async (payload) => {
       const updatedVisit = payload.new as AnimalVisit;
-      const animal = animals.find(a => a.id === updatedVisit.animal_id);
+      // Fetch the animal data to ensure it's loaded
+      const { data: animalData } = await supabase
+        .from('animals')
+        .select('*')
+        .eq('id', updatedVisit.animal_id)
+        .maybeSingle();
+
       setVisits(prev => prev.map(visit =>
-        visit.id === updatedVisit.id ? { ...updatedVisit, animal } : visit
+        visit.id === updatedVisit.id ? { ...updatedVisit, animal: animalData || undefined } : visit
       ));
-    }, [animals]),
+    }, []),
     onDelete: useCallback((payload) => {
       setVisits(prev => prev.filter(visit => visit.id !== payload.old.id));
     }, []),

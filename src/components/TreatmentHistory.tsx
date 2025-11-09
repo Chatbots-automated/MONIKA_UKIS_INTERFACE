@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Activity, Calendar, FileText, Pill, Syringe, AlertCircle, ChevronDown, ChevronUp, Filter, Search } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
+import { Animal } from '../lib/types';
+import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 
 interface TreatmentHistoryItem {
   treatment_id: string;
@@ -44,6 +46,7 @@ export function TreatmentHistory() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   useEffect(() => {
     loadTreatments();
@@ -237,7 +240,20 @@ export function TreatmentHistory() {
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-3 mb-2">
-                                <h4 className="text-lg font-bold text-gray-900">
+                                <h4
+                                  className="text-lg font-bold text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const { data: animalData } = await supabase
+                                      .from('animals')
+                                      .select('*')
+                                      .eq('id', treatment.animal_id)
+                                      .maybeSingle();
+                                    if (animalData) {
+                                      setSelectedAnimal(animalData);
+                                    }
+                                  }}
+                                >
                                   {treatment.animal_tag}
                                 </h4>
                                 <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
@@ -429,6 +445,17 @@ export function TreatmentHistory() {
             </div>
           ))}
         </div>
+      )}
+
+      {selectedAnimal && (
+        <AnimalDetailSidebar
+          animal={selectedAnimal}
+          defaultTab="treatments"
+          onClose={() => {
+            setSelectedAnimal(null);
+            loadTreatments();
+          }}
+        />
       )}
     </div>
   );
