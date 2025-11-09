@@ -401,9 +401,9 @@ export function ReceiveStock() {
 
         const itemData = getItemData(invoiceData.items[i], i);
 
-        const productInfo = products.find(p => p.id === matched.id);
-        const packageSize = productInfo?.primary_pack_size || null;
-        const packageCount = itemData.qty ? parseFloat(itemData.qty) : null;
+        // Use extracted package data if available, otherwise use product defaults
+        const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
+        const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
         stockEntries.push({
           product_id: matched.id,
@@ -1117,7 +1117,7 @@ export function ReceiveStock() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pakuotės dydis (produkto apibrėžimas)
+                      Pakuotės dydis
                     </label>
                     <input
                       type="number"

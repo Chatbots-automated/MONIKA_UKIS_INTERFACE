@@ -16,6 +16,17 @@ interface StockItem {
   unit?: string;
   package_size?: number | null;
   package_count?: number | null;
+  primary_pack_size?: number | null;
+}
+
+interface EditingData {
+  product_name: string;
+  on_hand: string;
+  category: string;
+  unit: string;
+  primary_pack_size: string;
+  expiry_date: string;
+  lot: string;
 }
 
 export function Inventory() {
@@ -25,7 +36,7 @@ export function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [editingData, setEditingData] = useState<EditingData | null>(null);
 
   useEffect(() => {
     loadInventory();
@@ -53,32 +64,65 @@ export function Inventory() {
 
   const loadInventory = async () => {
     try {
-      const { data, error } = await supabase
-        .from('stock_by_batch')
+      // Get batches with their products
+      const { data: batchesData, error: batchesError } = await supabase
+        .from('batches')
         .select(`
-          *,
-          products!inner(name, category, primary_pack_unit),
-          batches!inner(package_size, package_count)
-        `)
-        .gt('on_hand', 0);
+          batch_id,
+          product_id,
+          lot,
+          expiry_date,
+          mfg_date,
+          received_qty,
+          package_size,
+          package_count,
+          products!inner(
+            name,
+            category,
+            primary_pack_unit,
+            primary_pack_size
+          )
+        `);
 
-      if (error) throw error;
+      if (batchesError) throw batchesError;
 
-      const formattedData = data?.map(item => ({
-        batch_id: item.batch_id,
-        product_id: item.product_id,
-        on_hand: item.on_hand,
-        expiry_date: item.expiry_date,
-        lot: item.lot,
-        mfg_date: item.mfg_date,
-        product_name: item.products?.name,
-        category: item.products?.category,
-        unit: item.products?.primary_pack_unit,
-        package_size: item.batches?.package_size,
-        package_count: item.batches?.package_count,
-      })) || [];
+      // For each batch, calculate on_hand from inventory_transactions
+      const inventoryPromises = batchesData?.map(async (batch) => {
+        const { data: transData, error: transError } = await supabase
+          .from('inventory_transactions')
+          .select('quantity, transaction_type')
+          .eq('batch_id', batch.batch_id);
 
-      setInventory(formattedData);
+        if (transError) {
+          console.error('Error loading transactions:', transError);
+          return null;
+        }
+
+        // Calculate on_hand: sum of IN minus sum of OUT
+        const onHand = transData?.reduce((sum, trans) => {
+          return sum + (trans.transaction_type === 'IN' ? trans.quantity : -trans.quantity);
+        }, 0) || 0;
+
+        return {
+          batch_id: batch.batch_id,
+          product_id: batch.product_id,
+          on_hand: onHand,
+          expiry_date: batch.expiry_date,
+          lot: batch.lot,
+          mfg_date: batch.mfg_date,
+          product_name: batch.products?.name,
+          category: batch.products?.category,
+          unit: batch.products?.primary_pack_unit,
+          primary_pack_size: batch.products?.primary_pack_size,
+          package_size: batch.package_size,
+          package_count: batch.package_count,
+        };
+      }) || [];
+
+      const results = await Promise.all(inventoryPromises);
+      const filteredResults = results.filter((item): item is StockItem => item !== null && item.on_hand > 0);
+
+      setInventory(filteredResults);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -111,16 +155,27 @@ export function Inventory() {
 
   const handleEditClick = (item: StockItem) => {
     setEditingBatchId(item.batch_id);
-    setEditValue(item.on_hand.toString());
+    setEditingData({
+      product_name: item.product_name || '',
+      on_hand: item.on_hand.toString(),
+      category: item.category || 'medicines',
+      unit: item.unit || 'ml',
+      primary_pack_size: item.primary_pack_size?.toString() || '',
+      expiry_date: item.expiry_date || '',
+      lot: item.lot || '',
+    });
   };
 
   const handleCancelEdit = () => {
     setEditingBatchId(null);
-    setEditValue('');
+    setEditingData(null);
   };
 
   const handleSaveEdit = async (item: StockItem) => {
-    const newAmount = parseFloat(editValue);
+    if (!editingData) return;
+
+    const newAmount = parseFloat(editingData.on_hand);
+    const newPackSize = parseFloat(editingData.primary_pack_size);
 
     if (isNaN(newAmount) || newAmount < 0) {
       alert('Prašome įvesti teisingą kiekį');
@@ -128,42 +183,69 @@ export function Inventory() {
     }
 
     try {
+      // Update product information
+      const { error: productError } = await supabase
+        .from('products')
+        .update({
+          name: editingData.product_name,
+          category: editingData.category,
+          primary_pack_unit: editingData.unit,
+          primary_pack_size: isNaN(newPackSize) ? null : newPackSize,
+        })
+        .eq('product_id', item.product_id);
+
+      if (productError) throw productError;
+
+      // Update batch information
+      const { error: batchError } = await supabase
+        .from('batches')
+        .update({
+          lot: editingData.lot,
+          expiry_date: editingData.expiry_date || null,
+        })
+        .eq('batch_id', item.batch_id);
+
+      if (batchError) throw batchError;
+
+      // Adjust inventory if amount changed
       const difference = newAmount - item.on_hand;
+      if (difference !== 0) {
+        const { error: transError } = await supabase
+          .from('inventory_transactions')
+          .insert({
+            batch_id: item.batch_id,
+            product_id: item.product_id,
+            quantity: Math.abs(difference),
+            transaction_type: difference > 0 ? 'IN' : 'OUT',
+            notes: difference > 0
+              ? `Atsargų padidinimas: ${item.on_hand} → ${newAmount}`
+              : `Atsargų sumažinimas: ${item.on_hand} → ${newAmount}`,
+          });
 
-      const { error } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          batch_id: item.batch_id,
-          product_id: item.product_id,
-          qty: Math.abs(difference),
-          unit: item.unit,
-          transaction_type: difference > 0 ? 'adjustment_in' : 'adjustment_out',
-          notes: difference > 0
-            ? `Atsargų padidinimas: ${item.on_hand} → ${newAmount}`
-            : `Atsargų sumažinimas: ${item.on_hand} → ${newAmount}`,
-        });
-
-      if (error) throw error;
+        if (transError) throw transError;
+      }
 
       await logAction(
-        'adjust_inventory',
-        'inventory_transactions',
-        null,
+        'edit_inventory',
+        'products',
+        item.product_id,
         item.batch_id,
         {
-          product_name: item.product_name,
+          old_product_name: item.product_name,
+          new_product_name: editingData.product_name,
           old_amount: item.on_hand,
           new_amount: newAmount,
-          difference: difference
+          old_category: item.category,
+          new_category: editingData.category,
         }
       );
 
       setEditingBatchId(null);
-      setEditValue('');
+      setEditingData(null);
       loadInventory();
     } catch (error) {
-      console.error('Error adjusting inventory:', error);
-      alert('Klaida keičiant atsargas');
+      console.error('Error updating inventory:', error);
+      alert('Klaida atnaujinant atsargas');
     }
   };
 
@@ -249,31 +331,80 @@ export function Inventory() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredInventory.map((item) => (
-                  <tr key={item.batch_id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{item.product_name}</div>
+                  <tr key={item.batch_id} className={`transition-colors ${editingBatchId === item.batch_id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                    <td className="px-6 py-4">
+                      {editingBatchId === item.batch_id && editingData ? (
+                        <input
+                          type="text"
+                          value={editingData.product_name}
+                          onChange={(e) => setEditingData({ ...editingData, product_name: e.target.value })}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <div className="font-medium text-gray-900">{item.product_name}</div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full">
-                        {item.category}
-                      </span>
+                    <td className="px-6 py-4">
+                      {editingBatchId === item.batch_id && editingData ? (
+                        <select
+                          value={editingData.category}
+                          onChange={(e) => setEditingData({ ...editingData, category: e.target.value })}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="medicines">Vaistai</option>
+                          <option value="prevention">Prevencija</option>
+                          <option value="vakcina">Vakcina</option>
+                          <option value="bolusas">Bolusas</option>
+                          <option value="svirkstukai">Švirkštukai</option>
+                          <option value="hygiene">Higiena</option>
+                          <option value="biocide">Biocidas</option>
+                          <option value="technical">Techniniai</option>
+                          <option value="treatment_materials">Gydymo medžiagos</option>
+                          <option value="reproduction">Reprodukcija</option>
+                        </select>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full">
+                          {item.category}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {item.lot || 'N/A'}
+                    <td className="px-6 py-4">
+                      {editingBatchId === item.batch_id && editingData ? (
+                        <input
+                          type="text"
+                          value={editingData.lot}
+                          onChange={(e) => setEditingData({ ...editingData, lot: e.target.value })}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <span className="text-sm text-gray-600">{item.lot || 'N/A'}</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {editingBatchId === item.batch_id ? (
-                        <div className="flex items-center gap-2">
+                    <td className="px-6 py-4">
+                      {editingBatchId === item.batch_id && editingData ? (
+                        <div className="flex items-center gap-1">
                           <input
                             type="number"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-24 px-2 py-1 border border-emerald-300 rounded focus:ring-2 focus:ring-emerald-500 text-sm"
+                            value={editingData.on_hand}
+                            onChange={(e) => setEditingData({ ...editingData, on_hand: e.target.value })}
+                            className="w-20 px-2 py-1 border border-emerald-300 rounded text-sm focus:ring-2 focus:ring-emerald-500"
                             step="0.01"
                             min="0"
-                            autoFocus
                           />
-                          <span className="text-gray-600 text-sm">{item.unit}</span>
+                          <select
+                            value={editingData.unit}
+                            onChange={(e) => setEditingData({ ...editingData, unit: e.target.value })}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="ml">ml</option>
+                            <option value="l">L</option>
+                            <option value="g">g</option>
+                            <option value="kg">kg</option>
+                            <option value="vnt">vnt</option>
+                            <option value="tablet">tablet</option>
+                            <option value="bolus">bolus</option>
+                            <option value="syringe">syringe</option>
+                          </select>
                         </div>
                       ) : (
                         <div>
@@ -288,8 +419,19 @@ export function Inventory() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : 'N/A'}
+                    <td className="px-6 py-4">
+                      {editingBatchId === item.batch_id && editingData ? (
+                        <input
+                          type="date"
+                          value={editingData.expiry_date}
+                          onChange={(e) => setEditingData({ ...editingData, expiry_date: e.target.value })}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <span className="text-sm text-gray-600">
+                          {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : 'N/A'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {isExpired(item.expiry_date) ? (
