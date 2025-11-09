@@ -68,7 +68,7 @@ export function Inventory() {
       const { data: batchesData, error: batchesError } = await supabase
         .from('batches')
         .select(`
-          batch_id,
+          id,
           product_id,
           lot,
           expiry_date,
@@ -91,7 +91,7 @@ export function Inventory() {
         const { data: transData, error: transError } = await supabase
           .from('inventory_transactions')
           .select('quantity, transaction_type')
-          .eq('batch_id', batch.batch_id);
+          .eq('batch_id', batch.id);
 
         if (transError) {
           console.error('Error loading transactions:', transError);
@@ -104,7 +104,7 @@ export function Inventory() {
         }, 0) || 0;
 
         return {
-          batch_id: batch.batch_id,
+          batch_id: batch.id,
           product_id: batch.product_id,
           on_hand: onHand,
           expiry_date: batch.expiry_date,
