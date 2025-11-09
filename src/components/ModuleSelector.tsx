@@ -152,10 +152,6 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
-
-            <div className="absolute top-4 right-4 bg-amber-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-              Greitai
-            </div>
           </button>
 
           {isAdmin && (

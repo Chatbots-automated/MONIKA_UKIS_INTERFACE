@@ -18,8 +18,10 @@ import { Vaccinations } from './components/Vaccinations';
 import { TreatmentHistory } from './components/TreatmentHistory';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
+import { InvoiceViewer } from './components/InvoiceViewer';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
+import { Euro } from 'lucide-react';
 
 type Module = 'veterinarija' | 'islaidos' | 'admin' | null;
 
@@ -53,32 +55,33 @@ function App() {
 
   if (selectedModule === 'islaidos') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 flex items-center justify-center p-8">
-        <div className="text-center max-w-2xl">
-          <div className="bg-white rounded-2xl shadow-xl p-12 border-2 border-amber-200">
-            <div className="w-24 h-24 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-              <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+      <RealtimeProvider>
+        <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50">
+          <div className="max-w-7xl mx-auto p-8">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Euro className="w-10 h-10 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">Išlaidų Valdymas</h1>
+                  <p className="text-gray-600">Finansų apskaita ir kontrolė</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedModule(null)}
+                className="px-4 py-2 bg-white text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors border border-gray-300 shadow-sm"
+              >
+                Grįžti
+              </button>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Išlaidų Modulis
-            </h1>
-            <p className="text-xl text-gray-600 mb-6">
-              Šis modulis yra kuriamas ir netrukus bus prieinamas
-            </p>
-            <p className="text-gray-500 mb-8">
-              Finansų valdymo sistema leis registruoti išlaidas, kategorijas ir generuoti finansines ataskaitas.
-            </p>
-            <button
-              onClick={() => setSelectedModule(null)}
-              className="px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg font-semibold hover:from-amber-700 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Grįžti į pradžią
-            </button>
+
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <InvoiceViewer />
+            </div>
           </div>
         </div>
-      </div>
+      </RealtimeProvider>
     );
   }
 
