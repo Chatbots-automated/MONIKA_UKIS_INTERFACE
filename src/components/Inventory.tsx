@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, AlertCircle, Package } from 'lucide-react';
+import { Search, AlertCircle, Package, Edit2, Save, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 
@@ -22,6 +22,8 @@ export function Inventory() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   useEffect(() => {
     loadInventory();
@@ -102,6 +104,64 @@ export function Inventory() {
     return new Date(expiryDate) < new Date();
   };
 
+  const handleEditClick = (item: StockItem) => {
+    setEditingBatchId(item.batch_id);
+    setEditValue(item.on_hand.toString());
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBatchId(null);
+    setEditValue('');
+  };
+
+  const handleSaveEdit = async (item: StockItem) => {
+    const newAmount = parseFloat(editValue);
+
+    if (isNaN(newAmount) || newAmount < 0) {
+      alert('Prašome įvesti teisingą kiekį');
+      return;
+    }
+
+    try {
+      const difference = newAmount - item.on_hand;
+
+      const { error } = await supabase
+        .from('inventory_transactions')
+        .insert({
+          batch_id: item.batch_id,
+          product_id: item.product_id,
+          qty: Math.abs(difference),
+          unit: item.unit,
+          transaction_type: difference > 0 ? 'adjustment_in' : 'adjustment_out',
+          notes: difference > 0
+            ? `Atsargų padidinimas: ${item.on_hand} → ${newAmount}`
+            : `Atsargų sumažinimas: ${item.on_hand} → ${newAmount}`,
+        });
+
+      if (error) throw error;
+
+      await logAction(
+        'adjust_inventory',
+        'inventory_transactions',
+        null,
+        item.batch_id,
+        {
+          product_name: item.product_name,
+          old_amount: item.on_hand,
+          new_amount: newAmount,
+          difference: difference
+        }
+      );
+
+      setEditingBatchId(null);
+      setEditValue('');
+      loadInventory();
+    } catch (error) {
+      console.error('Error adjusting inventory:', error);
+      alert('Klaida keičiant atsargas');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -174,6 +234,9 @@ export function Inventory() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Būsena
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Veiksmai
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -191,9 +254,24 @@ export function Inventory() {
                       {item.lot || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${item.on_hand < 10 ? 'text-orange-600' : 'text-gray-900'}`}>
-                        {item.on_hand} {item.unit}
-                      </span>
+                      {editingBatchId === item.batch_id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="w-24 px-2 py-1 border border-emerald-300 rounded focus:ring-2 focus:ring-emerald-500 text-sm"
+                            step="0.01"
+                            min="0"
+                            autoFocus
+                          />
+                          <span className="text-gray-600 text-sm">{item.unit}</span>
+                        </div>
+                      ) : (
+                        <span className={`font-medium ${item.on_hand < 10 ? 'text-orange-600' : 'text-gray-900'}`}>
+                          {item.on_hand} {item.unit}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : 'N/A'}
@@ -213,6 +291,34 @@ export function Inventory() {
                         <span className="px-2 py-1 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">
                           Geras
                         </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {editingBatchId === item.batch_id ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSaveEdit(item)}
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                            title="Išsaugoti"
+                          >
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                            title="Atšaukti"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleEditClick(item)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Redaguoti kiekį"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                       )}
                     </td>
                   </tr>
