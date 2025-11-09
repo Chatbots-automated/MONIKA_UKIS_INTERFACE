@@ -123,9 +123,48 @@ export function Inventory() {
       }) || [];
 
       const results = await Promise.all(inventoryPromises);
-      const filteredResults = results.filter((item): item is StockItem => item !== null && item.on_hand > 0);
+      const batchesWithStock = results.filter((item): item is StockItem => item !== null && item.on_hand > 0);
 
-      setInventory(filteredResults);
+      // Group batches by product_id and sum up quantities
+      const productMap = new Map<string, { item: StockItem, batchCount: number, lots: Set<string> }>();
+
+      batchesWithStock.forEach(batch => {
+        const existing = productMap.get(batch.product_id);
+        if (existing) {
+          // Product already exists, sum the quantities
+          existing.item.on_hand += batch.on_hand;
+          existing.batchCount += 1;
+          if (batch.lot) existing.lots.add(batch.lot);
+          // Keep the earliest expiry date for display
+          if (batch.expiry_date && (!existing.item.expiry_date || batch.expiry_date < existing.item.expiry_date)) {
+            existing.item.expiry_date = batch.expiry_date;
+          }
+        } else {
+          // First time seeing this product, add it
+          const lots = new Set<string>();
+          if (batch.lot) lots.add(batch.lot);
+          productMap.set(batch.product_id, {
+            item: { ...batch },
+            batchCount: 1,
+            lots
+          });
+        }
+      });
+
+      // Convert map back to array and update LOT display
+      const groupedInventory = Array.from(productMap.values()).map(({ item, batchCount, lots }) => {
+        if (batchCount > 1) {
+          // Multiple batches - show indication
+          const lotArray = Array.from(lots);
+          item.lot = lotArray.length > 1 ? `${lotArray.length} partijos` : lotArray[0] || null;
+          // Clear package breakdown when multiple batches
+          item.package_size = null;
+          item.package_count = null;
+        }
+        return item;
+      });
+
+      setInventory(groupedInventory);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
