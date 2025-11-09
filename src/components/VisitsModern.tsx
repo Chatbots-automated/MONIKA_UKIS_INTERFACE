@@ -24,54 +24,10 @@ export function VisitsModern() {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
-  const loadedAnimalIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
   }, []);
-
-  // Load missing animal data once for visits without animals
-  useEffect(() => {
-    const loadMissingAnimals = async () => {
-      const visitsNeedingAnimals = visits.filter(v =>
-        !v.animal && v.animal_id && !loadedAnimalIds.current.has(v.animal_id)
-      );
-
-      if (visitsNeedingAnimals.length === 0) return;
-
-      // Mark these as being loaded to prevent duplicate requests
-      visitsNeedingAnimals.forEach(v => loadedAnimalIds.current.add(v.animal_id!));
-
-      // Load all missing animals in parallel
-      const animalPromises = visitsNeedingAnimals.map(v =>
-        supabase
-          .from('animals')
-          .select('*')
-          .eq('id', v.animal_id)
-          .maybeSingle()
-      );
-
-      const results = await Promise.all(animalPromises);
-
-      // Update visits with the loaded animal data
-      setVisits(prev => {
-        const updated = [...prev];
-        results.forEach((result, idx) => {
-          if (result.data) {
-            const visitIndex = updated.findIndex(v => v.id === visitsNeedingAnimals[idx].id);
-            if (visitIndex !== -1) {
-              updated[visitIndex] = { ...updated[visitIndex], animal: result.data };
-            }
-          }
-        });
-        return updated;
-      });
-    };
-
-    if (visits.length > 0) {
-      loadMissingAnimals();
-    }
-  }, [visits.length]); // Only trigger when the NUMBER of visits changes, not the content
 
   // Real-time subscription for animal_visits
   useRealtimeSubscription({
