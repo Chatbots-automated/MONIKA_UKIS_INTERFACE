@@ -1411,7 +1411,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     services: '',
     withdrawal_until: '',
     notes: '',
-    recurring_days: [] as number[],
+    recurring_days: [] as string[],
     medications: [] as Array<{
       product_id: string;
       batch_id: string;
@@ -1700,20 +1700,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
         // Create future visits for recurring treatments
         if (hasRecurringDays) {
-          const baseDate = new Date(formData.visit_datetime.split('T')[0]);
           const medicationNames = treatmentData.medications
             .map(med => products.find(p => p.id === med.product_id)?.name)
             .filter(Boolean)
             .join(', ');
 
-          const futureVisits = treatmentData.recurring_days.map(day => {
-            const futureDate = new Date(baseDate);
-            futureDate.setDate(futureDate.getDate() + day);
-            const futureDateStr = futureDate.toISOString().split('T')[0];
-
+          const futureVisits = treatmentData.recurring_days.map(dateStr => {
             return {
               animal_id: animalId,
-              visit_datetime: `${futureDateStr}T10:00:00`,
+              visit_datetime: `${dateStr}T10:00:00`,
               procedures: ['Gydymas'],
               status: 'Planuojamas',
               notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}`,
@@ -1897,18 +1892,43 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Pastabos
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              rows={3}
-              placeholder="Papildoma informacija..."
-            />
-          </div>
+          {formData.procedures.includes('Apžiūra') && (
+            <div className="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+              <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Apžiūros informacija
+              </h4>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Apžiūros rezultatai / Pastebėjimai
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  rows={4}
+                  placeholder="Įrašykite apžiūros rezultatus, pastebėjimus, būklę..."
+                />
+              </div>
+            </div>
+          )}
+
+          {!formData.procedures.includes('Apžiūra') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Pastabos
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                placeholder="Papildoma informacija..."
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -2012,37 +2032,59 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kartoti gydymą būsimomis dienomis (pasirinkite dienas)
+                  Kartoti gydymą būsimomis dienomis (pasirinkite datas)
                 </label>
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
-                  <div className="grid grid-cols-7 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(day => (
-                      <label key={day} className="flex items-center gap-1 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={treatmentData.recurring_days.includes(day)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setTreatmentData({
-                                ...treatmentData,
-                                recurring_days: [...treatmentData.recurring_days, day].sort((a, b) => a - b)
-                              });
-                            } else {
-                              setTreatmentData({
-                                ...treatmentData,
-                                recurring_days: treatmentData.recurring_days.filter(d => d !== day)
-                              });
-                            }
-                          }}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-gray-700">+{day}</span>
-                      </label>
-                    ))}
-                  </div>
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 space-y-2">
+                  {treatmentData.recurring_days.map((dateStr, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateStr}
+                        min={formData.visit_datetime.split('T')[0]}
+                        onChange={(e) => {
+                          const newDays = [...treatmentData.recurring_days];
+                          newDays[idx] = e.target.value;
+                          setTreatmentData({
+                            ...treatmentData,
+                            recurring_days: newDays.sort()
+                          });
+                        }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDays = treatmentData.recurring_days.filter((_, i) => i !== idx);
+                          setTreatmentData({
+                            ...treatmentData,
+                            recurring_days: newDays
+                          });
+                        }}
+                        className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const baseDate = new Date(formData.visit_datetime.split('T')[0]);
+                      baseDate.setDate(baseDate.getDate() + 1);
+                      const nextDate = baseDate.toISOString().split('T')[0];
+                      setTreatmentData({
+                        ...treatmentData,
+                        recurring_days: [...treatmentData.recurring_days, nextDate].sort()
+                      });
+                    }}
+                    className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pridėti datą
+                  </button>
                   {treatmentData.recurring_days.length > 0 && (
                     <div className="mt-2 text-xs text-blue-600 font-medium">
-                      Pasirinkta dienų: {treatmentData.recurring_days.join(', ')}
+                      Pasirinkta datų: {treatmentData.recurring_days.length}
                     </div>
                   )}
                 </div>
