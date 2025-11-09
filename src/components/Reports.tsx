@@ -27,6 +27,7 @@ import {
   OwnerMedsReport
 } from './ReportTemplates';
 import { SearchableSelect } from './SearchableSelect';
+import { InvoiceViewer } from './InvoiceViewer';
 
 interface AnalyticsData {
   totalAnimals: number;
@@ -45,7 +46,7 @@ interface AnalyticsData {
   inventoryByCategory: Array<{ category: string; value: number }>;
 }
 
-type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'owner_meds' | 'biocide_journal' | 'medical_waste';
+type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'owner_meds' | 'biocide_journal' | 'medical_waste' | 'invoices';
 
 export function Reports() {
   const [reportType, setReportType] = useState<ReportType>('analytics');
@@ -683,6 +684,7 @@ export function Reports() {
 
   const reportTypeInfo = {
     analytics: { name: 'Analitika', icon: PieChart, color: 'blue' },
+    invoices: { name: 'Sąskaitų Priskirimas', icon: FileText, color: 'indigo' },
     drug_journal: { name: 'Veterinarinių vaistų žurnalas', icon: Syringe, color: 'emerald' },
     treated_animals: { name: 'Gydomų gyvūnų registras', icon: Activity, color: 'teal' },
     owner_meds: { name: 'Savininko duodami vaistai', icon: FileText, color: 'sky' },
@@ -909,7 +911,7 @@ export function Reports() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        {reportType === 'analytics' ? renderAnalytics() : renderReport()}
+        {reportType === 'analytics' ? renderAnalytics() : reportType === 'invoices' ? <InvoiceViewer /> : renderReport()}
       </div>
     </div>
   );

@@ -370,7 +370,33 @@ export function ReceiveStock() {
         }
       }
 
+      // First, create the invoice record
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert({
+          invoice_number: invoiceData.invoice.number,
+          invoice_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
+          doc_title: 'Invoice',
+          supplier_id: supplierId,
+          supplier_name: invoiceData.supplier.name,
+          supplier_code: invoiceData.supplier.code || null,
+          supplier_vat: invoiceData.supplier.vat_code || null,
+          currency: invoiceData.invoice.currency || 'EUR',
+          total_net: parseFloat(invoiceData.invoice.total_net) || 0,
+          total_vat: parseFloat(invoiceData.invoice.total_vat) || 0,
+          total_gross: parseFloat(invoiceData.invoice.total_gross) || 0,
+          vat_rate: parseFloat(invoiceData.invoice.vat_rate) || 0,
+          pdf_filename: selectedFile?.name || null,
+        })
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Now create batches and invoice items
       const stockEntries = [];
+      const invoiceItemsEntries = [];
+
       for (let i = 0; i < invoiceData.items.length; i++) {
         const matched = matchedProducts.get(i);
         if (!matched) continue;
@@ -385,18 +411,43 @@ export function ReceiveStock() {
           supplier_id: supplierId,
           doc_title: 'Invoice',
           doc_number: invoiceData.invoice.number,
-          doc_date: new Date().toISOString().split('T')[0],
+          doc_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
           purchase_price: parseFloat(itemData.unit_price) || 0,
-          currency: invoiceData.invoice.currency,
+          currency: invoiceData.invoice.currency || 'EUR',
           received_qty: parseFloat(itemData.qty) || 0,
+        });
+
+        // Store invoice item data for later insertion
+        invoiceItemsEntries.push({
+          invoice_id: invoice.id,
+          product_id: matched.id,
+          line_no: itemData.line_no,
+          description: itemData.description,
+          sku: itemData.sku,
+          quantity: parseFloat(itemData.qty) || 0,
+          unit_price: parseFloat(itemData.unit_price) || 0,
+          total_price: (parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0),
         });
       }
 
-      const { error: insertError } = await supabase
+      const { data: batches, error: batchesError } = await supabase
         .from('batches')
-        .insert(stockEntries);
+        .insert(stockEntries)
+        .select();
 
-      if (insertError) throw insertError;
+      if (batchesError) throw batchesError;
+
+      // Link batches to invoice items
+      const invoiceItemsWithBatches = invoiceItemsEntries.map((item, index) => ({
+        ...item,
+        batch_id: batches[index]?.id || null,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(invoiceItemsWithBatches);
+
+      if (itemsError) throw itemsError;
 
       alert(`Sėkmingai priimta ${stockEntries.length} produktų!`);
       setInvoiceData(null);
