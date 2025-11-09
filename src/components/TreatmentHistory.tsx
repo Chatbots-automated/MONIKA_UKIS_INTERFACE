@@ -263,12 +263,49 @@ export function TreatmentHistory() {
 
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-sm">
+                                  <Calendar className="w-4 h-4 text-gray-500" />
+                                  <span className="text-gray-700">{formatDateLT(treatment.reg_date)}</span>
+                                  {treatment.created_at && (
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(treatment.created_at).toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 text-sm">
                                   <FileText className="w-4 h-4 text-emerald-600" />
                                   <span className="font-semibold text-gray-900">{treatment.disease_name}</span>
                                   {treatment.disease_code && (
                                     <span className="text-gray-500">({treatment.disease_code})</span>
                                   )}
                                 </div>
+
+                                {treatment.clinical_diagnosis && (
+                                  <div className="text-sm bg-blue-50 rounded px-2 py-1 text-gray-700">
+                                    <span className="font-medium">Diagnozė:</span> {treatment.clinical_diagnosis.length > 100 ? treatment.clinical_diagnosis.substring(0, 100) + '...' : treatment.clinical_diagnosis}
+                                  </div>
+                                )}
+
+                                {treatment.products_used && treatment.products_used.length > 0 && (
+                                  <div className="text-sm">
+                                    <div className="flex items-center gap-2">
+                                      <Pill className="w-4 h-4 text-orange-600" />
+                                      <span className="font-medium text-gray-900">Vaistai:</span>
+                                    </div>
+                                    <div className="ml-6 mt-1 space-y-1">
+                                      {treatment.products_used.slice(0, 3).map((prod: any, idx: number) => (
+                                        <div key={idx} className="text-xs text-gray-700">
+                                          • {prod.product_name} - {prod.qty} {prod.unit}
+                                        </div>
+                                      ))}
+                                      {treatment.products_used.length > 3 && (
+                                        <div className="text-xs text-blue-600 font-medium">
+                                          +{treatment.products_used.length - 3} daugiau...
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
 
                                 {treatment.owner_name && (
                                   <div className="text-sm text-gray-600">

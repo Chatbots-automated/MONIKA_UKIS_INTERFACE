@@ -29,6 +29,30 @@ export function VisitsModern() {
     loadData();
   }, []);
 
+  // Force load missing animal data
+  useEffect(() => {
+    const loadMissingAnimals = async () => {
+      const visitsNeedingAnimals = visits.filter(v => !v.animal && v.animal_id);
+      if (visitsNeedingAnimals.length === 0) return;
+
+      for (const visit of visitsNeedingAnimals) {
+        const { data: animalData } = await supabase
+          .from('animals')
+          .select('*')
+          .eq('id', visit.animal_id)
+          .maybeSingle();
+
+        if (animalData) {
+          setVisits(prev => prev.map(v =>
+            v.id === visit.id ? { ...v, animal: animalData } : v
+          ));
+        }
+      }
+    };
+
+    loadMissingAnimals();
+  }, [visits]);
+
   // Real-time subscription for animal_visits
   useRealtimeSubscription({
     table: 'animal_visits',
@@ -500,8 +524,10 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: {
     >
       <div className="flex items-start justify-between mb-3">
         <div>
-          <div className="font-bold text-gray-900 text-lg">{visit.animal?.tag_no || '-'}</div>
-          <div className="text-sm text-gray-600">{visit.animal?.species}</div>
+          <div className="font-bold text-gray-900 text-lg">
+            {visit.animal?.tag_no || <span className="text-red-500">Loading...</span>}
+          </div>
+          <div className="text-sm text-gray-600">{visit.animal?.species || ''}</div>
         </div>
         <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
           {getStatusIcon(visit.status)}
