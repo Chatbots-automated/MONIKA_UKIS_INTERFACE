@@ -157,6 +157,7 @@ export function Products() {
       >
         <option value="medicines">Vaistai</option>
         <option value="prevention">Prevencija</option>
+        <option value="vakcina">Vakcina</option>
         <option value="hygiene">Higiena</option>
         <option value="biocide">Biocidas</option>
         <option value="technical">Techniniai</option>
@@ -175,13 +176,16 @@ export function Products() {
         <select
           value={formData.primary_pack_unit}
           onChange={(e) => setFormData({ ...formData, primary_pack_unit: e.target.value as Unit })}
-          className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+          className="w-24 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
         >
           <option value="ml">ml</option>
           <option value="l">L</option>
           <option value="g">g</option>
           <option value="kg">kg</option>
           <option value="pcs">pcs</option>
+          <option value="tablet">tablet</option>
+          <option value="bolus">bolus</option>
+          <option value="syringe">syringe</option>
         </select>
       </div>
 
@@ -307,6 +311,7 @@ export function Products() {
                   <td className="px-3 py-2 text-gray-600">
                     {product.category === 'medicines' && 'Vaistai'}
                     {product.category === 'prevention' && 'Prevencija'}
+                    {product.category === 'vakcina' && 'Vakcina'}
                     {product.category === 'hygiene' && 'Higiena'}
                     {product.category === 'biocide' && 'Biocidas'}
                     {product.category === 'technical' && 'Techniniai'}

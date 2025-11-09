@@ -1,5 +1,5 @@
-export type ProductCategory = 'medicines' | 'prevention' | 'reproduction' | 'treatment_materials' | 'hygiene' | 'biocide' | 'technical';
-export type Unit = 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+export type ProductCategory = 'medicines' | 'prevention' | 'vakcina' | 'reproduction' | 'treatment_materials' | 'hygiene' | 'biocide' | 'technical';
+export type Unit = 'ml' | 'l' | 'g' | 'kg' | 'pcs' | 'tablet' | 'bolus' | 'syringe';
 
 export interface Product {
   id: string;
@@ -38,6 +38,8 @@ export interface Batch {
   purchase_price: number | null;
   currency: string;
   received_qty: number;
+  package_size: number | null;
+  package_count: number | null;
   invoice_path: string | null;
   created_at: string;
 }

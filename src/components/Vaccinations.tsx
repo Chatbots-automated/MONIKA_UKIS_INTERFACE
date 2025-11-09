@@ -61,7 +61,7 @@ export function Vaccinations() {
     try {
       const [vacsRes, prodsRes, animalsRes, batchesRes] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
-        supabase.from('products').select('*').eq('is_active', true).eq('category', 'prevention').order('name'),
+        supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
         fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
       ]);

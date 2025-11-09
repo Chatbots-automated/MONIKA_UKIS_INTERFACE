@@ -49,6 +49,8 @@ export function ReceiveStock() {
     doc_date: new Date().toISOString().split('T')[0],
     purchase_price: '',
     currency: 'EUR',
+    package_size: '',
+    package_count: '',
     received_qty: '',
   });
 
@@ -403,6 +405,10 @@ export function ReceiveStock() {
 
         const itemData = getItemData(invoiceData.items[i], i);
 
+        const productInfo = products.find(p => p.id === matched.id);
+        const packageSize = productInfo?.primary_pack_size || null;
+        const packageCount = itemData.qty ? parseFloat(itemData.qty) : null;
+
         stockEntries.push({
           product_id: matched.id,
           lot: itemData.batch || bulkReceiveData.lot || null,
@@ -414,7 +420,9 @@ export function ReceiveStock() {
           doc_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
           purchase_price: parseFloat(itemData.unit_price) || 0,
           currency: invoiceData.invoice.currency || 'EUR',
-          received_qty: parseFloat(itemData.qty) || 0,
+          package_size: packageSize,
+          package_count: packageCount,
+          received_qty: packageSize && packageCount ? packageSize * packageCount : (parseFloat(itemData.qty) || 0),
         });
 
         // Store invoice item data for later insertion
@@ -473,7 +481,7 @@ export function ReceiveStock() {
     setSuccess(false);
 
     try {
-      const { error } = await supabase.from('batches').insert({
+      const batchData: any = {
         product_id: formData.product_id,
         lot: formData.lot || null,
         mfg_date: formData.mfg_date || null,
@@ -484,8 +492,17 @@ export function ReceiveStock() {
         doc_date: formData.doc_date || null,
         purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : null,
         currency: formData.currency,
-        received_qty: parseFloat(formData.received_qty),
-      });
+      };
+
+      if (formData.package_size && formData.package_count) {
+        batchData.package_size = parseFloat(formData.package_size);
+        batchData.package_count = parseFloat(formData.package_count);
+        batchData.received_qty = parseFloat(formData.package_size) * parseFloat(formData.package_count);
+      } else if (formData.received_qty) {
+        batchData.received_qty = parseFloat(formData.received_qty);
+      }
+
+      const { error } = await supabase.from('batches').insert(batchData);
 
       if (error) throw error;
 
@@ -514,6 +531,8 @@ export function ReceiveStock() {
         doc_date: new Date().toISOString().split('T')[0],
         purchase_price: '',
         currency: 'EUR',
+        package_size: '',
+        package_count: '',
         received_qty: '',
       });
 
@@ -1019,6 +1038,7 @@ export function ReceiveStock() {
                     >
                       <option value="medicines">Vaistai</option>
                       <option value="prevention">Prevencija</option>
+                      <option value="vakcina">Vakcina</option>
                       <option value="hygiene">Higiena</option>
                       <option value="biocide">Biocidas</option>
                       <option value="technical">Techniniai</option>
@@ -1055,6 +1075,9 @@ export function ReceiveStock() {
                       <option value="g">g</option>
                       <option value="kg">kg</option>
                       <option value="pcs">pcs</option>
+                      <option value="tablet">tablet</option>
+                      <option value="bolus">bolus</option>
+                      <option value="syringe">syringe</option>
                     </select>
                   </div>
 
@@ -1223,17 +1246,79 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priimtas kiekis *
+                Pakuotės dydis
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.package_size}
+                onChange={(e) => {
+                  const newPackageSize = e.target.value;
+                  setFormData({ ...formData, package_size: newPackageSize });
+                  if (newPackageSize && formData.package_count) {
+                    setFormData(prev => ({
+                      ...prev,
+                      package_size: newPackageSize,
+                      received_qty: (parseFloat(newPackageSize) * parseFloat(prev.package_count)).toString()
+                    }));
+                  }
+                }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="pvz: 10 (viena pakuotė)"
+              />
+              <p className="text-xs text-gray-500 mt-1">Vienos pakuotės dydis (pvz: 1 buteliukas = 10ml)</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Kiek pakuočių
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.package_count}
+                onChange={(e) => {
+                  const newPackageCount = e.target.value;
+                  setFormData({ ...formData, package_count: newPackageCount });
+                  if (formData.package_size && newPackageCount) {
+                    setFormData(prev => ({
+                      ...prev,
+                      package_count: newPackageCount,
+                      received_qty: (parseFloat(prev.package_size) * parseFloat(newPackageCount)).toString()
+                    }));
+                  }
+                }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="pvz: 6 (buteliukų)"
+              />
+              <p className="text-xs text-gray-500 mt-1">Kiek pakuočių priimta</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Viso kiekis {formData.package_size && formData.package_count && (
+                  <span className="text-emerald-600 font-bold">
+                    (apskaičiuota automatiškai)
+                  </span>
+                )}
               </label>
               <input
                 type="number"
                 step="0.01"
                 value={formData.received_qty}
                 onChange={(e) => setFormData({ ...formData, received_qty: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-emerald-50 font-semibold"
                 placeholder="100"
                 required
+                readOnly={!!(formData.package_size && formData.package_count)}
               />
+              <p className="text-xs text-emerald-600 mt-1 font-medium">
+                {formData.package_size && formData.package_count ? (
+                  `${formData.package_count} × ${formData.package_size} = ${formData.received_qty || '0'}`
+                ) : (
+                  'Arba įveskite bendrą kiekį tiesiogiai'
+                )}
+              </p>
             </div>
 
             <div>

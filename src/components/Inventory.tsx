@@ -14,6 +14,8 @@ interface StockItem {
   product_name?: string;
   category?: string;
   unit?: string;
+  package_size?: number | null;
+  package_count?: number | null;
 }
 
 export function Inventory() {
@@ -55,7 +57,8 @@ export function Inventory() {
         .from('stock_by_batch')
         .select(`
           *,
-          products!inner(name, category, primary_pack_unit)
+          products!inner(name, category, primary_pack_unit),
+          batches!inner(package_size, package_count)
         `)
         .gt('on_hand', 0);
 
@@ -71,6 +74,8 @@ export function Inventory() {
         product_name: item.products?.name,
         category: item.products?.category,
         unit: item.products?.primary_pack_unit,
+        package_size: item.batches?.package_size,
+        package_count: item.batches?.package_count,
       })) || [];
 
       setInventory(formattedData);
@@ -268,9 +273,16 @@ export function Inventory() {
                           <span className="text-gray-600 text-sm">{item.unit}</span>
                         </div>
                       ) : (
-                        <span className={`font-medium ${item.on_hand < 10 ? 'text-orange-600' : 'text-gray-900'}`}>
-                          {item.on_hand} {item.unit}
-                        </span>
+                        <div>
+                          <span className={`font-medium ${item.on_hand < 10 ? 'text-orange-600' : 'text-gray-900'}`}>
+                            {item.on_hand} {item.unit}
+                          </span>
+                          {item.package_size && item.package_count && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {item.package_count} pak. × {item.package_size} {item.unit}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
