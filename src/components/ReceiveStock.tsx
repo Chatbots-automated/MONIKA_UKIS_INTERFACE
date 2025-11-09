@@ -28,6 +28,8 @@ export function ReceiveStock() {
     withdrawal_days_meat: '',
     withdrawal_days_milk: '',
     dosage_notes: '',
+    package_count: '',
+    total_quantity: '',
   });
   const [bulkReceiveData, setBulkReceiveData] = useState({
     lot: '',
@@ -248,6 +250,8 @@ export function ReceiveStock() {
       withdrawal_days_meat: '0',
       withdrawal_days_milk: '0',
       dosage_notes: '',
+      package_count: itemData.package_count?.toString() || '',
+      total_quantity: itemData.qty?.toString() || '',
     });
     setShowCreateModal(true);
   };
@@ -276,7 +280,7 @@ export function ReceiveStock() {
         is_active: true,
       };
 
-      const { data, error } = await supabase
+      const { data: newProduct, error } = await supabase
         .from('products')
         .insert(productData)
         .select()
@@ -284,12 +288,59 @@ export function ReceiveStock() {
 
       if (error) throw error;
 
+      // Automatically create a batch if we have package/quantity data from invoice
+      if (creatingProduct && (newProductForm.package_count || newProductForm.total_quantity)) {
+        const batchData: any = {
+          product_id: newProduct.id,
+          lot: creatingProduct.batch || null,
+          expiry_date: creatingProduct.expiry || null,
+          mfg_date: null,
+          supplier_id: invoiceData?.invoice?.supplier_id || null,
+          doc_title: invoiceData?.invoice?.doc_number || 'Sukurta iš sąskaitos',
+          doc_number: invoiceData?.invoice?.doc_number || null,
+          doc_date: invoiceData?.invoice?.doc_date || null,
+          purchase_price: creatingProduct.unit_price ? parseFloat(creatingProduct.unit_price) : null,
+          currency: invoiceData?.invoice?.currency || 'EUR',
+        };
+
+        // Calculate received quantity from package data or use total quantity
+        if (newProductForm.primary_pack_size && newProductForm.package_count) {
+          batchData.package_size = parseFloat(newProductForm.primary_pack_size);
+          batchData.package_count = parseFloat(newProductForm.package_count);
+          batchData.received_qty = parseFloat(newProductForm.primary_pack_size) * parseFloat(newProductForm.package_count);
+        } else if (newProductForm.total_quantity) {
+          batchData.received_qty = parseFloat(newProductForm.total_quantity);
+          batchData.package_size = null;
+          batchData.package_count = null;
+        }
+
+        const { error: batchError } = await supabase.from('batches').insert(batchData);
+
+        if (batchError) {
+          console.error('Error creating initial batch:', batchError);
+          alert('Produktas sukurtas, bet nepavyko pridėti pradinių atsargų. Galite jas pridėti rankiniu būdu.');
+        } else {
+          await logAction(
+            'receive_stock',
+            'batches',
+            null,
+            null,
+            {
+              product_id: newProduct.id,
+              lot: batchData.lot,
+              received_qty: batchData.received_qty,
+              doc_number: batchData.doc_number,
+            }
+          );
+        }
+      }
+
       await loadData();
 
       // Use the stored index from creatingProduct
       if (creatingProduct.index !== undefined) {
         const newMatches = new Map(matchedProducts);
-        newMatches.set(creatingProduct.index, data);
+        newMatches.set(creatingProduct.index, newProduct);
         setMatchedProducts(newMatches);
       }
 
@@ -304,6 +355,8 @@ export function ReceiveStock() {
         withdrawal_days_meat: '',
         withdrawal_days_milk: '',
         dosage_notes: '',
+        package_count: '',
+        total_quantity: '',
       });
       alert('Produktas sėkmingai sukurtas!');
     } catch (error: any) {
@@ -1301,6 +1354,8 @@ export function ReceiveStock() {
                       withdrawal_days_meat: '',
                       withdrawal_days_milk: '',
                       dosage_notes: '',
+                      package_count: '',
+                      total_quantity: '',
                     });
                   }}
                   className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
