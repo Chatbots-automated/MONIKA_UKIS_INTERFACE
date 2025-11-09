@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Edit2, Save, AlertTriangle } from 'lucide-react';
+import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, CreditCard as Edit2, Save, AlertTriangle } from 'lucide-react';
 
 export function ReceiveStock() {
   const { logAction } = useAuth();
