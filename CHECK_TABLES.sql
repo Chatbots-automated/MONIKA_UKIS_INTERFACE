@@ -66,7 +66,6 @@ SELECT
     batch_id,
     product_id,
     qty,
-    visit_id,
     created_at
 FROM usage_items
 ORDER BY created_at DESC
