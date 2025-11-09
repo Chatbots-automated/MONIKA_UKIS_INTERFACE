@@ -18,8 +18,8 @@ export function Products() {
     primary_pack_unit: 'ml' as Unit,
     primary_pack_size: '',
     active_substance: '',
-    withdrawal_days_meat: '',
-    withdrawal_days_milk: '',
+    withdrawal_days_meat: '0',
+    withdrawal_days_milk: '0',
     dosage_notes: '',
   };
 
@@ -138,106 +138,181 @@ export function Products() {
   };
 
   const formFields = useMemo(() => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <input
-        type="text"
-        placeholder="Pavadinimas *"
-        value={formData.name}
-        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-      />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Pavadinimas *
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Produkto pavadinimas"
+          />
+        </div>
 
-      <select
-        value={formData.category}
-        onChange={(e) => setFormData({ ...formData, category: e.target.value as ProductCategory })}
-        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-      >
-        <option value="medicines">Vaistai</option>
-        <option value="prevention">Prevencija</option>
-        <option value="vakcina">Vakcina</option>
-        <option value="bolusas">Bolusas</option>
-        <option value="svirkstukai">Švirkštukai</option>
-        <option value="hygiene">Higiena</option>
-        <option value="biocide">Biocidas</option>
-        <option value="technical">Techniniai</option>
-        <option value="treatment_materials">Gydymo medžiagos</option>
-        <option value="reproduction">Reprodukcija</option>
-      </select>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Kategorija *
+          </label>
+          <select
+            value={formData.category}
+            onChange={(e) => {
+              const newCategory = e.target.value as ProductCategory;
+              setFormData({
+                ...formData,
+                category: newCategory,
+                primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : formData.primary_pack_unit,
+                withdrawal_days_meat: newCategory === 'medicines' ? '0' : formData.withdrawal_days_meat,
+                withdrawal_days_milk: newCategory === 'medicines' ? '0' : formData.withdrawal_days_milk,
+              });
+            }}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          >
+            <option value="medicines">Vaistai</option>
+            <option value="prevention">Prevencija</option>
+            <option value="vakcina">Vakcina</option>
+            <option value="bolusas">Bolusas</option>
+            <option value="svirkstukai">Švirkštukai</option>
+            <option value="hygiene">Higiena</option>
+            <option value="biocide">Biocidas</option>
+            <option value="technical">Techniniai</option>
+            <option value="treatment_materials">Gydymo medžiagos</option>
+            <option value="reproduction">Reprodukcija</option>
+          </select>
+        </div>
 
-      <div className="flex gap-2">
-        <input
-          type="number"
-          placeholder="Dydis"
-          value={formData.primary_pack_size}
-          onChange={(e) => setFormData({ ...formData, primary_pack_size: e.target.value })}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-        />
-        <select
-          value={formData.primary_pack_unit}
-          onChange={(e) => setFormData({ ...formData, primary_pack_unit: e.target.value as Unit })}
-          className="w-24 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ml">ml</option>
-          <option value="l">L</option>
-          <option value="g">g</option>
-          <option value="kg">kg</option>
-          <option value="vnt">vnt</option>
-          <option value="tablet">tabletė</option>
-          <option value="bolus">bolusas</option>
-          <option value="syringe">švirkštas</option>
-        </select>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Pakuotės dydis
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={formData.primary_pack_size}
+            onChange={(e) => setFormData({ ...formData, primary_pack_size: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="100"
+          />
+          <p className="text-xs text-gray-500 mt-1">Standartinės pakuotės dydis</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Vienetas
+          </label>
+          <select
+            value={formData.primary_pack_unit}
+            onChange={(e) => setFormData({ ...formData, primary_pack_unit: e.target.value as Unit })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            disabled={formData.category === 'svirkstukai'}
+          >
+            <option value="ml">ml</option>
+            <option value="l">L</option>
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+            <option value="vnt">vnt</option>
+            <option value="tablet">tabletė</option>
+            <option value="bolus">bolusas</option>
+            <option value="syringe">švirkštas</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Veiklioji medžiaga
+          </label>
+          <input
+            type="text"
+            value={formData.active_substance}
+            onChange={(e) => setFormData({ ...formData, active_substance: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Pvz: Penicilinas"
+          />
+        </div>
+
+        {(formData.category === 'medicines' || formData.category === 'svirkstukai') && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span className="flex items-center gap-2">
+                  Karencija: Mėsa (dienų) *
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                </span>
+              </label>
+              <input
+                type="number"
+                value={formData.withdrawal_days_meat}
+                onChange={(e) => setFormData({ ...formData, withdrawal_days_meat: e.target.value })}
+                className="w-full px-4 py-2.5 border-2 border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-amber-50"
+                placeholder="7"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span className="flex items-center gap-2">
+                  Karencija: Pienas (dienų) *
+                  <AlertTriangle className="w-4 h-4 text-blue-600" />
+                </span>
+              </label>
+              <input
+                type="number"
+                value={formData.withdrawal_days_milk}
+                onChange={(e) => setFormData({ ...formData, withdrawal_days_milk: e.target.value })}
+                className="w-full px-4 py-2.5 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                placeholder="5"
+              />
+            </div>
+          </>
+        )}
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Dozavimo pastabos
+          </label>
+          <textarea
+            value={formData.dosage_notes}
+            onChange={(e) => setFormData({ ...formData, dosage_notes: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Papildomos dozavimo instrukcijos..."
+            rows={3}
+          />
+        </div>
       </div>
 
-      <input
-        type="text"
-        placeholder="Veiklioji medžiaga"
-        value={formData.active_substance}
-        onChange={(e) => setFormData({ ...formData, active_substance: e.target.value })}
-        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-      />
-
       {formData.category === 'medicines' && (
-        <>
-          <input
-            type="number"
-            placeholder="Karencija: Mėsa (d.) *"
-            value={formData.withdrawal_days_meat}
-            onChange={(e) => setFormData({ ...formData, withdrawal_days_meat: e.target.value })}
-            className="px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 bg-amber-50"
-          />
-
-          <input
-            type="number"
-            placeholder="Karencija: Pienas (d.) *"
-            value={formData.withdrawal_days_milk}
-            onChange={(e) => setFormData({ ...formData, withdrawal_days_milk: e.target.value })}
-            className="px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-blue-50"
-          />
-        </>
+        <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-900 mb-1">
+                Karencijos dienų nurodymas yra privalomas vaistams!
+              </p>
+              <p className="text-xs text-amber-700">
+                Šie duomenys naudojami apskaičiuoti gyvulių gydymo periodo pabaigą ir užtikrinti maisto saugą.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
-      <input
-        type="text"
-        placeholder="Dozavimo pastabos"
-        value={formData.dosage_notes}
-        onChange={(e) => setFormData({ ...formData, dosage_notes: e.target.value })}
-        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 col-span-2 md:col-span-1"
-      />
-
-      <div className="flex gap-2 col-span-2 md:col-span-4 justify-end">
+      <div className="flex gap-2 justify-end">
+        <button
+          onClick={handleCancel}
+          className="flex items-center gap-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+        >
+          <X className="w-4 h-4" />
+          Atšaukti
+        </button>
         <button
           onClick={handleSave}
           className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
         >
           <Save className="w-4 h-4" />
           Išsaugoti
-        </button>
-        <button
-          onClick={handleCancel}
-          className="flex items-center gap-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 text-sm"
-        >
-          <X className="w-4 h-4" />
-          Atšaukti
         </button>
       </div>
     </div>
@@ -316,19 +391,20 @@ export function Products() {
                   </td>
                   <td className="px-3 py-2 text-gray-600 text-xs">{product.active_substance || '-'}</td>
                   <td className="px-3 py-2">
-                    {product.category === 'medicines' ? (
+                    {(product.category === 'medicines' || product.category === 'svirkstukai') ? (
                       <div className="flex gap-1 text-xs">
-                        {product.withdrawal_days_meat && (
+                        {product.withdrawal_days_meat !== null && product.withdrawal_days_meat !== undefined && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded font-medium">
                             🥩 {product.withdrawal_days_meat}d
                           </span>
                         )}
-                        {product.withdrawal_days_milk && (
+                        {product.withdrawal_days_milk !== null && product.withdrawal_days_milk !== undefined && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
                             🥛 {product.withdrawal_days_milk}d
                           </span>
                         )}
-                        {!product.withdrawal_days_meat && !product.withdrawal_days_milk && (
+                        {(product.withdrawal_days_meat === null || product.withdrawal_days_meat === undefined) &&
+                         (product.withdrawal_days_milk === null || product.withdrawal_days_milk === undefined) && (
                           <span className="text-gray-400">-</span>
                         )}
                       </div>
