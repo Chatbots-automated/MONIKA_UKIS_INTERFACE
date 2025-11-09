@@ -34,7 +34,6 @@ const menuItems = [
   { id: 'receive', label: 'Priėmimas', icon: FileText, permission: 'receive_stock' },
   { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
-  { id: 'treatment', label: 'Gydymas / Nurašymas', icon: Syringe, permission: 'treatment' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
   { id: 'biocides', label: 'Biocidai', icon: Droplet, permission: 'biocides' },

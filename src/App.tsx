@@ -3,7 +3,6 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Inventory } from './components/Inventory';
 import { ReceiveStock } from './components/ReceiveStock';
-import { TreatmentCompact as Treatment } from './components/TreatmentCompact';
 import { Products } from './components/Products';
 import { AnimalsCompact as Animals } from './components/AnimalsCompact';
 import { VisitsModern as Visits } from './components/VisitsModern';
@@ -115,8 +114,6 @@ function App() {
         return <Inventory />;
       case 'receive':
         return <ReceiveStock />;
-      case 'treatment':
-        return <Treatment />;
       case 'treatment-history':
         return <TreatmentHistory />;
       case 'vaccinations':

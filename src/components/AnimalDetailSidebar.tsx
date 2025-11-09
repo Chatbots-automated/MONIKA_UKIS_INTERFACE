@@ -1411,6 +1411,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
     services: '',
     withdrawal_until: '',
     notes: '',
+    recurring_days: [] as number[],
     medications: [] as Array<{
       product_id: string;
       batch_id: string;
@@ -1419,6 +1420,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
       purpose: string;
       is_course: boolean;
       course_days: string;
+      teat: string;
     }>,
   });
 
@@ -1617,6 +1619,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
 
       // 2. If Gydymas procedure, create treatment
       if (formData.procedures.includes('Gydymas')) {
+        const hasRecurringDays = treatmentData.recurring_days.length > 0;
+
         const { data: treatmentRecord, error: treatmentError } = await supabase
           .from('treatments')
           .insert({
@@ -1631,6 +1635,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
             services: treatmentData.services ? treatmentData.services : null,
             vet_name: formData.vet_name ? formData.vet_name : null,
             notes: treatmentData.notes ? treatmentData.notes : null,
+            creates_future_visits: hasRecurringDays,
           })
           .select()
           .single();
@@ -1660,6 +1665,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 daily_dose: dailyDose,
                 unit: med.unit,
                 start_date: formData.visit_datetime.split('T')[0],
+                teat: med.teat || null,
               });
 
             if (courseError) throw courseError;
@@ -1674,6 +1680,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                 qty: parseFloat(med.qty),
                 unit: med.unit,
                 purpose: med.purpose ? med.purpose : null,
+                teat: med.teat || null,
               });
 
             if (usageError) throw usageError;
@@ -1689,6 +1696,44 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
           alert('Įspėjimas: Karencinių dienų skaičiavimas nepavyko. Klaida: ' + rpcError.message);
         } else {
           console.log('✅ Withdrawal dates calculated successfully');
+        }
+
+        // Create future visits for recurring treatments
+        if (hasRecurringDays) {
+          const baseDate = new Date(formData.visit_datetime.split('T')[0]);
+          const medicationNames = treatmentData.medications
+            .map(med => products.find(p => p.id === med.product_id)?.name)
+            .filter(Boolean)
+            .join(', ');
+
+          const futureVisits = treatmentData.recurring_days.map(day => {
+            const futureDate = new Date(baseDate);
+            futureDate.setDate(futureDate.getDate() + day);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+
+            return {
+              animal_id: animalId,
+              visit_datetime: `${futureDateStr}T10:00:00`,
+              procedures: ['Gydymas'],
+              status: 'Planuojamas',
+              notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}`,
+              vet_name: formData.vet_name || null,
+              next_visit_required: false,
+              treatment_required: true,
+              related_treatment_id: treatmentRecord.id,
+            };
+          });
+
+          const { error: futureVisitsError } = await supabase
+            .from('animal_visits')
+            .insert(futureVisits);
+
+          if (futureVisitsError) {
+            console.error('Error creating future treatment visits:', futureVisitsError);
+            alert('Įspėjimas: Būsimų vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message);
+          } else {
+            console.log(`✅ Created ${futureVisits.length} future treatment visits`);
+          }
         }
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
@@ -1966,6 +2011,44 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kartoti gydymą būsimomis dienomis (pasirinkite dienas)
+                </label>
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+                  <div className="grid grid-cols-7 gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(day => (
+                      <label key={day} className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={treatmentData.recurring_days.includes(day)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setTreatmentData({
+                                ...treatmentData,
+                                recurring_days: [...treatmentData.recurring_days, day].sort((a, b) => a - b)
+                              });
+                            } else {
+                              setTreatmentData({
+                                ...treatmentData,
+                                recurring_days: treatmentData.recurring_days.filter(d => d !== day)
+                              });
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-gray-700">+{day}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {treatmentData.recurring_days.length > 0 && (
+                    <div className="mt-2 text-xs text-blue-600 font-medium">
+                      Pasirinkta dienų: {treatmentData.recurring_days.join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Vaistai *</label>
                 <div className="space-y-3">
                   {treatmentData.medications.map((med, idx) => {
@@ -2064,7 +2147,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                           </button>
                         </div>
                         {/* Course duration checkbox and fields */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <label className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
@@ -2099,6 +2182,25 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                               )}
                             </>
                           )}
+
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm text-gray-700">Spenis:</label>
+                            <select
+                              value={med.teat}
+                              onChange={(e) => {
+                                const newMeds = [...treatmentData.medications];
+                                newMeds[idx].teat = e.target.value;
+                                setTreatmentData({ ...treatmentData, medications: newMeds });
+                              }}
+                              className="px-2 py-1 border border-gray-300 rounded text-xs"
+                            >
+                              <option value="">-</option>
+                              <option value="d1">D1 (dešinė priekis)</option>
+                              <option value="d2">D2 (dešinė gale)</option>
+                              <option value="k1">K1 (kairė priekis)</option>
+                              <option value="k2">K2 (kairė gale)</option>
+                            </select>
+                          </div>
                         </div>
                         {selectedProduct && (selectedProduct.withdrawal_days_milk || selectedProduct.withdrawal_days_meat) && (
                           <div className="text-xs bg-amber-50 border-2 border-amber-300 rounded px-3 py-2">
@@ -2128,7 +2230,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess }: { animalId: string; 
                     onClick={() => {
                       setTreatmentData({
                         ...treatmentData,
-                        medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas', is_course: false, course_days: '1' }]
+                        medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas', is_course: false, course_days: '1', teat: '' }]
                       });
                     }}
                     className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
