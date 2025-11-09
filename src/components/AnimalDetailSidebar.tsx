@@ -4,6 +4,7 @@ import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, U
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
+import { AnimalAnalytics } from './AnimalAnalytics';
 
 interface Vaccination {
   id: string;
@@ -1126,6 +1127,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                 </div>
               </div>
             </div>
+
+            <AnimalAnalytics animalId={animal.id} tagNumber={animal.tag_no} />
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
               <div className="bg-gray-50 border-b border-gray-200 px-5 py-3">
