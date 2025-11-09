@@ -6,6 +6,7 @@ import { Syringe, Plus, Save, X, AlertTriangle, Calendar } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { SearchableSelect } from './SearchableSelect';
 
 interface WithdrawalStatus {
   animal_id: string;
@@ -357,19 +358,15 @@ export function TreatmentCompact() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select
+          <SearchableSelect
+            options={animals.map(a => ({
+              value: a.id,
+              label: a.tag_no || `ID: ${a.id.slice(0, 8)}`
+            }))}
             value={animalId}
-            onChange={(e) => setAnimalId(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-            autoFocus
-          >
-            <option value="">Pasirinkti gyvūną *</option>
-            {animals.map(a => (
-              <option key={a.id} value={a.id}>
-                {a.tag_no || `ID: ${a.id.slice(0, 8)}`}
-              </option>
-            ))}
-          </select>
+            onChange={setAnimalId}
+            placeholder="Pasirinkti gyvūną *"
+          />
 
           <select
             value={diseaseId}
