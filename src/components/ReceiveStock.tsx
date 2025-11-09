@@ -243,9 +243,8 @@ export function ReceiveStock() {
       name: itemData.description || '',
       category: 'medicines',
       primary_pack_unit: 'ml',
-      primary_pack_size: itemData.qty?.toString() || '',
+      primary_pack_size: itemData.package_size?.toString() || '',
       active_substance: '',
-      registration_code: '',
       withdrawal_days_meat: '0',
       withdrawal_days_milk: '0',
       dosage_notes: '',
@@ -1038,6 +1037,37 @@ export function ReceiveStock() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują produktą</h3>
+
+              {creatingProduct && (
+                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                  <h4 className="text-sm font-bold text-blue-900 mb-2">Duomenys iš sąskaitos:</h4>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    {creatingProduct.package_size && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Pakuotės dydis:</span>
+                        <p className="font-bold text-blue-900">{creatingProduct.package_size}</p>
+                      </div>
+                    )}
+                    {creatingProduct.package_count && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Pakuočių kiekis:</span>
+                        <p className="font-bold text-blue-900">{creatingProduct.package_count}</p>
+                      </div>
+                    )}
+                    {creatingProduct.qty && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Viso:</span>
+                        <p className="font-bold text-emerald-700">{creatingProduct.qty}</p>
+                      </div>
+                    )}
+                  </div>
+                  {creatingProduct.package_size && creatingProduct.package_count && (
+                    <p className="text-xs text-blue-600 mt-2 font-medium">
+                      {creatingProduct.package_count} pak. × {creatingProduct.package_size} = {creatingProduct.qty} viso
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
