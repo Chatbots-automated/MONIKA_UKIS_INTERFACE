@@ -60,9 +60,11 @@ export function AnimalsCompact() {
   const loadData = async () => {
     try {
       const [animalsRes, summariesRes] = await Promise.all([
-        supabase.from('animals').select('*').order('tag_no'),
+        supabase.from('animals').select('*', { count: 'exact' }).order('tag_no'),
         supabase.from('animal_visit_summary').select('*'),
       ]);
+
+      console.log('🐄 Animals loaded:', animalsRes.data?.length, 'Total in DB:', animalsRes.count);
 
       setAnimals(animalsRes.data || []);
 
