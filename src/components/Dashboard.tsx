@@ -155,7 +155,7 @@ export function Dashboard() {
           products!inner(name)
         `).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(5),
         supabase.from('stock_by_product').select('category, on_hand'),
-        supabase.from('batches').select('purchase_price, received_qty'),
+        supabase.from('batches').select('id, purchase_price, received_qty'),
         supabase.from('animals').select('id', { count: 'exact', head: true }),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
         supabase.from('biocide_usage').select('id', { count: 'exact', head: true }).gte('use_date', monthStart),
@@ -195,9 +195,22 @@ export function Dashboard() {
         })
         .slice(0, 10);
 
-      const totalValue = batchValue.data?.reduce((sum, b) =>
-        sum + (b.purchase_price || 0) * (b.received_qty || 0), 0
-      ) || 0;
+      // Calculate total value based on on-hand quantity, not received quantity
+      let totalValue = 0;
+      if (batchValue.data) {
+        for (const batch of batchValue.data) {
+          // Get usage for this batch
+          const { data: usageData } = await supabase
+            .from('usage_items')
+            .select('qty')
+            .eq('batch_id', batch.id);
+
+          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+          const onHand = (batch.received_qty || 0) - totalUsed;
+          const batchValue = (batch.purchase_price || 0) * onHand;
+          totalValue += batchValue;
+        }
+      }
 
       const totalBatches = allBatches.data?.length || 0;
       const avgBatchValue = totalBatches > 0 ? totalValue / totalBatches : 0;
