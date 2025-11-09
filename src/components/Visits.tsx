@@ -55,7 +55,7 @@ export function Visits() {
     try {
       const [visitsRes, animalsRes] = await Promise.all([
         supabase.from('animal_visits').select('*').order('visit_date', { ascending: false }),
-        supabase.from('animals').select('*').order('tag_no'),
+        supabase.from('animals').select('*').order('tag_no').limit(10000),
       ]);
 
       const animalsData = animalsRes.data || [];

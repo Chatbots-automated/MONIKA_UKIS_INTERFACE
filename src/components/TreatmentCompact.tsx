@@ -89,7 +89,7 @@ export function TreatmentCompact() {
   const loadData = async () => {
     try {
       const [animalsRes, productsRes, diseasesRes, batchesRes] = await Promise.all([
-        supabase.from('animals').select('*').order('tag_no'),
+        supabase.from('animals').select('*').order('tag_no').limit(10000),
         supabase.from('products').select('*').eq('is_active', true).order('name'),
         supabase.from('diseases').select('*').order('name'),
         supabase.from('batches').select('*').order('expiry_date'),

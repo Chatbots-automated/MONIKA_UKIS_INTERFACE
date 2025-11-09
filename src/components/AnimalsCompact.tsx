@@ -59,12 +59,18 @@ export function AnimalsCompact() {
 
   const loadData = async () => {
     try {
+      // Get total count first
+      const { count } = await supabase
+        .from('animals')
+        .select('*', { count: 'exact', head: true });
+
+      // Now fetch all animals (Supabase default limit is 1000, we need to override)
       const [animalsRes, summariesRes] = await Promise.all([
-        supabase.from('animals').select('*', { count: 'exact' }).order('tag_no'),
-        supabase.from('animal_visit_summary').select('*'),
+        supabase.from('animals').select('*').order('tag_no').limit(count || 10000),
+        supabase.from('animal_visit_summary').select('*').limit(count || 10000),
       ]);
 
-      console.log('🐄 Animals loaded:', animalsRes.data?.length, 'Total in DB:', animalsRes.count);
+      console.log('🐄 Animals loaded:', animalsRes.data?.length, 'Total in DB:', count);
 
       setAnimals(animalsRes.data || []);
 

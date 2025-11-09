@@ -78,7 +78,7 @@ export function Reports() {
   const loadFilterOptions = async () => {
     try {
       const [animalsRes, productsRes, diseasesRes] = await Promise.all([
-        supabase.from('animals').select('id, tag_no, species').order('tag_no'),
+        supabase.from('animals').select('id, tag_no, species').order('tag_no').limit(10000),
         supabase.from('products').select('id, name').eq('is_active', true).order('name'),
         supabase.from('diseases').select('id, name').order('name'),
       ]);
@@ -108,7 +108,7 @@ export function Reports() {
         usageRes,
         withdrawalRes,
       ] = await Promise.all([
-        supabase.from('animals').select('id, active'),
+        supabase.from('animals').select('id, active').limit(10000),
         supabase.from('treatments').select('id, reg_date, outcome, disease_id').gte('reg_date', sixMonthsAgo),
         supabase.from('vaccinations').select('id, vaccination_date').gte('vaccination_date', sixMonthsAgo),
         supabase.from('products').select('id, name, category, is_active'),

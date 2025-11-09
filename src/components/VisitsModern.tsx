@@ -57,7 +57,7 @@ export function VisitsModern() {
           .from('animal_visits')
           .select('*')
           .order('visit_datetime', { ascending: false }),
-        supabase.from('animals').select('*'),
+        supabase.from('animals').select('*').limit(10000),
       ]);
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => ({

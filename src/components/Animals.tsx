@@ -42,7 +42,7 @@ export function Animals() {
   const loadData = async () => {
     try {
       const [animalsRes, productsRes, diseasesRes] = await Promise.all([
-        supabase.from('animals').select('*').order('tag_no'),
+        supabase.from('animals').select('*').order('tag_no').limit(10000),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
       ]);
