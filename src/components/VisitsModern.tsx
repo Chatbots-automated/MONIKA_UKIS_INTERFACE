@@ -83,11 +83,19 @@ export function VisitsModern() {
         fetchAllRows('animals'),
       ]);
 
-      const visitsWithAnimals = (visitsRes.data || []).map(visit => ({
-        ...visit,
-        animal: (animalsRes.data || []).find((a: Animal) => a.id === visit.animal_id),
-      }));
+      console.log('📊 Loaded visits:', visitsRes.data?.length);
+      console.log('📊 Loaded animals:', animalsRes.data?.length);
 
+      const visitsWithAnimals = (visitsRes.data || []).map(visit => {
+        const animal = (animalsRes.data || []).find((a: Animal) => a.id === visit.animal_id);
+        console.log(`Visit ${visit.id} with animal_id ${visit.animal_id} -> Found animal:`, animal?.tag_number);
+        return {
+          ...visit,
+          animal,
+        };
+      });
+
+      console.log('📊 Visits with animals:', visitsWithAnimals.filter(v => v.animal).length);
       setVisits(visitsWithAnimals);
       setAnimals(animalsRes.data || []);
     } catch (error) {
