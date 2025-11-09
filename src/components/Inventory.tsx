@@ -56,8 +56,11 @@ export function Inventory() {
   });
 
   useRealtimeSubscription({
-    table: 'inventory_transactions',
+    table: 'usage_items',
     onInsert: useCallback(() => {
+      loadInventory();
+    }, []),
+    onUpdate: useCallback(() => {
       loadInventory();
     }, []),
   });
@@ -86,22 +89,22 @@ export function Inventory() {
 
       if (batchesError) throw batchesError;
 
-      // For each batch, calculate on_hand from inventory_transactions
+      // For each batch, calculate on_hand from received_qty minus usage
       const inventoryPromises = batchesData?.map(async (batch) => {
-        const { data: transData, error: transError } = await supabase
-          .from('inventory_transactions')
-          .select('quantity, transaction_type')
+        // Get total usage for this batch
+        const { data: usageData, error: usageError } = await supabase
+          .from('usage_items')
+          .select('qty')
           .eq('batch_id', batch.id);
 
-        if (transError) {
-          console.error('Error loading transactions:', transError);
+        if (usageError) {
+          console.error('Error loading usage:', usageError);
           return null;
         }
 
-        // Calculate on_hand: sum of IN minus sum of OUT
-        const onHand = transData?.reduce((sum, trans) => {
-          return sum + (trans.transaction_type === 'IN' ? trans.quantity : -trans.quantity);
-        }, 0) || 0;
+        // Calculate on_hand: received_qty minus total usage
+        const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+        const onHand = (batch.received_qty || 0) - totalUsed;
 
         return {
           batch_id: batch.id,
@@ -196,34 +199,28 @@ export function Inventory() {
 
       if (productError) throw productError;
 
-      // Update batch information
+      // Update batch information (including received_qty adjustment)
+      const difference = newAmount - item.on_hand;
+
+      // Get current total usage
+      const { data: usageData } = await supabase
+        .from('usage_items')
+        .select('qty')
+        .eq('batch_id', item.batch_id);
+
+      const totalUsed = usageData?.reduce((sum, u) => sum + (u.qty || 0), 0) || 0;
+      const newReceivedQty = newAmount + totalUsed;
+
       const { error: batchError } = await supabase
         .from('batches')
         .update({
           lot: editingData.lot,
           expiry_date: editingData.expiry_date || null,
+          received_qty: newReceivedQty,
         })
-        .eq('batch_id', item.batch_id);
+        .eq('id', item.batch_id);
 
       if (batchError) throw batchError;
-
-      // Adjust inventory if amount changed
-      const difference = newAmount - item.on_hand;
-      if (difference !== 0) {
-        const { error: transError } = await supabase
-          .from('inventory_transactions')
-          .insert({
-            batch_id: item.batch_id,
-            product_id: item.product_id,
-            quantity: Math.abs(difference),
-            transaction_type: difference > 0 ? 'IN' : 'OUT',
-            notes: difference > 0
-              ? `Atsargų padidinimas: ${item.on_hand} → ${newAmount}`
-              : `Atsargų sumažinimas: ${item.on_hand} → ${newAmount}`,
-          });
-
-        if (transError) throw transError;
-      }
 
       await logAction(
         'edit_inventory',
