@@ -1117,7 +1117,7 @@ export function ReceiveStock() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pakuotės dydis
+                      Pakuotės dydis (produkto apibrėžimas)
                     </label>
                     <input
                       type="number"
@@ -1127,6 +1127,7 @@ export function ReceiveStock() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       placeholder="100"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Standartinės pakuotės dydis</p>
                   </div>
 
                   <div>
@@ -1148,6 +1149,87 @@ export function ReceiveStock() {
                       <option value="bolus">bolus</option>
                       <option value="syringe">syringe</option>
                     </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                      <h4 className="text-sm font-bold text-blue-900 mb-3">Priėmimo duomenys iš sąskaitos</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Pakuotės dydis
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.package_size}
+                            onChange={(e) => {
+                              const newSize = e.target.value;
+                              setNewProductForm(prev => {
+                                const size = parseFloat(newSize) || 0;
+                                const count = parseFloat(prev.package_count) || 0;
+                                return {
+                                  ...prev,
+                                  package_size: newSize,
+                                  total_quantity: size && count ? (size * count).toString() : prev.total_quantity
+                                };
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            placeholder="10"
+                          />
+                          <p className="text-xs text-gray-500 mt-0.5">pvz: 10ml</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Pakuočių skaičius
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.package_count}
+                            onChange={(e) => {
+                              const newCount = e.target.value;
+                              setNewProductForm(prev => {
+                                const size = parseFloat(prev.package_size) || 0;
+                                const count = parseFloat(newCount) || 0;
+                                return {
+                                  ...prev,
+                                  package_count: newCount,
+                                  total_quantity: size && count ? (size * count).toString() : prev.total_quantity
+                                };
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            placeholder="5"
+                          />
+                          <p className="text-xs text-gray-500 mt-0.5">kiek pak.</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Viso {newProductForm.package_size && newProductForm.package_count && (
+                              <span className="text-emerald-600 font-bold">(auto)</span>
+                            )}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.total_quantity}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, total_quantity: e.target.value })}
+                            className="w-full px-3 py-2 border border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-emerald-50 font-semibold"
+                            placeholder="50"
+                            readOnly={!!(newProductForm.package_size && newProductForm.package_count)}
+                          />
+                          <p className="text-xs text-emerald-600 mt-0.5 font-medium">
+                            {newProductForm.package_size && newProductForm.package_count ? (
+                              `${newProductForm.package_count} × ${newProductForm.package_size}`
+                            ) : (
+                              'arba įveskite'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="md:col-span-2">
