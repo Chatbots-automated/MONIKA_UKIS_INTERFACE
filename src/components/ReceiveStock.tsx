@@ -924,7 +924,14 @@ export function ReceiveStock() {
                                 const pkgSize = parseFloat(e.target.value) || 0;
                                 const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
                                 if (pkgSize && pkgCount) {
-                                  handleItemEdit(index, 'qty', (pkgSize * pkgCount).toString());
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
                                 }
                               }}
                               className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
@@ -942,7 +949,14 @@ export function ReceiveStock() {
                                 const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
                                 const pkgCount = parseFloat(e.target.value) || 0;
                                 if (pkgSize && pkgCount) {
-                                  handleItemEdit(index, 'qty', (pkgSize * pkgCount).toString());
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
                                 }
                               }}
                               className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
@@ -955,21 +969,72 @@ export function ReceiveStock() {
                               type="number"
                               step="0.01"
                               value={getItemData(item, index).qty}
-                              onChange={(e) => handleItemEdit(index, 'qty', e.target.value)}
+                              onChange={(e) => {
+                                const newQty = e.target.value;
+                                handleItemEdit(index, 'qty', newQty);
+                                const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                const qty = parseFloat(newQty) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
                               className="w-16 px-1 py-0.5 border border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
                               readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
                             />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <span className="text-gray-600">Kaina:</span>{' '}
+                            <span className="text-gray-600">Kaina (viso):</span>{' '}
                             <input
                               type="number"
                               step="0.01"
                               value={getItemData(item, index).unit_price}
-                              onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
+                              onChange={(e) => {
+                                const totalPrice = e.target.value;
+                                handleItemEdit(index, 'unit_price', totalPrice);
+                                const qty = parseFloat(getItemData(item, index).qty) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (parseFloat(totalPrice) / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
                               className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">
+                              {(() => {
+                                const unit = matchedProduct?.primary_pack_unit || 'vnt';
+                                const unitLabels: Record<string, string> = {
+                                  'ml': 'ml',
+                                  'l': 'l',
+                                  'g': 'g',
+                                  'kg': 'kg',
+                                  'vnt': 'vnt',
+                                  'tablet': 'tab',
+                                  'bolus': 'bol',
+                                  'syringe': 'švir'
+                                };
+                                return `${unitLabels[unit] || 'vnt'} kaina:`;
+                              })()}
+                            </span>{' '}
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={getItemData(item, index).price_per_unit || ''}
+                              onChange={(e) => {
+                                const perUnitPrice = e.target.value;
+                                handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                const qty = parseFloat(getItemData(item, index).qty) || 0;
+                                if (qty > 0 && perUnitPrice) {
+                                  const totalPrice = (parseFloat(perUnitPrice) * qty).toFixed(2);
+                                  handleItemEdit(index, 'unit_price', totalPrice);
+                                }
+                              }}
+                              className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
+                              readOnly={!!(getItemData(item, index).unit_price && getItemData(item, index).qty)}
                             />
                           </div>
                           <div>
@@ -979,6 +1044,16 @@ export function ReceiveStock() {
                             </span>
                           </div>
                         </div>
+                        {matchedProduct && (
+                          <div className="text-xs text-blue-600 mt-1 font-medium">
+                            📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.primary_pack_unit}
+                            {getItemData(item, index).unit_price && getItemData(item, index).qty && (
+                              <span className="ml-2">
+                                ({getItemData(item, index).unit_price} ÷ {getItemData(item, index).qty} = {getItemData(item, index).price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-200">
                           <div>
                             <span className="text-gray-600">Serija:</span>{' '}
