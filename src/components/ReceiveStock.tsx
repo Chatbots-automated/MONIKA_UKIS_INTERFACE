@@ -1000,7 +1000,7 @@ export function ReceiveStock() {
                                   handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                 }
                               }}
-                              className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              className="w-20 px-1 py-0.5 border-2 border-orange-300 rounded text-xs font-semibold bg-orange-50"
                             />
                           </div>
                           <div>
@@ -1024,23 +1024,18 @@ export function ReceiveStock() {
                               type="number"
                               step="0.0001"
                               value={getItemData(item, index).price_per_unit || ''}
-                              onChange={(e) => {
-                                const perUnitPrice = e.target.value;
-                                handleItemEdit(index, 'price_per_unit', perUnitPrice);
-                                const qty = parseFloat(getItemData(item, index).qty) || 0;
-                                if (qty > 0 && perUnitPrice) {
-                                  const totalPrice = (parseFloat(perUnitPrice) * qty).toFixed(2);
-                                  handleItemEdit(index, 'unit_price', totalPrice);
-                                }
-                              }}
+                              readOnly
                               className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
-                              readOnly={!!(getItemData(item, index).unit_price && getItemData(item, index).qty)}
                             />
                           </div>
                           <div>
-                            <span className="text-gray-600">Suma:</span>{' '}
+                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
                             <span className="font-medium text-emerald-700">
-                              €{(getItemData(item, index).qty * getItemData(item, index).unit_price).toFixed(2)}
+                              €{(() => {
+                                const qty = parseFloat(getItemData(item, index).qty) || 0;
+                                const perUnit = parseFloat(getItemData(item, index).price_per_unit) || 0;
+                                return (qty * perUnit).toFixed(2);
+                              })()}
                             </span>
                           </div>
                         </div>
@@ -1050,6 +1045,15 @@ export function ReceiveStock() {
                             {getItemData(item, index).unit_price && getItemData(item, index).qty && (
                               <span className="ml-2">
                                 ({getItemData(item, index).unit_price} ÷ {getItemData(item, index).qty} = {getItemData(item, index).price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
+                              </span>
+                            )}
+                            {getItemData(item, index).price_per_unit && getItemData(item, index).qty && (
+                              <span className="ml-2 text-emerald-600">
+                                | Tikrinimas: {getItemData(item, index).price_per_unit} × {getItemData(item, index).qty} = {(() => {
+                                  const qty = parseFloat(getItemData(item, index).qty) || 0;
+                                  const perUnit = parseFloat(getItemData(item, index).price_per_unit) || 0;
+                                  return (qty * perUnit).toFixed(2);
+                                })()} EUR
                               </span>
                             )}
                           </div>
