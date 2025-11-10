@@ -459,12 +459,14 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
-        // Calculate purchase price: use editable_total_price if user edited it, otherwise calculate from webhook data
+        // Get total price: use editable if user changed it, otherwise webhook's total_price, fallback to calculation
         const qty = parseFloat(itemData.qty) || 0;
         const unitPrice = parseFloat(itemData.unit_price) || 0;
-        const purchasePrice = itemData.editable_total_price !== undefined
+        const totalPrice = itemData.editable_total_price !== undefined
           ? parseFloat(itemData.editable_total_price)
-          : (qty * unitPrice);
+          : (itemData.total_price !== undefined
+              ? parseFloat(itemData.total_price)
+              : (qty * unitPrice));
 
         stockEntries.push({
           product_id: matched.id,
@@ -475,14 +477,14 @@ export function ReceiveStock() {
           doc_title: 'Invoice',
           doc_number: invoiceData.invoice.number,
           doc_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
-          purchase_price: purchasePrice,
+          purchase_price: totalPrice,
           currency: invoiceData.invoice.currency || 'EUR',
           package_size: packageSize,
           package_count: packageCount,
           received_qty: packageSize && packageCount ? packageSize * packageCount : qty,
         });
 
-        // Store invoice item data for later insertion
+        // Store invoice item data for later insertion (use webhook's original values)
         invoiceItemsEntries.push({
           invoice_id: invoice.id,
           product_id: matched.id,
@@ -491,7 +493,7 @@ export function ReceiveStock() {
           sku: itemData.sku,
           quantity: qty,
           unit_price: unitPrice,
-          total_price: qty * unitPrice,
+          total_price: totalPrice,
         });
       }
 
@@ -997,14 +999,21 @@ export function ReceiveStock() {
                             <input
                               type="number"
                               step="0.01"
-                              value={getItemData(item, index).editable_total_price !== undefined
-                                ? getItemData(item, index).editable_total_price
-                                : (() => {
-                                    const itemData = getItemData(item, index);
-                                    const qty = parseFloat(itemData.qty) || 0;
-                                    const unitPrice = parseFloat(itemData.unit_price) || 0;
-                                    return (qty * unitPrice).toFixed(2);
-                                  })()}
+                              value={(() => {
+                                const itemData = getItemData(item, index);
+                                // If user edited, use that value
+                                if (itemData.editable_total_price !== undefined) {
+                                  return itemData.editable_total_price;
+                                }
+                                // Otherwise use webhook's total_price if available
+                                if (itemData.total_price !== undefined) {
+                                  return parseFloat(itemData.total_price).toFixed(2);
+                                }
+                                // Fallback: calculate from unit_price × qty
+                                const qty = parseFloat(itemData.qty) || 0;
+                                const unitPrice = parseFloat(itemData.unit_price) || 0;
+                                return (qty * unitPrice).toFixed(2);
+                              })()}
                               onChange={(e) => {
                                 const totalPrice = e.target.value;
                                 handleItemEdit(index, 'editable_total_price', totalPrice);
@@ -1048,14 +1057,17 @@ export function ReceiveStock() {
                             📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.primary_pack_unit}
                             {(() => {
                               const itemData = getItemData(item, index);
-                              const editablePrice = itemData.editable_total_price !== undefined
+                              // Get the final total price (edited, webhook, or calculated)
+                              const finalPrice = itemData.editable_total_price !== undefined
                                 ? itemData.editable_total_price
-                                : (parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0);
+                                : (itemData.total_price !== undefined
+                                    ? parseFloat(itemData.total_price).toFixed(2)
+                                    : ((parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0)).toFixed(2));
                               const qty = parseFloat(itemData.qty) || 0;
-                              if (editablePrice && qty) {
+                              if (finalPrice && qty) {
                                 return (
                                   <span className="ml-2">
-                                    ({editablePrice} ÷ {qty} = {itemData.price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
+                                    ({finalPrice} ÷ {qty} = {itemData.price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
                                   </span>
                                 );
                               }
