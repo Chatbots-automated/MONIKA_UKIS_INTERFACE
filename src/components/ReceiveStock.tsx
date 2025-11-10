@@ -49,6 +49,7 @@ export function ReceiveStock() {
     doc_number: '',
     doc_date: new Date().toISOString().split('T')[0],
     purchase_price: '',
+    unit_price: '',
     currency: 'EUR',
     package_size: '',
     package_count: '',
@@ -579,6 +580,7 @@ export function ReceiveStock() {
         doc_number: '',
         doc_date: new Date().toISOString().split('T')[0],
         purchase_price: '',
+        unit_price: '',
         currency: 'EUR',
         package_size: '',
         package_count: '',
@@ -1392,10 +1394,18 @@ export function ReceiveStock() {
                 <option value="">Pasirinkite produktą...</option>
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} ({product.category})
+                    {product.name} - {product.primary_pack_size}{product.primary_pack_unit} ({product.category})
                   </option>
                 ))}
               </select>
+              {formData.product_id && (() => {
+                const selectedProduct = products.find(p => p.id === formData.product_id);
+                return selectedProduct ? (
+                  <p className="text-xs text-blue-600 mt-1 font-medium">
+                    📦 Matavimo vienetas: {selectedProduct.primary_pack_unit}
+                  </p>
+                ) : null;
+              })()}
             </div>
 
             <div>
@@ -1421,14 +1431,19 @@ export function ReceiveStock() {
                 value={formData.package_size}
                 onChange={(e) => {
                   const newPackageSize = e.target.value;
-                  setFormData({ ...formData, package_size: newPackageSize });
-                  if (newPackageSize && formData.package_count) {
-                    setFormData(prev => ({
+                  setFormData(prev => {
+                    const newQty = newPackageSize && prev.package_count ?
+                      (parseFloat(newPackageSize) * parseFloat(prev.package_count)).toString() : prev.received_qty;
+                    const price = parseFloat(prev.purchase_price) || 0;
+                    const qty = parseFloat(newQty) || 0;
+                    const unitPrice = qty > 0 && price ? (price / qty).toFixed(4) : prev.unit_price;
+                    return {
                       ...prev,
                       package_size: newPackageSize,
-                      received_qty: (parseFloat(newPackageSize) * parseFloat(prev.package_count)).toString()
-                    }));
-                  }
+                      received_qty: newQty,
+                      unit_price: unitPrice
+                    };
+                  });
                 }}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 placeholder="pvz: 10 (viena pakuotė)"
@@ -1446,14 +1461,19 @@ export function ReceiveStock() {
                 value={formData.package_count}
                 onChange={(e) => {
                   const newPackageCount = e.target.value;
-                  setFormData({ ...formData, package_count: newPackageCount });
-                  if (formData.package_size && newPackageCount) {
-                    setFormData(prev => ({
+                  setFormData(prev => {
+                    const newQty = prev.package_size && newPackageCount ?
+                      (parseFloat(prev.package_size) * parseFloat(newPackageCount)).toString() : prev.received_qty;
+                    const price = parseFloat(prev.purchase_price) || 0;
+                    const qty = parseFloat(newQty) || 0;
+                    const unitPrice = qty > 0 && price ? (price / qty).toFixed(4) : prev.unit_price;
+                    return {
                       ...prev,
                       package_count: newPackageCount,
-                      received_qty: (parseFloat(prev.package_size) * parseFloat(newPackageCount)).toString()
-                    }));
-                  }
+                      received_qty: newQty,
+                      unit_price: unitPrice
+                    };
+                  });
                 }}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 placeholder="pvz: 6 (buteliukų)"
@@ -1473,7 +1493,19 @@ export function ReceiveStock() {
                 type="number"
                 step="0.01"
                 value={formData.received_qty}
-                onChange={(e) => setFormData({ ...formData, received_qty: e.target.value })}
+                onChange={(e) => {
+                  const newQty = e.target.value;
+                  setFormData(prev => {
+                    const price = parseFloat(prev.purchase_price) || 0;
+                    const qty = parseFloat(newQty) || 0;
+                    const unitPrice = qty > 0 && price ? (price / qty).toFixed(4) : '';
+                    return {
+                      ...prev,
+                      received_qty: newQty,
+                      unit_price: unitPrice
+                    };
+                  });
+                }}
                 className="w-full px-4 py-2.5 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-emerald-50 font-semibold"
                 placeholder="100"
                 required
@@ -1570,16 +1602,27 @@ export function ReceiveStock() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pirkimo kaina
+                Pirkimo kaina (viso)
               </label>
               <div className="flex gap-2">
                 <input
                   type="number"
                   step="0.01"
                   value={formData.purchase_price}
-                  onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                  onChange={(e) => {
+                    const newPrice = e.target.value;
+                    setFormData(prev => {
+                      const qty = parseFloat(prev.received_qty) || 0;
+                      const unitPrice = qty > 0 && newPrice ? (parseFloat(newPrice) / qty).toFixed(4) : '';
+                      return {
+                        ...prev,
+                        purchase_price: newPrice,
+                        unit_price: unitPrice
+                      };
+                    });
+                  }}
                   className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="25.50"
+                  placeholder="100.00"
                 />
                 <select
                   value={formData.currency}
@@ -1591,6 +1634,61 @@ export function ReceiveStock() {
                   <option value="GBP">GBP</option>
                 </select>
               </div>
+              <p className="text-xs text-gray-500 mt-1">Visa pirkimo kaina</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {(() => {
+                  const selectedProduct = products.find(p => p.id === formData.product_id);
+                  const unit = selectedProduct?.primary_pack_unit || 'vnt';
+                  const unitLabels: Record<string, string> = {
+                    'ml': 'Mililitro',
+                    'l': 'Litro',
+                    'g': 'Gramo',
+                    'kg': 'Kilogramo',
+                    'vnt': 'Vieneto',
+                    'tablet': 'Tabletės',
+                    'bolus': 'Boluso',
+                    'syringe': 'Švirkšto'
+                  };
+                  return `${unitLabels[unit] || 'Vieneto'} kaina`;
+                })()} {formData.unit_price && (
+                  <span className="text-emerald-600 font-bold">(auto)</span>
+                )}
+              </label>
+              <input
+                type="number"
+                step="0.0001"
+                value={formData.unit_price}
+                onChange={(e) => {
+                  const newUnitPrice = e.target.value;
+                  setFormData(prev => {
+                    const qty = parseFloat(prev.received_qty) || 0;
+                    const totalPrice = qty > 0 && newUnitPrice ? (parseFloat(newUnitPrice) * qty).toFixed(2) : '';
+                    return {
+                      ...prev,
+                      unit_price: newUnitPrice,
+                      purchase_price: totalPrice
+                    };
+                  });
+                }}
+                className="w-full px-4 py-2.5 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-blue-50 font-semibold"
+                placeholder="0.1667"
+                readOnly={!!(formData.purchase_price && formData.received_qty)}
+              />
+              <p className="text-xs text-blue-600 mt-1 font-medium">
+                {formData.received_qty && formData.purchase_price ? (
+                  `${formData.purchase_price} EUR ÷ ${formData.received_qty} = ${formData.unit_price} EUR/${(() => {
+                    const selectedProduct = products.find(p => p.id === formData.product_id);
+                    return selectedProduct?.primary_pack_unit || 'vnt';
+                  })()}`
+                ) : formData.unit_price && formData.received_qty ? (
+                  `${formData.unit_price} EUR × ${formData.received_qty} = ${formData.purchase_price || '0'} EUR`
+                ) : (
+                  'Automatiškai apskaičiuojama iš kainos ir kiekio'
+                )}
+              </p>
             </div>
           </div>
 
