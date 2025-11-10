@@ -459,6 +459,13 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
+        // Calculate purchase price: use editable_total_price if user edited it, otherwise calculate from webhook data
+        const qty = parseFloat(itemData.qty) || 0;
+        const unitPrice = parseFloat(itemData.unit_price) || 0;
+        const purchasePrice = itemData.editable_total_price !== undefined
+          ? parseFloat(itemData.editable_total_price)
+          : (qty * unitPrice);
+
         stockEntries.push({
           product_id: matched.id,
           lot: itemData.batch || bulkReceiveData.lot || null,
@@ -468,11 +475,11 @@ export function ReceiveStock() {
           doc_title: 'Invoice',
           doc_number: invoiceData.invoice.number,
           doc_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
-          purchase_price: parseFloat(itemData.unit_price) || 0,
+          purchase_price: purchasePrice,
           currency: invoiceData.invoice.currency || 'EUR',
           package_size: packageSize,
           package_count: packageCount,
-          received_qty: packageSize && packageCount ? packageSize * packageCount : (parseFloat(itemData.qty) || 0),
+          received_qty: packageSize && packageCount ? packageSize * packageCount : qty,
         });
 
         // Store invoice item data for later insertion
@@ -482,9 +489,9 @@ export function ReceiveStock() {
           line_no: itemData.line_no,
           description: itemData.description,
           sku: itemData.sku,
-          quantity: parseFloat(itemData.qty) || 0,
-          unit_price: parseFloat(itemData.unit_price) || 0,
-          total_price: (parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0),
+          quantity: qty,
+          unit_price: unitPrice,
+          total_price: qty * unitPrice,
         });
       }
 
@@ -986,14 +993,32 @@ export function ReceiveStock() {
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
+                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
+                            <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border-2 border-emerald-300">
+                              €{(() => {
+                                const itemData = getItemData(item, index);
+                                const qty = parseFloat(itemData.qty) || 0;
+                                const unitPrice = parseFloat(itemData.unit_price) || 0;
+                                return (qty * unitPrice).toFixed(2);
+                              })()}
+                            </span>
+                          </div>
+                          <div>
                             <span className="text-gray-600">Kaina (viso):</span>{' '}
                             <input
                               type="number"
                               step="0.01"
-                              value={getItemData(item, index).unit_price}
+                              value={getItemData(item, index).editable_total_price !== undefined
+                                ? getItemData(item, index).editable_total_price
+                                : (() => {
+                                    const itemData = getItemData(item, index);
+                                    const qty = parseFloat(itemData.qty) || 0;
+                                    const unitPrice = parseFloat(itemData.unit_price) || 0;
+                                    return (qty * unitPrice).toFixed(2);
+                                  })()}
                               onChange={(e) => {
                                 const totalPrice = e.target.value;
-                                handleItemEdit(index, 'unit_price', totalPrice);
+                                handleItemEdit(index, 'editable_total_price', totalPrice);
                                 const qty = parseFloat(getItemData(item, index).qty) || 0;
                                 if (qty > 0 && totalPrice) {
                                   const perUnitPrice = (parseFloat(totalPrice) / qty).toFixed(4);
@@ -1028,25 +1053,25 @@ export function ReceiveStock() {
                               className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
                             />
                           </div>
-                          <div>
-                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
-                            <span className="font-medium text-emerald-700">
-                              €{(() => {
-                                const qty = parseFloat(getItemData(item, index).qty) || 0;
-                                const perUnit = parseFloat(getItemData(item, index).price_per_unit) || 0;
-                                return (qty * perUnit).toFixed(2);
-                              })()}
-                            </span>
-                          </div>
                         </div>
                         {matchedProduct && (
                           <div className="text-xs text-blue-600 mt-1 font-medium">
                             📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.primary_pack_unit}
-                            {getItemData(item, index).unit_price && getItemData(item, index).qty && (
-                              <span className="ml-2">
-                                ({getItemData(item, index).unit_price} ÷ {getItemData(item, index).qty} = {getItemData(item, index).price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
-                              </span>
-                            )}
+                            {(() => {
+                              const itemData = getItemData(item, index);
+                              const editablePrice = itemData.editable_total_price !== undefined
+                                ? itemData.editable_total_price
+                                : (parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0);
+                              const qty = parseFloat(itemData.qty) || 0;
+                              if (editablePrice && qty) {
+                                return (
+                                  <span className="ml-2">
+                                    ({editablePrice} ÷ {qty} = {itemData.price_per_unit || '...'} EUR/{matchedProduct.primary_pack_unit})
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                             {getItemData(item, index).price_per_unit && getItemData(item, index).qty && (
                               <span className="ml-2 text-emerald-600">
                                 | Tikrinimas: {getItemData(item, index).price_per_unit} × {getItemData(item, index).qty} = {(() => {
