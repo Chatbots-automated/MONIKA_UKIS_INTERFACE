@@ -991,20 +991,9 @@ export function ReceiveStock() {
                             />
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
                             <span className="text-gray-600">Galutinė kaina:</span>{' '}
-                            <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border-2 border-emerald-300">
-                              €{(() => {
-                                const itemData = getItemData(item, index);
-                                const qty = parseFloat(itemData.qty) || 0;
-                                const unitPrice = parseFloat(itemData.unit_price) || 0;
-                                return (qty * unitPrice).toFixed(2);
-                              })()}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Kaina (viso):</span>{' '}
                             <input
                               type="number"
                               step="0.01"
@@ -1025,7 +1014,7 @@ export function ReceiveStock() {
                                   handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                 }
                               }}
-                              className="w-20 px-1 py-0.5 border-2 border-orange-300 rounded text-xs font-semibold bg-orange-50"
+                              className="w-20 px-1 py-0.5 border-2 border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
                             />
                           </div>
                           <div>
@@ -1781,33 +1770,6 @@ export function ReceiveStock() {
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Galutinė kaina (tikrinimas)
-              </label>
-              <div className="w-full px-4 py-2.5 border-2 border-emerald-300 rounded-lg bg-emerald-50 font-bold text-emerald-700 text-lg">
-                {(() => {
-                  const qty = parseFloat(formData.received_qty) || 0;
-                  const unitPrice = parseFloat(formData.unit_price) || 0;
-                  const finalPrice = (qty * unitPrice).toFixed(2);
-                  return `€${finalPrice}`;
-                })()}
-              </div>
-              <p className="text-xs text-emerald-600 mt-1 font-medium">
-                {formData.unit_price && formData.received_qty ? (
-                  `${formData.unit_price} EUR/${(() => {
-                    const selectedProduct = products.find(p => p.id === formData.product_id);
-                    return selectedProduct?.primary_pack_unit || 'vnt';
-                  })()} × ${formData.received_qty} = ${(() => {
-                    const qty = parseFloat(formData.received_qty) || 0;
-                    const unitPrice = parseFloat(formData.unit_price) || 0;
-                    return (qty * unitPrice).toFixed(2);
-                  })()} EUR`
-                ) : (
-                  'Patvirtinimas, kad skaičiavimai teisingi'
-                )}
-              </p>
-            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
