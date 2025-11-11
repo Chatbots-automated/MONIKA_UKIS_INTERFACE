@@ -179,6 +179,30 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
     { date: geaData.m5_date, time: geaData.m5_time, qty: geaData.m5_qty },
   ].filter(m => m.qty !== null);
 
+  // Calculate days until calving (expected calving date is insemination date + 283 days)
+  const daysUntilCalving = geaData.inseminated_on ? (() => {
+    const inseminationDate = new Date(geaData.inseminated_on);
+    const expectedCalvingDate = new Date(inseminationDate);
+    expectedCalvingDate.setDate(expectedCalvingDate.getDate() + 283);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expectedCalvingDate.setHours(0, 0, 0, 0);
+    const diffTime = expectedCalvingDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  })() : null;
+
+  // Calculate pregnancy days (days since insemination)
+  const pregnancyDays = geaData.inseminated_on ? (() => {
+    const inseminationDate = new Date(geaData.inseminated_on);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    inseminationDate.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - inseminationDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  })() : null;
+
   return (
     <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
@@ -247,6 +271,16 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
         <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
           <span className="text-xs text-gray-500 block mb-1">Apsėklinimo diena</span>
           <span className="font-semibold text-gray-900 text-sm">{geaData.inseminated_on ? formatDateLT(geaData.inseminated_on) : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Veršingumas</span>
+          <span className="font-bold text-blue-600 text-lg">{pregnancyDays !== null ? `${pregnancyDays} d.` : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Liko iki apsiveršiavimo</span>
+          <span className={`font-bold text-lg ${daysUntilCalving !== null && daysUntilCalving < 30 ? 'text-orange-600' : 'text-gray-900'}`}>
+            {daysUntilCalving !== null ? `${daysUntilCalving} d.` : '-'}
+          </span>
         </div>
       </div>
     </div>
