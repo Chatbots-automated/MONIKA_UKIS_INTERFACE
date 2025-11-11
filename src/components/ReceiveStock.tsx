@@ -459,10 +459,16 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
+        // Get quantity from itemData
+        const qty = parseFloat(itemData.qty) || 0;
+
         // Get total price: NEVER multiply, use extracted net value or user's edited value
         const totalPrice = itemData.editable_total_price !== undefined
           ? parseFloat(itemData.editable_total_price)
           : parseFloat(itemData.net) || 0;
+
+        // Calculate unit price
+        const unitPrice = qty > 0 ? (totalPrice / qty) : 0;
 
         stockEntries.push({
           product_id: matched.id,
