@@ -459,14 +459,8 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
-        // Get quantity from itemData - try multiple possible field names
-        const qty = parseFloat(itemData.qty || itemData.quantity || itemData.qty_received) ||
-                    (packageSize && packageCount ? packageSize * packageCount : 0);
-
-        // Validate quantity exists
-        if (!qty || qty === 0) {
-          throw new Error(`Prekė "${itemData.description}" neturi kiekio. Prašome užpildyti kiekį arba pakuočių duomenis.`);
-        }
+        // Get quantity from itemData
+        const qty = parseFloat(itemData.qty) || 0;
 
         // Get total price: NEVER multiply, use extracted net value or user's edited value
         const totalPrice = itemData.editable_total_price !== undefined
@@ -985,7 +979,7 @@ export function ReceiveStock() {
                             <input
                               type="number"
                               step="0.01"
-                              value={getItemData(item, index).qty || getItemData(item, index).quantity || ''}
+                              value={getItemData(item, index).qty}
                               onChange={(e) => {
                                 const newQty = e.target.value;
                                 handleItemEdit(index, 'qty', newQty);
@@ -1063,7 +1057,7 @@ export function ReceiveStock() {
                               const finalPrice = itemData.editable_total_price !== undefined
                                 ? itemData.editable_total_price
                                 : (itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00');
-                              const qty = parseFloat(itemData.qty || itemData.quantity || '0') || 0;
+                              const qty = parseFloat(itemData.qty) || 0;
                               if (finalPrice && qty) {
                                 return (
                                   <span className="ml-2">
@@ -1073,11 +1067,10 @@ export function ReceiveStock() {
                               }
                               return null;
                             })()}
-                            {getItemData(item, index).price_per_unit && (getItemData(item, index).qty || getItemData(item, index).quantity) && (
+                            {getItemData(item, index).price_per_unit && getItemData(item, index).qty && (
                               <span className="ml-2 text-emerald-600">
-                                | Tikrinimas: {getItemData(item, index).price_per_unit} × {getItemData(item, index).qty || getItemData(item, index).quantity} = {(() => {
-                                  const itemData = getItemData(item, index);
-                                  const qty = parseFloat(itemData.qty || itemData.quantity || '0') || 0;
+                                | Tikrinimas: {getItemData(item, index).price_per_unit} × {getItemData(item, index).qty} = {(() => {
+                                  const qty = parseFloat(getItemData(item, index).qty) || 0;
                                   const perUnit = parseFloat(getItemData(item, index).price_per_unit) || 0;
                                   return (qty * perUnit).toFixed(2);
                                 })()} EUR
