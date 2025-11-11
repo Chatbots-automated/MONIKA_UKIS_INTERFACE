@@ -152,9 +152,6 @@ export function ReceiveStock() {
         throw new Error('Atsakyme nerasta prekių sąrašo');
       }
 
-      console.log('Invoice items:', invoiceObject.items);
-      console.log('First item structure:', invoiceObject.items[0]);
-
       setInvoiceData(invoiceObject);
       setHeaderData({
         invoice_number: invoiceObject.invoice.number,
@@ -462,13 +459,14 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
-        // Get total price: use editable if user changed it, otherwise webhook's total_price, fallback to 0
+        // Get total price: use editable if user changed it, otherwise webhook's total_price, fallback to calculation
         const qty = parseFloat(itemData.qty) || 0;
+        const unitPrice = parseFloat(itemData.unit_price) || 0;
         const totalPrice = itemData.editable_total_price !== undefined
           ? parseFloat(itemData.editable_total_price)
           : (itemData.total_price !== undefined
               ? parseFloat(itemData.total_price)
-              : 0);
+              : (qty * unitPrice));
 
         stockEntries.push({
           product_id: matched.id,
@@ -997,7 +995,7 @@ export function ReceiveStock() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <span className="text-gray-600">Galutinė kaina (Iš viso):</span>{' '}
+                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
                             <input
                               type="number"
                               step="0.01"
@@ -1011,8 +1009,10 @@ export function ReceiveStock() {
                                 if (itemData.total_price !== undefined) {
                                   return parseFloat(itemData.total_price).toFixed(2);
                                 }
-                                // Fallback: empty (user must enter manually)
-                                return '';
+                                // Fallback: calculate from unit_price × qty
+                                const qty = parseFloat(itemData.qty) || 0;
+                                const unitPrice = parseFloat(itemData.unit_price) || 0;
+                                return (qty * unitPrice).toFixed(2);
                               })()}
                               onChange={(e) => {
                                 const totalPrice = e.target.value;
@@ -1062,7 +1062,7 @@ export function ReceiveStock() {
                                 ? itemData.editable_total_price
                                 : (itemData.total_price !== undefined
                                     ? parseFloat(itemData.total_price).toFixed(2)
-                                    : null);
+                                    : ((parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0)).toFixed(2));
                               const qty = parseFloat(itemData.qty) || 0;
                               if (finalPrice && qty) {
                                 return (
