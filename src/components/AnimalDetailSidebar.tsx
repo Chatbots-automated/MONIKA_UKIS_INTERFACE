@@ -1223,25 +1223,455 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
                                   </div>
                                 </div>
                                 {((treatment.usage_items && treatment.usage_items.length > 0) || (treatment.treatment_courses && treatment.treatment_courses.length > 0)) && (
-                                  <div className="mt-2 flex flex-wrap gap-1">
-                                    {/* Show single doses */}
-                                    {treatment.usage_items && treatment.usage_items.slice(0, 2).map((item, i) => (
-                                      <span key={`usage-${i}`} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                                        {item.product?.name || 'Produktas'}
-                                      </span>
-                                    ))}
-                                    {/* Show courses */}
-                                    {treatment.treatment_courses && treatment.treatment_courses.slice(0, 2).map((course, i) => (
-                                      <span key={`course-${i}`} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
-                                        {course.product?.name || 'Produktas'} ({course.days}d)
-                                      </span>
-                                    ))}
-                                    {/* Show "more" indicator */}
-                                    {((treatment.usage_items?.length || 0) + (treatment.treatment_courses?.length || 0)) > 2 && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
-                                        +{((treatment.usage_items?.length || 0) + (treatment.treatment_courses?.length || 0)) - 2}
-                                      </span>
+                                  <div className="mt-2 space-y-2">
+                                    {/* Show single doses with cost */}
+                                    {treatment.usage_items && treatment.usage_items.map((item, i) => {
+                                      const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                                        ? item.batch.purchase_price / item.batch.received_qty
+                                        : 0;
+                                      const totalCost = item.qty * unitCost;
+                                      return (
+                                        <div key={`usage-${i}`} className="flex items-center justify-between text-xs bg-blue-50 px-2 py-1 rounded">
+                                          <span className="text-blue-900 font-medium">
+                                            {item.product?.name || 'Produktas'} - {item.qty} {item.product?.primary_pack_unit || 'vnt'}
+                                          </span>
+                                          {totalCost > 0 && (
+                                            <span className="text-blue-700 font-bold">€{totalCost.toFixed(2)}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Show courses with cost */}
+                                    {treatment.treatment_courses && treatment.treatment_courses.map((course, i) => {
+                                      const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                                        ? course.batch.purchase_price / course.batch.received_qty
+                                        : 0;
+                                      const totalCost = course.total_quantity * unitCost;
+                                      return (
+                                        <div key={`course-${i}`} className="flex items-center justify-between text-xs bg-purple-50 px-2 py-1 rounded">
+                                          <span className="text-purple-900 font-medium">
+                                            {course.product?.name || 'Produktas'} - Kursas {course.days}d ({course.total_quantity} {course.product?.primary_pack_unit || 'vnt'})
+                                          </span>
+                                          {totalCost > 0 && (
+                                            <span className="text-purple-700 font-bold">€{totalCost.toFixed(2)}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Total treatment cost */}
+                                    {(() => {
+                                      const usageCost = treatment.usage_items?.reduce((sum, item) => {
+                                        const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                                          ? item.batch.purchase_price / item.batch.received_qty
+                                          : 0;
+                                        return sum + (item.qty * unitCost);
+                                      }, 0) || 0;
+                                      const courseCost = treatment.treatment_courses?.reduce((sum, course) => {
+                                        const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                                          ? course.batch.purchase_price / course.batch.received_qty
+                                          : 0;
+                                        return sum + (course.total_quantity * unitCost);
+                                      }, 0) || 0;
+                                      const totalCost = usageCost + courseCost;
+
+                                      return totalCost > 0 ? (
+                                        <div className="flex items-center justify-between text-xs bg-emerald-100 px-2 py-1.5 rounded font-bold border border-emerald-200">
+                                          <span className="text-emerald-900">SAVIKAINA (Gydymo kaina)</span>
+                                          <span className="text-emerald-700 text-sm">€{totalCost.toFixed(2)}</span>
+                                        </div>
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                )}
+                                {treatment.outcome && (
+                                  <div className="mt-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                      treatment.outcome === 'recovered' ? 'bg-green-100 text-green-800' :
+                                      treatment.outcome === 'ongoing' ? 'bg-yellow-100 text-yellow-800' :
+                                      treatment.outcome === 'deceased' ? 'bg-red-100 text-red-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {treatment.outcome === 'recovered' ? 'Pasveiko' :
+                                       treatment.outcome === 'ongoing' ? 'Gydoma' :
+                                       treatment.outcome === 'deceased' ? 'Kritęs' : treatment.outcome}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else if (event.type === 'vaccination') {
+                          const vaccination = event.data as VaccinationWithProduct;
+                          return (
+                            <div key={`vaccination-${vaccination.id}`} className="flex gap-3 group hover:bg-purple-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                  <Syringe className="w-5 h-5 text-purple-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-gray-900">Vakcinacija</div>
+                                    {vaccination.product && (
+                                      <div className="text-sm text-gray-600 mt-0.5">
+                                        {vaccination.product.name}
+                                      </div>
                                     )}
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Dozė: {vaccination.dose_amount} {vaccination.unit}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateLT(vaccination.vaccination_date)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'treatments' && (
+          <div className="space-y-4">
+            {treatments.length > 0 ? (
+              treatments.map(treatment => (
+                <div key={treatment.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900">{treatment.disease_name}</div>
+                      <div className="text-xs text-gray-500 mt-1">{formatDateLT(treatment.reg_date)}</div>
+                    </div>
+                    {treatment.outcome && (
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        treatment.outcome === 'recovered' ? 'bg-green-100 text-green-800' :
+                        treatment.outcome === 'ongoing' ? 'bg-yellow-100 text-yellow-800' :
+                        treatment.outcome === 'deceased' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {treatment.outcome === 'recovered' ? 'Pasveiko' :
+                         treatment.outcome === 'ongoing' ? 'Gydoma' :
+                         treatment.outcome === 'deceased' ? 'Kritęs' : treatment.outcome}
+                      </span>
+                    )}
+                  </div>
+
+                  {((treatment.usage_items && treatment.usage_items.length > 0) || (treatment.treatment_courses && treatment.treatment_courses.length > 0)) && (
+                    <div className="space-y-2 mt-3">
+                      {/* Single doses with cost */}
+                      {treatment.usage_items && treatment.usage_items.map((item, i) => {
+                        const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                          ? item.batch.purchase_price / item.batch.received_qty
+                          : 0;
+                        const totalCost = item.qty * unitCost;
+                        return (
+                          <div key={`usage-${i}`} className="flex items-center justify-between text-xs bg-blue-50 px-3 py-2 rounded-lg">
+                            <span className="text-blue-900 font-medium">
+                              {item.product?.name || 'Produktas'} - {item.qty} {item.product?.primary_pack_unit || 'vnt'}
+                            </span>
+                            {totalCost > 0 && (
+                              <span className="text-blue-700 font-bold">€{totalCost.toFixed(2)}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Courses with cost */}
+                      {treatment.treatment_courses && treatment.treatment_courses.map((course, i) => {
+                        const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                          ? course.batch.purchase_price / course.batch.received_qty
+                          : 0;
+                        const totalCost = course.total_quantity * unitCost;
+                        return (
+                          <div key={`course-${i}`} className="flex items-center justify-between text-xs bg-purple-50 px-3 py-2 rounded-lg">
+                            <span className="text-purple-900 font-medium">
+                              {course.product?.name || 'Produktas'} - Kursas {course.days}d ({course.total_quantity} {course.product?.primary_pack_unit || 'vnt'})
+                            </span>
+                            {totalCost > 0 && (
+                              <span className="text-purple-700 font-bold">€{totalCost.toFixed(2)}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Total treatment cost */}
+                      {(() => {
+                        const usageCost = treatment.usage_items?.reduce((sum, item) => {
+                          const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                            ? item.batch.purchase_price / item.batch.received_qty
+                            : 0;
+                          return sum + (item.qty * unitCost);
+                        }, 0) || 0;
+                        const courseCost = treatment.treatment_courses?.reduce((sum, course) => {
+                          const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                            ? course.batch.purchase_price / course.batch.received_qty
+                            : 0;
+                          return sum + (course.total_quantity * unitCost);
+                        }, 0) || 0;
+                        const totalCost = usageCost + courseCost;
+
+                        return totalCost > 0 ? (
+                          <div className="flex items-center justify-between text-xs bg-emerald-100 px-3 py-2 rounded-lg font-bold border-2 border-emerald-300">
+                            <span className="text-emerald-900">SAVIKAINA (Gydymo kaina)</span>
+                            <span className="text-emerald-700 text-sm">€{totalCost.toFixed(2)}</span>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+
+                  {treatment.notes && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="text-xs font-medium text-gray-500 mb-1">Pastabos</div>
+                      <p className="text-sm text-gray-700 leading-relaxed">{treatment.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-16 text-gray-500">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Pill className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="text-lg font-medium">Nėra gydymų</p>
+                <p className="text-sm mt-1">Gydymai bus pridėti per vizitus</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'vaccinations' && (
+          <div className="space-y-4">
+            {vaccinations.length > 0 ? (
+              vaccinations.map((vaccination) => (
+                <div key={vaccination.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      {vaccination.product && (
+                        <div className="font-semibold text-gray-900">{vaccination.product.name}</div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-1">{formatDateLT(vaccination.vaccination_date)}</div>
+                    </div>
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                      Dozė #{vaccination.dose_number}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs font-medium text-gray-500 mb-1">Kiekis</div>
+                      <div className="text-gray-700">{vaccination.dose_amount} {vaccination.unit}</div>
+                    </div>
+                    {vaccination.next_booster_date && (
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 mb-1">Kitas skiepas</div>
+                        <div className="text-gray-700">{formatDateLT(vaccination.next_booster_date)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {vaccination.notes && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="text-xs font-medium text-gray-500 mb-1">Pastabos</div>
+                      <p className="text-sm text-gray-700 leading-relaxed">{vaccination.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-16 text-gray-500">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Syringe className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="text-lg font-medium">Nėra vakcinacijų</p>
+                <p className="text-sm mt-1">Pridėkite vakcinaciją per vizitą</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Gyvūno statistika
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">{visits.length}</div>
+                  <div className="text-xs text-gray-600">Vizitų</div>
+                </div>
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-green-600 mb-1">{treatments.length}</div>
+                  <div className="text-xs text-gray-600">Gydymų</div>
+                </div>
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-3xl font-bold text-purple-600 mb-1">{vaccinations.length}</div>
+                  <div className="text-xs text-gray-600">Vakcinacijų</div>
+                </div>
+              </div>
+            </div>
+
+            <AnimalAnalytics animalId={animal.id} tagNumber={animal.tag_no} />
+
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="bg-gray-50 border-b border-gray-200 px-5 py-3">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-gray-600" />
+                  Pilna istorija
+                </h3>
+              </div>
+              <div className="p-5">
+                {(() => {
+                  const allEvents = [
+                    ...visits.map(v => ({ type: 'visit', date: v.visit_datetime, data: v })),
+                    ...treatments.map(t => ({ type: 'treatment', date: t.reg_date, data: t })),
+                    ...vaccinations.map(v => ({ type: 'vaccination', date: v.vaccination_date, data: v }))
+                  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                  if (allEvents.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-gray-500">
+                        <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileText className="w-10 h-10 text-gray-400" />
+                        </div>
+                        <p className="text-lg font-medium">Nėra įvykių</p>
+                        <p className="text-sm mt-1">Istorija prasidės po pirmojo vizito</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {allEvents.map((event, idx) => {
+                        if (event.type === 'visit') {
+                          const visit = event.data as AnimalVisit;
+                          return (
+                            <div key={`visit-${visit.id}`} className="flex gap-3 group hover:bg-blue-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <Calendar className="w-5 h-5 text-blue-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-gray-900">Vizitas</div>
+                                    <div className="text-sm text-gray-600 mt-0.5">
+                                      {visit.procedures.join(', ')}
+                                    </div>
+                                    {visit.notes && (
+                                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">{visit.notes}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateTimeLT(visit.visit_datetime)}
+                                  </div>
+                                </div>
+                                {visit.status && (
+                                  <div className="mt-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                      visit.status === 'Užbaigtas' ? 'bg-green-100 text-green-800' :
+                                      visit.status === 'Planuojamas' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {visit.status}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else if (event.type === 'treatment') {
+                          const treatment = event.data as TreatmentWithDetails;
+                          return (
+                            <div key={`treatment-${treatment.id}`} className="flex gap-3 group hover:bg-green-50 p-3 rounded-lg transition-colors">
+                              <div className="flex-shrink-0">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                  <Pill className="w-5 h-5 text-green-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">Gydymas</div>
+                                    {treatment.disease_name && (
+                                      <div className="text-sm text-gray-600 mt-0.5">{treatment.disease_name}</div>
+                                    )}
+                                    {treatment.notes && (
+                                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">{treatment.notes}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDateLT(treatment.reg_date)}
+                                  </div>
+                                </div>
+                                {((treatment.usage_items && treatment.usage_items.length > 0) || (treatment.treatment_courses && treatment.treatment_courses.length > 0)) && (
+                                  <div className="mt-2 space-y-1">
+                                    {/* Show single doses with cost */}
+                                    {treatment.usage_items && treatment.usage_items.map((item, i) => {
+                                      const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                                        ? item.batch.purchase_price / item.batch.received_qty
+                                        : 0;
+                                      const totalCost = item.qty * unitCost;
+                                      return (
+                                        <div key={`usage-${i}`} className="flex items-center justify-between text-xs bg-blue-50 px-2 py-1 rounded">
+                                          <span className="text-blue-900 font-medium">
+                                            {item.product?.name || 'Produktas'} - {item.qty} {item.product?.primary_pack_unit || 'vnt'}
+                                          </span>
+                                          {totalCost > 0 && (
+                                            <span className="text-blue-700 font-bold">€{totalCost.toFixed(2)}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Show courses with cost */}
+                                    {treatment.treatment_courses && treatment.treatment_courses.map((course, i) => {
+                                      const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                                        ? course.batch.purchase_price / course.batch.received_qty
+                                        : 0;
+                                      const totalCost = course.total_quantity * unitCost;
+                                      return (
+                                        <div key={`course-${i}`} className="flex items-center justify-between text-xs bg-purple-50 px-2 py-1 rounded">
+                                          <span className="text-purple-900 font-medium">
+                                            {course.product?.name || 'Produktas'} - Kursas {course.days}d ({course.total_quantity} {course.product?.primary_pack_unit || 'vnt'})
+                                          </span>
+                                          {totalCost > 0 && (
+                                            <span className="text-purple-700 font-bold">€{totalCost.toFixed(2)}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Total treatment cost */}
+                                    {(() => {
+                                      const usageCost = treatment.usage_items?.reduce((sum, item) => {
+                                        const unitCost = item.batch?.purchase_price && item.batch?.received_qty
+                                          ? item.batch.purchase_price / item.batch.received_qty
+                                          : 0;
+                                        return sum + (item.qty * unitCost);
+                                      }, 0) || 0;
+                                      const courseCost = treatment.treatment_courses?.reduce((sum, course) => {
+                                        const unitCost = course.batch?.purchase_price && course.batch?.received_qty
+                                          ? course.batch.purchase_price / course.batch.received_qty
+                                          : 0;
+                                        return sum + (course.total_quantity * unitCost);
+                                      }, 0) || 0;
+                                      const totalCost = usageCost + courseCost;
+
+                                      return totalCost > 0 ? (
+                                        <div className="flex items-center justify-between text-xs bg-emerald-100 px-2 py-1.5 rounded font-bold border border-emerald-200">
+                                          <span className="text-emerald-900">SAVIKAINA</span>
+                                          <span className="text-emerald-700">€{totalCost.toFixed(2)}</span>
+                                        </div>
+                                      ) : null;
+                                    })()}
                                   </div>
                                 )}
                               </div>
