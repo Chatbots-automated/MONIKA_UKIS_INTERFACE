@@ -237,7 +237,7 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-lg p-3 border border-purple-100">
-          <span className="text-xs text-gray-500 block mb-1">Apsiversiavo</span>
+          <span className="text-xs text-gray-500 block mb-1">Apsiveršiavo</span>
           <span className="font-semibold text-gray-900 text-sm">{geaData.calved_on ? formatDateLT(geaData.calved_on) : '-'}</span>
         </div>
         <div className="bg-white rounded-lg p-3 border border-purple-100">
