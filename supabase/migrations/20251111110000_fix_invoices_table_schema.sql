@@ -92,7 +92,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'invoices' AND column_name = 'created_by'
   ) THEN
-    ALTER TABLE invoices ADD COLUMN created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL;
+    ALTER TABLE invoices ADD COLUMN created_by uuid REFERENCES users(id) ON DELETE SET NULL;
   END IF;
 END $$;
 
