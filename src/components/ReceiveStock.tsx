@@ -1001,14 +1001,8 @@ export function ReceiveStock() {
                                 if (itemData.editable_total_price !== undefined) {
                                   return itemData.editable_total_price;
                                 }
-                                // Otherwise use webhook's total_price if available
-                                if (itemData.total_price !== undefined) {
-                                  return parseFloat(itemData.total_price).toFixed(2);
-                                }
-                                // Fallback: calculate from unit_price × qty
-                                const qty = parseFloat(itemData.qty) || 0;
-                                const unitPrice = parseFloat(itemData.unit_price) || 0;
-                                return (qty * unitPrice).toFixed(2);
+                                // Otherwise use webhook's total_price - NEVER calculate
+                                return itemData.total_price ? parseFloat(itemData.total_price).toFixed(2) : '0.00';
                               })()}
                               onChange={(e) => {
                                 const totalPrice = e.target.value;
@@ -1053,12 +1047,10 @@ export function ReceiveStock() {
                             📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.primary_pack_unit}
                             {(() => {
                               const itemData = getItemData(item, index);
-                              // Get the final total price (edited, webhook, or calculated)
+                              // Get the final total price (edited or webhook) - NEVER calculate
                               const finalPrice = itemData.editable_total_price !== undefined
                                 ? itemData.editable_total_price
-                                : (itemData.total_price !== undefined
-                                    ? parseFloat(itemData.total_price).toFixed(2)
-                                    : ((parseFloat(itemData.qty) || 0) * (parseFloat(itemData.unit_price) || 0)).toFixed(2));
+                                : (itemData.total_price ? parseFloat(itemData.total_price).toFixed(2) : '0.00');
                               const qty = parseFloat(itemData.qty) || 0;
                               if (finalPrice && qty) {
                                 return (
