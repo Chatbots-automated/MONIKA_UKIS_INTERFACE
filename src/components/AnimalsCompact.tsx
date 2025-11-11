@@ -8,10 +8,16 @@ import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { fetchAllRows } from '../lib/helpers';
 
+interface GeaCollarData {
+  animal_id: string;
+  collar_no: number;
+}
+
 export function AnimalsCompact() {
   const { logAction } = useAuth();
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [visitSummaries, setVisitSummaries] = useState<Map<string, AnimalVisitSummary>>(new Map());
+  const [geaCollars, setGeaCollars] = useState<Map<string, number>>(new Map());
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,6 +72,12 @@ export function AnimalsCompact() {
       // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
+      // Fetch latest collar numbers from gea_daily
+      const { data: geaData } = await supabase
+        .from('gea_daily')
+        .select('animal_id, collar_no')
+        .order('snapshot_date', { ascending: false });
+
       console.log('🐄 Animals loaded:', allAnimals.length);
 
       setAnimals(allAnimals);
@@ -75,6 +87,17 @@ export function AnimalsCompact() {
         summaryMap.set(summary.animal_id, summary);
       });
       setVisitSummaries(summaryMap);
+
+      // Create a map of animal_id to latest collar_no
+      const collarMap = new Map<string, number>();
+      if (geaData) {
+        geaData.forEach((record: GeaCollarData) => {
+          if (record.collar_no && !collarMap.has(record.animal_id)) {
+            collarMap.set(record.animal_id, record.collar_no);
+          }
+        });
+      }
+      setGeaCollars(collarMap);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -161,11 +184,16 @@ export function AnimalsCompact() {
     }
   };
 
-  const filteredAnimals = animals.filter(animal =>
-    (animal.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    animal.species.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    animal.holder_name?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredAnimals = animals.filter(animal => {
+    const searchLower = searchTerm.toLowerCase();
+    const collarNo = geaCollars.get(animal.id);
+    return (
+      animal.tag_no?.toLowerCase().includes(searchLower) ||
+      animal.species.toLowerCase().includes(searchLower) ||
+      animal.holder_name?.toLowerCase().includes(searchLower) ||
+      (collarNo && collarNo.toString().includes(searchTerm))
+    );
+  });
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Kraunama...</div>;
@@ -178,7 +206,7 @@ export function AnimalsCompact() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
-            placeholder="Ieškoti pagal ID, rūšį, laikytoją..."
+            placeholder="Ieškoti pagal ID, rūšį, laikytoją, kaklo nr..."
             value={searchTerm}
             onChange={(e) => {
               const newValue = e.target.value;

@@ -191,6 +191,10 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Duomenų data</span>
+          <span className="font-bold text-gray-900 text-sm">{formatDateLT(geaData.snapshot_date)}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Kaklo Nr.</span>
           <span className="font-bold text-gray-900 text-lg">{geaData.collar_no || '-'}</span>
         </div>
@@ -205,6 +209,10 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
         <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Pieno vidurkis</span>
           <span className="font-bold text-purple-600 text-lg">{geaData.milk_avg ? `${geaData.milk_avg.toFixed(1)} L` : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Dalyvauja pieno gamyboje</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.in_milk ? 'Taip' : 'Ne'}</span>
         </div>
       </div>
 
@@ -228,24 +236,18 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        {geaData.calved_on && (
-          <div className="bg-white rounded-lg p-3 border border-purple-100">
-            <span className="text-xs text-gray-500 block mb-1">Apsiversiavo</span>
-            <span className="font-semibold text-gray-900 text-sm">{formatDateLT(geaData.calved_on)}</span>
-          </div>
-        )}
-        {geaData.lact_days !== null && (
-          <div className="bg-white rounded-lg p-3 border border-purple-100">
-            <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
-            <span className="font-bold text-gray-900 text-lg">{geaData.lact_days}</span>
-          </div>
-        )}
-        {geaData.inseminated_on && (
-          <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
-            <span className="text-xs text-gray-500 block mb-1">Apsėklinimo diena</span>
-            <span className="font-semibold text-gray-900 text-sm">{formatDateLT(geaData.inseminated_on)}</span>
-          </div>
-        )}
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Apsiversiavo</span>
+          <span className="font-semibold text-gray-900 text-sm">{geaData.calved_on ? formatDateLT(geaData.calved_on) : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.lact_days !== null ? geaData.lact_days : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
+          <span className="text-xs text-gray-500 block mb-1">Apsėklinimo diena</span>
+          <span className="font-semibold text-gray-900 text-sm">{geaData.inseminated_on ? formatDateLT(geaData.inseminated_on) : '-'}</span>
+        </div>
       </div>
     </div>
   );
