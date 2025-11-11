@@ -152,6 +152,9 @@ export function ReceiveStock() {
         throw new Error('Atsakyme nerasta prekių sąrašo');
       }
 
+      console.log('Invoice items:', invoiceObject.items);
+      console.log('First item structure:', invoiceObject.items[0]);
+
       setInvoiceData(invoiceObject);
       setHeaderData({
         invoice_number: invoiceObject.invoice.number,
