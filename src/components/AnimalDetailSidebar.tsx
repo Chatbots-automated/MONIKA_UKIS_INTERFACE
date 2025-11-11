@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink } from 'lucide-react';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
@@ -31,6 +31,38 @@ interface WithdrawalStatus {
   milk_until: string | null;
   meat_active: boolean;
   meat_until: string | null;
+}
+
+interface GeaDaily {
+  id: number;
+  animal_id: string;
+  tag_no: string;
+  collar_no: number | null;
+  statusas: string | null;
+  grupe: number | null;
+  milk_avg: number | null;
+  m1_date: string | null;
+  m1_time: string | null;
+  m1_qty: number | null;
+  m2_date: string | null;
+  m2_time: string | null;
+  m2_qty: number | null;
+  m3_date: string | null;
+  m3_time: string | null;
+  m3_qty: number | null;
+  m4_date: string | null;
+  m4_time: string | null;
+  m4_qty: number | null;
+  m5_date: string | null;
+  m5_time: string | null;
+  m5_qty: number | null;
+  in_milk: boolean | null;
+  calved_on: string | null;
+  lact_days: number | null;
+  inseminated_on: string | null;
+  snapshot_date: string;
+  source: string;
+  created_at: string;
 }
 
 function WithdrawalStatusCard({ animalId }: { animalId: string }) {
@@ -94,6 +126,125 @@ function WithdrawalStatusCard({ animalId }: { animalId: string }) {
           <p className="text-amber-800">
             🥩 Mėsa iki: <strong>{formatDateLT(withdrawalStatus.meat_until)}</strong>
           </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GeaDailyCard({ animalId }: { animalId: string }) {
+  const [geaData, setGeaData] = useState<GeaDaily | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadGeaData();
+  }, [animalId]);
+
+  const loadGeaData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('gea_daily')
+        .select('*')
+        .eq('animal_id', animalId)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      setGeaData(data);
+    } catch (error) {
+      console.error('Error loading GEA data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm">
+        <p className="text-sm text-gray-500">Kraunama...</p>
+      </div>
+    );
+  }
+
+  if (!geaData) {
+    return null;
+  }
+
+  const milkings = [
+    { date: geaData.m1_date, time: geaData.m1_time, qty: geaData.m1_qty },
+    { date: geaData.m2_date, time: geaData.m2_time, qty: geaData.m2_qty },
+    { date: geaData.m3_date, time: geaData.m3_time, qty: geaData.m3_qty },
+    { date: geaData.m4_date, time: geaData.m4_time, qty: geaData.m4_qty },
+    { date: geaData.m5_date, time: geaData.m5_time, qty: geaData.m5_qty },
+  ].filter(m => m.qty !== null);
+
+  return (
+    <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <Milk className="w-5 h-5 text-purple-600" />
+        <h3 className="font-bold text-gray-900 text-lg">GEA Duomenys</h3>
+        <span className="text-xs text-gray-500 ml-auto">
+          {formatDateLT(geaData.snapshot_date)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Kaklo Nr.</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.collar_no || '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Statusas</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.statusas || '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Grupė</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.grupe || '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Pieno vidurkis</span>
+          <span className="font-bold text-purple-600 text-lg">{geaData.milk_avg ? `${geaData.milk_avg.toFixed(1)} L` : '-'}</span>
+        </div>
+      </div>
+
+      {geaData.in_milk && (
+        <div className="bg-white rounded-lg p-3 border border-purple-100 mb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="w-4 h-4 text-purple-600" />
+            <span className="text-xs font-semibold text-gray-700">Melžimai</span>
+          </div>
+          <div className="space-y-1">
+            {milkings.map((m, idx) => (
+              <div key={idx} className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  {m.date && formatDateLT(m.date)} {m.time?.substring(0, 5)}
+                </span>
+                <span className="font-semibold text-purple-600">{m.qty?.toFixed(2)} L</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        {geaData.calved_on && (
+          <div className="bg-white rounded-lg p-3 border border-purple-100">
+            <span className="text-xs text-gray-500 block mb-1">Apsiversiavo</span>
+            <span className="font-semibold text-gray-900 text-sm">{formatDateLT(geaData.calved_on)}</span>
+          </div>
+        )}
+        {geaData.lact_days !== null && (
+          <div className="bg-white rounded-lg p-3 border border-purple-100">
+            <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
+            <span className="font-bold text-gray-900 text-lg">{geaData.lact_days}</span>
+          </div>
+        )}
+        {geaData.inseminated_on && (
+          <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
+            <span className="text-xs text-gray-500 block mb-1">Apsėklinimo diena</span>
+            <span className="font-semibold text-gray-900 text-sm">{formatDateLT(geaData.inseminated_on)}</span>
+          </div>
         )}
       </div>
     </div>
@@ -465,6 +616,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: 
             </div>
 
             <WithdrawalStatusCard animalId={animal.id} />
+
+            <GeaDailyCard animalId={animal.id} />
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
