@@ -459,10 +459,10 @@ export function ReceiveStock() {
         const packageSize = itemData.package_size ? parseFloat(itemData.package_size) : null;
         const packageCount = itemData.package_count ? parseFloat(itemData.package_count) : null;
 
-        // Get total price: NEVER multiply, use extracted value or user's edited value
+        // Get total price: NEVER multiply, use extracted net value or user's edited value
         const totalPrice = itemData.editable_total_price !== undefined
           ? parseFloat(itemData.editable_total_price)
-          : parseFloat(itemData.total_price) || 0;
+          : parseFloat(itemData.net) || 0;
 
         stockEntries.push({
           product_id: matched.id,
@@ -489,7 +489,7 @@ export function ReceiveStock() {
           sku: itemData.sku,
           quantity: qty,
           unit_price: unitPrice,
-          total_price: totalPrice,
+          total_price: totalPrice,  // This uses net from extraction
         });
       }
 
@@ -1001,8 +1001,8 @@ export function ReceiveStock() {
                                 if (itemData.editable_total_price !== undefined) {
                                   return itemData.editable_total_price;
                                 }
-                                // Otherwise use webhook's total_price - NEVER calculate
-                                return itemData.total_price ? parseFloat(itemData.total_price).toFixed(2) : '0.00';
+                                // Otherwise use webhook's net field - NEVER calculate
+                                return itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00';
                               })()}
                               onChange={(e) => {
                                 const totalPrice = e.target.value;
@@ -1050,7 +1050,7 @@ export function ReceiveStock() {
                               // Get the final total price (edited or webhook) - NEVER calculate
                               const finalPrice = itemData.editable_total_price !== undefined
                                 ? itemData.editable_total_price
-                                : (itemData.total_price ? parseFloat(itemData.total_price).toFixed(2) : '0.00');
+                                : (itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00');
                               const qty = parseFloat(itemData.qty) || 0;
                               if (finalPrice && qty) {
                                 return (
