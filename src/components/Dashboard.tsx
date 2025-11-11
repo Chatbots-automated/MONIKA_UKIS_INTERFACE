@@ -207,7 +207,10 @@ export function Dashboard() {
 
           const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
           const onHand = (batch.received_qty || 0) - totalUsed;
-          const batchValue = (batch.purchase_price || 0) * onHand;
+
+          // Calculate unit price from total purchase price and received quantity
+          const unitPrice = batch.received_qty > 0 ? (batch.purchase_price || 0) / batch.received_qty : 0;
+          const batchValue = unitPrice * onHand;
           totalValue += batchValue;
         }
       }
