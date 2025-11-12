@@ -937,7 +937,10 @@ export function ReceiveStock() {
                                 if (pkgSize && pkgCount) {
                                   const newQty = (pkgSize * pkgCount).toString();
                                   handleItemEdit(index, 'qty', newQty);
-                                  const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
                                   const qty = parseFloat(newQty) || 0;
                                   if (qty > 0 && totalPrice) {
                                     const perUnitPrice = (totalPrice / qty).toFixed(4);
@@ -962,7 +965,10 @@ export function ReceiveStock() {
                                 if (pkgSize && pkgCount) {
                                   const newQty = (pkgSize * pkgCount).toString();
                                   handleItemEdit(index, 'qty', newQty);
-                                  const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
                                   const qty = parseFloat(newQty) || 0;
                                   if (qty > 0 && totalPrice) {
                                     const perUnitPrice = (totalPrice / qty).toFixed(4);
@@ -983,7 +989,10 @@ export function ReceiveStock() {
                               onChange={(e) => {
                                 const newQty = e.target.value;
                                 handleItemEdit(index, 'qty', newQty);
-                                const totalPrice = parseFloat(getItemData(item, index).unit_price) || 0;
+                                const itemData = getItemData(item, index);
+                                const totalPrice = itemData.editable_total_price !== undefined
+                                  ? parseFloat(itemData.editable_total_price)
+                                  : (itemData.net ? parseFloat(itemData.net) : 0);
                                 const qty = parseFloat(newQty) || 0;
                                 if (qty > 0 && totalPrice) {
                                   const perUnitPrice = (totalPrice / qty).toFixed(4);
