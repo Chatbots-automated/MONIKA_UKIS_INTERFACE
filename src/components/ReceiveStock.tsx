@@ -17,6 +17,7 @@ export function ReceiveStock() {
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [matchedProducts, setMatchedProducts] = useState<Map<number, Product | null>>(new Map());
   const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
+  const [itemsToReceive, setItemsToReceive] = useState<Map<number, boolean>>(new Map());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creatingProduct, setCreatingProduct] = useState<any>(null);
   const [newProductForm, setNewProductForm] = useState({
@@ -165,11 +166,14 @@ export function ReceiveStock() {
       });
 
       const matches = new Map<number, Product | null>();
+      const receiveFlags = new Map<number, boolean>();
       for (let i = 0; i < invoiceObject.items.length; i++) {
         const match = await searchProductMatch(invoiceObject.items[i].description);
         matches.set(i, match);
+        receiveFlags.set(i, true);
       }
       setMatchedProducts(matches);
+      setItemsToReceive(receiveFlags);
 
       setUploadStatus('success');
       setUploadMessage(`PDF sėkmingai įkeltas! Rasta ${invoiceObject.items.length} prekių.`);
@@ -190,6 +194,7 @@ export function ReceiveStock() {
     setInvoiceData(null);
     setMatchedProducts(new Map());
     setEditedItems(new Map());
+    setItemsToReceive(new Map());
     setHeaderData(null);
     setEditingHeader(false);
   };
@@ -451,7 +456,8 @@ export function ReceiveStock() {
 
       for (let i = 0; i < invoiceData.items.length; i++) {
         const matched = matchedProducts.get(i);
-        if (!matched) continue;
+        const shouldReceive = itemsToReceive.get(i) !== false;
+        if (!matched || !shouldReceive) continue;
 
         const itemData = getItemData(invoiceData.items[i], i);
 
@@ -522,6 +528,7 @@ export function ReceiveStock() {
       setInvoiceData(null);
       setMatchedProducts(new Map());
       setEditedItems(new Map());
+      setItemsToReceive(new Map());
       setSelectedFile(null);
       setUploadStatus('idle');
       setBulkReceiveData({
@@ -897,6 +904,17 @@ export function ReceiveStock() {
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="checkbox"
+                          checked={itemsToReceive.get(index) !== false}
+                          onChange={(e) => {
+                            const newFlags = new Map(itemsToReceive);
+                            newFlags.set(index, e.target.checked);
+                            setItemsToReceive(newFlags);
+                          }}
+                          className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                          title={itemsToReceive.get(index) !== false ? "Įtraukti į pajamimą" : "Neįtraukti į pajamimą"}
+                        />
                         {isMatched ? (
                           <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                         ) : (
@@ -1190,7 +1208,11 @@ export function ReceiveStock() {
                 className="w-full px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
-                {bulkReceiving ? 'Priimama...' : `Priimti visus susietus produktus (${Array.from(matchedProducts.values()).filter(p => p !== null).length})`}
+                {bulkReceiving ? 'Priimama...' : `Priimti pažymėtus produktus (${
+                  Array.from(matchedProducts.entries())
+                    .filter(([index, product]) => product !== null && itemsToReceive.get(index) !== false)
+                    .length
+                })`}
               </button>
             </div>
           </div>
