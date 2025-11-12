@@ -66,8 +66,8 @@ export function Products() {
         primary_pack_unit: formData.primary_pack_unit,
         primary_pack_size: formData.primary_pack_size ? parseFloat(formData.primary_pack_size) : null,
         active_substance: formData.active_substance || null,
-        withdrawal_days_meat: (formData.category === 'medicines' && formData.withdrawal_days_meat) ? parseInt(formData.withdrawal_days_meat) : null,
-        withdrawal_days_milk: (formData.category === 'medicines' && formData.withdrawal_days_milk) ? parseInt(formData.withdrawal_days_milk) : null,
+        withdrawal_days_meat: (['medicines', 'svirkstukai'].includes(formData.category) && formData.withdrawal_days_meat) ? parseInt(formData.withdrawal_days_meat) : null,
+        withdrawal_days_milk: (['medicines', 'svirkstukai'].includes(formData.category) && formData.withdrawal_days_milk) ? parseInt(formData.withdrawal_days_milk) : null,
         dosage_notes: formData.dosage_notes || null,
         is_active: true,
       };

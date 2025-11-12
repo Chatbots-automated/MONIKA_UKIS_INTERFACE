@@ -40,6 +40,7 @@ interface GeaDaily {
   collar_no: number | null;
   statusas: string | null;
   grupe: number | null;
+  veisline_verte: string | null;
   milk_avg: number | null;
   m1_date: string | null;
   m1_time: string | null;
@@ -229,6 +230,10 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
         <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Grupė</span>
           <span className="font-bold text-gray-900 text-lg">{geaData.grupe || '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Veislinė vertė</span>
+          <span className="font-bold text-gray-900 text-lg">{geaData.veisline_verte || '-'}</span>
         </div>
         <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Pieno vidurkis</span>

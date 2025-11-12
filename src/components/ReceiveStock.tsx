@@ -263,8 +263,8 @@ export function ReceiveStock() {
       return;
     }
 
-    if (newProductForm.category === 'medicines' && (!newProductForm.withdrawal_days_meat || !newProductForm.withdrawal_days_milk)) {
-      alert('Vaistams privaloma nurodyti karencines dienas');
+    if (['medicines', 'svirkstukai'].includes(newProductForm.category) && (!newProductForm.withdrawal_days_meat || !newProductForm.withdrawal_days_milk)) {
+      alert('Vaistams ir švirkštukams privaloma nurodyti karencines dienas');
       return;
     }
 
@@ -275,8 +275,8 @@ export function ReceiveStock() {
         primary_pack_unit: newProductForm.primary_pack_unit,
         primary_pack_size: newProductForm.primary_pack_size ? parseFloat(newProductForm.primary_pack_size) : null,
         active_substance: newProductForm.active_substance || null,
-        withdrawal_days_meat: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_meat) ? parseInt(newProductForm.withdrawal_days_meat) : null,
-        withdrawal_days_milk: (newProductForm.category === 'medicines' && newProductForm.withdrawal_days_milk) ? parseInt(newProductForm.withdrawal_days_milk) : null,
+        withdrawal_days_meat: (['medicines', 'svirkstukai'].includes(newProductForm.category) && newProductForm.withdrawal_days_meat) ? parseInt(newProductForm.withdrawal_days_meat) : null,
+        withdrawal_days_milk: (['medicines', 'svirkstukai'].includes(newProductForm.category) && newProductForm.withdrawal_days_milk) ? parseInt(newProductForm.withdrawal_days_milk) : null,
         dosage_notes: newProductForm.dosage_notes || null,
         is_active: true,
       };
