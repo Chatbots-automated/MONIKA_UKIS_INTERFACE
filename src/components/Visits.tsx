@@ -59,7 +59,7 @@ export function Visits() {
         fetchAllRows('animals', '*', 'tag_no'),
       ]);
 
-      const animalsData = animalsRes.data || [];
+      const animalsData = animalsRes || [];
       const visitsData = (visitsRes.data || []).map((visit: Visit) => ({
         ...visit,
         animal: animalsData.find(a => a.id === visit.animal_id),

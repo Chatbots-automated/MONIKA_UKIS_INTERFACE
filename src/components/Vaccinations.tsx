@@ -68,7 +68,7 @@ export function Vaccinations() {
 
       setVaccinations(vacsRes.data || []);
       setProducts(prodsRes.data || []);
-      setAnimals(animalsRes.data || []);
+      setAnimals(animalsRes || []);
       setBatches(batchesRes.data || []);
     } catch (error) {
       console.error('Error:', error);

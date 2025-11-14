@@ -85,7 +85,7 @@ export function Reports() {
         supabase.from('diseases').select('id, name').order('name'),
       ]);
 
-      if (animalsRes.data) setAnimals(animalsRes.data);
+      if (animalsRes) setAnimals(animalsRes);
       if (productsRes.data) setProducts(productsRes.data);
       if (diseasesRes.data) setDiseases(diseasesRes.data);
     } catch (error) {
@@ -120,7 +120,7 @@ export function Reports() {
         supabase.from('treatments').select('withdrawal_until_meat, withdrawal_until_milk').or(`withdrawal_until_meat.gte.${today},withdrawal_until_milk.gte.${today}`),
       ]);
 
-      const animals = animalsRes.data || [];
+      const animals = animalsRes || [];
       const treatments = treatmentsRes.data || [];
       const vaccinations = vaccinationsRes.data || [];
       const products = productsRes.data || [];

@@ -63,7 +63,7 @@ export function Treatment() {
       `).gt('on_hand', 0),
     ]);
 
-    if (animalsRes.data) setAnimals(animalsRes.data);
+    if (animalsRes) setAnimals(animalsRes);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (productsRes.data) setProducts(productsRes.data);
     if (batchesRes.data) setBatches(batchesRes.data);
