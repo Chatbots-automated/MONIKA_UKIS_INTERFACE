@@ -23,8 +23,7 @@ import {
   TreatedAnimalsReport,
   MedicalWasteReport,
   DrugJournalReport,
-  BiocideJournalReport,
-  OwnerMedsReport
+  BiocideJournalReport
 } from './ReportTemplates';
 import { SearchableSelect } from './SearchableSelect';
 import { InvoiceViewer } from './InvoiceViewer';
@@ -46,7 +45,7 @@ interface AnalyticsData {
   inventoryByCategory: Array<{ category: string; value: number }>;
 }
 
-type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'owner_meds' | 'biocide_journal' | 'medical_waste' | 'invoices';
+type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'medical_waste' | 'invoices';
 
 export function Reports() {
   const [reportType, setReportType] = useState<ReportType>('analytics');
@@ -116,7 +115,7 @@ export function Reports() {
         supabase.from('products').select('id, name, category, is_active'),
         supabase.from('batches').select('id, product_id, expiry_date, received_qty, purchase_price'),
         supabase.from('diseases').select('id, name'),
-        supabase.from('usage_items').select('product_id, qty, treatment_id'),
+        supabase.from('usage_items').select('product_id, qty, treatment_id, batch_id'),
         supabase.from('treatments').select('withdrawal_until_meat, withdrawal_until_milk').or(`withdrawal_until_meat.gte.${today},withdrawal_until_milk.gte.${today}`),
       ]);
 
@@ -133,11 +132,26 @@ export function Reports() {
       const totalTreatments = treatments.length;
       const totalVaccinations = vaccinations.length;
 
-      const totalProductValue = batches.reduce((sum, b) => {
-        const price = parseFloat(b.purchase_price || 0);
-        const qty = parseFloat(b.received_qty || 0);
-        return sum + (price * qty);
-      }, 0);
+      // Calculate total value based on on-hand quantity
+      const usageByBatch = new Map<string, number>();
+      usage.forEach(u => {
+        if (u.batch_id) {
+          const current = usageByBatch.get(u.batch_id) || 0;
+          usageByBatch.set(u.batch_id, current + (parseFloat(u.qty) || 0));
+        }
+      });
+
+      let totalProductValue = 0;
+      batches.forEach(b => {
+        const totalUsed = usageByBatch.get(b.id) || 0;
+        const receivedQty = parseFloat(b.received_qty) || 0;
+        const onHand = receivedQty - totalUsed;
+        if (onHand > 0) {
+          const purchasePrice = parseFloat(b.purchase_price) || 0;
+          const unitPrice = receivedQty > 0 ? purchasePrice / receivedQty : 0;
+          totalProductValue += unitPrice * onHand;
+        }
+      });
 
       const stockByProduct = new Map<string, number>();
       batches.forEach(b => {
@@ -219,9 +233,16 @@ export function Reports() {
       batches.forEach(b => {
         const product = products.find(p => p.id === b.product_id);
         if (product) {
-          const value = parseFloat(b.purchase_price || 0) * parseFloat(b.received_qty || 0);
-          const current = categoryValue.get(product.category) || 0;
-          categoryValue.set(product.category, current + value);
+          const totalUsed = usageByBatch.get(b.id) || 0;
+          const receivedQty = parseFloat(b.received_qty) || 0;
+          const onHand = receivedQty - totalUsed;
+          if (onHand > 0) {
+            const purchasePrice = parseFloat(b.purchase_price) || 0;
+            const unitPrice = receivedQty > 0 ? purchasePrice / receivedQty : 0;
+            const value = unitPrice * onHand;
+            const current = categoryValue.get(product.category) || 0;
+            categoryValue.set(product.category, current + value);
+          }
         }
       });
       const inventoryByCategory = Array.from(categoryValue.entries())
@@ -301,24 +322,6 @@ export function Reports() {
           break;
         }
 
-        case 'owner_meds': {
-          let query = supabase.from('vw_owner_admin_meds').select('*');
-          if (dateFrom) query = query.gte('first_admin_date', dateFrom);
-          if (dateTo) query = query.lte('first_admin_date', dateTo);
-          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
-          if (filterProduct) query = query.eq('product_id', filterProduct);
-          if (filterDisease) query = query.eq('disease_id', filterDisease);
-
-          const { data, error } = await query;
-          if (error) throw error;
-
-          result = data || [];
-
-          if (filterBatch) {
-            result = result.filter(r => r.batch_number?.toLowerCase().includes(filterBatch.toLowerCase()));
-          }
-          break;
-        }
 
         case 'biocide_journal': {
           let query = supabase.from('vw_biocide_journal').select('*');
@@ -675,8 +678,6 @@ export function Reports() {
         return <DrugJournalReport data={data} />;
       case 'biocide_journal':
         return <BiocideJournalReport data={data} />;
-      case 'owner_meds':
-        return <OwnerMedsReport data={data} />;
       default:
         return null;
     }
@@ -687,7 +688,6 @@ export function Reports() {
     invoices: { name: 'Sąskaitų Priskirimas', icon: FileText, color: 'indigo' },
     drug_journal: { name: 'Veterinarinių vaistų žurnalas', icon: Syringe, color: 'emerald' },
     treated_animals: { name: 'Gydomų gyvūnų registras', icon: Activity, color: 'teal' },
-    owner_meds: { name: 'Savininko duodami vaistai', icon: FileText, color: 'sky' },
     biocide_journal: { name: 'Biocidų žurnalas', icon: Package, color: 'purple' },
     medical_waste: { name: 'Medicininių atliekų žurnalas', icon: AlertTriangle, color: 'orange' },
   };
@@ -806,7 +806,7 @@ export function Reports() {
                     </div>
                   </div>
 
-                  {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
+                  {reportType === 'treated_animals' && (
                     <SearchableSelect
                       label="Gyvūnas"
                       placeholder="Pasirinkite gyvūną"
@@ -820,7 +820,7 @@ export function Reports() {
                     />
                   )}
 
-                  {(reportType === 'treated_animals' || reportType === 'owner_meds' || reportType === 'drug_journal' || reportType === 'biocide_journal') && (
+                  {(reportType === 'treated_animals' || reportType === 'drug_journal' || reportType === 'biocide_journal') && (
                     <SearchableSelect
                       label="Produktas"
                       placeholder="Pasirinkite produktą"
@@ -834,7 +834,7 @@ export function Reports() {
                     />
                   )}
 
-                  {(reportType === 'treated_animals' || reportType === 'owner_meds') && (
+                  {reportType === 'treated_animals' && (
                     <SearchableSelect
                       label="Liga"
                       placeholder="Pasirinkite ligą"
@@ -848,7 +848,7 @@ export function Reports() {
                     />
                   )}
 
-                  {(reportType === 'drug_journal' || reportType === 'owner_meds' || reportType === 'biocide_journal') && (
+                  {(reportType === 'drug_journal' || reportType === 'biocide_journal') && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 mb-1">Serijos nr.</label>
                       <input
