@@ -287,6 +287,10 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
             {daysUntilCalving !== null ? `${daysUntilCalving} d.` : '-'}
           </span>
         </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
+          <span className="text-xs text-gray-500 block mb-1">Kada veršiuosis</span>
+          <span className="font-semibold text-gray-900 text-sm">{geaData.kada_versiuosis ? formatDateLT(geaData.kada_versiuosis) : '-'}</span>
+        </div>
       </div>
     </div>
   );
