@@ -195,20 +195,25 @@ export function Dashboard() {
         })
         .slice(0, 10);
 
-      // Calculate total value based on on-hand quantity, not received quantity
+      // Calculate total value efficiently by fetching all usage data at once
+      const { data: allUsageData } = await supabase
+        .from('usage_items')
+        .select('batch_id, qty');
+
+      // Create a map of batch_id to total usage
+      const usageByBatch = new Map<string, number>();
+      allUsageData?.forEach(item => {
+        const batchId = item.batch_id;
+        const currentUsage = usageByBatch.get(batchId) || 0;
+        usageByBatch.set(batchId, currentUsage + (item.qty || 0));
+      });
+
+      // Calculate total value using the batches data we already have
       let totalValue = 0;
       if (batchValue.data) {
         for (const batch of batchValue.data) {
-          // Get usage for this batch
-          const { data: usageData } = await supabase
-            .from('usage_items')
-            .select('qty')
-            .eq('batch_id', batch.id);
-
-          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+          const totalUsed = usageByBatch.get(batch.id) || 0;
           const onHand = (batch.received_qty || 0) - totalUsed;
-
-          // Calculate unit price from total purchase price and received quantity
           const unitPrice = batch.received_qty > 0 ? (batch.purchase_price || 0) / batch.received_qty : 0;
           const batchValue = unitPrice * onHand;
           totalValue += batchValue;
