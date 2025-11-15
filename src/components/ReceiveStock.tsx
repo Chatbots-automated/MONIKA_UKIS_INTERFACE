@@ -4,6 +4,7 @@ import { Product, Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, CreditCard as Edit2, Save, AlertTriangle } from 'lucide-react';
+import { getSubcategories, getNestedSubcategories, hasSubcategories, hasNestedSubcategories } from '../lib/categoryHierarchy';
 
 export function ReceiveStock() {
   const { logAction } = useAuth();
@@ -23,6 +24,8 @@ export function ReceiveStock() {
   const [newProductForm, setNewProductForm] = useState({
     name: '',
     category: 'medicines' as const,
+    subcategory: '',
+    subcategory_2: '',
     primary_pack_unit: 'ml' as const,
     primary_pack_size: '',
     active_substance: '',
@@ -277,6 +280,8 @@ export function ReceiveStock() {
       const productData = {
         name: newProductForm.name,
         category: newProductForm.category,
+        subcategory: newProductForm.subcategory || null,
+        subcategory_2: newProductForm.subcategory_2 || null,
         primary_pack_unit: newProductForm.primary_pack_unit,
         primary_pack_size: newProductForm.primary_pack_size ? parseFloat(newProductForm.primary_pack_size) : null,
         active_substance: newProductForm.active_substance || null,
@@ -1278,6 +1283,8 @@ export function ReceiveStock() {
                         setNewProductForm({
                           ...newProductForm,
                           category: newCategory,
+                          subcategory: '',
+                          subcategory_2: '',
                           // Force vnt unit for Švirkštukai category
                           primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : newProductForm.primary_pack_unit,
                           // Auto-fill withdrawal days with 0 when switching to medicines
@@ -1299,6 +1306,48 @@ export function ReceiveStock() {
                       <option value="reproduction">Reprodukcija</option>
                     </select>
                   </div>
+
+                  {hasSubcategories(newProductForm.category) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Subkategorija
+                      </label>
+                      <select
+                        value={newProductForm.subcategory}
+                        onChange={(e) => {
+                          setNewProductForm({
+                            ...newProductForm,
+                            subcategory: e.target.value,
+                            subcategory_2: '',
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      >
+                        <option value="">Pasirinkite subkategoriją</option>
+                        {getSubcategories(newProductForm.category).map(sub => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {newProductForm.subcategory && hasNestedSubcategories(newProductForm.category, newProductForm.subcategory) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Detali subkategorija
+                      </label>
+                      <select
+                        value={newProductForm.subcategory_2}
+                        onChange={(e) => setNewProductForm({ ...newProductForm, subcategory_2: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      >
+                        <option value="">Pasirinkite detalią subkategoriją</option>
+                        {getNestedSubcategories(newProductForm.category, newProductForm.subcategory).map(sub2 => (
+                          <option key={sub2} value={sub2}>{sub2}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

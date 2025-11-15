@@ -4,6 +4,7 @@ import { Product, ProductCategory, Unit } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';
+import { getSubcategories, getNestedSubcategories, hasSubcategories, hasNestedSubcategories } from '../lib/categoryHierarchy';
 
 export function Products() {
   const { logAction } = useAuth();
@@ -15,6 +16,8 @@ export function Products() {
   const emptyProduct = {
     name: '',
     category: 'medicines' as ProductCategory,
+    subcategory: '',
+    subcategory_2: '',
     primary_pack_unit: 'ml' as Unit,
     primary_pack_size: '',
     active_substance: '',
@@ -63,6 +66,8 @@ export function Products() {
       const productData = {
         name: formData.name,
         category: formData.category,
+        subcategory: formData.subcategory || null,
+        subcategory_2: formData.subcategory_2 || null,
         primary_pack_unit: formData.primary_pack_unit,
         primary_pack_size: formData.primary_pack_size ? parseFloat(formData.primary_pack_size) : null,
         active_substance: formData.active_substance || null,
@@ -164,6 +169,8 @@ export function Products() {
               setFormData({
                 ...formData,
                 category: newCategory,
+                subcategory: '',
+                subcategory_2: '',
                 primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : formData.primary_pack_unit,
                 withdrawal_days_meat: newCategory === 'medicines' ? '0' : formData.withdrawal_days_meat,
                 withdrawal_days_milk: newCategory === 'medicines' ? '0' : formData.withdrawal_days_milk,
@@ -183,6 +190,48 @@ export function Products() {
             <option value="reproduction">Reprodukcija</option>
           </select>
         </div>
+
+        {hasSubcategories(formData.category) && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subkategorija
+            </label>
+            <select
+              value={formData.subcategory}
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  subcategory: e.target.value,
+                  subcategory_2: '',
+                });
+              }}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Pasirinkite subkategoriją</option>
+              {getSubcategories(formData.category).map(sub => (
+                <option key={sub} value={sub}>{sub}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {formData.subcategory && hasNestedSubcategories(formData.category, formData.subcategory) && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Detali subkategorija
+            </label>
+            <select
+              value={formData.subcategory_2}
+              onChange={(e) => setFormData({ ...formData, subcategory_2: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Pasirinkite detalią subkategoriją</option>
+              {getNestedSubcategories(formData.category, formData.subcategory).map(sub2 => (
+                <option key={sub2} value={sub2}>{sub2}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
