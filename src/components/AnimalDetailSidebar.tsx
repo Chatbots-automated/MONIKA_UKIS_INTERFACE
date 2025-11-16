@@ -313,7 +313,7 @@ interface AnimalDetailSidebarProps {
 
 type TabType = 'overview' | 'visits' | 'treatments' | 'vaccinations' | 'logs';
 
-export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'visits' }: AnimalDetailSidebarProps) {
+export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }: AnimalDetailSidebarProps) {
   const { logAction } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [visits, setVisits] = useState<AnimalVisit[]>([]);
