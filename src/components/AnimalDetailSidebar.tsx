@@ -273,7 +273,7 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
           <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
           <span className="font-bold text-gray-900 text-lg">{geaData.lact_days !== null ? geaData.lact_days : '-'}</span>
         </div>
-        <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Apsėklinimo diena</span>
           <span className="font-semibold text-gray-900 text-sm">{geaData.inseminated_on ? formatDateLT(geaData.inseminated_on) : '-'}</span>
         </div>
@@ -282,14 +282,14 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
           <span className="font-bold text-blue-600 text-lg">{pregnancyDays !== null ? `${pregnancyDays} d.` : '-'}</span>
         </div>
         <div className="bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-xs text-gray-500 block mb-1">Kada veršiuosis</span>
+          <span className="font-semibold text-gray-900 text-sm">{geaData.kada_versiuosis ? formatDateLT(geaData.kada_versiuosis) : '-'}</span>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Liko iki apsiveršiavimo</span>
           <span className={`font-bold text-lg ${daysUntilCalving !== null && daysUntilCalving < 30 ? 'text-orange-600' : 'text-gray-900'}`}>
             {daysUntilCalving !== null ? `${daysUntilCalving} d.` : '-'}
           </span>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-purple-100 col-span-2">
-          <span className="text-xs text-gray-500 block mb-1">Kada veršiuosis</span>
-          <span className="font-semibold text-gray-900 text-sm">{geaData.kada_versiuosis ? formatDateLT(geaData.kada_versiuosis) : '-'}</span>
         </div>
       </div>
     </div>
