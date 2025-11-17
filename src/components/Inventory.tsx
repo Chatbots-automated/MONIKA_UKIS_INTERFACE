@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Search, AlertCircle, Package, Edit2, Save, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { translateCategory } from '../lib/helpers';
 
 interface StockItem {
   batch_id: string;
@@ -400,7 +401,7 @@ export function Inventory() {
                         </select>
                       ) : (
                         <span className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full">
-                          {item.category}
+                          {translateCategory(item.category)}
                         </span>
                       )}
                     </td>

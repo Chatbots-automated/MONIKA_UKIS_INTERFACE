@@ -1,6 +1,26 @@
 import { supabase } from './supabase';
 
 /**
+ * Translate product category from English to Lithuanian
+ */
+export function translateCategory(category: string | undefined): string {
+  const translations: Record<string, string> = {
+    'medicines': 'Vaistai',
+    'prevention': 'Prevencija',
+    'vakcina': 'Vakcina',
+    'bolusas': 'Bolusas',
+    'svirkstukai': 'Švirkštukai',
+    'hygiene': 'Higiena',
+    'biocide': 'Biocidas',
+    'technical': 'Techniniai',
+    'treatment_materials': 'Gydymo medžiagos',
+    'reproduction': 'Reprodukcija',
+  };
+
+  return translations[category || ''] || category || '';
+}
+
+/**
  * Fetch all rows from a Supabase table, bypassing the 1000 row limit
  * by using pagination under the hood
  */
