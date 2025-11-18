@@ -5,6 +5,8 @@ import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, X
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
+import { TeatStatusCard } from './TeatStatusCard';
+import { TeatDisplay } from './TeatSelector';
 
 interface Vaccination {
   id: string;
@@ -661,6 +663,8 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
             </div>
 
             <WithdrawalStatusCard animalId={animal.id} />
+
+            <TeatStatusCard animalId={animal.id} />
 
             <GeaDailyCard animalId={animal.id} />
 
@@ -1621,6 +1625,15 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                           </div>
                         ) : null;
                       })()}
+                    </div>
+                  )}
+
+                  {(treatment.sick_teats || treatment.affected_teats) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <TeatDisplay
+                        sickTeats={treatment.sick_teats || []}
+                        disabledTeats={[]}
+                      />
                     </div>
                   )}
 

@@ -7,6 +7,7 @@ import { formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { SearchableSelect } from './SearchableSelect';
+import { TeatSelector } from './TeatSelector';
 
 interface WithdrawalStatus {
   animal_id: string;
@@ -40,6 +41,8 @@ export function TreatmentCompact() {
   const [diseaseId, setDiseaseId] = useState('');
   const [regDate, setRegDate] = useState(new Date().toISOString().split('T')[0]);
   const [teat, setTeat] = useState<'LF' | 'RF' | 'LR' | 'RR' | ''>('');
+  const [sickTeats, setSickTeats] = useState<string[]>([]);
+  const [disabledTeats, setDisabledTeats] = useState<string[]>([]);
   const [caseType, setCaseType] = useState<'new' | 'recurring' | ''>('');
   const [vetName, setVetName] = useState('');
   const [notes, setNotes] = useState('');
@@ -221,6 +224,8 @@ export function TreatmentCompact() {
           notes: notes || null,
           mastitis_teat: teat || null,
           mastitis_type: caseType || null,
+          sick_teats: sickTeats,
+          affected_teats: sickTeats,
         })
         .select()
         .single();
@@ -304,12 +309,35 @@ export function TreatmentCompact() {
 
       console.log('✅ Usage items logged');
 
+      if (disabledTeats.length > 0) {
+        for (const teatPosition of disabledTeats) {
+          const { error: teatError } = await supabase
+            .from('teat_status')
+            .upsert({
+              animal_id: animalId,
+              teat_position: teatPosition,
+              is_disabled: true,
+              disabled_date: regDate,
+              disabled_reason: notes || 'Išjungtas per gydymą',
+            }, {
+              onConflict: 'animal_id,teat_position'
+            });
+
+          if (teatError) {
+            console.error('Error saving teat status:', teatError);
+          }
+        }
+        console.log('✅ Disabled teats saved');
+      }
+
       alert('Gydymas sėkmingai užregistruotas!');
 
       setAnimalId('');
       setDiseaseId('');
       setRegDate(new Date().toISOString().split('T')[0]);
       setTeat('');
+      setSickTeats([]);
+      setDisabledTeats([]);
       setCaseType('');
       setVetName('');
       setNotes('');
@@ -387,66 +415,59 @@ export function TreatmentCompact() {
           />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Spenelis</label>
-            <div className="flex gap-2">
-              {(['LF', 'RF', 'LR', 'RR'] as const).map(t => (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Atvejis</label>
+              <div className="flex gap-2">
                 <button
-                  key={t}
-                  onClick={() => setTeat(teat === t ? '' : t)}
+                  onClick={() => setCaseType(caseType === 'new' ? '' : 'new')}
                   className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
-                    teat === t
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                    caseType === 'new'
+                      ? 'bg-green-600 text-white border-green-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
                   }`}
                 >
-                  {t}
+                  Naujas
                 </button>
-              ))}
+                <button
+                  onClick={() => setCaseType(caseType === 'recurring' ? '' : 'recurring')}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
+                    caseType === 'recurring'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
+                  }`}
+                >
+                  Besikartojantis
+                </button>
+              </div>
             </div>
+
+            <input
+              type="text"
+              placeholder="Veterinaras"
+              value={vetName}
+              onChange={(e) => setVetName(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+            />
           </div>
 
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Atvejis</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCaseType(caseType === 'new' ? '' : 'new')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
-                  caseType === 'new'
-                    ? 'bg-green-600 text-white border-green-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
-                }`}
-              >
-                Naujas
-              </button>
-              <button
-                onClick={() => setCaseType(caseType === 'recurring' ? '' : 'recurring')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
-                  caseType === 'recurring'
-                    ? 'bg-amber-600 text-white border-amber-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400'
-                }`}
-              >
-                Besikartojantis
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Spenų būsena</label>
+            <TeatSelector
+              selectedSickTeats={sickTeats}
+              selectedDisabledTeats={disabledTeats}
+              onSickTeatsChange={setSickTeats}
+              onDisabledTeatsChange={setDisabledTeats}
+            />
           </div>
-
-          <input
-            type="text"
-            placeholder="Veterinaras"
-            value={vetName}
-            onChange={(e) => setVetName(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-          />
 
           <input
             type="text"
             placeholder="Pastabos"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 

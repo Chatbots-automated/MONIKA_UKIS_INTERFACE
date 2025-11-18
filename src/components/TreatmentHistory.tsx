@@ -4,6 +4,7 @@ import { Activity, Calendar, FileText, Pill, Syringe, AlertCircle, ChevronDown, 
 import { formatDateLT } from '../lib/formatters';
 import { Animal } from '../lib/types';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
+import { TeatDisplay } from './TeatSelector';
 
 interface TreatmentHistoryItem {
   treatment_id: string;
@@ -18,6 +19,8 @@ interface TreatmentHistoryItem {
   notes: string | null;
   mastitis_teat: string | null;
   mastitis_type: string | null;
+  sick_teats: string[] | null;
+  affected_teats: string[] | null;
   syringe_count: number | null;
   withdrawal_until_meat: string | null;
   withdrawal_until_milk: string | null;
@@ -317,6 +320,10 @@ export function TreatmentHistory() {
                                   <div className="text-sm text-gray-600">
                                     <span className="font-medium">Veterinaras:</span> {treatment.vet_name}
                                   </div>
+                                )}
+
+                                {(treatment.sick_teats && treatment.sick_teats.length > 0) && (
+                                  <TeatDisplay sickTeats={treatment.sick_teats} disabledTeats={[]} />
                                 )}
 
                                 {(treatment.withdrawal_until_meat || treatment.withdrawal_until_milk) && (

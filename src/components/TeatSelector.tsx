@@ -1,0 +1,174 @@
+import { useState, useEffect } from 'react';
+
+interface TeatSelectorProps {
+  selectedSickTeats: string[];
+  selectedDisabledTeats: string[];
+  onSickTeatsChange: (teats: string[]) => void;
+  onDisabledTeatsChange: (teats: string[]) => void;
+  readonly?: boolean;
+}
+
+const TEAT_POSITIONS = [
+  { id: 'k1', label: 'K1', side: 'Kairė priekis' },
+  { id: 'k2', label: 'K2', side: 'Kairė užpakalis' },
+  { id: 'd1', label: 'D1', side: 'Dešinė priekis' },
+  { id: 'd2', label: 'D2', side: 'Dešinė užpakalis' },
+];
+
+export function TeatSelector({
+  selectedSickTeats,
+  selectedDisabledTeats,
+  onSickTeatsChange,
+  onDisabledTeatsChange,
+  readonly = false,
+}: TeatSelectorProps) {
+  const toggleSick = (teatId: string) => {
+    if (readonly) return;
+
+    if (selectedSickTeats.includes(teatId)) {
+      onSickTeatsChange(selectedSickTeats.filter(t => t !== teatId));
+    } else {
+      onSickTeatsChange([...selectedSickTeats, teatId]);
+    }
+  };
+
+  const toggleDisabled = (teatId: string) => {
+    if (readonly) return;
+
+    if (selectedDisabledTeats.includes(teatId)) {
+      onDisabledTeatsChange(selectedDisabledTeats.filter(t => t !== teatId));
+    } else {
+      onDisabledTeatsChange([...selectedDisabledTeats, teatId]);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-6">
+        {TEAT_POSITIONS.map((teat) => {
+          const isSick = selectedSickTeats.includes(teat.id);
+          const isDisabled = selectedDisabledTeats.includes(teat.id);
+
+          return (
+            <div key={teat.id} className="space-y-2">
+              <div className="text-xs font-medium text-gray-600 text-center">
+                {teat.side}
+              </div>
+
+              <div
+                className={`
+                  relative w-full aspect-square rounded-lg border-2 transition-all
+                  ${readonly ? 'cursor-default' : 'cursor-pointer hover:shadow-md'}
+                  ${isSick ? 'bg-red-100 border-red-500' : ''}
+                  ${isDisabled ? 'bg-gray-300 border-gray-500' : ''}
+                  ${!isSick && !isDisabled ? 'bg-green-50 border-green-300' : ''}
+                `}
+                onClick={() => !readonly && !isDisabled && toggleSick(teat.id)}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-gray-700">
+                    {teat.label}
+                  </span>
+                </div>
+
+                {isSick && (
+                  <div className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 py-0.5 rounded">
+                    Sergantis
+                  </div>
+                )}
+
+                {isDisabled && (
+                  <div className="absolute top-1 right-1 bg-gray-700 text-white text-xs px-2 py-0.5 rounded">
+                    Išjungtas
+                  </div>
+                )}
+              </div>
+
+              {!readonly && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSick(teat.id)}
+                    disabled={isDisabled}
+                    className={`
+                      flex-1 text-xs py-1.5 rounded transition-colors
+                      ${isSick
+                        ? 'bg-red-600 text-white'
+                        : 'bg-red-50 text-red-700 hover:bg-red-100'
+                      }
+                      ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                  >
+                    {isSick ? '✓ Sergantis' : 'Sergantis'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleDisabled(teat.id)}
+                    className={`
+                      flex-1 text-xs py-1.5 rounded transition-colors
+                      ${isDisabled
+                        ? 'bg-gray-700 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }
+                    `}
+                  >
+                    {isDisabled ? '✓ Išjungtas' : 'Išjungtas'}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {(selectedSickTeats.length > 0 || selectedDisabledTeats.length > 0) && (
+        <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+          {selectedSickTeats.length > 0 && (
+            <div>
+              <span className="font-medium">Sergantys spenys:</span>{' '}
+              {selectedSickTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+            </div>
+          )}
+          {selectedDisabledTeats.length > 0 && (
+            <div>
+              <span className="font-medium">Išjungti spenys:</span>{' '}
+              {selectedDisabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TeatDisplay({ sickTeats, disabledTeats }: { sickTeats: string[]; disabledTeats: string[] }) {
+  if (!sickTeats?.length && !disabledTeats?.length) return null;
+
+  return (
+    <div className="text-sm space-y-1">
+      {sickTeats?.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
+            Sergantys spenys:
+          </span>
+          <span className="text-gray-700">
+            {sickTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+          </span>
+        </div>
+      )}
+      {disabledTeats?.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-medium">
+            Išjungti spenys:
+          </span>
+          <span className="text-gray-700">
+            {disabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export { TEAT_POSITIONS };
