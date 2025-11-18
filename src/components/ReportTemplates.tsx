@@ -1,5 +1,14 @@
 import { formatDateLT } from '../lib/formatters';
 
+function translateUnit(unit: string): string {
+  const translations: Record<string, string> = {
+    'syringe': 'švirkštukas',
+    'tablet': 'tabletkė',
+    'bolus': 'bolusas',
+  };
+  return translations[unit] || unit;
+}
+
 interface TreatedAnimalsReportProps {
   data: any[];
 }
@@ -190,7 +199,7 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
                     {row.active_substance && <div className="text-gray-600 text-[10px]">💊 Veikl. med.: {row.active_substance}</div>}
                   </div>
                 </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-medium text-gray-700">{row.unit || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-medium text-gray-700">{translateUnit(row.unit) || '-'}</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.receipt_date ? formatDateLT(row.receipt_date) : '-'}</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs">
                   <div className="space-y-1">
@@ -280,7 +289,7 @@ export function BiocideJournalReport({ data }: BiocideJournalReportProps) {
                     {row.active_substance && <div className="text-gray-600 text-[10px]">🧪 Veikl. med.: {row.active_substance}</div>}
                   </div>
                 </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-medium text-gray-700">{row.unit || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-medium text-gray-700">{translateUnit(row.unit) || '-'}</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center text-gray-400">-</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center text-gray-400">-</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center text-gray-400">-</td>

@@ -24,6 +24,13 @@ export function Vaccinations() {
   const [showMassVaccination, setShowMassVaccination] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [filterSpecies, setFilterSpecies] = useState('');
+  const [filterSex, setFilterSex] = useState('');
+  const [filterAgeFrom, setFilterAgeFrom] = useState('');
+  const [filterAgeTo, setFilterAgeTo] = useState('');
+  const [filterTagFrom, setFilterTagFrom] = useState('');
+  const [filterTagTo, setFilterTagTo] = useState('');
+
   const [vacDateFrom, setVacDateFrom] = useState('');
   const [vacDateTo, setVacDateTo] = useState('');
   const [vacSearch, setVacSearch] = useState('');
@@ -255,10 +262,31 @@ export function Vaccinations() {
     }));
   };
 
-  const filteredAnimals = animals.filter(a =>
-    a.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredAnimals = animals.filter(a => {
+    const matchesSearch = a.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesSpecies = !filterSpecies || a.species?.toLowerCase() === filterSpecies.toLowerCase();
+
+    const matchesSex = !filterSex || a.sex?.toLowerCase() === filterSex.toLowerCase();
+
+    const ageInMonths = a.age_months || 0;
+    const matchesAgeFrom = !filterAgeFrom || ageInMonths >= parseInt(filterAgeFrom);
+    const matchesAgeTo = !filterAgeTo || ageInMonths <= parseInt(filterAgeTo);
+
+    const matchesTagRange = () => {
+      if (!filterTagFrom && !filterTagTo) return true;
+      const tag = a.tag_no || '';
+      if (filterTagFrom && filterTagTo) {
+        return tag >= filterTagFrom && tag <= filterTagTo;
+      }
+      if (filterTagFrom) return tag >= filterTagFrom;
+      if (filterTagTo) return tag <= filterTagTo;
+      return true;
+    };
+
+    return matchesSearch && matchesSpecies && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
+  });
 
   const filteredVaccinations = vaccinations.filter(vac => {
     let match = true;
@@ -466,6 +494,110 @@ export function Vaccinations() {
                 rows={2}
                 placeholder="Papildoma informacija..."
               />
+            </div>
+          </div>
+
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-5 h-5 text-blue-600" />
+              <h4 className="font-bold text-gray-900">Filtruoti gyvūnus</h4>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Rūšis</label>
+                <select
+                  value={filterSpecies}
+                  onChange={(e) => setFilterSpecies(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visos</option>
+                  <option value="Galvijas">Galvijas</option>
+                  <option value="Kiaulė">Kiaulė</option>
+                  <option value="Avis">Avis</option>
+                  <option value="Ožka">Ožka</option>
+                  <option value="Arklys">Arklys</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Lytis</label>
+                <select
+                  value={filterSex}
+                  onChange={(e) => setFilterSex(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visi</option>
+                  <option value="Bulius">Bulius</option>
+                  <option value="Karvė">Karvė</option>
+                  <option value="Telyčaitė">Telyčaitė</option>
+                  <option value="Veršelis">Veršelis</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Amžius nuo (mėn.)</label>
+                <input
+                  type="number"
+                  value={filterAgeFrom}
+                  onChange={(e) => setFilterAgeFrom(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Amžius iki (mėn.)</label>
+                <input
+                  type="number"
+                  value={filterAgeTo}
+                  onChange={(e) => setFilterAgeTo(e.target.value)}
+                  placeholder="999"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Numeris nuo</label>
+                <input
+                  type="text"
+                  value={filterTagFrom}
+                  onChange={(e) => setFilterTagFrom(e.target.value)}
+                  placeholder="LT000044539555"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Numeris iki</label>
+                <input
+                  type="text"
+                  value={filterTagTo}
+                  onChange={(e) => setFilterTagTo(e.target.value)}
+                  placeholder="LT000044539571"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => {
+                  setFilterSpecies('');
+                  setFilterSex('');
+                  setFilterAgeFrom('');
+                  setFilterAgeTo('');
+                  setFilterTagFrom('');
+                  setFilterTagTo('');
+                  setSearchTerm('');
+                }}
+                className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 transition-colors"
+              >
+                Išvalyti filtrus
+              </button>
+              <span className="text-xs text-gray-600 flex items-center">
+                Rasta gyvūnų: <span className="ml-1 font-bold text-blue-600">{filteredAnimals.length}</span>
+              </span>
             </div>
           </div>
 
