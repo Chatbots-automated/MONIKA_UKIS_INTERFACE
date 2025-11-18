@@ -3070,25 +3070,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                               )}
                             </>
                           )}
-
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm text-gray-700">Spenis:</label>
-                            <select
-                              value={med.teat}
-                              onChange={(e) => {
-                                const newMeds = [...treatmentData.medications];
-                                newMeds[idx].teat = e.target.value;
-                                setTreatmentData({ ...treatmentData, medications: newMeds });
-                              }}
-                              className="px-2 py-1 border border-gray-300 rounded text-xs"
-                            >
-                              <option value="">-</option>
-                              <option value="d1">D1 (dešinė priekis)</option>
-                              <option value="d2">D2 (dešinė gale)</option>
-                              <option value="k1">K1 (kairė priekis)</option>
-                              <option value="k2">K2 (kairė gale)</option>
-                            </select>
-                          </div>
                         </div>
                         {selectedProduct && (selectedProduct.withdrawal_days_milk || selectedProduct.withdrawal_days_meat) && (
                           <div className="text-xs bg-amber-50 border-2 border-amber-300 rounded px-3 py-2">

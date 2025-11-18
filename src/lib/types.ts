@@ -1,5 +1,5 @@
 export type ProductCategory = 'medicines' | 'prevention' | 'vakcina' | 'reproduction' | 'treatment_materials' | 'hygiene' | 'biocide' | 'technical' | 'svirkstukai' | 'bolusas';
-export type Unit = 'ml' | 'l' | 'g' | 'kg' | 'vnt' | 'tablet' | 'bolus' | 'syringe';
+export type Unit = 'ml' | 'l' | 'g' | 'kg' | 'vnt' | 'tabletkė' | 'bolusas' | 'švirkštukas';
 
 export interface Product {
   id: string;

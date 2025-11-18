@@ -609,9 +609,9 @@ export function Treatment() {
                       <option value="g">g</option>
                       <option value="kg">kg</option>
                       <option value="vnt">vnt</option>
-                      <option value="tablet">tabletė</option>
-                      <option value="bolus">bolusas</option>
-                      <option value="syringe">švirkštas</option>
+                      <option value="tabletkė">tabletkė</option>
+                      <option value="bolusas">bolusas</option>
+                      <option value="švirkštukas">švirkštukas</option>
                     </select>
                   </div>
 

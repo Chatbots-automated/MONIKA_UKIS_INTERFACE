@@ -171,7 +171,7 @@ export function Products() {
                 category: newCategory,
                 subcategory: '',
                 subcategory_2: '',
-                primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : formData.primary_pack_unit,
+                primary_pack_unit: newCategory === 'svirkstukai' ? 'švirkštukas' : formData.primary_pack_unit,
                 withdrawal_days_meat: newCategory === 'medicines' ? '0' : formData.withdrawal_days_meat,
                 withdrawal_days_milk: newCategory === 'medicines' ? '0' : formData.withdrawal_days_milk,
               });
@@ -263,9 +263,9 @@ export function Products() {
             <option value="g">g</option>
             <option value="kg">kg</option>
             <option value="vnt">vnt</option>
-            <option value="tablet">tabletė</option>
-            <option value="bolus">bolusas</option>
-            <option value="syringe">švirkštas</option>
+            <option value="tabletkė">tabletkė</option>
+            <option value="bolusas">bolusas</option>
+            <option value="švirkštukas">švirkštukas</option>
           </select>
         </div>
 
