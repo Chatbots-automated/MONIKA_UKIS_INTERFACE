@@ -1382,6 +1382,22 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                                     {visit.notes && (
                                       <div className="text-xs text-gray-500 mt-1 line-clamp-2">{visit.notes}</div>
                                     )}
+                                    {(visit as any).planned_medications && (visit as any).planned_medications.length > 0 && !(visit as any).medications_processed && (
+                                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                                        <div className="text-xs font-semibold text-amber-900 mb-1">📦 Planuojami vaistai:</div>
+                                        {(visit as any).planned_medications.map((med: any, idx: number) => {
+                                          const product = products.find(p => p.id === med.product_id);
+                                          return (
+                                            <div key={idx} className="text-xs text-amber-800">
+                                              • {product?.name || 'Produktas'}: {med.qty} {med.unit}
+                                            </div>
+                                          );
+                                        })}
+                                        <div className="text-xs text-amber-600 mt-1 italic">
+                                          Nusirašys kai vizitas bus užbaigtas
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="text-xs text-gray-500 whitespace-nowrap">
                                     {formatDateTimeLT(visit.visit_datetime)}
@@ -1773,6 +1789,22 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                                     </div>
                                     {visit.notes && (
                                       <div className="text-xs text-gray-500 mt-1 line-clamp-2">{visit.notes}</div>
+                                    )}
+                                    {(visit as any).planned_medications && (visit as any).planned_medications.length > 0 && !(visit as any).medications_processed && (
+                                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                                        <div className="text-xs font-semibold text-amber-900 mb-1">📦 Planuojami vaistai:</div>
+                                        {(visit as any).planned_medications.map((med: any, idx: number) => {
+                                          const product = products.find(p => p.id === med.product_id);
+                                          return (
+                                            <div key={idx} className="text-xs text-amber-800">
+                                              • {product?.name || 'Produktas'}: {med.qty} {med.unit}
+                                            </div>
+                                          );
+                                        })}
+                                        <div className="text-xs text-amber-600 mt-1 italic">
+                                          Nusirašys kai vizitas bus užbaigtas
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                   <div className="text-xs text-gray-500 whitespace-nowrap">
@@ -2476,18 +2508,26 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           treatmentRecord = data;
         }
 
-        // Create usage items or courses for medications
+        // NEW SYSTEM: Handle medication deduction based on visit status
+        // If visit is "Baigtas" immediately, process medications now
+        // Otherwise, store as planned_medications and process when completed
+
+        const isCourseWithMultipleDays = treatmentData.medications.some(
+          med => med.is_course && parseInt(med.course_days) > 1
+        );
+
         for (const med of treatmentData.medications) {
           if (!med.product_id || !med.batch_id || !med.qty) {
             throw new Error('Visi vaistų laukai privalomi: produktas, serija ir kiekis');
           }
 
-          // If this is a multi-day course, create a course entry
+          // If this is a multi-day course
           if (med.is_course && parseInt(med.course_days) > 1) {
             const totalQty = parseFloat(med.qty);
             const days = parseInt(med.course_days);
             const dailyDose = totalQty / days;
 
+            // Store course information for tracking
             const { error: courseError } = await supabase
               .from('treatment_courses')
               .insert({
@@ -2503,22 +2543,67 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               });
 
             if (courseError) throw courseError;
-          } else {
-            // Single dose - create normal usage item
-            const { error: usageError } = await supabase
-              .from('usage_items')
-              .insert({
-                treatment_id: treatmentRecord.id,
-                product_id: med.product_id,
-                batch_id: med.batch_id,
-                qty: parseFloat(med.qty),
-                unit: med.unit,
-                purpose: med.purpose ? med.purpose : null,
-                teat: med.teat || null,
-              });
 
-            if (usageError) throw usageError;
+            // For TODAY'S visit: Only deduct daily dose if status is "Baigtas"
+            if (formData.status === 'Baigtas') {
+              const { error: usageError } = await supabase
+                .from('usage_items')
+                .insert({
+                  treatment_id: treatmentRecord.id,
+                  product_id: med.product_id,
+                  batch_id: med.batch_id,
+                  qty: dailyDose,
+                  unit: med.unit,
+                  purpose: med.purpose ? med.purpose : null,
+                  teat: med.teat || null,
+                });
+
+              if (usageError) throw usageError;
+            }
+          } else {
+            // Single dose - only create usage if visit is completed
+            if (formData.status === 'Baigtas') {
+              const { error: usageError } = await supabase
+                .from('usage_items')
+                .insert({
+                  treatment_id: treatmentRecord.id,
+                  product_id: med.product_id,
+                  batch_id: med.batch_id,
+                  qty: parseFloat(med.qty),
+                  unit: med.unit,
+                  purpose: med.purpose ? med.purpose : null,
+                  teat: med.teat || null,
+                });
+
+              if (usageError) throw usageError;
+            }
           }
+        }
+
+        // Update the visit with planned medications if not completed
+        if (formData.status !== 'Baigtas') {
+          const plannedMeds = treatmentData.medications.map(med => {
+            const dailyQty = med.is_course && parseInt(med.course_days) > 1
+              ? parseFloat(med.qty) / parseInt(med.course_days)
+              : parseFloat(med.qty);
+
+            return {
+              product_id: med.product_id,
+              batch_id: med.batch_id,
+              qty: dailyQty,
+              unit: med.unit,
+              purpose: med.purpose || 'Gydymas',
+              teat: med.teat || null,
+            };
+          });
+
+          await supabase
+            .from('animal_visits')
+            .update({
+              planned_medications: plannedMeds,
+              medications_processed: false
+            })
+            .eq('id', visitData.id);
         }
 
         // Calculate withdrawal dates using database function
@@ -2532,12 +2617,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           console.log('✅ Withdrawal dates calculated successfully');
         }
 
-        // Create future visits for recurring treatments
+        // Create future visits for recurring treatments with planned medications
         if (hasRecurringDays) {
           const medicationNames = treatmentData.medications
             .map(med => products.find(p => p.id === med.product_id)?.name)
             .filter(Boolean)
             .join(', ');
+
+          // Calculate daily doses for each medication
+          const dailyMedications = treatmentData.medications.map(med => {
+            const dailyQty = med.is_course && parseInt(med.course_days) > 1
+              ? parseFloat(med.qty) / parseInt(med.course_days)
+              : parseFloat(med.qty);
+
+            return {
+              product_id: med.product_id,
+              batch_id: med.batch_id,
+              qty: dailyQty,
+              unit: med.unit,
+              purpose: med.purpose || 'Gydymas',
+              teat: med.teat || null,
+            };
+          });
 
           const futureVisits = treatmentData.recurring_days.map(dateStr => {
             return {
@@ -2550,6 +2651,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               next_visit_required: false,
               treatment_required: true,
               related_treatment_id: treatmentRecord.id,
+              related_visit_id: visitData.id,
+              planned_medications: dailyMedications,
+              medications_processed: false,
             };
           });
 
@@ -2561,8 +2665,25 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             console.error('Error creating future treatment visits:', futureVisitsError);
             alert('Įspėjimas: Būsimų vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message);
           } else {
-            console.log(`✅ Created ${futureVisits.length} future treatment visits`);
+            console.log(`✅ Created ${futureVisits.length} future treatment visits with planned medications`);
           }
+
+          // Auto-enable "Reikia sekančio vizito" when course is created
+          // The next visit should be AFTER the last course day for check-up
+          const lastCourseDate = treatmentData.recurring_days[treatmentData.recurring_days.length - 1];
+          const lastCourseDateObj = new Date(lastCourseDate);
+          const checkupDate = new Date(lastCourseDateObj);
+          checkupDate.setDate(checkupDate.getDate() + 3); // 3 days after last treatment
+
+          await supabase
+            .from('animal_visits')
+            .update({
+              next_visit_required: true,
+              next_visit_date: checkupDate.toISOString().slice(0, 16),
+            })
+            .eq('id', visitData.id);
+
+          console.log(`✅ Auto-enabled next visit for check-up on ${checkupDate.toLocaleDateString('lt')}`);
         }
 
         // Save disabled teats to teat_status table
@@ -3069,6 +3190,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                                   const newMeds = [...treatmentData.medications];
                                   newMeds[idx].course_days = e.target.value;
                                   setTreatmentData({ ...treatmentData, medications: newMeds });
+
+                                  // Auto-enable next visit when course duration is set
+                                  if (parseInt(e.target.value) > 1) {
+                                    setFormData({ ...formData, next_visit_required: true });
+                                  }
                                 }}
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
                               />
