@@ -82,3 +82,19 @@ export async function fetchAllRows<T>(
 
   return allRows;
 }
+
+/**
+ * Normalize number input by replacing comma with decimal point
+ * This allows users to enter numbers using comma (European style)
+ */
+export function normalizeNumberInput(value: string): string {
+  return value.replace(',', '.');
+}
+
+/**
+ * Parse a number from user input, handling both comma and decimal
+ */
+export function parseNumberInput(value: string): number {
+  const normalized = normalizeNumberInput(value);
+  return parseFloat(normalized);
+}

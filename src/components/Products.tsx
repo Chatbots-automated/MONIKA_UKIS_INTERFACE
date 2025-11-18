@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, Unit } from '../lib/types';
+import { normalizeNumberInput } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';

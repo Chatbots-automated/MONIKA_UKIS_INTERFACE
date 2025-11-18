@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Supplier } from '../lib/types';
+import { normalizeNumberInput } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Check, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, CreditCard as Edit2, Save, AlertTriangle } from 'lucide-react';
@@ -1424,7 +1425,7 @@ export function ReceiveStock() {
                             type="number"
                             step="0.01"
                             value={newProductForm.total_quantity}
-                            onChange={(e) => setNewProductForm({ ...newProductForm, total_quantity: e.target.value })}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, total_quantity: normalizeNumberInput(e.target.value) })}
                             className="w-full px-3 py-2 border border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-emerald-50 font-semibold"
                             placeholder="500"
                             readOnly={!!(newProductForm.primary_pack_size && newProductForm.package_count)}

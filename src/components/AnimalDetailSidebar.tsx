@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
+import { normalizeNumberInput } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
 import { TeatStatusCard } from './TeatStatusCard';
@@ -2736,7 +2737,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   type="number"
                   step="0.1"
                   value={formData.temperature}
-                  onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, temperature: normalizeNumberInput(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   placeholder="38.5"
                 />
@@ -3023,7 +3024,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                             value={med.qty}
                             onChange={(e) => {
                               const newMeds = [...treatmentData.medications];
-                              newMeds[idx].qty = e.target.value;
+                              newMeds[idx].qty = normalizeNumberInput(e.target.value);
                               setTreatmentData({ ...treatmentData, medications: newMeds });
                             }}
                             className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"

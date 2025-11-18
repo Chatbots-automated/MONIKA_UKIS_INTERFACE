@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchAllRows } from '../lib/helpers';
+import { fetchAllRows, normalizeNumberInput } from '../lib/helpers';
 import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -457,7 +457,7 @@ export function Vaccinations() {
                           value={vaccine.dose_amount}
                           onChange={(e) => {
                             const newVaccines = [...massVaccines];
-                            newVaccines[idx].dose_amount = e.target.value;
+                            newVaccines[idx].dose_amount = normalizeNumberInput(e.target.value);
                             setMassVaccines(newVaccines);
                           }}
                           className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
