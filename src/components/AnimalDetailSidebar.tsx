@@ -1645,15 +1645,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                   )}
                 </div>
               ))
-            ) : (
-              <div className="text-center py-16 text-gray-500">
-                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Pill className="w-10 h-10 text-gray-400" />
-                </div>
-                <p className="text-lg font-medium">Nėra gydymų</p>
-                <p className="text-sm mt-1">Gydymai bus pridėti per vizitus</p>
-              </div>
-            )}
+            ) : null}
           </div>
         )}
 

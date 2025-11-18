@@ -43,56 +43,40 @@ export function TeatSelector({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-2">
+      <div className="grid grid-cols-4 gap-2">
         {TEAT_POSITIONS.map((teat) => {
           const isSick = selectedSickTeats.includes(teat.id);
           const isDisabled = selectedDisabledTeats.includes(teat.id);
 
           return (
-            <div key={teat.id} className="space-y-2">
-              <div className="text-xs font-medium text-gray-600 text-center">
-                {teat.side}
-              </div>
-
+            <div key={teat.id} className="space-y-1">
               <div
                 className={`
-                  relative w-full rounded-lg border-2 transition-all
-                  ${readonly ? 'cursor-default' : 'cursor-pointer hover:shadow-md'}
+                  relative w-full rounded border transition-all
+                  ${readonly ? 'cursor-default' : 'cursor-pointer hover:shadow-sm'}
                   ${isSick ? 'bg-red-100 border-red-500' : ''}
                   ${isDisabled ? 'bg-gray-300 border-gray-500' : ''}
                   ${!isSick && !isDisabled ? 'bg-green-50 border-green-300' : ''}
                 `}
-                style={{ aspectRatio: '1', minHeight: '60px' }}
+                style={{ aspectRatio: '1', minHeight: '30px' }}
                 onClick={() => !readonly && !isDisabled && toggleSick(teat.id)}
               >
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xl font-bold text-gray-700">
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-sm font-bold text-gray-700">
                     {teat.label}
                   </span>
                 </div>
-
-                {isSick && (
-                  <div className="absolute top-1 right-1 bg-red-600 text-white text-xs px-1.5 py-0.5 rounded">
-                    Sergantis
-                  </div>
-                )}
-
-                {isDisabled && (
-                  <div className="absolute top-1 right-1 bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded">
-                    Išjungtas
-                  </div>
-                )}
               </div>
 
               {!readonly && (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-0.5">
                   <button
                     type="button"
                     onClick={() => toggleSick(teat.id)}
                     disabled={isDisabled}
                     className={`
-                      flex-1 text-xs py-1.5 rounded transition-colors
+                      text-[10px] py-0.5 px-1 rounded transition-colors
                       ${isSick
                         ? 'bg-red-600 text-white'
                         : 'bg-red-50 text-red-700 hover:bg-red-100'
@@ -100,21 +84,21 @@ export function TeatSelector({
                       ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
-                    {isSick ? '✓ Sergantis' : 'Sergantis'}
+                    {isSick ? '✓' : 'S'}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => toggleDisabled(teat.id)}
                     className={`
-                      flex-1 text-xs py-1.5 rounded transition-colors
+                      text-[10px] py-0.5 px-1 rounded transition-colors
                       ${isDisabled
                         ? 'bg-gray-700 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }
                     `}
                   >
-                    {isDisabled ? '✓ Išjungtas' : 'Išjungtas'}
+                    {isDisabled ? '✓' : 'I'}
                   </button>
                 </div>
               )}
@@ -124,16 +108,16 @@ export function TeatSelector({
       </div>
 
       {(selectedSickTeats.length > 0 || selectedDisabledTeats.length > 0) && (
-        <div className="text-sm text-gray-600 bg-white border border-gray-300 p-2 rounded">
+        <div className="text-xs text-gray-600 bg-white border border-gray-300 p-1.5 rounded">
           {selectedSickTeats.length > 0 && (
             <div>
-              <span className="font-medium">Sergantys spenys:</span>{' '}
+              <span className="font-medium">Sergantys:</span>{' '}
               {selectedSickTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
             </div>
           )}
           {selectedDisabledTeats.length > 0 && (
             <div>
-              <span className="font-medium">Išjungti spenys:</span>{' '}
+              <span className="font-medium">Išjungti:</span>{' '}
               {selectedDisabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
             </div>
           )}
