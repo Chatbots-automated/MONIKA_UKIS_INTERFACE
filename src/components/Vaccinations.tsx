@@ -276,12 +276,15 @@ export function Vaccinations() {
 
     const matchesTagRange = () => {
       if (!filterTagFrom && !filterTagTo) return true;
-      const tag = a.tag_no || '';
-      if (filterTagFrom && filterTagTo) {
-        return tag >= filterTagFrom && tag <= filterTagTo;
+      const tag = (a.tag_no || '').toUpperCase().trim();
+      const tagFrom = filterTagFrom.toUpperCase().trim();
+      const tagTo = filterTagTo.toUpperCase().trim();
+
+      if (tagFrom && tagTo) {
+        return tag >= tagFrom && tag <= tagTo;
       }
-      if (filterTagFrom) return tag >= filterTagFrom;
-      if (filterTagTo) return tag <= filterTagTo;
+      if (tagFrom) return tag >= tagFrom;
+      if (tagTo) return tag <= tagTo;
       return true;
     };
 
@@ -531,7 +534,6 @@ export function Vaccinations() {
                   <option value="Bulius">Bulius</option>
                   <option value="Karvė">Karvė</option>
                   <option value="Telyčaitė">Telyčaitė</option>
-                  <option value="Veršelis">Veršelis</option>
                 </select>
               </div>
 
