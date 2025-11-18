@@ -43,60 +43,64 @@ export function TeatSelector({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-6">
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-8">
         {TEAT_POSITIONS.map((teat) => {
           const isSick = selectedSickTeats.includes(teat.id);
           const isDisabled = selectedDisabledTeats.includes(teat.id);
 
           return (
-            <div key={teat.id} className="space-y-2">
-              <div className="text-xs font-medium text-gray-600 text-center">
+            <div key={teat.id} className="space-y-3">
+              <div className="text-sm font-bold text-gray-700 text-center uppercase tracking-wide">
                 {teat.side}
               </div>
 
               <div
                 className={`
-                  relative w-full aspect-square rounded-lg border-2 transition-all
-                  ${readonly ? 'cursor-default' : 'cursor-pointer hover:shadow-md'}
-                  ${isSick ? 'bg-red-100 border-red-500' : ''}
-                  ${isDisabled ? 'bg-gray-300 border-gray-500' : ''}
-                  ${!isSick && !isDisabled ? 'bg-green-50 border-green-300' : ''}
+                  relative w-full rounded-xl border-4 transition-all shadow-lg
+                  ${readonly ? 'cursor-default' : 'cursor-pointer hover:shadow-2xl hover:scale-105'}
+                  ${isSick ? 'bg-gradient-to-br from-red-100 to-red-200 border-red-600' : ''}
+                  ${isDisabled ? 'bg-gradient-to-br from-gray-300 to-gray-400 border-gray-600' : ''}
+                  ${!isSick && !isDisabled ? 'bg-gradient-to-br from-green-50 to-green-100 border-green-400' : ''}
                 `}
+                style={{ aspectRatio: '1', minHeight: '140px' }}
                 onClick={() => !readonly && !isDisabled && toggleSick(teat.id)}
               >
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-gray-700">
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-5xl font-black text-gray-800 mb-2">
                     {teat.label}
+                  </span>
+                  <span className="text-xs text-gray-600 font-medium">
+                    Spenelis
                   </span>
                 </div>
 
                 {isSick && (
-                  <div className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 py-0.5 rounded">
-                    Sergantis
+                  <div className="absolute top-2 right-2 bg-red-600 text-white text-sm font-bold px-3 py-1.5 rounded-lg shadow-md">
+                    🔴 Sergantis
                   </div>
                 )}
 
                 {isDisabled && (
-                  <div className="absolute top-1 right-1 bg-gray-700 text-white text-xs px-2 py-0.5 rounded">
-                    Išjungtas
+                  <div className="absolute top-2 right-2 bg-gray-800 text-white text-sm font-bold px-3 py-1.5 rounded-lg shadow-md">
+                    ⚫ Išjungtas
                   </div>
                 )}
               </div>
 
               {!readonly && (
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => toggleSick(teat.id)}
                     disabled={isDisabled}
                     className={`
-                      flex-1 text-xs py-1.5 rounded transition-colors
+                      flex-1 text-sm font-semibold py-3 rounded-lg transition-all transform
                       ${isSick
-                        ? 'bg-red-600 text-white'
-                        : 'bg-red-50 text-red-700 hover:bg-red-100'
+                        ? 'bg-red-600 text-white shadow-lg scale-105'
+                        : 'bg-red-50 text-red-700 hover:bg-red-100 border-2 border-red-300'
                       }
-                      ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+                      ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}
                     `}
                   >
                     {isSick ? '✓ Sergantis' : 'Sergantis'}
@@ -106,11 +110,12 @@ export function TeatSelector({
                     type="button"
                     onClick={() => toggleDisabled(teat.id)}
                     className={`
-                      flex-1 text-xs py-1.5 rounded transition-colors
+                      flex-1 text-sm font-semibold py-3 rounded-lg transition-all transform
                       ${isDisabled
-                        ? 'bg-gray-700 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-gray-800 text-white shadow-lg scale-105'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-2 border-gray-300'
                       }
+                      hover:scale-105
                     `}
                   >
                     {isDisabled ? '✓ Išjungtas' : 'Išjungtas'}
@@ -123,17 +128,21 @@ export function TeatSelector({
       </div>
 
       {(selectedSickTeats.length > 0 || selectedDisabledTeats.length > 0) && (
-        <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+        <div className="text-base bg-white border-2 border-blue-300 p-4 rounded-lg shadow-sm">
           {selectedSickTeats.length > 0 && (
-            <div>
-              <span className="font-medium">Sergantys spenys:</span>{' '}
-              {selectedSickTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+            <div className="mb-2">
+              <span className="font-bold text-red-700">🔴 Sergantys spenys:</span>{' '}
+              <span className="text-gray-900 font-semibold">
+                {selectedSickTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+              </span>
             </div>
           )}
           {selectedDisabledTeats.length > 0 && (
             <div>
-              <span className="font-medium">Išjungti spenys:</span>{' '}
-              {selectedDisabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+              <span className="font-bold text-gray-700">⚫ Išjungti spenys:</span>{' '}
+              <span className="text-gray-900 font-semibold">
+                {selectedDisabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t)?.label).join(', ')}
+              </span>
             </div>
           )}
         </div>
