@@ -24,7 +24,6 @@ export function Vaccinations() {
   const [showMassVaccination, setShowMassVaccination] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [filterSpecies, setFilterSpecies] = useState('');
   const [filterSex, setFilterSex] = useState('');
   const [filterAgeFrom, setFilterAgeFrom] = useState('');
   const [filterAgeTo, setFilterAgeTo] = useState('');
@@ -35,14 +34,17 @@ export function Vaccinations() {
   const [vacDateTo, setVacDateTo] = useState('');
   const [vacSearch, setVacSearch] = useState('');
 
-  const [massVaccinationData, setMassVaccinationData] = useState({
+  const [massVaccines, setMassVaccines] = useState([{
     product_id: '',
     batch_id: '',
+    dose_amount: '',
+    unit: 'ml' as Unit,
+  }]);
+
+  const [massVaccinationData, setMassVaccinationData] = useState({
     vaccination_date: new Date().toISOString().split('T')[0],
     next_booster_date: '',
     dose_number: '1',
-    dose_amount: '',
-    unit: 'ml' as Unit,
     administered_by: '',
     notes: '',
   });
@@ -128,8 +130,10 @@ export function Vaccinations() {
   };
 
   const handleMassVaccinate = async () => {
-    if (!massVaccinationData.product_id || !massVaccinationData.dose_amount) {
-      alert('Pasirinkite vakciną/prevenciją ir įveskite dozę');
+    const validVaccines = massVaccines.filter(v => v.product_id && v.dose_amount);
+
+    if (validVaccines.length === 0) {
+      alert('Pasirinkite bent vieną vakciną/prevenciją ir įveskite dozę');
       return;
     }
 
@@ -141,48 +145,60 @@ export function Vaccinations() {
     setSaving(true);
 
     try {
-      const vaccinationEntries = Array.from(selectedAnimals).map(animalId => ({
-        animal_id: animalId,
-        product_id: massVaccinationData.product_id,
-        batch_id: massVaccinationData.batch_id || null,
-        vaccination_date: massVaccinationData.vaccination_date,
-        next_booster_date: massVaccinationData.next_booster_date || null,
-        dose_number: parseInt(massVaccinationData.dose_number),
-        dose_amount: parseFloat(massVaccinationData.dose_amount),
-        unit: massVaccinationData.unit,
-        administered_by: massVaccinationData.administered_by || null,
-        notes: massVaccinationData.notes || null,
-      }));
+      const allVaccinationEntries = [];
 
-      const { error } = await supabase.from('vaccinations').insert(vaccinationEntries);
+      for (const vaccine of validVaccines) {
+        const vaccinationEntries = Array.from(selectedAnimals).map(animalId => ({
+          animal_id: animalId,
+          product_id: vaccine.product_id,
+          batch_id: vaccine.batch_id || null,
+          vaccination_date: massVaccinationData.vaccination_date,
+          next_booster_date: massVaccinationData.next_booster_date || null,
+          dose_number: parseInt(massVaccinationData.dose_number),
+          dose_amount: parseFloat(vaccine.dose_amount),
+          unit: vaccine.unit,
+          administered_by: massVaccinationData.administered_by || null,
+          notes: massVaccinationData.notes || null,
+        }));
+
+        allVaccinationEntries.push(...vaccinationEntries);
+      }
+
+      const { error } = await supabase.from('vaccinations').insert(allVaccinationEntries);
 
       if (error) throw error;
 
-      const selectedProduct = products.find(p => p.id === massVaccinationData.product_id);
-      await logAction(
-        'create_mass_vaccination',
-        'vaccinations',
-        null,
-        null,
-        {
-          animal_count: selectedAnimals.size,
-          product_id: massVaccinationData.product_id,
-          product_name: selectedProduct?.name || 'N/A',
-          batch_id: massVaccinationData.batch_id,
-          vaccination_date: massVaccinationData.vaccination_date,
-          dose_amount: massVaccinationData.dose_amount,
-          dose_number: massVaccinationData.dose_number,
-        }
-      );
+      for (const vaccine of validVaccines) {
+        const selectedProduct = products.find(p => p.id === vaccine.product_id);
+        await logAction(
+          'create_mass_vaccination',
+          'vaccinations',
+          null,
+          null,
+          {
+            animal_count: selectedAnimals.size,
+            product_id: vaccine.product_id,
+            product_name: selectedProduct?.name || 'N/A',
+            batch_id: vaccine.batch_id,
+            vaccination_date: massVaccinationData.vaccination_date,
+            dose_amount: vaccine.dose_amount,
+            dose_number: massVaccinationData.dose_number,
+          }
+        );
+      }
 
-      // If there's a next booster date, create planned visits for all vaccinated animals
       if (massVaccinationData.next_booster_date) {
+        const productNames = validVaccines.map(v => {
+          const prod = products.find(p => p.id === v.product_id);
+          return prod?.name || 'N/A';
+        }).join(', ');
+
         const futureVisits = Array.from(selectedAnimals).map(animalId => ({
           animal_id: animalId,
           visit_datetime: `${massVaccinationData.next_booster_date}T10:00:00`,
           procedures: ['Vakcina'],
           status: 'Planuojamas',
-          notes: `Pakartotinė vakcina: ${selectedProduct?.name || 'N/A'}`,
+          notes: `Pakartotinė vakcina: ${productNames}`,
           vet_name: massVaccinationData.administered_by || null,
           next_visit_required: false,
           treatment_required: false,
@@ -197,18 +213,20 @@ export function Vaccinations() {
         }
       }
 
-      alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų!`);
+      alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų su ${validVaccines.length} vakcina(-omis)!`);
 
       setSelectedAnimals(new Set());
       setShowMassVaccination(false);
-      setMassVaccinationData({
+      setMassVaccines([{
         product_id: '',
         batch_id: '',
+        dose_amount: '',
+        unit: 'ml',
+      }]);
+      setMassVaccinationData({
         vaccination_date: new Date().toISOString().split('T')[0],
         next_booster_date: '',
         dose_number: '1',
-        dose_amount: '',
-        unit: 'ml',
         administered_by: '',
         notes: '',
       });
@@ -266,8 +284,6 @@ export function Vaccinations() {
     const matchesSearch = a.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesSpecies = !filterSpecies || a.species?.toLowerCase() === filterSpecies.toLowerCase();
-
     const matchesSex = !filterSex || a.sex?.toLowerCase() === filterSex.toLowerCase();
 
     const ageInMonths = a.age_months || 0;
@@ -288,7 +304,7 @@ export function Vaccinations() {
       return true;
     };
 
-    return matchesSearch && matchesSpecies && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
+    return matchesSearch && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
   });
 
   const filteredVaccinations = vaccinations.filter(vac => {
@@ -320,7 +336,6 @@ export function Vaccinations() {
     return match;
   });
 
-  const availableBatches = batches.filter(b => b.product_id === massVaccinationData.product_id);
 
   const groupVaccinationsByDateFiltered = (): VaccinationGroup[] => {
     const grouped = new Map<string, any[]>();
@@ -364,78 +379,129 @@ export function Vaccinations() {
         <div className="bg-white border-2 border-blue-300 rounded-xl p-6 shadow-lg">
           <h3 className="text-xl font-bold text-gray-900 mb-4">Masinė vakcina/prevencija</h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Vakcina / prevencija *
-              </label>
-              <select
-                value={massVaccinationData.product_id}
-                onChange={async (e) => {
-                  const productId = e.target.value;
-
-                  if (productId) {
-                    const oldestBatchId = await getOldestBatchWithStock(productId);
-                    setMassVaccinationData({ ...massVaccinationData, product_id: productId, batch_id: oldestBatchId });
-                  } else {
-                    setMassVaccinationData({ ...massVaccinationData, product_id: '', batch_id: '' });
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-bold text-gray-900">Vakcinos / prevencija</label>
+              <button
+                type="button"
+                onClick={() => setMassVaccines([...massVaccines, { product_id: '', batch_id: '', dose_amount: '', unit: 'ml' }])}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
               >
-                <option value="">Pasirinkite vakciną / prevenciją</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                + Pridėti vakciną
+              </button>
             </div>
 
-            {massVaccinationData.product_id && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Partija
-                </label>
-                <select
-                  value={massVaccinationData.batch_id}
-                  onChange={(e) => setMassVaccinationData({ ...massVaccinationData, batch_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Pasirinkite partiją</option>
-                  {availableBatches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.lot} (Galioja iki: {b.expiry_date})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="space-y-3">
+              {massVaccines.map((vaccine, idx) => (
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Vakcina / prevencija *
+                      </label>
+                      <select
+                        value={vaccine.product_id}
+                        onChange={async (e) => {
+                          const productId = e.target.value;
+                          const newVaccines = [...massVaccines];
+                          newVaccines[idx].product_id = productId;
+                          if (productId) {
+                            const oldestBatchId = await getOldestBatchWithStock(productId);
+                            newVaccines[idx].batch_id = oldestBatchId;
+                          } else {
+                            newVaccines[idx].batch_id = '';
+                          }
+                          setMassVaccines(newVaccines);
+                        }}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Pasirinkite vakciną</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Dozė *
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={massVaccinationData.dose_amount}
-                  onChange={(e) => setMassVaccinationData({ ...massVaccinationData, dose_amount: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="2.5"
-                />
-                <select
-                  value={massVaccinationData.unit}
-                  onChange={(e) => setMassVaccinationData({ ...massVaccinationData, unit: e.target.value as Unit })}
-                  className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="ml">ml</option>
-                  <option value="l">l</option>
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                  <option value="pcs">pcs</option>
-                </select>
-              </div>
+                    {vaccine.product_id && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Partija
+                        </label>
+                        <select
+                          value={vaccine.batch_id}
+                          onChange={(e) => {
+                            const newVaccines = [...massVaccines];
+                            newVaccines[idx].batch_id = e.target.value;
+                            setMassVaccines(newVaccines);
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Pasirinkite partiją</option>
+                          {batches.filter(b => b.product_id === vaccine.product_id).map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.lot} ({b.expiry_date})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Dozė *
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={vaccine.dose_amount}
+                          onChange={(e) => {
+                            const newVaccines = [...massVaccines];
+                            newVaccines[idx].dose_amount = e.target.value;
+                            setMassVaccines(newVaccines);
+                          }}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                          placeholder="2.5"
+                        />
+                        <select
+                          value={vaccine.unit}
+                          onChange={(e) => {
+                            const newVaccines = [...massVaccines];
+                            newVaccines[idx].unit = e.target.value as Unit;
+                            setMassVaccines(newVaccines);
+                          }}
+                          className="w-16 px-1 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="vnt">vnt</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {massVaccines.length > 1 && (
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newVaccines = massVaccines.filter((_, i) => i !== idx);
+                            setMassVaccines(newVaccines);
+                          }}
+                          className="px-3 py-1.5 bg-red-500 text-white rounded text-xs font-medium hover:bg-red-600 transition-colors"
+                        >
+                          Šalinti
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -506,23 +572,7 @@ export function Vaccinations() {
               <h4 className="font-bold text-gray-900">Filtruoti gyvūnus</h4>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Rūšis</label>
-                <select
-                  value={filterSpecies}
-                  onChange={(e) => setFilterSpecies(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Visos</option>
-                  <option value="Galvijas">Galvijas</option>
-                  <option value="Kiaulė">Kiaulė</option>
-                  <option value="Avis">Avis</option>
-                  <option value="Ožka">Ožka</option>
-                  <option value="Arklys">Arklys</option>
-                </select>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Lytis</label>
                 <select
@@ -585,7 +635,6 @@ export function Vaccinations() {
             <div className="flex gap-2 mt-3">
               <button
                 onClick={() => {
-                  setFilterSpecies('');
                   setFilterSex('');
                   setFilterAgeFrom('');
                   setFilterAgeTo('');
@@ -660,6 +709,7 @@ export function Vaccinations() {
               onClick={() => {
                 setShowMassVaccination(false);
                 setSelectedAnimals(new Set());
+                setMassVaccines([{ product_id: '', batch_id: '', dose_amount: '', unit: 'ml' }]);
               }}
               className="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg font-medium hover:bg-gray-400 transition-colors"
             >
@@ -667,7 +717,7 @@ export function Vaccinations() {
             </button>
             <button
               onClick={handleMassVaccinate}
-              disabled={saving || selectedAnimals.size === 0 || !massVaccinationData.product_id || !massVaccinationData.dose_amount}
+              disabled={saving || selectedAnimals.size === 0 || massVaccines.filter(v => v.product_id && v.dose_amount).length === 0}
               className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Check className="w-5 h-5" />
