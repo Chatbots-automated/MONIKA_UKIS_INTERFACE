@@ -6,7 +6,7 @@ import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
 import { TeatStatusCard } from './TeatStatusCard';
-import { TeatDisplay } from './TeatSelector';
+import { TeatDisplay, TeatSelector } from './TeatSelector';
 
 interface Vaccination {
   id: string;
@@ -2070,6 +2070,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }>,
   });
 
+  const [sickTeats, setSickTeats] = useState<string[]>([]);
+  const [disabledTeats, setDisabledTeats] = useState<string[]>([]);
+
   // Note: Withdrawal dates are now calculated by the database function
   // after treatment is saved, using per-medicine course durations
 
@@ -2413,6 +2416,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 vet_name: formData.vet_name ? formData.vet_name : null,
                 notes: treatmentData.notes ? treatmentData.notes : null,
                 creates_future_visits: hasRecurringDays,
+                sick_teats: sickTeats,
+                affected_teats: sickTeats,
               })
               .eq('id', existingTreatment.id)
               .select()
@@ -2442,6 +2447,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 vet_name: formData.vet_name ? formData.vet_name : null,
                 notes: treatmentData.notes ? treatmentData.notes : null,
                 creates_future_visits: hasRecurringDays,
+                sick_teats: sickTeats,
+                affected_teats: sickTeats,
               })
               .select()
               .single();
@@ -2466,6 +2473,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               vet_name: formData.vet_name ? formData.vet_name : null,
               notes: treatmentData.notes ? treatmentData.notes : null,
               creates_future_visits: hasRecurringDays,
+              sick_teats: sickTeats,
+              affected_teats: sickTeats,
             })
             .select()
             .single();
@@ -2561,6 +2570,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           } else {
             console.log(`✅ Created ${futureVisits.length} future treatment visits`);
           }
+        }
+
+        // Save disabled teats to teat_status table
+        if (disabledTeats.length > 0) {
+          for (const teatPosition of disabledTeats) {
+            const { error: teatError } = await supabase
+              .from('teat_status')
+              .upsert({
+                animal_id: animalId,
+                teat_position: teatPosition,
+                is_disabled: true,
+                disabled_date: formData.visit_datetime.split('T')[0],
+                disabled_reason: treatmentData.notes || 'Išjungtas per gydymą',
+              }, {
+                onConflict: 'animal_id,teat_position'
+              });
+
+            if (teatError) {
+              console.error('Error saving teat status:', teatError);
+            }
+          }
+          console.log('✅ Disabled teats saved');
         }
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
@@ -2850,6 +2881,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   </select>
                 </div>
 
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Spenų būsena</label>
+                <TeatSelector
+                  selectedSickTeats={sickTeats}
+                  selectedDisabledTeats={disabledTeats}
+                  onSickTeatsChange={setSickTeats}
+                  onDisabledTeatsChange={setDisabledTeats}
+                />
               </div>
 
               <div>
