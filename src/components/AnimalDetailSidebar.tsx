@@ -3191,9 +3191,25 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                                   newMeds[idx].course_days = e.target.value;
                                   setTreatmentData({ ...treatmentData, medications: newMeds });
 
-                                  // Auto-enable next visit when course duration is set
-                                  if (parseInt(e.target.value) > 1) {
+                                  const days = parseInt(e.target.value);
+                                  // Auto-populate recurring days when course duration is set
+                                  if (days > 1) {
+                                    // Auto-enable next visit
                                     setFormData({ ...formData, next_visit_required: true });
+
+                                    // Generate dates for the next N days (excluding today)
+                                    const baseDate = new Date(formData.visit_datetime.split('T')[0]);
+                                    const futureDates: string[] = [];
+                                    for (let i = 1; i < days; i++) {
+                                      const futureDate = new Date(baseDate);
+                                      futureDate.setDate(baseDate.getDate() + i);
+                                      futureDates.push(futureDate.toISOString().split('T')[0]);
+                                    }
+                                    setTreatmentData({
+                                      ...treatmentData,
+                                      medications: newMeds,
+                                      recurring_days: futureDates
+                                    });
                                   }
                                 }}
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
