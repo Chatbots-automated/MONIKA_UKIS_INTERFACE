@@ -30,6 +30,7 @@ interface ProductUsage {
   product_id: string;
   product_name: string;
   category: string;
+  unit: string;
   usage_count: number;
   total_quantity: number;
   total_cost: number;
@@ -306,7 +307,7 @@ export function AnimalAnalytics({ animalId, tagNumber }: AnimalAnalyticsProps) {
                 <div className="flex-1">
                   <div className="font-medium text-gray-900 text-sm">{product.product_name}</div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    Panaudota {product.usage_count} kartų • Kiekis: {product.total_quantity}
+                    Panaudota {product.usage_count} kartų • Kiekis: {product.total_quantity} {product.unit || ''}
                   </div>
                 </div>
                 <div className="text-right ml-4">

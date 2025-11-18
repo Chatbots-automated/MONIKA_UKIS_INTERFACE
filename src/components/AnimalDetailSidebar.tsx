@@ -2966,11 +2966,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                                 newMeds[idx].product_id = productId;
 
                                 if (productId) {
+                                  const product = products.find(p => p.id === productId);
                                   const oldestBatchId = await getOldestBatchWithStock(productId);
                                   newMeds[idx].batch_id = oldestBatchId;
+                                  newMeds[idx].unit = product?.primary_pack_unit || 'ml';
                                   fetchStockLevel(productId);
                                 } else {
                                   newMeds[idx].batch_id = '';
+                                  newMeds[idx].unit = 'ml';
                                 }
 
                                 setTreatmentData({ ...treatmentData, medications: newMeds });
@@ -3017,21 +3020,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                             }}
                             className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
                           />
-                          <select
-                            value={med.unit}
-                            onChange={(e) => {
-                              const newMeds = [...treatmentData.medications];
-                              newMeds[idx].unit = e.target.value as any;
-                              setTreatmentData({ ...treatmentData, medications: newMeds });
-                            }}
-                            className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="ml">ml</option>
-                            <option value="l">l</option>
-                            <option value="g">g</option>
-                            <option value="kg">kg</option>
-                            <option value="pcs">vnt</option>
-                          </select>
+                          <div className="col-span-2 px-2 py-1 border border-gray-200 bg-gray-50 rounded text-sm flex items-center text-gray-700 font-medium">
+                            {selectedProduct?.primary_pack_unit || med.unit || 'ml'}
+                          </div>
                           <button
                             type="button"
                             onClick={() => {

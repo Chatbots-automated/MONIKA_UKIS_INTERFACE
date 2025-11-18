@@ -21,6 +21,14 @@
   input[type="number"] {
     -moz-appearance: textfield;
   }
+
+  input[type="date"] {
+    position: relative;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
 }
 
 @layer components {
