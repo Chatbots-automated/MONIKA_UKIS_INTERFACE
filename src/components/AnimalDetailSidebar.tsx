@@ -2690,7 +2690,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             <input
               type="datetime-local"
               value={formData.visit_datetime}
-              onChange={(e) => setFormData({ ...formData, visit_datetime: e.target.value })}
+              onChange={(e) => {
+                const newDateTime = e.target.value;
+                setFormData({
+                  ...formData,
+                  visit_datetime: newDateTime,
+                  temperature_measured_at: newDateTime,
+                  next_visit_date: newDateTime,
+                });
+              }}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               required
             />
