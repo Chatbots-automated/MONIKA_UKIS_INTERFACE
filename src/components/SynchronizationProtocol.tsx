@@ -1,0 +1,435 @@
+import React, { useState, useEffect } from 'react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Plus, X, Edit2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import {
+  SynchronizationProtocol,
+  AnimalSynchronization,
+  AnimalSynchronizationWithDetails,
+  SynchronizationStep,
+  Product,
+  Batch,
+} from '../lib/types';
+
+interface SynchronizationProtocolProps {
+  animalId: string;
+  onProtocolCreated?: () => void;
+}
+
+export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }: SynchronizationProtocolProps) {
+  const [protocols, setProtocols] = useState<SynchronizationProtocol[]>([]);
+  const [activeSync, setActiveSync] = useState<AnimalSynchronizationWithDetails | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedProtocolId, setSelectedProtocolId] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+
+  useEffect(() => {
+    loadProtocols();
+    loadActiveSync();
+    loadProducts();
+    loadBatches();
+  }, [animalId]);
+
+  const loadProtocols = async () => {
+    const { data } = await supabase
+      .from('synchronization_protocols')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (data) setProtocols(data);
+  };
+
+  const loadActiveSync = async () => {
+    const { data: syncData } = await supabase
+      .from('animal_synchronizations')
+      .select('*')
+      .eq('animal_id', animalId)
+      .eq('status', 'Active')
+      .maybeSingle();
+
+    if (syncData) {
+      const { data: protocolData } = await supabase
+        .from('synchronization_protocols')
+        .select('*')
+        .eq('id', syncData.protocol_id)
+        .single();
+
+      const { data: stepsData } = await supabase
+        .from('synchronization_steps')
+        .select('*')
+        .eq('synchronization_id', syncData.id)
+        .order('step_number');
+
+      setActiveSync({
+        ...syncData,
+        protocol: protocolData || undefined,
+        steps: stepsData || [],
+      });
+    }
+  };
+
+  const loadProducts = async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (data) setProducts(data);
+  };
+
+  const loadBatches = async () => {
+    const { data } = await supabase
+      .from('batches')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (data) setBatches(data);
+  };
+
+  const handleCreateProtocol = async () => {
+    if (!selectedProtocolId) {
+      alert('Pasirinkite protokolą');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.rpc('initialize_animal_synchronization', {
+        p_animal_id: animalId,
+        p_protocol_id: selectedProtocolId,
+        p_start_date: startDate,
+      });
+
+      if (error) throw error;
+
+      alert('Sinchronizacijos protokolas sėkmingai pradėtas!');
+      setShowCreateForm(false);
+      loadActiveSync();
+      onProtocolCreated?.();
+    } catch (error: any) {
+      console.error('Error creating protocol:', error);
+      alert('Klaida kuriant protokolą: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelProtocol = async () => {
+    if (!activeSync || !confirm('Ar tikrai norite atšaukti šį protokolą?')) return;
+
+    const { error } = await supabase
+      .from('animal_synchronizations')
+      .update({ status: 'Cancelled' })
+      .eq('id', activeSync.id);
+
+    if (error) {
+      alert('Klaida atšaukiant protokolą: ' + error.message);
+    } else {
+      alert('Protokolas atšauktas');
+      setActiveSync(null);
+      onProtocolCreated?.();
+    }
+  };
+
+  const handleUpdateStep = async (stepId: string, updates: Partial<SynchronizationStep>) => {
+    const { error } = await supabase
+      .from('synchronization_steps')
+      .update(updates)
+      .eq('id', stepId);
+
+    if (error) {
+      alert('Klaida atnaujinant žingsnį: ' + error.message);
+    } else {
+      loadActiveSync();
+    }
+  };
+
+  const handleCompleteStep = async (step: SynchronizationStep) => {
+    const dosage = prompt('Įveskite dozę:', step.dosage?.toString() || '');
+    if (dosage === null) return;
+
+    const unit = prompt('Įveskite vienetą:', step.dosage_unit || 'ml');
+    if (unit === null) return;
+
+    const batchId = prompt('Įveskite pakuotės ID (arba palikite tuščią):');
+
+    try {
+      const { error } = await supabase.rpc('complete_synchronization_step', {
+        p_step_id: step.id,
+        p_batch_id: batchId || null,
+        p_actual_dosage: parseFloat(dosage),
+        p_actual_unit: unit,
+      });
+
+      if (error) throw error;
+
+      alert('Žingsnis pažymėtas kaip atliktas!');
+      loadActiveSync();
+    } catch (error: any) {
+      alert('Klaida: ' + error.message);
+    }
+  };
+
+  const handleUpdateInsemination = async () => {
+    if (!activeSync) return;
+
+    const date = prompt('Įveskite sėklinimo datą (YYYY-MM-DD):', activeSync.insemination_date || '');
+    if (date === null) return;
+
+    const number = prompt('Įveskite sėklinimo numerį:', activeSync.insemination_number || '');
+    if (number === null) return;
+
+    const { error } = await supabase
+      .from('animal_synchronizations')
+      .update({
+        insemination_date: date || null,
+        insemination_number: number || null,
+      })
+      .eq('id', activeSync.id);
+
+    if (error) {
+      alert('Klaida: ' + error.message);
+    } else {
+      alert('Sėklinimo duomenys atnaujinti!');
+      loadActiveSync();
+    }
+  };
+
+  const getStepStatus = (step: SynchronizationStep) => {
+    if (step.completed) return 'completed';
+    const today = new Date().toISOString().split('T')[0];
+    const scheduled = step.scheduled_date;
+
+    if (scheduled === today) return 'today';
+    if (scheduled < today) return 'overdue';
+    const daysDiff = Math.floor((new Date(scheduled).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff <= 2) return 'upcoming';
+    return 'pending';
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800 border-green-300';
+      case 'today': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'overdue': return 'bg-red-100 text-red-800 border-red-300';
+      case 'upcoming': return 'bg-blue-100 text-blue-800 border-blue-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const selectedProtocol = protocols.find(p => p.id === selectedProtocolId);
+
+  if (activeSync) {
+    const completedSteps = activeSync.steps?.filter(s => s.completed).length || 0;
+    const totalSteps = activeSync.steps?.length || 0;
+    const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+    return (
+      <div className="space-y-4">
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-4">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-purple-600" />
+                {activeSync.protocol?.name}
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">Pradėta: {new Date(activeSync.start_date).toLocaleDateString('lt-LT')}</p>
+            </div>
+            <button
+              onClick={handleCancelProtocol}
+              className="text-red-600 hover:text-red-700 text-sm"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+              <span>Progresas: {completedSteps} / {totalSteps}</span>
+              <span>{progressPercent.toFixed(0)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-purple-600 h-2 rounded-full transition-all"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {activeSync.steps?.map((step) => {
+              const status = getStepStatus(step);
+              const statusColor = getStatusColor(status);
+
+              return (
+                <div
+                  key={step.id}
+                  className={`p-3 rounded-lg border-2 ${statusColor}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {step.completed ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        )}
+                        <span className="font-medium">
+                          {step.step_number}. {step.step_name}
+                        </span>
+                        {step.is_evening && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Vakare</span>}
+                      </div>
+                      <div className="ml-7 mt-1 text-sm">
+                        <div className="flex items-center gap-4">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            {new Date(step.scheduled_date).toLocaleDateString('lt-LT')}
+                          </span>
+                          {step.dosage && (
+                            <span className="flex items-center gap-1">
+                              <Syringe className="w-4 h-4" />
+                              {step.dosage} {step.dosage_unit}
+                            </span>
+                          )}
+                        </div>
+                        {step.completed_at && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            Atlikta: {new Date(step.completed_at).toLocaleString('lt-LT')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {!step.completed && (
+                      <button
+                        onClick={() => handleCompleteStep(step)}
+                        className="ml-2 px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
+                      >
+                        Atlikti
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-purple-200">
+            <h4 className="font-semibold text-gray-900 mb-2">Sėklinimas</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Data</label>
+                <div className="text-sm font-medium">{activeSync.insemination_date || 'Nenurodyta'}</div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Numeris</label>
+                <div className="text-sm font-medium">{activeSync.insemination_number || 'Nenurodyta'}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleUpdateInsemination}
+              className="mt-2 w-full px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+            >
+              <Edit2 className="w-4 h-4 inline mr-1" />
+              Redaguoti sėklinimą
+            </button>
+          </div>
+
+          {activeSync.result && (
+            <div className="mt-4 pt-4 border-t border-purple-200">
+              <h4 className="font-semibold text-gray-900 mb-1">Rezultatas</h4>
+              <p className="text-sm text-gray-700">{activeSync.result}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {!showCreateForm ? (
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 font-medium"
+        >
+          <Plus className="w-5 h-5" />
+          Pradėti sinchronizacijos protokolą
+        </button>
+      ) : (
+        <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-gray-900">Naujas protokolas</h3>
+            <button
+              onClick={() => setShowCreateForm(false)}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Protokolas</label>
+            <select
+              value={selectedProtocolId}
+              onChange={(e) => setSelectedProtocolId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Pasirinkite protokolą</option>
+              {protocols.map((protocol) => (
+                <option key={protocol.id} value={protocol.id}>
+                  {protocol.name}
+                </option>
+              ))}
+            </select>
+            {selectedProtocol && (
+              <p className="text-sm text-gray-600 mt-1">{selectedProtocol.description}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pradžios data</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          {selectedProtocol && (
+            <div className="bg-white rounded-lg p-3 space-y-2">
+              <h4 className="font-semibold text-gray-900 text-sm">Protokolo žingsniai:</h4>
+              {selectedProtocol.steps.map((step) => {
+                const stepDate = new Date(startDate);
+                stepDate.setDate(stepDate.getDate() + step.day_offset);
+
+                return (
+                  <div key={step.step} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
+                    <span className="font-medium">
+                      {step.step}. {step.medication}
+                      {step.is_evening && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">vakare</span>}
+                    </span>
+                    <span className="text-gray-600">{stepDate.toLocaleDateString('lt-LT')}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <button
+            onClick={handleCreateProtocol}
+            disabled={loading || !selectedProtocolId}
+            className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? 'Kuriama...' : 'Pradėti protokolą'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

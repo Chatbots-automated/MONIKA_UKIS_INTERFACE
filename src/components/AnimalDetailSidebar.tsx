@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
 import { TeatStatusCard } from './TeatStatusCard';
 import { TeatDisplay, TeatSelector } from './TeatSelector';
+import { SynchronizationProtocolComponent } from './SynchronizationProtocol';
 
 interface Vaccination {
   id: string;
@@ -3294,6 +3295,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* SYNCHRONIZATION PROTOCOL */}
+          {formData.procedures.includes('Gydymas') && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg">
+              <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-purple-600" />
+                Sinchronizacijos protokolas
+              </h4>
+              <SynchronizationProtocolComponent
+                animalId={animal.id}
+                onProtocolCreated={() => {
+                  loadVisits();
+                }}
+              />
             </div>
           )}
 

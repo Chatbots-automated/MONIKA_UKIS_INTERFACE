@@ -180,3 +180,67 @@ export interface AnimalVisitSummary {
   next_visit: string | null;
   last_visit: string | null;
 }
+
+export type SynchronizationStatus = 'Active' | 'Completed' | 'Cancelled';
+
+export interface SynchronizationProtocol {
+  id: string;
+  name: string;
+  description: string | null;
+  steps: ProtocolStep[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProtocolStep {
+  step: number;
+  medication: string;
+  day_offset: number;
+  is_evening?: boolean;
+  is_insemination?: boolean;
+}
+
+export interface AnimalSynchronization {
+  id: string;
+  animal_id: string;
+  protocol_id: string;
+  start_date: string;
+  status: SynchronizationStatus;
+  insemination_date: string | null;
+  insemination_number: string | null;
+  result: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SynchronizationStep {
+  id: string;
+  synchronization_id: string;
+  step_number: number;
+  step_name: string;
+  scheduled_date: string;
+  is_evening: boolean;
+  medication_product_id: string | null;
+  dosage: number | null;
+  dosage_unit: string | null;
+  completed: boolean;
+  completed_at: string | null;
+  visit_id: string | null;
+  batch_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SynchronizationStepWithDetails extends SynchronizationStep {
+  product?: Product;
+  batch?: Batch;
+}
+
+export interface AnimalSynchronizationWithDetails extends AnimalSynchronization {
+  protocol?: SynchronizationProtocol;
+  steps?: SynchronizationStepWithDetails[];
+  animal?: Animal;
+}
