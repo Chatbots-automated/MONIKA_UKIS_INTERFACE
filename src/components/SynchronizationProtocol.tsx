@@ -7,7 +7,7 @@ import {
   AnimalSynchronizationWithDetails,
   SynchronizationStep,
   Product,
-  Batch,
+  StockByBatch,
 } from '../lib/types';
 
 interface SynchronizationProtocolProps {
@@ -30,7 +30,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batches, setBatches] = useState<StockByBatch[]>([]);
   const [todayStepData, setTodayStepData] = useState<{[key: number]: {batchId: string, dosage: string, unit: string}}>({});
 
   useEffect(() => {
@@ -91,32 +91,12 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
   const loadBatches = async () => {
     const { data } = await supabase
-      .from('batches')
-      .select(`
-        *,
-        products!inner(primary_pack_unit)
-      `)
-      .order('created_at', { ascending: false });
+      .from('stock_by_batch')
+      .select('*')
+      .gt('on_hand', 0);
 
     if (data) {
-      // Enrich batches with stock level information
-      const enrichedBatches = await Promise.all(
-        data.map(async (batch: any) => {
-          const { data: stockData } = await supabase
-            .from('stock_level')
-            .select('quantity')
-            .eq('product_id', batch.product_id)
-            .single();
-
-          return {
-            ...batch,
-            batch_number: batch.lot || 'N/A',
-            current_quantity: stockData?.quantity || 0,
-            unit: batch.products?.primary_pack_unit || 'vnt'
-          };
-        })
-      );
-      setBatches(enrichedBatches);
+      setBatches(data);
     }
   };
 
@@ -470,11 +450,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                             {batches
                               .filter((b) => {
                                 if (!medicationProduct) return false;
-                                return b.product_id === medicationProduct.id && b.current_quantity > 0;
+                                return b.product_id === medicationProduct.id && b.on_hand > 0;
                               })
                               .map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
+                                <option key={b.batch_id} value={b.batch_id}>
+                                  {b.lot || 'N/A'} (Likutis: {b.on_hand} {medicationProduct.primary_pack_unit})
                                 </option>
                               ))}
                           </select>
@@ -670,11 +650,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                             {batches
                               .filter((b) => {
                                 if (!medicationProduct) return false;
-                                return b.product_id === medicationProduct.id && b.current_quantity > 0;
+                                return b.product_id === medicationProduct.id && b.on_hand > 0;
                               })
                               .map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
+                                <option key={b.batch_id} value={b.batch_id}>
+                                  {b.lot || 'N/A'} (Likutis: {b.on_hand} {medicationProduct.primary_pack_unit})
                                 </option>
                               ))}
                           </select>
