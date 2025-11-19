@@ -425,8 +425,8 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
                   {showCompleteForm === step.id && (() => {
                     const medicationProduct = products.find(p =>
-                      p.name.toLowerCase().includes(step.step_name.toLowerCase()) ||
-                      step.step_name.toLowerCase().includes(p.name.toLowerCase())
+                      p.name.toLowerCase().startsWith(step.step_name.toLowerCase()) ||
+                      p.name.toLowerCase().startsWith(step.step_name.toLowerCase() + ' ')
                     );
 
                     return (
@@ -608,10 +608,10 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                 const isToday = stepDate.toISOString().split('T')[0] === new Date(startDate).toISOString().split('T')[0];
                 const stepData = todayStepData[step.step] || { batchId: '', dosage: '', unit: 'ml' };
 
-                // Find the product by medication name
+                // Find the product by medication name (match start of product name)
                 const medicationProduct = products.find(p =>
-                  p.name.toLowerCase().includes(step.medication.toLowerCase()) ||
-                  step.medication.toLowerCase().includes(p.name.toLowerCase())
+                  p.name.toLowerCase().startsWith(step.medication.toLowerCase()) ||
+                  p.name.toLowerCase().startsWith(step.medication.toLowerCase() + ' ')
                 );
 
                 return (
