@@ -456,13 +456,13 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
     const visitDate = new Date(v.visit_datetime);
     const today = new Date();
     return visitDate > today;
-  });
+  }).sort((a, b) => new Date(a.visit_datetime).getTime() - new Date(b.visit_datetime).getTime());
 
   const pastVisits = visits.filter(v => {
     const visitDate = new Date(v.visit_datetime);
     const today = new Date();
     return visitDate < today && visitDate.toDateString() !== today.toDateString();
-  });
+  }).sort((a, b) => new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime());
 
   // Separate by completion status
   const todayIncomplete = todayVisits.filter(v => v.status !== 'Baigtas');
@@ -3634,6 +3634,8 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
             </div>
           )}
 
+          {visit.sync_step_id && <SyncStepMedicationDisplay visitId={visit.id} syncStepId={visit.sync_step_id} />}
+
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Pastabos ir komentarai
@@ -3742,6 +3744,118 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
               )}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; syncStepId: string }) {
+  const [stepData, setStepData] = useState<any>(null);
+  const [productData, setProductData] = useState<any>(null);
+  const [batchData, setBatchData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, [syncStepId]);
+
+  const loadData = async () => {
+    try {
+      // Load synchronization step data
+      const { data: step, error: stepError } = await supabase
+        .from('synchronization_steps')
+        .select('*')
+        .eq('id', syncStepId)
+        .maybeSingle();
+
+      if (stepError) throw stepError;
+      setStepData(step);
+
+      // If step has medication data, load product and batch info
+      if (step?.batch_id) {
+        const [productRes, batchRes] = await Promise.all([
+          step.medication_product_id
+            ? supabase.from('products').select('*').eq('id', step.medication_product_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          supabase.from('batches').select('*').eq('id', step.batch_id).maybeSingle()
+        ]);
+
+        if (productRes.data) setProductData(productRes.data);
+        if (batchRes.data) setBatchData(batchRes.data);
+      }
+    } catch (error) {
+      console.error('Error loading sync step medication data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="text-sm text-gray-600">Kraunama...</div>
+      </div>
+    );
+  }
+
+  if (!stepData || !stepData.completed) {
+    return null;
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+          <Syringe className="w-5 h-5 text-purple-600" />
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-900">Sinchronizacijos vaistai</h3>
+          <p className="text-xs text-gray-600">Panaudoti vaistai šiame vizite</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg p-4 border border-purple-200">
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs font-medium text-gray-500 mb-1">Vaistas</div>
+            <div className="text-base font-semibold text-gray-900">{stepData.step_name}</div>
+          </div>
+
+          {stepData.dosage && (
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Panaudotas kiekis</div>
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold text-purple-700">{stepData.dosage}</div>
+                <div className="text-lg text-gray-600">{stepData.dosage_unit}</div>
+              </div>
+            </div>
+          )}
+
+          {batchData && (
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Pakuotė / Serija</div>
+              <div className="text-sm text-gray-900 font-medium">{batchData.lot || 'N/A'}</div>
+            </div>
+          )}
+
+          {stepData.completed_at && (
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Panaudota</div>
+              <div className="text-sm text-gray-700">{formatDateTimeLT(stepData.completed_at)}</div>
+            </div>
+          )}
+
+          {productData && batchData?.purchase_price && batchData?.received_qty && stepData.dosage && (
+            <div className="mt-3 pt-3 border-t border-purple-200">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-600">Savikaina:</span>
+                <span className="text-lg font-bold text-purple-700">
+                  €{((batchData.purchase_price / batchData.received_qty) * stepData.dosage).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -32,6 +32,8 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<StockByBatch[]>([]);
   const [todayStepData, setTodayStepData] = useState<{[key: number]: {batchId: string, dosage: string, unit: string}}>({});
+  const [globalDosage, setGlobalDosage] = useState<string>('');
+  const [globalUnit, setGlobalUnit] = useState<string>('ml');
 
   useEffect(() => {
     loadProtocols();
@@ -600,6 +602,79 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             />
           </div>
 
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <Syringe className="w-4 h-4 text-blue-600" />
+              <h4 className="font-semibold text-gray-900 text-sm">Bendroji dozė visiems vaistams</h4>
+            </div>
+            <p className="text-xs text-gray-600 mb-2">Nustatykite vienodą dozę visiems vaistams (galite pakeisti individualiai žemiau)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Dozė</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={globalDosage}
+                  onChange={(e) => {
+                    setGlobalDosage(e.target.value);
+                    // Apply to all today's steps
+                    if (selectedProtocol && e.target.value) {
+                      const updatedData = { ...todayStepData };
+                      const today = new Date(startDate).toISOString().split('T')[0];
+                      selectedProtocol.steps.forEach(step => {
+                        const stepDate = new Date(startDate);
+                        stepDate.setDate(stepDate.getDate() + step.day_offset);
+                        if (stepDate.toISOString().split('T')[0] === today) {
+                          updatedData[step.step] = {
+                            ...updatedData[step.step],
+                            dosage: e.target.value,
+                            unit: globalUnit
+                          };
+                        }
+                      });
+                      setTodayStepData(updatedData);
+                    }
+                  }}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder="Pvz: 2"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Vienetas</label>
+                <select
+                  value={globalUnit}
+                  onChange={(e) => {
+                    setGlobalUnit(e.target.value);
+                    // Apply to all today's steps
+                    if (selectedProtocol && globalDosage) {
+                      const updatedData = { ...todayStepData };
+                      const today = new Date(startDate).toISOString().split('T')[0];
+                      selectedProtocol.steps.forEach(step => {
+                        const stepDate = new Date(startDate);
+                        stepDate.setDate(stepDate.getDate() + step.day_offset);
+                        if (stepDate.toISOString().split('T')[0] === today) {
+                          updatedData[step.step] = {
+                            ...updatedData[step.step],
+                            dosage: globalDosage,
+                            unit: e.target.value
+                          };
+                        }
+                      });
+                      setTodayStepData(updatedData);
+                    }
+                  }}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ml">ml</option>
+                  <option value="mg">mg</option>
+                  <option value="g">g</option>
+                  <option value="vnt">vnt</option>
+                  <option value="IU">IU</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {selectedProtocol && (
             <div className="bg-white rounded-lg p-3 space-y-3">
               <h4 className="font-semibold text-gray-900 text-sm">Protokolo žingsniai:</h4>
@@ -667,7 +742,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Dozė *</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Dozė * {stepData.dosage && globalDosage && stepData.dosage !== globalDosage && (
+                                <span className="text-blue-600 font-normal">(pakeista)</span>
+                              )}
+                            </label>
                             <input
                               type="number"
                               step="0.1"

@@ -171,6 +171,11 @@ export interface AnimalVisit {
   treatment_required: boolean;
   created_at: string;
   updated_at: string;
+  sync_step_id: string | null;
+  related_treatment_id: string | null;
+  planned_medications: any[] | null;
+  medications_processed: boolean;
+  related_visit_id: string | null;
 }
 
 export interface AnimalVisitSummary {
