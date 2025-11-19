@@ -31,7 +31,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [todayStepData, setTodayStepData] = useState<{[key: number]: {productId: string, batchId: string, dosage: string, unit: string}}>({});
+  const [todayStepData, setTodayStepData] = useState<{[key: number]: {batchId: string, dosage: string, unit: string}}>({});
 
   useEffect(() => {
     loadProtocols();
@@ -116,8 +116,8 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
       for (const step of todaySteps) {
         const stepData = todayStepData[step.step];
-        if (!stepData || !stepData.productId || !stepData.batchId || !stepData.dosage) {
-          alert(`Užpildykite visus šiandienos žingsnio ${step.step} laukus`);
+        if (!stepData || !stepData.batchId || !stepData.dosage) {
+          alert(`Užpildykite visus šiandienos žingsnio ${step.step} laukus (pakuotę ir dozę)`);
           return;
         }
       }
@@ -254,14 +254,13 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
   const [showCompleteForm, setShowCompleteForm] = useState<string | null>(null);
   const [completeFormData, setCompleteFormData] = useState({
-    productId: '',
     batchId: '',
     dosage: '',
     unit: 'ml',
   });
 
   const submitCompleteStep = async (stepId: string) => {
-    if (!completeFormData.productId || !completeFormData.batchId || !completeFormData.dosage) {
+    if (!completeFormData.batchId || !completeFormData.dosage) {
       alert('Užpildykite visus laukus');
       return;
     }
@@ -278,7 +277,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
       alert('Žingsnis pažymėtas kaip atliktas!');
       setShowCompleteForm(null);
-      setCompleteFormData({ productId: '', batchId: '', dosage: '', unit: 'ml' });
+      setCompleteFormData({ batchId: '', dosage: '', unit: 'ml' });
       loadActiveSync();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
@@ -424,27 +423,21 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                     )}
                   </div>
 
-                  {showCompleteForm === step.id && (
-                    <div className="mt-3 p-3 bg-white rounded-lg border-2 border-purple-300 space-y-3">
-                      <h5 className="font-semibold text-sm">Įveskite informaciją</h5>
+                  {showCompleteForm === step.id && (() => {
+                    const medicationProduct = products.find(p =>
+                      p.name.toLowerCase().includes(step.step_name.toLowerCase()) ||
+                      step.step_name.toLowerCase().includes(p.name.toLowerCase())
+                    );
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Produktas</label>
-                        <select
-                          value={completeFormData.productId}
-                          onChange={(e) => {
-                            setCompleteFormData({ ...completeFormData, productId: e.target.value, batchId: '' });
-                          }}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
-                        >
-                          <option value="">Pasirinkite produktą</option>
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                    return (
+                      <div className="mt-3 p-3 bg-white rounded-lg border-2 border-purple-300 space-y-3">
+                        <h5 className="font-semibold text-sm">Įveskite informaciją</h5>
 
-                      {completeFormData.productId && (
+                        <div className="bg-purple-50 p-2 rounded border border-purple-300">
+                          <span className="text-xs text-gray-600">Medikamentas:</span>
+                          <p className="font-semibold text-sm text-gray-900">{step.step_name}</p>
+                        </div>
+
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Pakuotė</label>
                           <select
@@ -454,15 +447,22 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                           >
                             <option value="">Pasirinkite pakuotę</option>
                             {batches
-                              .filter((b) => b.product_id === completeFormData.productId && b.current_quantity > 0)
+                              .filter((b) => {
+                                if (!medicationProduct) return false;
+                                return b.product_id === medicationProduct.id && b.current_quantity > 0;
+                              })
                               .map((b) => (
                                 <option key={b.id} value={b.id}>
                                   {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
                                 </option>
                               ))}
                           </select>
+                          {!medicationProduct && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Produktas "{step.step_name}" nerastas inventoriuje
+                            </p>
+                          )}
                         </div>
-                      )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -491,25 +491,26 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                         </div>
                       </div>
 
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => submitCompleteStep(step.id)}
-                          className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
-                        >
-                          Patvirtinti
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowCompleteForm(null);
-                            setCompleteFormData({ productId: '', batchId: '', dosage: '', unit: 'ml' });
-                          }}
-                          className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
-                        >
-                          Atšaukti
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => submitCompleteStep(step.id)}
+                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
+                          >
+                            Patvirtinti
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowCompleteForm(null);
+                              setCompleteFormData({ batchId: '', dosage: '', unit: 'ml' });
+                            }}
+                            className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                          >
+                            Atšaukti
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -605,7 +606,13 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                 const stepDate = new Date(startDate);
                 stepDate.setDate(stepDate.getDate() + step.day_offset);
                 const isToday = stepDate.toISOString().split('T')[0] === new Date(startDate).toISOString().split('T')[0];
-                const stepData = todayStepData[step.step] || { productId: '', batchId: '', dosage: '', unit: 'ml' };
+                const stepData = todayStepData[step.step] || { batchId: '', dosage: '', unit: 'ml' };
+
+                // Find the product by medication name
+                const medicationProduct = products.find(p =>
+                  p.name.toLowerCase().includes(step.medication.toLowerCase()) ||
+                  step.medication.toLowerCase().includes(p.name.toLowerCase())
+                );
 
                 return (
                   <div key={step.step} className={`p-3 rounded-lg border-2 ${isToday ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50 border-gray-200'}`}>
@@ -622,49 +629,41 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                       <div className="mt-3 space-y-2 pt-3 border-t border-yellow-200">
                         <p className="text-xs font-semibold text-gray-700 mb-2">Užpildykite informaciją apie šiandienos gydymą:</p>
 
+                        <div className="bg-white p-2 rounded border border-gray-300">
+                          <span className="text-xs text-gray-600">Medikamentas:</span>
+                          <p className="font-semibold text-sm text-gray-900">{step.medication}</p>
+                        </div>
+
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Produktas *</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Pakuotė *</label>
                           <select
-                            value={stepData.productId}
+                            value={stepData.batchId}
                             onChange={(e) => {
                               setTodayStepData({
                                 ...todayStepData,
-                                [step.step]: { ...stepData, productId: e.target.value, batchId: '' }
+                                [step.step]: { ...stepData, batchId: e.target.value }
                               });
                             }}
                             className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
                           >
-                            <option value="">Pasirinkite produktą</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
+                            <option value="">Pasirinkite pakuotę</option>
+                            {batches
+                              .filter((b) => {
+                                if (!medicationProduct) return false;
+                                return b.product_id === medicationProduct.id && b.current_quantity > 0;
+                              })
+                              .map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
+                                </option>
+                              ))}
                           </select>
+                          {!medicationProduct && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Produktas "{step.medication}" nerastas inventoriuje
+                            </p>
+                          )}
                         </div>
-
-                        {stepData.productId && (
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Pakuotė *</label>
-                            <select
-                              value={stepData.batchId}
-                              onChange={(e) => {
-                                setTodayStepData({
-                                  ...todayStepData,
-                                  [step.step]: { ...stepData, batchId: e.target.value }
-                                });
-                              }}
-                              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
-                            >
-                              <option value="">Pasirinkite pakuotę</option>
-                              {batches
-                                .filter((b) => b.product_id === stepData.productId && b.current_quantity > 0)
-                                .map((b) => (
-                                  <option key={b.id} value={b.id}>
-                                    {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        )}
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
