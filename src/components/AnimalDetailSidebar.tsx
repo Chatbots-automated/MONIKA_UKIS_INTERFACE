@@ -3308,7 +3308,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               <SynchronizationProtocolComponent
                 animalId={animalId}
                 onProtocolCreated={() => {
-                  loadVisits();
+                  // Protocol created successfully
                 }}
               />
             </div>
