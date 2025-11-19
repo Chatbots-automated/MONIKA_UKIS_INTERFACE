@@ -3306,7 +3306,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 Sinchronizacijos protokolas
               </h4>
               <SynchronizationProtocolComponent
-                animalId={animal.id}
+                animalId={animalId}
                 onProtocolCreated={() => {
                   loadVisits();
                 }}
