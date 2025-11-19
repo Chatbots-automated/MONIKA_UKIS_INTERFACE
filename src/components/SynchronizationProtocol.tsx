@@ -92,10 +92,32 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const loadBatches = async () => {
     const { data } = await supabase
       .from('batches')
-      .select('*')
+      .select(`
+        *,
+        products!inner(primary_pack_unit)
+      `)
       .order('created_at', { ascending: false });
 
-    if (data) setBatches(data);
+    if (data) {
+      // Enrich batches with stock level information
+      const enrichedBatches = await Promise.all(
+        data.map(async (batch: any) => {
+          const { data: stockData } = await supabase
+            .from('stock_level')
+            .select('quantity')
+            .eq('product_id', batch.product_id)
+            .single();
+
+          return {
+            ...batch,
+            batch_number: batch.lot || 'N/A',
+            current_quantity: stockData?.quantity || 0,
+            unit: batch.products?.primary_pack_unit || 'vnt'
+          };
+        })
+      );
+      setBatches(enrichedBatches);
+    }
   };
 
   const handleCreateProtocol = async () => {
