@@ -87,7 +87,7 @@ export function Animals() {
   const loadAnimalDetails = async (animalId: string) => {
     setDetailLoading(true);
     try {
-      const [treatmentsRes, vaccinationsRes, coursesRes, visitsRes] = await Promise.all([
+      const [treatmentsRes, vaccinationsRes, coursesRes, visitsRes, syncRes] = await Promise.all([
         supabase
           .from('treatments')
           .select('*')
@@ -111,6 +111,11 @@ export function Animals() {
           .select('*')
           .eq('animal_id', animalId)
           .order('visit_date', { ascending: false }),
+        supabase
+          .from('animal_synchronizations')
+          .select('*, synchronization_protocols(name)')
+          .eq('animal_id', animalId)
+          .order('created_at', { ascending: false }),
       ]);
 
       const animal = animals.find(a => a.id === animalId);
@@ -121,6 +126,7 @@ export function Animals() {
           vaccinations: vaccinationsRes.data || [],
           treatment_courses: coursesRes.data || [],
           visits: visitsRes.data || [],
+          synchronizations: syncRes.data || [],
         });
       }
     } catch (error) {
@@ -358,6 +364,15 @@ export function Animals() {
                     </div>
                     <span className="text-2xl font-bold text-purple-700">
                       {selectedAnimal.treatment_courses?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-pink-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-pink-600" />
+                      <span className="text-sm font-medium text-pink-900">Sinchronizacijos</span>
+                    </div>
+                    <span className="text-2xl font-bold text-pink-700">
+                      {selectedAnimal.synchronizations?.filter((s: any) => s.status === 'Active').length || 0}
                     </span>
                   </div>
                 </div>
@@ -746,6 +761,77 @@ export function Animals() {
                               <span className="font-medium">{course.doses_administered || 0} / {course.days}</span>
                             </div>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-pink-50 to-purple-50 border-b-2 border-pink-200">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-pink-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Sinchronizacijos protokolai</h3>
+                    <span className="ml-auto bg-pink-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {selectedAnimal.synchronizations?.length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {!selectedAnimal.synchronizations || selectedAnimal.synchronizations.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                      <p>Šis gyvūnas nedalyvauja sinchronizacijos protokoluose</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedAnimal.synchronizations.map((sync: any) => (
+                        <div key={sync.id} className="p-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border-2 border-pink-200 hover:border-pink-300 transition-colors">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">
+                                {sync.synchronization_protocols?.name || 'Protokolas'}
+                              </h4>
+                              <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Pradėta: {new Date(sync.start_date).toLocaleDateString('lt-LT')}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  sync.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                  sync.status === 'Completed' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {sync.status === 'Active' ? 'Aktyvus' :
+                                   sync.status === 'Completed' ? 'Baigtas' :
+                                   'Atšauktas'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          {sync.insemination_date && (
+                            <div className="mt-3 p-3 bg-white rounded border border-pink-200">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600">Sėklinimo data: </span>
+                                  <span className="font-medium">{sync.insemination_date}</span>
+                                </div>
+                                {sync.insemination_number && (
+                                  <div>
+                                    <span className="text-gray-600">Numeris: </span>
+                                    <span className="font-medium">{sync.insemination_number}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {sync.result && (
+                            <div className="mt-2 text-sm">
+                              <span className="text-gray-600">Rezultatas: </span>
+                              <span className="font-medium text-gray-900">{sync.result}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

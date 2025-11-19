@@ -15,6 +15,13 @@ interface SynchronizationProtocolProps {
   onProtocolCreated?: () => void;
 }
 
+interface StepWithProductSelection extends SynchronizationStep {
+  selectedProductId?: string;
+  selectedBatchId?: string;
+  actualDosage?: number;
+  actualUnit?: string;
+}
+
 export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }: SynchronizationProtocolProps) {
   const [protocols, setProtocols] = useState<SynchronizationProtocol[]>([]);
   const [activeSync, setActiveSync] = useState<AnimalSynchronizationWithDetails | null>(null);
@@ -138,9 +145,10 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             visit_datetime: new Date(step.scheduled_date).toISOString(),
             procedures: ['Gydymas'],
             notes: `Sinchronizacija - ${step.step_name}${step.is_evening ? ' (vakare)' : ''}${step.dosage ? `\nDozė: ${step.dosage} ${step.dosage_unit}` : ''}`,
-            status: 'Scheduled',
+            status: 'Planuojamas',
             treatment_required: false,
             next_visit_required: false,
+            sync_step_id: step.id,
           };
 
           const { error: visitError } = await supabase
@@ -196,25 +204,36 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   };
 
   const handleCompleteStep = async (step: SynchronizationStep) => {
-    const dosage = prompt('Įveskite dozę:', step.dosage?.toString() || '');
-    if (dosage === null) return;
+    setShowCompleteForm(step.id);
+  };
 
-    const unit = prompt('Įveskite vienetą:', step.dosage_unit || 'ml');
-    if (unit === null) return;
+  const [showCompleteForm, setShowCompleteForm] = useState<string | null>(null);
+  const [completeFormData, setCompleteFormData] = useState({
+    productId: '',
+    batchId: '',
+    dosage: '',
+    unit: 'ml',
+  });
 
-    const batchId = prompt('Įveskite pakuotės ID (arba palikite tuščią):');
+  const submitCompleteStep = async (stepId: string) => {
+    if (!completeFormData.productId || !completeFormData.batchId || !completeFormData.dosage) {
+      alert('Užpildykite visus laukus');
+      return;
+    }
 
     try {
       const { error } = await supabase.rpc('complete_synchronization_step', {
-        p_step_id: step.id,
-        p_batch_id: batchId || null,
-        p_actual_dosage: parseFloat(dosage),
-        p_actual_unit: unit,
+        p_step_id: stepId,
+        p_batch_id: completeFormData.batchId,
+        p_actual_dosage: parseFloat(completeFormData.dosage),
+        p_actual_unit: completeFormData.unit,
       });
 
       if (error) throw error;
 
       alert('Žingsnis pažymėtas kaip atliktas!');
+      setShowCompleteForm(null);
+      setCompleteFormData({ productId: '', batchId: '', dosage: '', unit: 'ml' });
       loadActiveSync();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
@@ -350,7 +369,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                         )}
                       </div>
                     </div>
-                    {!step.completed && (
+                    {!step.completed && showCompleteForm !== step.id && (
                       <button
                         onClick={() => handleCompleteStep(step)}
                         className="ml-2 px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
@@ -359,6 +378,93 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                       </button>
                     )}
                   </div>
+
+                  {showCompleteForm === step.id && (
+                    <div className="mt-3 p-3 bg-white rounded-lg border-2 border-purple-300 space-y-3">
+                      <h5 className="font-semibold text-sm">Įveskite informaciją</h5>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Produktas</label>
+                        <select
+                          value={completeFormData.productId}
+                          onChange={(e) => {
+                            setCompleteFormData({ ...completeFormData, productId: e.target.value, batchId: '' });
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="">Pasirinkite produktą</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {completeFormData.productId && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Pakuotė</label>
+                          <select
+                            value={completeFormData.batchId}
+                            onChange={(e) => setCompleteFormData({ ...completeFormData, batchId: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                          >
+                            <option value="">Pasirinkite pakuotę</option>
+                            {batches
+                              .filter((b) => b.product_id === completeFormData.productId && b.current_quantity > 0)
+                              .map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Dozė</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={completeFormData.dosage}
+                            onChange={(e) => setCompleteFormData({ ...completeFormData, dosage: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                            placeholder={step.dosage?.toString() || ''}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Vienetas</label>
+                          <select
+                            value={completeFormData.unit}
+                            onChange={(e) => setCompleteFormData({ ...completeFormData, unit: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                          >
+                            <option value="ml">ml</option>
+                            <option value="mg">mg</option>
+                            <option value="g">g</option>
+                            <option value="vnt">vnt</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => submitCompleteStep(step.id)}
+                          className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
+                        >
+                          Patvirtinti
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowCompleteForm(null);
+                            setCompleteFormData({ productId: '', batchId: '', dosage: '', unit: 'ml' });
+                          }}
+                          className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                        >
+                          Atšaukti
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
