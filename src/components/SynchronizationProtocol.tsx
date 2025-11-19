@@ -31,6 +31,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [todayStepData, setTodayStepData] = useState<{[key: number]: {productId: string, batchId: string, dosage: string, unit: string}}>({});
 
   useEffect(() => {
     loadProtocols();
@@ -103,6 +104,25 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
       return;
     }
 
+    // Check if today's steps have required data
+    const selectedProtocol = protocols.find(p => p.id === selectedProtocolId);
+    if (selectedProtocol) {
+      const today = new Date(startDate);
+      const todaySteps = selectedProtocol.steps.filter(step => {
+        const stepDate = new Date(startDate);
+        stepDate.setDate(stepDate.getDate() + step.day_offset);
+        return stepDate.toISOString().split('T')[0] === today.toISOString().split('T')[0];
+      });
+
+      for (const step of todaySteps) {
+        const stepData = todayStepData[step.step];
+        if (!stepData || !stepData.productId || !stepData.batchId || !stepData.dosage) {
+          alert(`Užpildykite visus šiandienos žingsnio ${step.step} laukus`);
+          return;
+        }
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -137,8 +157,10 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
       if (stepsError) throw stepsError;
 
-      // Create a visit for each step
+      // Create a visit for each step and complete today's steps
       if (steps && steps.length > 0) {
+        const today = new Date(startDate).toISOString().split('T')[0];
+
         for (const step of steps) {
           const visitData = {
             animal_id: animalId,
@@ -158,11 +180,34 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
           if (visitError) {
             console.error('Error creating visit for step:', step.step_number, visitError);
           }
+
+          // If this step is today and has data entered, complete it immediately
+          const stepDate = new Date(step.scheduled_date).toISOString().split('T')[0];
+          if (stepDate === today) {
+            const stepData = todayStepData[step.step_number];
+            if (stepData && stepData.batchId && stepData.dosage) {
+              try {
+                const { error: completeError } = await supabase.rpc('complete_synchronization_step', {
+                  p_step_id: step.id,
+                  p_batch_id: stepData.batchId,
+                  p_actual_dosage: parseFloat(stepData.dosage),
+                  p_actual_unit: stepData.unit,
+                });
+
+                if (completeError) {
+                  console.error('Error completing today step:', step.step_number, completeError);
+                }
+              } catch (err) {
+                console.error('Error completing step:', err);
+              }
+            }
+          }
         }
       }
 
       alert('Sinchronizacijos protokolas sėkmingai pradėtas!');
       setShowCreateForm(false);
+      setTodayStepData({});
       loadActiveSync();
       onProtocolCreated?.();
     } catch (error: any) {
@@ -554,19 +599,111 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
           </div>
 
           {selectedProtocol && (
-            <div className="bg-white rounded-lg p-3 space-y-2">
+            <div className="bg-white rounded-lg p-3 space-y-3">
               <h4 className="font-semibold text-gray-900 text-sm">Protokolo žingsniai:</h4>
               {selectedProtocol.steps.map((step) => {
                 const stepDate = new Date(startDate);
                 stepDate.setDate(stepDate.getDate() + step.day_offset);
+                const isToday = stepDate.toISOString().split('T')[0] === new Date(startDate).toISOString().split('T')[0];
+                const stepData = todayStepData[step.step] || { productId: '', batchId: '', dosage: '', unit: 'ml' };
 
                 return (
-                  <div key={step.step} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
-                    <span className="font-medium">
-                      {step.step}. {step.medication}
-                      {step.is_evening && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">vakare</span>}
-                    </span>
-                    <span className="text-gray-600">{stepDate.toLocaleDateString('lt-LT')}</span>
+                  <div key={step.step} className={`p-3 rounded-lg border-2 ${isToday ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="font-medium">
+                        {step.step}. {step.medication}
+                        {step.is_evening && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">vakare</span>}
+                        {isToday && <span className="ml-2 text-xs bg-yellow-600 text-white px-2 py-0.5 rounded font-semibold">ŠIANDIEN</span>}
+                      </span>
+                      <span className="text-gray-600">{stepDate.toLocaleDateString('lt-LT')}</span>
+                    </div>
+
+                    {isToday && (
+                      <div className="mt-3 space-y-2 pt-3 border-t border-yellow-200">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">Užpildykite informaciją apie šiandienos gydymą:</p>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Produktas *</label>
+                          <select
+                            value={stepData.productId}
+                            onChange={(e) => {
+                              setTodayStepData({
+                                ...todayStepData,
+                                [step.step]: { ...stepData, productId: e.target.value, batchId: '' }
+                              });
+                            }}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
+                          >
+                            <option value="">Pasirinkite produktą</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {stepData.productId && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Pakuotė *</label>
+                            <select
+                              value={stepData.batchId}
+                              onChange={(e) => {
+                                setTodayStepData({
+                                  ...todayStepData,
+                                  [step.step]: { ...stepData, batchId: e.target.value }
+                                });
+                              }}
+                              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
+                            >
+                              <option value="">Pasirinkite pakuotę</option>
+                              {batches
+                                .filter((b) => b.product_id === stepData.productId && b.current_quantity > 0)
+                                .map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.batch_number} (Likutis: {b.current_quantity} {b.unit})
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Dozė *</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={stepData.dosage}
+                              onChange={(e) => {
+                                setTodayStepData({
+                                  ...todayStepData,
+                                  [step.step]: { ...stepData, dosage: e.target.value }
+                                });
+                              }}
+                              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
+                              placeholder="Pvz., 2.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Vienetas</label>
+                            <select
+                              value={stepData.unit}
+                              onChange={(e) => {
+                                setTodayStepData({
+                                  ...todayStepData,
+                                  [step.step]: { ...stepData, unit: e.target.value }
+                                });
+                              }}
+                              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
+                            >
+                              <option value="ml">ml</option>
+                              <option value="mg">mg</option>
+                              <option value="g">g</option>
+                              <option value="vnt">vnt</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
