@@ -99,13 +99,59 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.rpc('initialize_animal_synchronization', {
+      // Initialize the synchronization protocol
+      const { data: syncData, error: syncError } = await supabase.rpc('initialize_animal_synchronization', {
         p_animal_id: animalId,
         p_protocol_id: selectedProtocolId,
         p_start_date: startDate,
       });
 
-      if (error) throw error;
+      if (syncError) throw syncError;
+
+      // Get the created synchronization ID
+      const { data: createdSync, error: fetchError } = await supabase
+        .from('animal_synchronizations')
+        .select('id')
+        .eq('animal_id', animalId)
+        .eq('protocol_id', selectedProtocolId)
+        .eq('status', 'Active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      // Get all steps for this synchronization
+      const { data: steps, error: stepsError } = await supabase
+        .from('synchronization_steps')
+        .select('*')
+        .eq('synchronization_id', createdSync.id)
+        .order('step_number');
+
+      if (stepsError) throw stepsError;
+
+      // Create a visit for each step
+      if (steps && steps.length > 0) {
+        for (const step of steps) {
+          const visitData = {
+            animal_id: animalId,
+            visit_datetime: new Date(step.scheduled_date).toISOString(),
+            procedures: ['Gydymas'],
+            notes: `Sinchronizacija - ${step.step_name}${step.is_evening ? ' (vakare)' : ''}${step.dosage ? `\nDozė: ${step.dosage} ${step.dosage_unit}` : ''}`,
+            status: 'Scheduled',
+            treatment_required: false,
+            next_visit_required: false,
+          };
+
+          const { error: visitError } = await supabase
+            .from('animal_visits')
+            .insert(visitData);
+
+          if (visitError) {
+            console.error('Error creating visit for step:', step.step_number, visitError);
+          }
+        }
+      }
 
       alert('Sinchronizacijos protokolas sėkmingai pradėtas!');
       setShowCreateForm(false);
