@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
-import { normalizeNumberInput } from '../lib/helpers';
+import { normalizeNumberInput, sortByLithuanian } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { AnimalAnalytics } from './AnimalAnalytics';
 import { TeatStatusCard } from './TeatStatusCard';
@@ -441,7 +441,9 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       .eq('is_active', true);
 
     if (!error && data) {
-      setProducts(data);
+      // Sort by Lithuanian alphabet
+      const sortedData = sortByLithuanian(data, 'name');
+      setProducts(sortedData);
     }
   };
 

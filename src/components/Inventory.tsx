@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Search, AlertCircle, Package, Edit2, Save, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { translateCategory } from '../lib/helpers';
+import { translateCategory, sortByLithuanian } from '../lib/helpers';
 
 interface StockItem {
   batch_id: string;
@@ -165,7 +165,9 @@ export function Inventory() {
         return item;
       });
 
-      setInventory(groupedInventory);
+      // Sort by Lithuanian alphabet
+      const sortedInventory = sortByLithuanian(groupedInventory, 'product_name');
+      setInventory(sortedInventory);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {

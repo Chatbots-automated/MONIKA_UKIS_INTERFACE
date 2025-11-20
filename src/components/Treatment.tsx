@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchAllRows } from '../lib/helpers';
+import { fetchAllRows, sortByLithuanian } from '../lib/helpers';
 import { Product, Animal, Disease, StockByBatch, Unit } from '../lib/types';
 import { Syringe, Plus, Trash2, Check, Search } from 'lucide-react';
 import { formatDateLT, getDaysUntil } from '../lib/formatters';
@@ -55,7 +55,7 @@ export function Treatment() {
     const [animalsRes, diseasesRes, productsRes, batchesRes] = await Promise.all([
       fetchAllRows('animals', '*', 'tag_no'),
       supabase.from('diseases').select('*').order('name'),
-      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      supabase.from('products').select('*').eq('is_active', true),
       supabase.from('stock_by_batch').select(`
         *,
         products!inner(name),
@@ -65,7 +65,10 @@ export function Treatment() {
 
     if (animalsRes) setAnimals(animalsRes);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
-    if (productsRes.data) setProducts(productsRes.data);
+    if (productsRes.data) {
+      const sortedProducts = sortByLithuanian(productsRes.data, 'name');
+      setProducts(sortedProducts);
+    }
     if (batchesRes.data) setBatches(batchesRes.data);
   };
 

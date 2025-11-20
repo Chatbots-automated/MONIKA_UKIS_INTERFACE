@@ -4,6 +4,7 @@ import { Product, Unit } from '../lib/types';
 import { AlertTriangle, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { sortByLithuanian } from '../lib/helpers';
 
 export function OwnerMeds() {
   const { logAction } = useAuth();
@@ -50,7 +51,10 @@ export function OwnerMeds() {
       supabase.from('owner_med_admin').select(`*, products(name)`).order('first_admin_date', { ascending: false }).limit(10),
     ]);
 
-    if (productsRes.data) setProducts(productsRes.data);
+    if (productsRes.data) {
+      const sortedProducts = sortByLithuanian(productsRes.data, 'name');
+      setProducts(sortedProducts);
+    }
     if (recordsRes.data) setRecords(recordsRes.data);
   };
 

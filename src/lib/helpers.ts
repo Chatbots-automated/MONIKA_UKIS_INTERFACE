@@ -1,6 +1,24 @@
 import { supabase } from './supabase';
 
 /**
+ * Compare strings using Lithuanian locale for alphabetical sorting
+ */
+export function compareLithuanian(a: string, b: string): number {
+  return a.localeCompare(b, 'lt');
+}
+
+/**
+ * Sort array of objects by a string property using Lithuanian alphabet
+ */
+export function sortByLithuanian<T>(array: T[], property: keyof T): T[] {
+  return [...array].sort((a, b) => {
+    const aVal = String(a[property] || '');
+    const bVal = String(b[property] || '');
+    return compareLithuanian(aVal, bVal);
+  });
+}
+
+/**
  * Format date for Lithuanian date input (yyyy-MM-dd)
  */
 export function formatDateForInput(date: Date | string | null | undefined): string {

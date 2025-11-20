@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, Unit } from '../lib/types';
-import { normalizeNumberInput } from '../lib/helpers';
+import { normalizeNumberInput, sortByLithuanian } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';
@@ -36,7 +36,7 @@ export function Products() {
   useRealtimeSubscription({
     table: 'products',
     onInsert: useCallback((payload) => {
-      setProducts(prev => [...prev, payload.new].sort((a, b) => a.name.localeCompare(b.name)));
+      setProducts(prev => sortByLithuanian([...prev, payload.new], 'name'));
     }, []),
     onUpdate: useCallback((payload) => {
       setProducts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p));
@@ -50,11 +50,12 @@ export function Products() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('*')
-        .order('name');
+        .select('*');
 
       if (error) throw error;
-      setProducts(data || []);
+      // Sort by Lithuanian alphabet
+      const sortedData = sortByLithuanian(data || [], 'name');
+      setProducts(sortedData);
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {

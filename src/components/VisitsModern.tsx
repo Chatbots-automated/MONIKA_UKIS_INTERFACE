@@ -427,7 +427,7 @@ export function VisitsModern() {
                       onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
                     >
                       <td className="px-4 py-3 text-sm">
-                        <div className="font-medium text-gray-900">{formatDateTimeLT(visit.visit_datetime)}</div>
+                        <div className="font-medium text-gray-900">{formatDateLT(visit.visit_datetime)}</div>
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="font-medium text-gray-900">{visit.animal?.tag_no || '-'}</div>
@@ -522,7 +522,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: {
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <Clock className="w-4 h-4 text-gray-400" />
-          {formatDateTimeLT(visit.visit_datetime)}
+          {formatDateLT(visit.visit_datetime)}
         </div>
 
         <div className="flex flex-wrap gap-1">
