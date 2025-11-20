@@ -2846,7 +2846,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             >
                               <option value="">Pasirinkite vaistą</option>
-                              {products.filter(p => p.category === 'medicines').map(product => (
+                              {sortByLithuanian(products.filter(p => p.category === 'medicines'), 'name').map(product => (
                                 <option key={product.id} value={product.id}>{product.name}</option>
                               ))}
                             </select>
