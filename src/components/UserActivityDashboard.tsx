@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Activity, Users, TrendingUp, Clock, BarChart3, Award } from 'lucide-react';
+import { Activity, Users, TrendingUp, Clock, BarChart3, Award, Filter, X } from 'lucide-react';
 import { translateAction } from '../lib/actionTranslations';
+import { formatDateLT } from '../lib/formatters';
 
 interface ActivityStats {
   totalActions: number;
@@ -14,15 +15,57 @@ interface ActivityStats {
   hourlyActivity: Array<{ hour: number; count: number }>;
   actionBreakdown: Array<{ action: string; count: number }>;
   recentActivity: Array<any>;
+  userStats: Array<{ userId: string; email: string; count: number; lastActive: string }>;
 }
 
 export function UserActivityDashboard() {
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserLogs, setSelectedUserLogs] = useState<any[]>([]);
+  const [selectedAction, setSelectedAction] = useState('');
+  const [lastDays, setLastDays] = useState('7');
 
   useEffect(() => {
     loadStats();
   }, []);
+
+  useEffect(() => {
+    if (selectedUserId) {
+      loadUserLogs();
+    }
+  }, [selectedUserId, selectedAction, lastDays]);
+
+  const loadUserLogs = async () => {
+    if (!selectedUserId) return;
+
+    try {
+      let query = supabase
+        .from('user_audit_logs')
+        .select('*')
+        .eq('user_id', selectedUserId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (lastDays) {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - parseInt(lastDays));
+        query = query.gte('created_at', daysAgo.toISOString());
+      }
+
+      if (selectedAction) {
+        query = query.eq('action', selectedAction);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setSelectedUserLogs(data || []);
+    } catch (error: any) {
+      console.error('Error loading user logs:', error);
+      alert('Klaida kraunant vartotojo žurnalą: ' + error.message);
+    }
+  };
 
   const loadStats = async () => {
     setLoading(true);
@@ -91,6 +134,26 @@ export function UserActivityDashboard() {
         user_email: usersData?.users.find(u => u.id === log.user_id)?.email || 'Unknown'
       }));
 
+      const userStatsMap: { [key: string]: { count: number; lastActive: string } } = {};
+      logs.forEach(log => {
+        if (!userStatsMap[log.user_id]) {
+          userStatsMap[log.user_id] = { count: 0, lastActive: log.created_at };
+        }
+        userStatsMap[log.user_id].count++;
+        if (new Date(log.created_at) > new Date(userStatsMap[log.user_id].lastActive)) {
+          userStatsMap[log.user_id].lastActive = log.created_at;
+        }
+      });
+
+      const userStats = Object.entries(userStatsMap)
+        .map(([userId, data]) => ({
+          userId,
+          email: usersData?.users.find(u => u.id === userId)?.email || 'Unknown',
+          count: data.count,
+          lastActive: data.lastActive
+        }))
+        .sort((a, b) => b.count - a.count);
+
       setStats({
         totalActions: logs.length,
         uniqueUsers,
@@ -101,7 +164,8 @@ export function UserActivityDashboard() {
         peakHour,
         hourlyActivity,
         actionBreakdown,
-        recentActivity
+        recentActivity,
+        userStats
       });
 
     } catch (error: any) {
@@ -256,6 +320,158 @@ export function UserActivityDashboard() {
           ))}
         </div>
       </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Users className="h-5 w-5 text-blue-500" />
+          Vartotojų aktyvumas
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vartotojas</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmų</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pask. aktyvumas</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {stats.userStats.map((user) => (
+                <tr key={user.userId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm text-gray-900">{user.email}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{user.count}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{formatDateLT(user.lastActive)}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <button
+                      onClick={() => {
+                        setSelectedUserId(user.userId);
+                        setSelectedAction('');
+                      }}
+                      className="text-red-600 hover:text-red-700 font-medium"
+                    >
+                      Peržiūrėti žurnalą
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedUserId && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-red-500" />
+              Vartotojo aktyvumo žurnalas
+            </h3>
+            <button
+              onClick={() => {
+                setSelectedUserId(null);
+                setSelectedUserLogs([]);
+                setSelectedAction('');
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-600" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Vartotojas</label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => {
+                  setSelectedUserId(e.target.value);
+                  setSelectedAction('');
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+              >
+                {stats.userStats.map((user) => (
+                  <option key={user.userId} value={user.userId}>{user.email}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Laikotarpis</label>
+              <select
+                value={lastDays}
+                onChange={(e) => setLastDays(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+              >
+                <option value="1">Paskutinė diena</option>
+                <option value="7">Paskutinė savaitė</option>
+                <option value="30">Paskutinis mėnuo</option>
+                <option value="90">Paskutiniai 3 mėnesiai</option>
+                <option value="">Visas laikas</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Veiksmas</label>
+              <select
+                value={selectedAction}
+                onChange={(e) => setSelectedAction(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+              >
+                <option value="">Visi veiksmai</option>
+                {Array.from(new Set(selectedUserLogs.map(log => log.action))).map(action => (
+                  <option key={action} value={action}>{translateAction(action)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="text-sm text-gray-600 mb-4">
+            Rodoma {selectedUserLogs.length} įrašų
+          </div>
+
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {selectedUserLogs.map((log) => (
+              <div key={log.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      log.action.includes('create') ? 'bg-green-100 text-green-800' :
+                      log.action.includes('update') ? 'bg-blue-100 text-blue-800' :
+                      log.action.includes('delete') ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {translateAction(log.action)}
+                    </span>
+                    {log.table_name && (
+                      <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">
+                        {log.table_name}
+                      </span>
+                    )}
+                  </div>
+                  {log.new_data && Object.keys(log.new_data).length > 0 && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {Object.entries(log.new_data).slice(0, 3).map(([key, value]) => (
+                        <span key={key} className="mr-3">
+                          <span className="font-medium">{key}:</span> {String(value).substring(0, 30)}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right text-xs text-gray-500">
+                  {formatDateLT(log.created_at)}
+                </div>
+              </div>
+            ))}
+            {selectedUserLogs.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                Šiuo laikotarpiu veiksmų nerasta
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

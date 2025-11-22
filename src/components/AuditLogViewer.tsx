@@ -24,12 +24,24 @@ export function AuditLogViewer() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAction, setSelectedAction] = useState('');
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [lastDays, setLastDays] = useState('');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
   const [users, setUsers] = useState<Array<{id: string, email: string}>>([]);
   const [actions, setActions] = useState<string[]>([]);
+
+  const actionCategories = [
+    { value: '', label: 'Visos kategorijos' },
+    { value: 'treatment', label: 'Gydymas' },
+    { value: 'animal', label: 'Gyvūnai' },
+    { value: 'inventory', label: 'Atsargos' },
+    { value: 'product', label: 'Produktai' },
+    { value: 'user', label: 'Vartotojai' },
+    { value: 'auth', label: 'Prisijungimas' },
+  ];
 
   useEffect(() => {
     loadLogs();
@@ -37,7 +49,7 @@ export function AuditLogViewer() {
 
   useEffect(() => {
     filterLogs();
-  }, [logs, searchTerm, selectedAction, selectedUser, startDate, endDate]);
+  }, [logs, searchTerm, selectedAction, selectedUser, selectedCategory, startDate, endDate, lastDays]);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -80,6 +92,16 @@ export function AuditLogViewer() {
     }
   };
 
+  const getCategoryForAction = (action: string): string => {
+    if (action.includes('treatment')) return 'treatment';
+    if (action.includes('animal')) return 'animal';
+    if (action.includes('product') || action.includes('batch')) return 'product';
+    if (action.includes('inventory') || action.includes('stock') || action.includes('usage')) return 'inventory';
+    if (action.includes('user') || action.includes('freeze') || action.includes('unfreeze')) return 'user';
+    if (action.includes('login') || action.includes('logout') || action.includes('auth')) return 'auth';
+    return '';
+  };
+
   const filterLogs = () => {
     let filtered = [...logs];
 
@@ -92,6 +114,10 @@ export function AuditLogViewer() {
       );
     }
 
+    if (selectedCategory) {
+      filtered = filtered.filter(log => getCategoryForAction(log.action) === selectedCategory);
+    }
+
     if (selectedAction) {
       filtered = filtered.filter(log => log.action === selectedAction);
     }
@@ -100,14 +126,20 @@ export function AuditLogViewer() {
       filtered = filtered.filter(log => log.user_id === selectedUser);
     }
 
-    if (startDate) {
-      filtered = filtered.filter(log => new Date(log.created_at) >= new Date(startDate));
-    }
+    if (lastDays) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - parseInt(lastDays));
+      filtered = filtered.filter(log => new Date(log.created_at) >= daysAgo);
+    } else {
+      if (startDate) {
+        filtered = filtered.filter(log => new Date(log.created_at) >= new Date(startDate));
+      }
 
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter(log => new Date(log.created_at) <= end);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(log => new Date(log.created_at) <= end);
+      }
     }
 
     setFilteredLogs(filtered);
@@ -140,8 +172,10 @@ export function AuditLogViewer() {
     setSearchTerm('');
     setSelectedAction('');
     setSelectedUser('');
+    setSelectedCategory('');
     setStartDate('');
     setEndDate('');
+    setLastDays('');
   };
 
   const getActionBadgeColor = (action: string) => {
@@ -194,58 +228,102 @@ export function AuditLogViewer() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Ieškoti..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-            />
+        <div className="space-y-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Ieškoti..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+            </div>
+
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setSelectedAction('');
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            >
+              {actionCategories.map(cat => (
+                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedAction}
+              onChange={(e) => setSelectedAction(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              disabled={selectedCategory !== ''}
+            >
+              <option value="">Visi veiksmai</option>
+              {actions.map(action => (
+                <option key={action} value={action}>{translateAction(action)}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            >
+              <option value="">Visi vartotojai</option>
+              {users.map(user => (
+                <option key={user.id} value={user.id}>{user.email}</option>
+              ))}
+            </select>
           </div>
 
-          <select
-            value={selectedAction}
-            onChange={(e) => setSelectedAction(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-          >
-            <option value="">Visi veiksmai</option>
-            {actions.map(action => (
-              <option key={action} value={action}>{translateAction(action)}</option>
-            ))}
-          </select>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <select
+              value={lastDays}
+              onChange={(e) => {
+                setLastDays(e.target.value);
+                if (e.target.value) {
+                  setStartDate('');
+                  setEndDate('');
+                }
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            >
+              <option value="">Pasirinkti laikotarpį...</option>
+              <option value="1">Paskutinė diena</option>
+              <option value="7">Paskutinė savaitė</option>
+              <option value="30">Paskutinis mėnuo</option>
+              <option value="90">Paskutiniai 3 mėnesiai</option>
+            </select>
 
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-          >
-            <option value="">Visi vartotojai</option>
-            {users.map(user => (
-              <option key={user.id} value={user.id}>{user.email}</option>
-            ))}
-          </select>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setLastDays('');
+              }}
+              disabled={lastDays !== ''}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              placeholder="Nuo datos"
+            />
 
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-            placeholder="Nuo datos"
-          />
-
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-            placeholder="Iki datos"
-          />
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setLastDays('');
+              }}
+              disabled={lastDays !== ''}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              placeholder="Iki datos"
+            />
+          </div>
         </div>
 
-        {(searchTerm || selectedAction || selectedUser || startDate || endDate) && (
+        {(searchTerm || selectedAction || selectedUser || selectedCategory || startDate || endDate || lastDays) && (
           <div className="mb-4">
             <button
               onClick={clearFilters}
