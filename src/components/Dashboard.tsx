@@ -155,7 +155,8 @@ export function Dashboard() {
         visitsWeek,
         visitsMonth,
         upcomingVisits,
-        withdrawalAnimals
+        withdrawalCount,
+        withdrawalData
       ] = await Promise.all([
         supabase.from('stock_by_product').select('*'),
         supabase.from('stock_by_batch').select(`
@@ -381,7 +382,7 @@ export function Dashboard() {
       const recentReceived = recentBatchesData.data?.length || 0;
 
       // Group withdrawal animals by animal_id to show unique animals
-      const withdrawalAnimalsData = withdrawalAnimals.data || [];
+      const withdrawalAnimalsData = withdrawalData.data || [];
       const uniqueWithdrawalAnimals = new Map();
       withdrawalAnimalsData.forEach(treatment => {
         const animalId = treatment.animals?.id;
@@ -437,7 +438,7 @@ export function Dashboard() {
         visitsThisWeek: visitsWeek.count || 0,
         visitsThisMonth: visitsMonth.count || 0,
         upcomingVisits: upcomingVisits.count || 0,
-        animalsInWithdrawal: withdrawalAnimals.count || 0,
+        animalsInWithdrawal: withdrawalCount.count || 0,
       });
       setExpiringBatches(expiringList);
       setCategoryStats(categoryStatsArray);
