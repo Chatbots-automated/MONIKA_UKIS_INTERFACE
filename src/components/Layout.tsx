@@ -36,11 +36,8 @@ const menuItems = [
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
-  { id: 'biocides', label: 'Biocidai', icon: Droplet, permission: 'biocides' },
-  { id: 'owner-meds', label: 'Savininko Vaistai', icon: AlertTriangle, permission: 'products' },
   { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2, permission: 'waste' },
   { id: 'products', label: 'Produktai', icon: Pill, permission: 'products' },
-  { id: 'suppliers', label: 'Tiekėjai', icon: Building2, permission: 'suppliers' },
   { id: 'reports', label: 'Ataskaitos', icon: FileText, permission: 'view' },
   { id: 'users', label: 'Vartotojai', icon: Users, permission: 'manage_users' },
 ];
