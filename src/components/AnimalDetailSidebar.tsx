@@ -1943,9 +1943,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         setVaccinationData({
           product_id: vacc.product_id || '',
           batch_id: vacc.batch_id || '',
-          dose_qty: vacc.dose_qty?.toString() || '',
-          dose_unit: vacc.dose_unit || 'ml',
-          purpose: vacc.purpose || '',
+          dose_amount: vacc.dose_amount?.toString() || '',
+          dose_number: vacc.dose_number?.toString() || '1',
+          unit: vacc.unit || 'ml',
+          next_booster_date: vacc.next_booster_date || '',
+          administered_by: vacc.administered_by || '',
           notes: vacc.notes || '',
         });
       }
