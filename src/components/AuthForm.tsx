@@ -33,7 +33,7 @@ export function AuthForm() {
             <div className="flex items-center justify-center mb-4">
               <img
                 src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
-                alt="ZUB Berčiūnai"
+                alt="ŽŪB Berčiunai"
                 className="w-20 h-20 rounded-xl bg-white p-2 shadow-lg object-contain"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -45,7 +45,7 @@ export function AuthForm() {
               />
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">
-              ZUB Berčiūnai
+              ŽŪB Berčiunai
             </h1>
             <p className="text-emerald-50">
               VetStock Valdymo Sistema
@@ -142,7 +142,7 @@ export function AuthForm() {
         </div>
 
         <div className="mt-6 text-center text-sm text-white/80">
-          <p>© 2025 ZUB Berčiūnai · VetStock Sistema v1.0.0</p>
+          <p>© 2025 ŽŪB Berčiunai · VetStock Sistema v1.0.0</p>
         </div>
       </div>
     </div>

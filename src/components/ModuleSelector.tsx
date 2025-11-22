@@ -17,7 +17,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           <div className="flex items-center justify-center mb-6">
             <img
               src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
-              alt="ZUB Berčiūnai"
+              alt="ŽŪB Berčiunai"
               className="w-24 h-24 rounded-2xl bg-white p-2 shadow-2xl object-contain"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
@@ -25,7 +25,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             />
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">
-            ŽŪB Berčiūnai
+            ŽŪB Berčiunai
           </h1>
           <p className="text-xl text-emerald-100">
             Valdymo Sistema

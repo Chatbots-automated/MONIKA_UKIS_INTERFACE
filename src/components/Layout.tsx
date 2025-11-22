@@ -73,7 +73,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
               <div className="flex-shrink-0">
                 <img
                   src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
-                  alt="ZUB Berčiūnai"
+                  alt="ŽŪB Berčiunai"
                   className="w-10 xl:w-16 h-10 xl:h-16 rounded-lg bg-white p-0.5 xl:p-1 shadow-lg object-contain"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -81,7 +81,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                 />
               </div>
               <div>
-                <h1 className="font-bold text-sm xl:text-xl text-white leading-tight">ZUB Berčiūnai</h1>
+                <h1 className="font-bold text-sm xl:text-xl text-white leading-tight">ŽŪB Berčiunai</h1>
                 <p className="text-xs text-emerald-200 xl:mt-1">VetStock<span className="hidden xl:inline"> Sistema</span></p>
               </div>
             </div>
@@ -208,13 +208,13 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
               <div className="flex items-center gap-2">
                 <img
                   src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
-                  alt="ZUB"
+                  alt="ŽŪB"
                   className="w-6 h-6 rounded object-contain"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
-                <span>© 2025 ZUB Berčiūnai. Visos teisės saugomos.</span>
+                <span>© 2025 ŽŪB Berčiunai. Visos teisės saugomos.</span>
               </div>
               <div className="text-xs text-gray-500">
                 VetStock Sistema · Versija 1.0.0
