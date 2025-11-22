@@ -43,6 +43,14 @@ interface DashboardStats {
   ownerMedsThisMonth: number;
   totalBatches: number;
   avgBatchValue: number;
+  vaccinationsToday: number;
+  vaccinationsThisWeek: number;
+  vaccinationsThisMonth: number;
+  visitsToday: number;
+  visitsThisWeek: number;
+  visitsThisMonth: number;
+  upcomingVisits: number;
+  animalsInWithdrawal: number;
 }
 
 interface CategoryStock {
@@ -91,6 +99,14 @@ export function Dashboard() {
     ownerMedsThisMonth: 0,
     totalBatches: 0,
     avgBatchValue: 0,
+    vaccinationsToday: 0,
+    vaccinationsThisWeek: 0,
+    vaccinationsThisMonth: 0,
+    visitsToday: 0,
+    visitsThisWeek: 0,
+    visitsThisMonth: 0,
+    upcomingVisits: 0,
+    animalsInWithdrawal: 0,
   });
   const [expiringBatches, setExpiringBatches] = useState<any[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStock[]>([]);
@@ -130,7 +146,15 @@ export function Dashboard() {
         wasteCount,
         ownerMedsCount,
         allBatches,
-        usageData
+        usageData,
+        vaccinationsToday,
+        vaccinationsWeek,
+        vaccinationsMonth,
+        visitsToday,
+        visitsWeek,
+        visitsMonth,
+        upcomingVisits,
+        withdrawalAnimals
       ] = await Promise.all([
         supabase.from('stock_by_product').select('*'),
         supabase.from('stock_by_batch').select(`
@@ -165,7 +189,15 @@ export function Dashboard() {
         supabase.from('usage_items').select(`
           qty,
           products!inner(id, name)
-        `).gte('created_at', monthStart)
+        `).gte('created_at', monthStart),
+        supabase.from('vaccinations').select('id', { count: 'exact', head: true }).gte('vaccination_date', todayStart),
+        supabase.from('vaccinations').select('id', { count: 'exact', head: true }).gte('vaccination_date', weekStart),
+        supabase.from('vaccinations').select('id', { count: 'exact', head: true }).gte('vaccination_date', monthStart),
+        supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', todayStart),
+        supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', weekStart),
+        supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', monthStart),
+        supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', now.toISOString()).eq('status', 'scheduled'),
+        supabase.from('treatments').select('id', { count: 'exact', head: true }).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`)
       ]);
 
       const totalProducts = stockData.data?.length || 0;
@@ -358,6 +390,14 @@ export function Dashboard() {
         ownerMedsThisMonth: ownerMedsCount.count || 0,
         totalBatches,
         avgBatchValue,
+        vaccinationsToday: vaccinationsToday.count || 0,
+        vaccinationsThisWeek: vaccinationsWeek.count || 0,
+        vaccinationsThisMonth: vaccinationsMonth.count || 0,
+        visitsToday: visitsToday.count || 0,
+        visitsThisWeek: visitsWeek.count || 0,
+        visitsThisMonth: visitsMonth.count || 0,
+        upcomingVisits: upcomingVisits.count || 0,
+        animalsInWithdrawal: withdrawalAnimals.count || 0,
       });
       setExpiringBatches(expiringList);
       setCategoryStats(categoryStatsArray);
@@ -535,7 +575,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm p-6 border border-blue-200">
           <div className="flex items-center gap-3 mb-4">
             <div className="bg-blue-600 p-2 rounded-lg">
@@ -559,6 +599,72 @@ export function Dashboard() {
           </div>
         </div>
 
+        <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl shadow-sm p-6 border border-cyan-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-cyan-600 p-2 rounded-lg">
+              <ShieldAlert className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Vakcinacijos</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Šiandien</span>
+              <span className="text-2xl font-bold text-cyan-600">{stats.vaccinationsToday}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Šią savaitę</span>
+              <span className="text-lg font-semibold text-gray-700">{stats.vaccinationsThisWeek}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Šį mėnesį</span>
+              <span className="text-lg font-semibold text-gray-700">{stats.vaccinationsThisMonth}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl shadow-sm p-6 border border-amber-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-amber-600 p-2 rounded-lg">
+              <Calendar className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Vizitai</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Šiandien</span>
+              <span className="text-2xl font-bold text-amber-600">{stats.visitsToday}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Šią savaitę</span>
+              <span className="text-lg font-semibold text-gray-700">{stats.visitsThisWeek}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Suplanuota</span>
+              <span className="text-lg font-semibold text-gray-700">{stats.upcomingVisits}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-sm p-6 border border-red-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-red-600 p-2 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Karencija</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Gyvūnai karencijoje</span>
+              <span className="text-2xl font-bold text-red-600">{stats.animalsInWithdrawal}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">Negalima šalinti pieno/mėsos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl shadow-sm p-6 border border-emerald-200">
           <div className="flex items-center gap-3 mb-4">
             <div className="bg-emerald-600 p-2 rounded-lg">
@@ -578,9 +684,9 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-sm p-6 border border-purple-200">
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl shadow-sm p-6 border border-teal-200">
           <div className="flex items-center gap-3 mb-4">
-            <div className="bg-purple-600 p-2 rounded-lg">
+            <div className="bg-teal-600 p-2 rounded-lg">
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
             <h3 className="font-semibold text-gray-900">Kategorijos</h3>
@@ -589,12 +695,35 @@ export function Dashboard() {
             {categoryStats.slice(0, 3).map((cat) => (
               <div key={cat.category} className="flex items-center justify-between text-sm">
                 <span className="text-gray-700">{getCategoryLabel(cat.category)}</span>
-                <span className="font-semibold text-purple-600">{cat.count}</span>
+                <span className="font-semibold text-teal-600">{cat.count}</span>
               </div>
             ))}
             {categoryStats.length > 3 && (
               <p className="text-xs text-gray-600 mt-2">+{categoryStats.length - 3} daugiau</p>
             )}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl shadow-sm p-6 border border-rose-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-rose-600 p-2 rounded-lg">
+              <Stethoscope className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Šio mėnesio</h3>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-700">Gydymai</span>
+              <span className="font-semibold text-rose-600">{stats.treatmentsThisMonth}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-700">Vakcinacijos</span>
+              <span className="font-semibold text-rose-600">{stats.vaccinationsThisMonth}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-700">Vizitai</span>
+              <span className="font-semibold text-rose-600">{stats.visitsThisMonth}</span>
+            </div>
           </div>
         </div>
       </div>
