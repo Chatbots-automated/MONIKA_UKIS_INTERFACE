@@ -115,6 +115,7 @@ export function Dashboard() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([]);
   const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
+  const [withdrawalAnimals, setWithdrawalAnimals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -197,7 +198,14 @@ export function Dashboard() {
         supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', weekStart),
         supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', monthStart),
         supabase.from('animal_visits').select('id', { count: 'exact', head: true }).gte('visit_datetime', now.toISOString()).eq('status', 'scheduled'),
-        supabase.from('treatments').select('id', { count: 'exact', head: true }).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`)
+        supabase.from('treatments').select('id', { count: 'exact', head: true }).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`),
+        supabase.from('treatments').select(`
+          id,
+          withdrawal_until_milk,
+          withdrawal_until_meat,
+          reg_date,
+          animals!inner(id, tag_no, species)
+        `).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`).order('withdrawal_until_milk', { ascending: true, nullsFirst: false })
       ]);
 
       const totalProducts = stockData.data?.length || 0;
@@ -372,6 +380,38 @@ export function Dashboard() {
 
       const recentReceived = recentBatchesData.data?.length || 0;
 
+      // Group withdrawal animals by animal_id to show unique animals
+      const withdrawalAnimalsData = withdrawalAnimals.data || [];
+      const uniqueWithdrawalAnimals = new Map();
+      withdrawalAnimalsData.forEach(treatment => {
+        const animalId = treatment.animals?.id;
+        if (!animalId) return;
+
+        const existing = uniqueWithdrawalAnimals.get(animalId);
+        const milkDate = treatment.withdrawal_until_milk ? new Date(treatment.withdrawal_until_milk) : null;
+        const meatDate = treatment.withdrawal_until_meat ? new Date(treatment.withdrawal_until_meat) : null;
+
+        if (!existing ||
+            (milkDate && (!existing.withdrawal_until_milk || milkDate > new Date(existing.withdrawal_until_milk))) ||
+            (meatDate && (!existing.withdrawal_until_meat || meatDate > new Date(existing.withdrawal_until_meat)))) {
+          uniqueWithdrawalAnimals.set(animalId, {
+            animal_id: animalId,
+            tag_no: treatment.animals?.tag_no,
+            species: treatment.animals?.species,
+            withdrawal_until_milk: milkDate && milkDate >= now ? treatment.withdrawal_until_milk : (existing?.withdrawal_until_milk || null),
+            withdrawal_until_meat: meatDate && meatDate >= now ? treatment.withdrawal_until_meat : (existing?.withdrawal_until_meat || null),
+          });
+        }
+      });
+
+      const withdrawalAnimalsList = Array.from(uniqueWithdrawalAnimals.values())
+        .filter(a => a.withdrawal_until_milk || a.withdrawal_until_meat)
+        .sort((a, b) => {
+          const aDate = new Date(a.withdrawal_until_milk || a.withdrawal_until_meat || 0);
+          const bDate = new Date(b.withdrawal_until_milk || b.withdrawal_until_meat || 0);
+          return bDate.getTime() - aDate.getTime();
+        });
+
       setStats({
         totalProducts,
         lowStock,
@@ -406,6 +446,7 @@ export function Dashboard() {
       setTopProducts(topProductsList);
       setStockAlerts(alerts.slice(0, 10));
       setMonthlyTrends(last6Months);
+      setWithdrawalAnimals(withdrawalAnimalsList);
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
@@ -645,21 +686,62 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-sm p-6 border border-red-200">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-red-600 p-2 rounded-lg">
-              <AlertTriangle className="w-5 h-5 text-white" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-6 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <h3 className="font-semibold text-gray-900">Gyvūnai karencijoje</h3>
+              <span className="ml-auto text-xs font-medium px-2 py-1 bg-red-100 text-red-700 rounded-full">
+                {withdrawalAnimals.length}
+              </span>
             </div>
-            <h3 className="font-semibold text-gray-900">Karencija</h3>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700">Gyvūnai karencijoje</span>
-              <span className="text-2xl font-bold text-red-600">{stats.animalsInWithdrawal}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Negalima šalinti pieno/mėsos</span>
-            </div>
+          <div className="p-6 max-h-80 overflow-y-auto">
+            {withdrawalAnimals.length === 0 ? (
+              <div className="text-center py-8">
+                <ShieldAlert className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">Nėra gyvūnų karencijoje</p>
+                <p className="text-xs text-gray-400 mt-1">Galima šalinti pieną ir mėsą</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {withdrawalAnimals.map((animal) => (
+                  <div
+                    key={animal.animal_id}
+                    className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-200"
+                  >
+                    <div className="flex-shrink-0 mt-0.5">
+                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {animal.species} #{animal.tag_no}
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        {animal.withdrawal_until_milk && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-blue-700 font-medium">🥛 Pienas:</span>
+                            <span className="text-gray-700">{formatDateLT(animal.withdrawal_until_milk)}</span>
+                            <span className="text-gray-500">
+                              ({getDaysUntil(animal.withdrawal_until_milk)} d.)
+                            </span>
+                          </div>
+                        )}
+                        {animal.withdrawal_until_meat && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-red-700 font-medium">🥩 Mėsa:</span>
+                            <span className="text-gray-700">{formatDateLT(animal.withdrawal_until_meat)}</span>
+                            <span className="text-gray-500">
+                              ({getDaysUntil(animal.withdrawal_until_meat)} d.)
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
