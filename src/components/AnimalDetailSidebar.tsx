@@ -2547,6 +2547,34 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
       }
 
+      // Create next visit if required
+      if (formData.next_visit_required && formData.next_visit_date) {
+        const { data: nextVisitData, error: nextVisitError } = await supabase
+          .from('animal_visits')
+          .insert({
+            animal_id: animalId,
+            visit_datetime: formData.next_visit_date,
+            procedures: formData.procedures,
+            status: 'Planuojamas',
+            notes: `Pakartotinis vizitas po: ${formData.procedures.join(', ')}`,
+            vet_name: formData.vet_name,
+            next_visit_required: false,
+            treatment_required: false,
+          })
+          .select()
+          .single();
+
+        if (nextVisitError) {
+          console.error('Error creating next visit:', nextVisitError);
+          alert('Vizitas sukurtas, bet klaida kuriant sekantį vizitą: ' + nextVisitError.message);
+        } else {
+          await logAction('create_future_visit', 'animal_visits', nextVisitData.id, null, {
+            from_visit_id: visitData.id,
+            scheduled_date: formData.next_visit_date
+          });
+        }
+      }
+
       alert('Vizitas ir visi susiję įrašai sėkmingai sukurti!');
       onSuccess();
     } catch (error: any) {
