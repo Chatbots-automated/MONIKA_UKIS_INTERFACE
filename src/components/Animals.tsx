@@ -49,22 +49,32 @@ export function Animals() {
         supabase.from('diseases').select('*'),
         supabase
           .from('gea_daily')
-          .select('animal_id, collar_no')
+          .select('animal_id, collar_no, bovine_class, neck_no')
           .order('snapshot_date', { ascending: false }),
       ]);
 
-      // Create a map of animal_id to latest collar_no
+      // Create a map of animal_id to latest collar_no, bovine_class, and neck_no
       const collarMap = new Map<string, string>();
+      const classMap = new Map<string, string>();
+      const neckMap = new Map<string, string>();
       (geaData.data || []).forEach((gea: any) => {
         if (gea.collar_no && !collarMap.has(gea.animal_id)) {
           collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
+        if (gea.bovine_class && !classMap.has(gea.animal_id)) {
+          classMap.set(gea.animal_id, gea.bovine_class);
+        }
+        if (gea.neck_no && !neckMap.has(gea.animal_id)) {
+          neckMap.set(gea.animal_id, gea.neck_no.toString());
+        }
       });
 
-      // Enrich animals with collar numbers from GEA data
+      // Enrich animals with collar numbers, bovine class, and neck numbers from GEA data
       const enrichedAnimals = allAnimals.map((animal: Animal) => ({
         ...animal,
         collar_no: collarMap.get(animal.id) || null,
+        class: classMap.get(animal.id) || null,
+        neck_no: neckMap.get(animal.id) || null,
       }));
 
       setAnimals(enrichedAnimals);
@@ -318,6 +328,12 @@ export function Animals() {
                   </div>
                 </div>
                 <div className="space-y-3 pt-4 border-t border-blue-400">
+                  {(selectedAnimal as any).neck_no && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-blue-100">Kaklo Nr.:</span>
+                      <span className="font-semibold">{(selectedAnimal as any).neck_no}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-blue-100">Rūšis:</span>
                     <span className="font-semibold">{selectedAnimal.species}</span>

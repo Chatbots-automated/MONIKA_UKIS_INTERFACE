@@ -84,7 +84,7 @@ export function VisitsModern() {
         fetchAllRows<Animal>('animals'),
         supabase
           .from('gea_daily')
-          .select('animal_id, collar_no')
+          .select('animal_id, collar_no, bovine_class, neck_no')
           .order('snapshot_date', { ascending: false }),
       ]);
 
@@ -92,18 +92,28 @@ export function VisitsModern() {
       console.log('📊 Loaded animals:', animalsData.length);
       console.log('📊 Loaded GEA data:', geaData.data?.length);
 
-      // Create a map of animal_id to latest collar_no
+      // Create a map of animal_id to latest collar_no, bovine_class, and neck_no
       const collarMap = new Map<string, string>();
+      const classMap = new Map<string, string>();
+      const neckMap = new Map<string, string>();
       (geaData.data || []).forEach((gea: any) => {
         if (gea.collar_no && !collarMap.has(gea.animal_id)) {
           collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
+        if (gea.bovine_class && !classMap.has(gea.animal_id)) {
+          classMap.set(gea.animal_id, gea.bovine_class);
+        }
+        if (gea.neck_no && !neckMap.has(gea.animal_id)) {
+          neckMap.set(gea.animal_id, gea.neck_no.toString());
+        }
       });
 
-      // Enrich animals with collar numbers from GEA data
+      // Enrich animals with collar numbers, bovine class, and neck numbers from GEA data
       const enrichedAnimals = animalsData.map((animal: Animal) => ({
         ...animal,
         collar_no: collarMap.get(animal.id) || null,
+        class: classMap.get(animal.id) || null,
+        neck_no: neckMap.get(animal.id) || null,
       }));
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => {
@@ -535,6 +545,9 @@ export function VisitsModern() {
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="font-medium text-gray-900">{formatAnimalDisplay(visit.animal)}</div>
+                        {(visit.animal as any)?.neck_no && (
+                          <div className="text-xs text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
+                        )}
                         <div className="text-gray-600">{visit.animal?.class}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -634,6 +647,9 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: 
             <div className="font-bold text-gray-900 text-lg">
               {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
             </div>
+            {(visit.animal as any)?.neck_no && (
+              <div className="text-sm text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
+            )}
             <div className="text-sm text-gray-600">{visit.animal?.class || ''}</div>
           </div>
           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
