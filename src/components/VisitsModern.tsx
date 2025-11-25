@@ -101,13 +101,13 @@ export function VisitsModern() {
       });
 
       // Enrich animals with collar numbers from GEA data
-      // Extract neck number from tag_no (last 4 digits)
+      // Neck number is the same as collar number
       const enrichedAnimals = animalsData.map((animal: Animal) => {
-        const neckNo = animal.tag_no ? animal.tag_no.slice(-4) : null;
+        const collarNo = collarMap.get(animal.id) || null;
         return {
           ...animal,
-          collar_no: collarMap.get(animal.id) || null,
-          neck_no: neckNo,
+          collar_no: collarNo,
+          neck_no: collarNo,
         };
       });
 
