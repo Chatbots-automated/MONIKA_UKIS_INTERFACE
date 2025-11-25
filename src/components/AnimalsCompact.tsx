@@ -211,10 +211,10 @@ export function AnimalsCompact() {
         false;
     }
 
-    // Filter by neck number search term
+    // Filter by neck number search term (exact match only)
     if (neckNumberSearch) {
       const collarNo = geaCollars.get(animal.id);
-      matchesNeck = collarNo ? collarNo.toString().includes(neckNumberSearch) : false;
+      matchesNeck = collarNo ? collarNo.toString() === neckNumberSearch : false;
     }
 
     return matchesGeneral && matchesNeck;
