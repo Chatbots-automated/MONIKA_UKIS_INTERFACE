@@ -49,33 +49,28 @@ export function Animals() {
         supabase.from('diseases').select('*'),
         supabase
           .from('gea_daily')
-          .select('animal_id, collar_no, bovine_class, neck_no')
+          .select('animal_id, collar_no')
           .order('snapshot_date', { ascending: false }),
       ]);
 
-      // Create a map of animal_id to latest collar_no, bovine_class, and neck_no
+      // Create a map of animal_id to latest collar_no
       const collarMap = new Map<string, string>();
-      const classMap = new Map<string, string>();
-      const neckMap = new Map<string, string>();
       (geaData.data || []).forEach((gea: any) => {
         if (gea.collar_no && !collarMap.has(gea.animal_id)) {
           collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
-        if (gea.bovine_class && !classMap.has(gea.animal_id)) {
-          classMap.set(gea.animal_id, gea.bovine_class);
-        }
-        if (gea.neck_no && !neckMap.has(gea.animal_id)) {
-          neckMap.set(gea.animal_id, gea.neck_no.toString());
-        }
       });
 
-      // Enrich animals with collar numbers, bovine class, and neck numbers from GEA data
-      const enrichedAnimals = allAnimals.map((animal: Animal) => ({
-        ...animal,
-        collar_no: collarMap.get(animal.id) || null,
-        class: classMap.get(animal.id) || null,
-        neck_no: neckMap.get(animal.id) || null,
-      }));
+      // Enrich animals with collar numbers from GEA data
+      // Extract neck number from tag_no (last digits before country code)
+      const enrichedAnimals = allAnimals.map((animal: Animal) => {
+        const neckNo = animal.tag_no ? animal.tag_no.replace(/^[A-Z]{2}0*/, '') : null;
+        return {
+          ...animal,
+          collar_no: collarMap.get(animal.id) || null,
+          neck_no: neckNo,
+        };
+      });
 
       setAnimals(enrichedAnimals);
       setProducts(productsRes.data || []);
@@ -336,7 +331,7 @@ export function Animals() {
                   )}
                   <div className="flex items-center justify-between">
                     <span className="text-blue-100">Rūšis:</span>
-                    <span className="font-semibold">{selectedAnimal.species}</span>
+                    <span className="font-semibold">{selectedAnimal.sex || selectedAnimal.species}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-blue-100">Lytis:</span>
@@ -1103,7 +1098,7 @@ export function Animals() {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).neck_no || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).class || animal.species}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || animal.species}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.sex === 'male' ? 'Patinas' : animal.sex === 'female' ? 'Patelė' : 'N/A'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}
