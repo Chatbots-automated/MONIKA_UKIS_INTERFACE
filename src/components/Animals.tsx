@@ -22,7 +22,7 @@ export function Animals() {
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchByCollar, setSearchByCollar] = useState(true);
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [diseases, setDiseases] = useState<Disease[]>([]);
 
@@ -245,31 +245,40 @@ export function Animals() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const searchAnimals = (term: string): Animal[] => {
-    if (!term) return animals;
-
-    const searchLower = term.toLowerCase().trim();
-
+  const searchAnimals = (generalTerm: string, neckTerm: string): Animal[] => {
     return animals.filter(animal => {
-      const collarNo = animal.collar_no?.toLowerCase() || '';
-      const tagNo = animal.tag_no?.toLowerCase() || '';
-      const holderName = animal.holder_name?.toLowerCase() || '';
-      const holderAddress = animal.holder_address?.toLowerCase() || '';
+      let matchesGeneral = true;
+      let matchesNeck = true;
 
-      if (searchByCollar && collarNo.includes(searchLower)) return true;
-      if (tagNo.includes(searchLower)) return true;
-      if (holderName.includes(searchLower)) return true;
-      if (holderAddress.includes(searchLower)) return true;
+      // Filter by general search term
+      if (generalTerm) {
+        const searchLower = generalTerm.toLowerCase().trim();
+        const tagNo = animal.tag_no?.toLowerCase() || '';
+        const holderName = animal.holder_name?.toLowerCase() || '';
+        const holderAddress = animal.holder_address?.toLowerCase() || '';
 
-      const last5Digits = tagNo.slice(-5);
-      const reversed = last5Digits.split('').reverse().join('');
-      if (reversed.includes(searchLower)) return true;
+        const last5Digits = tagNo.slice(-5);
+        const reversed = last5Digits.split('').reverse().join('');
 
-      return false;
+        matchesGeneral =
+          tagNo.includes(searchLower) ||
+          holderName.includes(searchLower) ||
+          holderAddress.includes(searchLower) ||
+          reversed.includes(searchLower);
+      }
+
+      // Filter by neck number search term
+      if (neckTerm) {
+        const neckLower = neckTerm.toLowerCase().trim();
+        const collarNo = animal.collar_no?.toLowerCase() || '';
+        matchesNeck = collarNo.includes(neckLower);
+      }
+
+      return matchesGeneral && matchesNeck;
     });
   };
 
-  const filteredAnimals = searchAnimals(searchTerm);
+  const filteredAnimals = searchAnimals(searchTerm, neckNumberSearch);
 
   if (loading) {
     return (
@@ -904,26 +913,27 @@ export function Animals() {
         )}
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={searchByCollar ? "Ieškoti pagal kaklo nr., ženklo numerį, savininką..." : "Ieškoti pagal ženklo numerį, savininką arba paskutinius 5 skaitmenis..."}
+            placeholder="Ieškoti pagal ženklo numerį, savininką, paskutinius 5 skaitmenis..."
             className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer ml-1">
+        <div className="relative">
+          <Activity className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-emerald-500" />
           <input
-            type="checkbox"
-            checked={searchByCollar}
-            onChange={(e) => setSearchByCollar(e.target.checked)}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            type="text"
+            value={neckNumberSearch}
+            onChange={(e) => setNeckNumberSearch(e.target.value)}
+            placeholder="Ieškoti pagal kaklo numerį..."
+            className="w-full pl-12 pr-4 py-3 border-2 border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
           />
-          <span>Ieškoti pagal kaklo numerį</span>
-        </label>
+        </div>
       </div>
 
       {showAdd && (
