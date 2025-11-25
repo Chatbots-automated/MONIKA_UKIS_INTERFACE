@@ -76,20 +76,39 @@ export function VisitsModern() {
 
   const loadData = async () => {
     try {
-      const [visitsRes, animalsData] = await Promise.all([
+      const [visitsRes, animalsData, geaData] = await Promise.all([
         supabase
           .from('animal_visits')
           .select('*')
           .order('visit_datetime', { ascending: false }),
         fetchAllRows<Animal>('animals'),
+        supabase
+          .from('gea_daily')
+          .select('animal_id, collar_no')
+          .order('snapshot_date', { ascending: false }),
       ]);
 
       console.log('📊 Loaded visits:', visitsRes.data?.length);
       console.log('📊 Loaded animals:', animalsData.length);
+      console.log('📊 Loaded GEA data:', geaData.data?.length);
+
+      // Create a map of animal_id to latest collar_no
+      const collarMap = new Map<string, string>();
+      (geaData.data || []).forEach((gea: any) => {
+        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+          collarMap.set(gea.animal_id, gea.collar_no.toString());
+        }
+      });
+
+      // Enrich animals with collar numbers from GEA data
+      const enrichedAnimals = animalsData.map((animal: Animal) => ({
+        ...animal,
+        collar_no: collarMap.get(animal.id) || null,
+      }));
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => {
-        const animal = animalsData.find((a: Animal) => a.id === visit.animal_id);
-        console.log(`Visit ${visit.id} with animal_id ${visit.animal_id} -> Found animal:`, animal?.tag_number);
+        const animal = enrichedAnimals.find((a: Animal) => a.id === visit.animal_id);
+        console.log(`Visit ${visit.id} with animal_id ${visit.animal_id} -> Found animal:`, animal?.tag_no, 'Collar:', animal?.collar_no);
         return {
           ...visit,
           animal,
@@ -98,7 +117,7 @@ export function VisitsModern() {
 
       console.log('📊 Visits with animals:', visitsWithAnimals.filter(v => v.animal).length);
       setVisits(visitsWithAnimals);
-      setAnimals(animalsData);
+      setAnimals(enrichedAnimals);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
