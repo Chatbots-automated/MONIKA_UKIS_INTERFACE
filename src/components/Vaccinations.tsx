@@ -12,14 +12,22 @@ interface VaccinationGroup {
   vaccinations: any[];
 }
 
+interface GeaCollarData {
+  animal_id: string;
+  collar_no: number;
+  snapshot_date: string;
+}
+
 export function Vaccinations() {
   const { logAction } = useAuth();
   const [vaccinations, setVaccinations] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [geaCollars, setGeaCollars] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [selectedAnimals, setSelectedAnimals] = useState<Set<string>>(new Set());
   const [showMassVaccination, setShowMassVaccination] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,12 +76,24 @@ export function Vaccinations() {
 
   const loadData = async () => {
     try {
-      const [vacsRes, prodsRes, animalsRes, batchesRes] = await Promise.all([
+      const [vacsRes, prodsRes, animalsRes, batchesRes, geaData] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
         fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
+        fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date'),
       ]);
+
+      // Create collar map
+      const collarMap = new Map<string, number>();
+      if (geaData) {
+        geaData.forEach((record: any) => {
+          if (record.collar_no) {
+            collarMap.set(record.animal_id, record.collar_no);
+          }
+        });
+      }
+      setGeaCollars(collarMap);
 
       setVaccinations(vacsRes.data || []);
       setProducts(prodsRes.data || []);
@@ -284,6 +304,13 @@ export function Vaccinations() {
     const matchesSearch = a.tag_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.holder_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
+    // Filter by neck number search term (exact match only)
+    let matchesNeck = true;
+    if (neckNumberSearch) {
+      const collarNo = geaCollars.get(a.id);
+      matchesNeck = collarNo ? collarNo.toString() === neckNumberSearch : false;
+    }
+
     const matchesSex = !filterSex || a.sex?.toLowerCase() === filterSex.toLowerCase();
 
     const ageInMonths = a.age_months || 0;
@@ -304,7 +331,7 @@ export function Vaccinations() {
       return true;
     };
 
-    return matchesSearch && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
+    return matchesSearch && matchesNeck && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
   });
 
   const filteredVaccinations = vaccinations.filter(vac => {
@@ -643,6 +670,7 @@ export function Vaccinations() {
                   setFilterTagFrom('');
                   setFilterTagTo('');
                   setSearchTerm('');
+                  setNeckNumberSearch('');
                 }}
                 className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 transition-colors"
               >
@@ -655,19 +683,31 @@ export function Vaccinations() {
           </div>
 
           <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-700">
+            <div className="mb-2">
+              <p className="text-sm font-medium text-gray-700 mb-2">
                 Pasirinkta gyvūnų: <span className="text-blue-600 font-bold">{selectedAnimals.size}</span>
               </p>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Ieškoti gyvūno..."
-                  className="pl-10 pr-4 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Ieškoti pagal ID, laikytoją..."
+                    className="w-full pl-10 pr-4 py-1.5 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                  <input
+                    type="text"
+                    value={neckNumberSearch}
+                    onChange={(e) => setNeckNumberSearch(e.target.value)}
+                    placeholder="Ieškoti pagal kaklo numerį..."
+                    className="w-full pl-10 pr-4 py-1.5 border-2 border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
               </div>
             </div>
 
