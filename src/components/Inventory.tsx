@@ -441,8 +441,8 @@ export function Inventory() {
                             <option value="kg">kg</option>
                             <option value="vnt">vnt</option>
                             <option value="tabletkė">tabletkė</option>
-                            <option value="bolusas">bolusas</option>
-                            <option value="švirkštukas">švirkštukas</option>
+                            <option value="bolus">bolus</option>
+                            <option value="syringe">syringe</option>
                           </select>
                         </div>
                       ) : (
