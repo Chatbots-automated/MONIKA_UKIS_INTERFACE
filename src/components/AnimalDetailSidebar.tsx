@@ -9,6 +9,7 @@ import { AnimalAnalytics } from './AnimalAnalytics';
 import { TeatStatusCard } from './TeatStatusCard';
 import { TeatDisplay, TeatSelector } from './TeatSelector';
 import { SynchronizationProtocolComponent } from './SynchronizationProtocol';
+import { SearchableSelect } from './SearchableSelect';
 
 interface Vaccination {
   id: string;
@@ -1831,6 +1832,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const [diseases, setDiseases] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [stockLevels, setStockLevels] = useState<Record<string, number>>({});
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
 
   // Treatment form data
   const [treatmentData, setTreatmentData] = useState({
@@ -1979,15 +1981,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   };
 
   const loadResources = async () => {
-    const [productsRes, diseasesRes, batchesRes] = await Promise.all([
+    const [productsRes, diseasesRes, batchesRes, usersRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('diseases').select('*'),
       supabase.from('batches').select('*').order('expiry_date'),
+      supabase.from('users').select('id, full_name, email').order('full_name'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (batchesRes.data) setBatches(batchesRes.data);
+    if (usersRes.data) setUsers(usersRes.data);
   };
 
   const handleCreateDisease = async () => {
@@ -2690,15 +2694,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Gydytojas
-              </label>
-              <input
-                type="text"
+              <SearchableSelect
+                label="Gydytojas"
+                options={users.map(user => ({ value: user.full_name, label: user.full_name }))}
                 value={formData.vet_name}
-                onChange={(e) => setFormData({ ...formData, vet_name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Vardas Pavardė"
+                onChange={(value) => setFormData({ ...formData, vet_name: value })}
+                placeholder="Pasirinkite gydytoją..."
+                emptyLabel="Nepasirinkta"
               />
             </div>
             <div>
