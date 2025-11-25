@@ -40,8 +40,8 @@ export function Synchronizations() {
         .from('synchronization_steps')
         .select(`
           *,
-          product:medication_product_id(id, name, unit),
-          batch:batch_id(id, batch_no, expiry_date)
+          product:medication_product_id(id, name, primary_pack_unit),
+          batch:batch_id(id, lot, expiry_date)
         `)
         .order('scheduled_date', { ascending: true })
         .order('step_number', { ascending: true });
@@ -302,12 +302,12 @@ export function Synchronizations() {
                   <span className="font-medium">{(step.product as any).name}</span>
                   {step.dosage && (
                     <span className="text-sm">
-                      ({step.dosage} {step.dosage_unit || (step.product as any).unit})
+                      ({step.dosage} {step.dosage_unit || (step.product as any).primary_pack_unit})
                     </span>
                   )}
                   {step.batch && (
                     <span className="text-sm ml-auto">
-                      Partija: {(step.batch as any).batch_no}
+                      Partija: {(step.batch as any).lot}
                     </span>
                   )}
                 </div>
