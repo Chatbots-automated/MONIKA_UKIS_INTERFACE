@@ -5,6 +5,7 @@ import { SynchronizationStepWithDetails, Animal } from '../lib/types';
 import { formatDateLT, formatDateTimeLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
+import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 
 interface SyncStepDisplay extends SynchronizationStepWithDetails {
   animal?: Animal;
@@ -21,6 +22,7 @@ export function Synchronizations() {
   const [customDateTo, setCustomDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('pending');
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   useEffect(() => {
     loadData();
@@ -96,48 +98,9 @@ export function Synchronizations() {
     }
   };
 
-  const handleCompleteStep = async (step: SyncStepDisplay) => {
-    try {
-      const newCompleted = !step.completed;
-
-      const { error: stepError } = await supabase
-        .from('synchronization_steps')
-        .update({
-          completed: newCompleted,
-          completed_at: newCompleted ? new Date().toISOString() : null,
-        })
-        .eq('id', step.id);
-
-      if (stepError) throw stepError;
-
-      const { data: linkedVisit } = await supabase
-        .from('animal_visits')
-        .select('id')
-        .eq('sync_step_id', step.id)
-        .maybeSingle();
-
-      if (linkedVisit) {
-        const { error: visitError } = await supabase
-          .from('animal_visits')
-          .update({
-            status: newCompleted ? 'Atliktas' : 'Planuojamas',
-          })
-          .eq('id', linkedVisit.id);
-
-        if (visitError) throw visitError;
-      }
-
-      await logAction(
-        newCompleted ? 'update' : 'create',
-        'synchronization_steps',
-        step.id,
-        `${newCompleted ? 'Užbaigtas' : 'Atnaujintas'} sinchronizacijos žingsnis: ${step.step_name}`
-      );
-
-      loadData();
-    } catch (error) {
-      console.error('Error updating step:', error);
-      alert('Klaida atnaujinant žingsnį');
+  const handleStepClick = (step: SyncStepDisplay) => {
+    if (step.animal) {
+      setSelectedAnimal(step.animal);
     }
   };
 
@@ -253,10 +216,8 @@ export function Synchronizations() {
           {filteredSteps.map((step) => (
             <div
               key={step.id}
-              className={`border-2 rounded-lg p-4 transition-all ${getStatusColor(step)} ${
-                step.completed ? '' : 'hover:shadow-lg cursor-pointer'
-              }`}
-              onClick={() => !step.completed && handleCompleteStep(step)}
+              className={`border-2 rounded-lg p-4 transition-all ${getStatusColor(step)} hover:shadow-lg cursor-pointer`}
+              onClick={() => handleStepClick(step)}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -321,6 +282,17 @@ export function Synchronizations() {
             </div>
           ))}
         </div>
+      )}
+
+      {selectedAnimal && (
+        <AnimalDetailSidebar
+          animal={selectedAnimal}
+          defaultTab="visits"
+          onClose={() => {
+            setSelectedAnimal(null);
+            loadData();
+          }}
+        />
       )}
     </div>
   );
