@@ -25,6 +25,7 @@ export function AnimalsCompact() {
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
 
   const emptyAnimal = {
     tag_no: '',
@@ -197,14 +198,26 @@ export function AnimalsCompact() {
   };
 
   const filteredAnimals = animals.filter(animal => {
-    const searchLower = searchTerm.toLowerCase();
-    const collarNo = geaCollars.get(animal.id);
-    return (
-      animal.tag_no?.toLowerCase().includes(searchLower) ||
-      animal.species.toLowerCase().includes(searchLower) ||
-      animal.holder_name?.toLowerCase().includes(searchLower) ||
-      (collarNo && collarNo.toString().includes(searchTerm))
-    );
+    let matchesGeneral = true;
+    let matchesNeck = true;
+
+    // Filter by general search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      matchesGeneral =
+        animal.tag_no?.toLowerCase().includes(searchLower) ||
+        animal.species.toLowerCase().includes(searchLower) ||
+        animal.holder_name?.toLowerCase().includes(searchLower) ||
+        false;
+    }
+
+    // Filter by neck number search term
+    if (neckNumberSearch) {
+      const collarNo = geaCollars.get(animal.id);
+      matchesNeck = collarNo ? collarNo.toString().includes(neckNumberSearch) : false;
+    }
+
+    return matchesGeneral && matchesNeck;
   });
 
   if (loading) {
@@ -213,24 +226,36 @@ export function AnimalsCompact() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex-1 max-w-md relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Ieškoti pagal ID, rūšį, laikytoją, kaklo nr..."
-            value={searchTerm}
-            onChange={(e) => {
-              const newValue = e.target.value;
-              setSearchTerm(newValue);
-              if (newValue.length >= 3) {
-                logAction('search_animals', null, null, null, { search_term: newValue });
-              }
-            }}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Ieškoti pagal ID, rūšį, laikytoją..."
+              value={searchTerm}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setSearchTerm(newValue);
+                if (newValue.length >= 3) {
+                  logAction('search_animals', null, null, null, { search_term: newValue });
+                }
+              }}
+              className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-500 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Ieškoti pagal kaklo numerį..."
+              value={neckNumberSearch}
+              onChange={(e) => setNeckNumberSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border-2 border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 justify-end">
           <button
             onClick={handleRefreshAnimals}
             disabled={refreshing}
