@@ -131,12 +131,37 @@ export function VisitsModern() {
     }
 
     try {
-      const { error } = await supabase
+      const { data: treatments, error: treatmentError } = await supabase
+        .from('treatments')
+        .select('id')
+        .eq('visit_id', visitId);
+
+      if (treatmentError) throw treatmentError;
+
+      if (treatments && treatments.length > 0) {
+        const treatmentIds = treatments.map(t => t.id);
+
+        const { error: usageError } = await supabase
+          .from('usage_items')
+          .delete()
+          .in('treatment_id', treatmentIds);
+
+        if (usageError) throw usageError;
+
+        const { error: deleteError } = await supabase
+          .from('treatments')
+          .delete()
+          .in('id', treatmentIds);
+
+        if (deleteError) throw deleteError;
+      }
+
+      const { error: visitError } = await supabase
         .from('animal_visits')
         .delete()
         .eq('id', visitId);
 
-      if (error) throw error;
+      if (visitError) throw visitError;
 
       setVisits(prev => prev.filter(v => v.id !== visitId));
       logAction('delete_visit', 'animal_visits', visitId);

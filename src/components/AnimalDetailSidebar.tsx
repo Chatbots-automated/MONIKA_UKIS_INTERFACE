@@ -1865,23 +1865,27 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   // Vaccination form data
   const [vaccinationData, setVaccinationData] = useState({
-    product_id: '',
-    batch_id: '',
-    dose_amount: '',
-    dose_number: '1',
-    unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
-    next_booster_date: '',
+    vaccines: [] as Array<{
+      product_id: string;
+      batch_id: string;
+      dose_amount: string;
+      dose_number: string;
+      unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      next_booster_date: string;
+    }>,
     administered_by: '',
     notes: '',
   });
 
   // Prevention form data
   const [preventionData, setPreventionData] = useState({
-    product_id: '',
-    batch_id: '',
-    dose_qty: '',
-    dose_unit: 'ml' as 'ml' | 'l' | 'g' | 'kg' | 'pcs',
-    purpose: '',
+    products: [] as Array<{
+      product_id: string;
+      batch_id: string;
+      dose_qty: string;
+      dose_unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      purpose: string;
+    }>,
     notes: '',
   });
 
@@ -2098,13 +2102,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       return;
     }
 
-    if (formData.procedures.includes('Vakcina') && !vaccinationData.product_id) {
-      alert('Vakcinai reikia pasirinkti produktą');
+    if (formData.procedures.includes('Vakcina') && vaccinationData.vaccines.length === 0) {
+      alert('Vakcinai reikia pasirinkti bent vieną produktą');
       return;
     }
 
-    if (formData.procedures.includes('Profilaktika') && !preventionData.product_id) {
-      alert('Profilaktikai reikia pasirinkti produktą');
+    if (formData.procedures.includes('Profilaktika') && preventionData.products.length === 0) {
+      alert('Profilaktikai reikia pasirinkti bent vieną produktą');
       return;
     }
 
@@ -2473,78 +2477,82 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
       }
 
-      // 3. If Vakcina procedure, create vaccination
+      // 3. If Vakcina procedure, create vaccinations
       if (formData.procedures.includes('Vakcina')) {
-        if (!vaccinationData.product_id || !vaccinationData.batch_id || !vaccinationData.dose_amount) {
-          throw new Error('Visi vakcinacijos laukai privalomi: produktas, serija ir dozė');
-        }
+        for (const vaccine of vaccinationData.vaccines) {
+          if (!vaccine.product_id || !vaccine.batch_id || !vaccine.dose_amount) {
+            throw new Error('Visi vakcinacijos laukai privalomi: produktas, serija ir dozė');
+          }
 
-        const { data: vaccinationRecord, error: vaccinationError } = await supabase
-          .from('vaccinations')
-          .insert({
-            animal_id: animalId,
-            product_id: vaccinationData.product_id,
-            batch_id: vaccinationData.batch_id,
-            vaccination_date: formData.visit_datetime.split('T')[0],
-            dose_amount: parseFloat(vaccinationData.dose_amount),
-            dose_number: parseInt(vaccinationData.dose_number),
-            unit: vaccinationData.unit,
-            next_booster_date: vaccinationData.next_booster_date ? vaccinationData.next_booster_date : null,
-            administered_by: vaccinationData.administered_by ? vaccinationData.administered_by : formData.vet_name,
-            notes: vaccinationData.notes ? vaccinationData.notes : null,
-          })
-          .select()
-          .single();
-
-        if (vaccinationError) throw vaccinationError;
-
-        await logAction('create_vaccination', 'vaccinations', vaccinationRecord.id);
-
-        // If there's a next booster date, create a planned visit for it
-        if (vaccinationData.next_booster_date) {
-          const { error: futureVisitError } = await supabase
-            .from('animal_visits')
+          const { data: vaccinationRecord, error: vaccinationError } = await supabase
+            .from('vaccinations')
             .insert({
               animal_id: animalId,
-              visit_datetime: `${vaccinationData.next_booster_date}T10:00:00`,
-              procedures: ['Vakcina'],
-              status: 'Planuojamas',
-              notes: `Pakartotinė vakcina: ${products.find(p => p.id === vaccinationData.product_id)?.name || 'N/A'}`,
-              vet_name: vaccinationData.administered_by || formData.vet_name || null,
-              next_visit_required: false,
-              treatment_required: false,
-            });
+              product_id: vaccine.product_id,
+              batch_id: vaccine.batch_id,
+              vaccination_date: formData.visit_datetime.split('T')[0],
+              dose_amount: parseFloat(vaccine.dose_amount),
+              dose_number: parseInt(vaccine.dose_number),
+              unit: vaccine.unit,
+              next_booster_date: vaccine.next_booster_date ? vaccine.next_booster_date : null,
+              administered_by: vaccinationData.administered_by ? vaccinationData.administered_by : formData.vet_name,
+              notes: vaccinationData.notes ? vaccinationData.notes : null,
+            })
+            .select()
+            .single();
 
-          if (futureVisitError) {
-            console.error('Error creating future vaccination visit:', futureVisitError);
+          if (vaccinationError) throw vaccinationError;
+
+          await logAction('create_vaccination', 'vaccinations', vaccinationRecord.id);
+
+          // If there's a next booster date, create a planned visit for it
+          if (vaccine.next_booster_date) {
+            const { error: futureVisitError } = await supabase
+              .from('animal_visits')
+              .insert({
+                animal_id: animalId,
+                visit_datetime: `${vaccine.next_booster_date}T10:00:00`,
+                procedures: ['Vakcina'],
+                status: 'Planuojamas',
+                notes: `Pakartotinė vakcina: ${products.find(p => p.id === vaccine.product_id)?.name || 'N/A'}`,
+                vet_name: vaccinationData.administered_by || formData.vet_name || null,
+                next_visit_required: false,
+                treatment_required: false,
+              });
+
+            if (futureVisitError) {
+              console.error('Error creating future vaccination visit:', futureVisitError);
+            }
           }
         }
       }
 
-      // 4. If Profilaktika procedure, create prevention record (using biocide_usage table)
+      // 4. If Profilaktika procedure, create prevention records (using biocide_usage table)
       if (formData.procedures.includes('Profilaktika')) {
-        if (!preventionData.product_id || !preventionData.batch_id || !preventionData.dose_qty) {
-          throw new Error('Visi profilaktikos laukai privalomi: produktas, serija ir kiekis');
+        for (const product of preventionData.products) {
+          if (!product.product_id || !product.batch_id || !product.dose_qty) {
+            throw new Error('Visi profilaktikos laukai privalomi: produktas, serija ir kiekis');
+          }
+
+          const { data: preventionRecord, error: preventionError } = await supabase
+            .from('biocide_usage')
+            .insert({
+              product_id: product.product_id,
+              batch_id: product.batch_id,
+              use_date: formData.visit_datetime.split('T')[0],
+              purpose: product.purpose ? product.purpose : 'Profilaktika',
+              work_scope: `Gyvūnas: ${animalId}`,
+              qty: parseFloat(product.dose_qty),
+              unit: product.dose_unit,
+              used_by_name: formData.vet_name ? formData.vet_name : null,
+            })
+            .select()
+            .single();
+
+          if (preventionError) throw preventionError;
+
+          await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
         }
-
-        const { data: preventionRecord, error: preventionError } = await supabase
-          .from('biocide_usage')
-          .insert({
-            product_id: preventionData.product_id,
-            batch_id: preventionData.batch_id,
-            use_date: formData.visit_datetime.split('T')[0],
-            purpose: preventionData.purpose ? preventionData.purpose : 'Profilaktika',
-            work_scope: `Gyvūnas: ${animalId}`,
-            qty: parseFloat(preventionData.dose_qty),
-            unit: preventionData.dose_unit,
-            used_by_name: formData.vet_name ? formData.vet_name : null,
-          })
-          .select()
-          .single();
-
-        if (preventionError) throw preventionError;
-
-        await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
       }
 
       // Create next visit if required
@@ -3101,9 +3109,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 }}
               />
             </div>
-          )}
-
-          {/* VAKCINA FORM */}
+          )}          {/* VAKCINA FORM */}
           {formData.procedures.includes('Vakcina') && (
             <div ref={vaccinationSectionRef} className="p-4 bg-purple-50 border-2 border-purple-300 rounded-lg space-y-4">
               <h4 className="font-bold text-gray-900 flex items-center gap-2">
@@ -3111,101 +3117,159 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 Vakcinacijos informacija
               </h4>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vakcina *</label>
-                <select
-                  value={vaccinationData.product_id}
-                  onChange={async (e) => {
-                    const productId = e.target.value;
+              <div className="space-y-3">
+                {vaccinationData.vaccines.map((vaccine, index) => (
+                  <div key={index} className="p-3 bg-white border border-purple-200 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">Vakcina #{index + 1}</span>
+                      {vaccinationData.vaccines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newVaccines = vaccinationData.vaccines.filter((_, i) => i !== index);
+                            setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                          }}
+                          className="text-red-600 hover:bg-red-50 p-1 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                    if (productId) {
-                      const oldestBatchId = await getOldestBatchWithStock(productId);
-                      setVaccinationData({ ...vaccinationData, product_id: productId, batch_id: oldestBatchId });
-                      fetchStockLevel(productId);
-                    } else {
-                      setVaccinationData({ ...vaccinationData, product_id: '', batch_id: '' });
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  required
-                >
-                  <option value="">Pasirinkite vakciną</option>
-                  {products.filter(p => p.category === 'prevention').map(product => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
-                  ))}
-                </select>
-                {vaccinationData.product_id && stockLevels[vaccinationData.product_id] !== undefined && (
-                  <div className="text-xs text-gray-500 mt-1 px-1">
-                    Likutis: <span className={stockLevels[vaccinationData.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
-                      {stockLevels[vaccinationData.product_id].toFixed(2)}
-                    </span> {products.find(p => p.id === vaccinationData.product_id)?.unit}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vakcina *</label>
+                      <select
+                        value={vaccine.product_id}
+                        onChange={async (e) => {
+                          const productId = e.target.value;
+                          const newVaccines = [...vaccinationData.vaccines];
+
+                          if (productId) {
+                            const oldestBatchId = await getOldestBatchWithStock(productId);
+                            newVaccines[index] = { ...vaccine, product_id: productId, batch_id: oldestBatchId };
+                            fetchStockLevel(productId);
+                          } else {
+                            newVaccines[index] = { ...vaccine, product_id: '', batch_id: '' };
+                          }
+
+                          setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        required
+                      >
+                        <option value="">Pasirinkite vakciną</option>
+                        {products.filter(p => p.category === 'prevention').map(product => (
+                          <option key={product.id} value={product.id}>{product.name}</option>
+                        ))}
+                      </select>
+                      {vaccine.product_id && stockLevels[vaccine.product_id] !== undefined && (
+                        <div className="text-xs text-gray-500 mt-1 px-1">
+                          Likutis: <span className={stockLevels[vaccine.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
+                            {stockLevels[vaccine.product_id].toFixed(2)}
+                          </span> {products.find(p => p.id === vaccine.product_id)?.unit}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
+                      <select
+                        value={vaccine.batch_id}
+                        onChange={(e) => {
+                          const newVaccines = [...vaccinationData.vaccines];
+                          newVaccines[index] = { ...vaccine, batch_id: e.target.value };
+                          setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        disabled={!vaccine.product_id}
+                        required
+                      >
+                        <option value="">Pasirinkite seriją</option>
+                        {batches.filter(b => b.product_id === vaccine.product_id).map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Dozė *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={vaccine.dose_amount}
+                          onChange={(e) => {
+                            const newVaccines = [...vaccinationData.vaccines];
+                            newVaccines[index] = { ...vaccine, dose_amount: e.target.value };
+                            setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                        <select
+                          value={vaccine.unit}
+                          onChange={(e) => {
+                            const newVaccines = [...vaccinationData.vaccines];
+                            newVaccines[index] = { ...vaccine, unit: e.target.value as any };
+                            setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="pcs">vnt</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Dozės Nr.</label>
+                        <input
+                          type="number"
+                          value={vaccine.dose_number}
+                          onChange={(e) => {
+                            const newVaccines = [...vaccinationData.vaccines];
+                            newVaccines[index] = { ...vaccine, dose_number: e.target.value };
+                            setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Pakartotinė vakcinacija (data)</label>
+                      <input
+                        type="date"
+                        value={vaccine.next_booster_date}
+                        onChange={(e) => {
+                          const newVaccines = [...vaccinationData.vaccines];
+                          newVaccines[index] = { ...vaccine, next_booster_date: e.target.value };
+                          setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
-                <select
-                  value={vaccinationData.batch_id}
-                  onChange={(e) => setVaccinationData({ ...vaccinationData, batch_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  disabled={!vaccinationData.product_id}
-                  required
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVaccinationData({
+                      ...vaccinationData,
+                      vaccines: [...vaccinationData.vaccines, { product_id: '', batch_id: '', dose_amount: '', dose_number: '1', unit: 'ml', next_booster_date: '' }]
+                    });
+                  }}
+                  className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
-                  <option value="">Pasirinkite seriją</option>
-                  {batches.filter(b => b.product_id === vaccinationData.product_id).map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dozė *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={vaccinationData.dose_amount}
-                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
-                  <select
-                    value={vaccinationData.unit}
-                    onChange={(e) => setVaccinationData({ ...vaccinationData, unit: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="ml">ml</option>
-                    <option value="l">l</option>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="pcs">vnt</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dozės Nr.</label>
-                  <input
-                    type="number"
-                    value={vaccinationData.dose_number}
-                    onChange={(e) => setVaccinationData({ ...vaccinationData, dose_number: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pakartotinė vakcinacija (data)</label>
-                <input
-                  type="date"
-                  value={vaccinationData.next_booster_date}
-                  onChange={(e) => setVaccinationData({ ...vaccinationData, next_booster_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                />
+                  <Plus className="w-4 h-4" />
+                  Pridėti vakciną
+                </button>
               </div>
 
               <div>
@@ -3231,6 +3295,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             </div>
           )}
 
+
           {/* PROFILAKTIKA FORM */}
           {formData.procedures.includes('Profilaktika') && (
             <div ref={preventionSectionRef} className="p-4 bg-green-50 border-2 border-green-300 rounded-lg space-y-4">
@@ -3239,93 +3304,147 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 Profilaktikos informacija
               </h4>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
-                <select
-                  value={preventionData.product_id}
-                  onChange={async (e) => {
-                    const productId = e.target.value;
+              <div className="space-y-3">
+                {preventionData.products.map((product, index) => (
+                  <div key={index} className="p-3 bg-white border border-green-200 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">Produktas #{index + 1}</span>
+                      {preventionData.products.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newProducts = preventionData.products.filter((_, i) => i !== index);
+                            setPreventionData({ ...preventionData, products: newProducts });
+                          }}
+                          className="text-red-600 hover:bg-red-50 p-1 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                    if (productId) {
-                      const oldestBatchId = await getOldestBatchWithStock(productId);
-                      setPreventionData({ ...preventionData, product_id: productId, batch_id: oldestBatchId });
-                      fetchStockLevel(productId);
-                    } else {
-                      setPreventionData({ ...preventionData, product_id: '', batch_id: '' });
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  <option value="">Pasirinkite produktą</option>
-                  {products.filter(p => p.category === 'prevention' || p.category === 'biocide').map(product => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
-                  ))}
-                </select>
-                {preventionData.product_id && stockLevels[preventionData.product_id] !== undefined && (
-                  <div className="text-xs text-gray-500 mt-1 px-1">
-                    Likutis: <span className={stockLevels[preventionData.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
-                      {stockLevels[preventionData.product_id].toFixed(2)}
-                    </span> {products.find(p => p.id === preventionData.product_id)?.unit}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
+                      <select
+                        value={product.product_id}
+                        onChange={async (e) => {
+                          const productId = e.target.value;
+                          const newProducts = [...preventionData.products];
+
+                          if (productId) {
+                            const oldestBatchId = await getOldestBatchWithStock(productId);
+                            newProducts[index] = { ...product, product_id: productId, batch_id: oldestBatchId };
+                            fetchStockLevel(productId);
+                          } else {
+                            newProducts[index] = { ...product, product_id: '', batch_id: '' };
+                          }
+
+                          setPreventionData({ ...preventionData, products: newProducts });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        required
+                      >
+                        <option value="">Pasirinkite produktą</option>
+                        {products.filter(p => p.category === 'prevention' || p.category === 'biocide').map(prod => (
+                          <option key={prod.id} value={prod.id}>{prod.name}</option>
+                        ))}
+                      </select>
+                      {product.product_id && stockLevels[product.product_id] !== undefined && (
+                        <div className="text-xs text-gray-500 mt-1 px-1">
+                          Likutis: <span className={stockLevels[product.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
+                            {stockLevels[product.product_id].toFixed(2)}
+                          </span> {products.find(p => p.id === product.product_id)?.unit}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
+                      <select
+                        value={product.batch_id}
+                        onChange={(e) => {
+                          const newProducts = [...preventionData.products];
+                          newProducts[index] = { ...product, batch_id: e.target.value };
+                          setPreventionData({ ...preventionData, products: newProducts });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        disabled={!product.product_id}
+                        required
+                      >
+                        <option value="">Pasirinkite seriją</option>
+                        {batches.filter(b => b.product_id === product.product_id).map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={product.dose_qty}
+                          onChange={(e) => {
+                            const newProducts = [...preventionData.products];
+                            newProducts[index] = { ...product, dose_qty: e.target.value };
+                            setPreventionData({ ...preventionData, products: newProducts });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                        <select
+                          value={product.dose_unit}
+                          onChange={(e) => {
+                            const newProducts = [...preventionData.products];
+                            newProducts[index] = { ...product, dose_unit: e.target.value as any };
+                            setPreventionData({ ...preventionData, products: newProducts });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        >
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="pcs">vnt</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Paskirtis</label>
+                      <input
+                        type="text"
+                        value={product.purpose}
+                        onChange={(e) => {
+                          const newProducts = [...preventionData.products];
+                          newProducts[index] = { ...product, purpose: e.target.value };
+                          setPreventionData({ ...preventionData, products: newProducts });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        placeholder="Parazitų prevencija, dezinfekcija, kt."
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Serija *</label>
-                <select
-                  value={preventionData.batch_id}
-                  onChange={(e) => setPreventionData({ ...preventionData, batch_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  disabled={!preventionData.product_id}
-                  required
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreventionData({
+                      ...preventionData,
+                      products: [...preventionData.products, { product_id: '', batch_id: '', dose_qty: '', dose_unit: 'ml', purpose: '' }]
+                    });
+                  }}
+                  className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
-                  <option value="">Pasirinkite seriją</option>
-                  {batches.filter(b => b.product_id === preventionData.product_id).map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={preventionData.dose_qty}
-                    onChange={(e) => setPreventionData({ ...preventionData, dose_qty: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
-                  <select
-                    value={preventionData.dose_unit}
-                    onChange={(e) => setPreventionData({ ...preventionData, dose_unit: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="ml">ml</option>
-                    <option value="l">l</option>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="pcs">vnt</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paskirtis</label>
-                <input
-                  type="text"
-                  value={preventionData.purpose}
-                  onChange={(e) => setPreventionData({ ...preventionData, purpose: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  placeholder="Parazitų prevencija, dezinfekcija, kt."
-                />
+                  <Plus className="w-4 h-4" />
+                  Pridėti produktą
+                </button>
               </div>
 
               <div>
