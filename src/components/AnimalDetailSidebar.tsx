@@ -2892,7 +2892,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                             </select>
                             {stockLevel !== undefined && (
                               <div className="text-xs text-gray-500 mt-0.5 px-1">
-                                Likutis: <span className={stockLevel > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>{stockLevel.toFixed(2)}</span> {selectedProduct?.unit}
+                                Likutis: <span className={stockLevel > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>{stockLevel.toFixed(2)}</span> {selectedProduct?.primary_pack_unit}
                               </div>
                             )}
                           </div>
@@ -3144,14 +3144,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         value={vaccine.product_id}
                         onChange={async (e) => {
                           const productId = e.target.value;
+                          const unit = products.find(p => p.id === productId)?.primary_pack_unit || 'ml';
                           const newVaccines = [...vaccinationData.vaccines];
 
                           if (productId) {
                             const oldestBatchId = await getOldestBatchWithStock(productId);
-                            newVaccines[index] = { ...vaccine, product_id: productId, batch_id: oldestBatchId };
+                            newVaccines[index] = { ...vaccine, product_id: productId, batch_id: oldestBatchId, unit: unit };
                             fetchStockLevel(productId);
                           } else {
-                            newVaccines[index] = { ...vaccine, product_id: '', batch_id: '' };
+                            newVaccines[index] = { ...vaccine, product_id: '', batch_id: '', unit: 'ml' };
                           }
 
                           setVaccinationData({ ...vaccinationData, vaccines: newVaccines });
@@ -3168,7 +3169,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         <div className="text-xs text-gray-500 mt-1 px-1">
                           Likutis: <span className={stockLevels[vaccine.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
                             {stockLevels[vaccine.product_id].toFixed(2)}
-                          </span> {products.find(p => p.id === vaccine.product_id)?.unit}
+                          </span> {products.find(p => p.id === vaccine.product_id)?.primary_pack_unit}
                         </div>
                       )}
                     </div>
@@ -3331,14 +3332,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         value={product.product_id}
                         onChange={async (e) => {
                           const productId = e.target.value;
+                          const unit = products.find(p => p.id === productId)?.primary_pack_unit || 'ml';
                           const newProducts = [...preventionData.products];
 
                           if (productId) {
                             const oldestBatchId = await getOldestBatchWithStock(productId);
-                            newProducts[index] = { ...product, product_id: productId, batch_id: oldestBatchId };
+                            newProducts[index] = { ...product, product_id: productId, batch_id: oldestBatchId, dose_unit: unit };
                             fetchStockLevel(productId);
                           } else {
-                            newProducts[index] = { ...product, product_id: '', batch_id: '' };
+                            newProducts[index] = { ...product, product_id: '', batch_id: '', dose_unit: 'ml' };
                           }
 
                           setPreventionData({ ...preventionData, products: newProducts });
@@ -3355,7 +3357,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         <div className="text-xs text-gray-500 mt-1 px-1">
                           Likutis: <span className={stockLevels[product.product_id] > 0 ? 'text-green-600' : 'text-red-600 font-bold'}>
                             {stockLevels[product.product_id].toFixed(2)}
-                          </span> {products.find(p => p.id === product.product_id)?.unit}
+                          </span> {products.find(p => p.id === product.product_id)?.primary_pack_unit}
                         </div>
                       )}
                     </div>

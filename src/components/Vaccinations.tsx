@@ -403,8 +403,10 @@ export function Vaccinations() {
                         value={vaccine.product_id}
                         onChange={async (e) => {
                           const productId = e.target.value;
+                          const unit = products.find(p => p.id === productId)?.primary_pack_unit || 'ml';
                           const newVaccines = [...massVaccines];
                           newVaccines[idx].product_id = productId;
+                          newVaccines[idx].unit = unit as Unit;
                           if (productId) {
                             const oldestBatchId = await getOldestBatchWithStock(productId);
                             newVaccines[idx].batch_id = oldestBatchId;
