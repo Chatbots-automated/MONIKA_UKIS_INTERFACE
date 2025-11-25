@@ -535,7 +535,7 @@ export function VisitsModern() {
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="font-medium text-gray-900">{formatAnimalDisplay(visit.animal)}</div>
-                        <div className="text-gray-600">{visit.animal?.species}</div>
+                        <div className="text-gray-600">{visit.animal?.class}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
@@ -634,7 +634,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: 
             <div className="font-bold text-gray-900 text-lg">
               {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
             </div>
-            <div className="text-sm text-gray-600">{visit.animal?.species || ''}</div>
+            <div className="text-sm text-gray-600">{visit.animal?.class || ''}</div>
           </div>
           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
             {getStatusIcon(visit.status)}
