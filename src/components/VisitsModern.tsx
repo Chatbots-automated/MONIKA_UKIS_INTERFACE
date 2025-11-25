@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Download } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -12,10 +12,19 @@ interface VisitWithAnimal extends AnimalVisit {
   animal?: Animal;
 }
 
+interface WithdrawalStatus {
+  animal_id: string;
+  milk_until: string | null;
+  meat_until: string | null;
+  milk_active: boolean;
+  meat_active: boolean;
+}
+
 export function VisitsModern() {
   const { logAction } = useAuth();
   const [visits, setVisits] = useState<VisitWithAnimal[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
+  const [withdrawalStatuses, setWithdrawalStatuses] = useState<Map<string, WithdrawalStatus>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<VisitStatus | 'all'>('all');
@@ -76,18 +85,26 @@ export function VisitsModern() {
 
   const loadData = async () => {
     try {
-      const [visitsRes, animalsData, geaData] = await Promise.all([
+      const [visitsRes, animalsData, geaData, withdrawalData] = await Promise.all([
         supabase
           .from('animal_visits')
           .select('*')
           .order('visit_datetime', { ascending: false }),
         fetchAllRows<Animal>('animals'),
         fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
+        supabase.from('vw_withdrawal_status').select('*'),
       ]);
 
       console.log('📊 Loaded visits:', visitsRes.data?.length);
       console.log('📊 Loaded animals:', animalsData.length);
       console.log('📊 Loaded GEA data:', geaData.length);
+
+      // Create withdrawal status map
+      const withdrawalMap = new Map<string, WithdrawalStatus>();
+      (withdrawalData.data || []).forEach((status: any) => {
+        withdrawalMap.set(status.animal_id, status);
+      });
+      setWithdrawalStatuses(withdrawalMap);
 
       // Create a map of animal_id to latest collar_no
       // Data is sorted ascending, so we overwrite to keep the most recent value
@@ -177,6 +194,62 @@ export function VisitsModern() {
   };
 
   const uniqueVets = Array.from(new Set(visits.map(v => v.vet_name).filter(Boolean)));
+
+  const exportToExcel = () => {
+    const visitsToExport = filteredVisits;
+
+    if (visitsToExport.length === 0) {
+      alert('Nėra vizitų eksportavimui');
+      return;
+    }
+
+    const headers = ['Data', 'Gyvūnas', 'Kaklo Nr.', 'Statusas', 'Procedūros', 'Veterinaras', 'Temperatūra', 'Pastabos'];
+    const rows = visitsToExport.map(visit => [
+      formatDateTimeLT(visit.visit_datetime),
+      formatAnimalDisplay(visit.animal),
+      visit.animal?.collar_no || '',
+      visit.status,
+      visit.procedures.join(', '),
+      visit.vet_name || '',
+      visit.temperature || '',
+      visit.notes || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    let filename = 'vizitai';
+    if (dateFrom && dateTo) {
+      filename += `_${dateFrom}_${dateTo}`;
+    } else if (dateFrom) {
+      filename += `_nuo_${dateFrom}`;
+    } else if (dateTo) {
+      filename += `_iki_${dateTo}`;
+    } else {
+      filename += `_${new Date().toISOString().split('T')[0]}`;
+    }
+    filename += '.csv';
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const isToday = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -270,6 +343,13 @@ export function VisitsModern() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Vizitai</h2>
+        <button
+          onClick={exportToExcel}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Eksportuoti į Excel
+        </button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
@@ -389,6 +469,7 @@ export function VisitsModern() {
                   e.stopPropagation();
                   handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
                 }}
+                withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
               />
             ))}
           </div>
@@ -418,6 +499,7 @@ export function VisitsModern() {
                       e.stopPropagation();
                       handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
                     }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
                   />
                 ))}
               </div>
@@ -442,6 +524,7 @@ export function VisitsModern() {
                       e.stopPropagation();
                       handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
                     }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
                   />
                 ))}
               </div>
@@ -473,6 +556,7 @@ export function VisitsModern() {
                       e.stopPropagation();
                       handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
                     }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
                   />
                 ))}
               </div>
@@ -497,6 +581,7 @@ export function VisitsModern() {
                       e.stopPropagation();
                       handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
                     }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
                   />
                 ))}
               </div>
@@ -617,12 +702,13 @@ export function VisitsModern() {
   );
 }
 
-function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: {
+function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete, withdrawalStatus }: {
   visit: VisitWithAnimal;
   getStatusColor: (status: VisitStatus) => string;
   getStatusIcon: (status: VisitStatus) => JSX.Element;
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  withdrawalStatus?: WithdrawalStatus;
 }) {
   return (
     <div className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all hover:border-blue-300 relative group">
@@ -637,8 +723,22 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: 
       <div onClick={onClick} className="cursor-pointer">
         <div className="flex items-start justify-between mb-3 pr-8">
           <div className="flex-1">
-            <div className="font-bold text-gray-900 text-lg">
-              {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
+            <div className="flex items-center gap-2">
+              <div className="font-bold text-gray-900 text-lg">
+                {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
+              </div>
+              {withdrawalStatus && (withdrawalStatus.milk_active || withdrawalStatus.meat_active) && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-red-100 border border-red-300 rounded text-xs font-medium text-red-700" title="Karencijos periodas">
+                  <AlertCircle className="w-3 h-3" />
+                  {withdrawalStatus.milk_active && withdrawalStatus.milk_until && (
+                    <span>🥛 {formatDateLT(withdrawalStatus.milk_until)}</span>
+                  )}
+                  {withdrawalStatus.milk_active && withdrawalStatus.meat_active && <span className="mx-1">|</span>}
+                  {withdrawalStatus.meat_active && withdrawalStatus.meat_until && (
+                    <span>🥩 {formatDateLT(withdrawalStatus.meat_until)}</span>
+                  )}
+                </div>
+              )}
             </div>
             {(visit.animal as any)?.neck_no && (
               <div className="text-sm text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
