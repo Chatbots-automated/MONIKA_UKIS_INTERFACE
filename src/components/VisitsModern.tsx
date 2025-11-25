@@ -82,20 +82,18 @@ export function VisitsModern() {
           .select('*')
           .order('visit_datetime', { ascending: false }),
         fetchAllRows<Animal>('animals'),
-        supabase
-          .from('gea_daily')
-          .select('animal_id, collar_no')
-          .order('snapshot_date', { ascending: false }),
+        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
       ]);
 
       console.log('📊 Loaded visits:', visitsRes.data?.length);
       console.log('📊 Loaded animals:', animalsData.length);
-      console.log('📊 Loaded GEA data:', geaData.data?.length);
+      console.log('📊 Loaded GEA data:', geaData.length);
 
       // Create a map of animal_id to latest collar_no
+      // Data is sorted ascending, so we overwrite to keep the most recent value
       const collarMap = new Map<string, string>();
-      (geaData.data || []).forEach((gea: any) => {
-        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+      (geaData || []).forEach((gea: any) => {
+        if (gea.collar_no) {
           collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
       });

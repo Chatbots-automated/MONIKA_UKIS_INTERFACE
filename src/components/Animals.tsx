@@ -47,16 +47,14 @@ export function Animals() {
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
-        supabase
-          .from('gea_daily')
-          .select('animal_id, collar_no')
-          .order('snapshot_date', { ascending: false }),
+        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
       ]);
 
       // Create a map of animal_id to latest collar_no
+      // Data is sorted ascending, so we overwrite to keep the most recent value
       const collarMap = new Map<string, string>();
-      (geaData.data || []).forEach((gea: any) => {
-        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+      (geaData || []).forEach((gea: any) => {
+        if (gea.collar_no) {
           collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
       });

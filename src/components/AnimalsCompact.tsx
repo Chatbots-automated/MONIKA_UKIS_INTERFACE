@@ -11,6 +11,7 @@ import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 interface GeaCollarData {
   animal_id: string;
   collar_no: number;
+  snapshot_date: string;
 }
 
 export function AnimalsCompact() {
@@ -72,23 +73,24 @@ export function AnimalsCompact() {
       // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
-      // Fetch latest collar numbers from gea_daily
-      const { data: geaData } = await supabase
-        .from('gea_daily')
-        .select('animal_id, collar_no')
-        .order('snapshot_date', { ascending: false });
+      // Fetch latest collar numbers from gea_daily (use fetchAllRows to get all records)
+      const geaData = await fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date');
 
       console.log('🐄 Animals loaded:', allAnimals.length);
+      console.log('📊 GEA records loaded:', geaData.length);
 
       // Create a map of animal_id to latest collar_no
+      // Since data is sorted by snapshot_date ascending, we iterate and OVERWRITE
+      // so the last (most recent) value for each animal is kept
       const collarMap = new Map<string, number>();
       if (geaData) {
-        geaData.forEach((record: GeaCollarData) => {
-          if (record.collar_no && !collarMap.has(record.animal_id)) {
+        geaData.forEach((record: any) => {
+          if (record.collar_no) {
             collarMap.set(record.animal_id, record.collar_no);
           }
         });
       }
+      console.log('🏷️ Animals with collar numbers:', collarMap.size);
       setGeaCollars(collarMap);
 
       // Enrich animals with collar numbers
