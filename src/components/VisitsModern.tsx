@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -122,6 +122,29 @@ export function VisitsModern() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteVisit = async (visitId: string, animalDisplay: string) => {
+    if (!confirm(`Ar tikrai norite ištrinti vizitą gyvūnui ${animalDisplay}?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('animal_visits')
+        .delete()
+        .eq('id', visitId);
+
+      if (error) throw error;
+
+      setVisits(prev => prev.filter(v => v.id !== visitId));
+      logAction('delete_visit', 'animal_visits', visitId);
+
+      alert('Vizitas sėkmingai ištrintas');
+    } catch (error) {
+      console.error('Error deleting visit:', error);
+      alert('Klaida trinant vizitą');
     }
   };
 
@@ -334,6 +357,10 @@ export function VisitsModern() {
                 getStatusColor={getStatusColor}
                 getStatusIcon={getStatusIcon}
                 onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                onDelete={(e) => {
+                  e.stopPropagation();
+                  handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                }}
               />
             ))}
           </div>
@@ -359,6 +386,10 @@ export function VisitsModern() {
                     getStatusColor={getStatusColor}
                     getStatusIcon={getStatusIcon}
                     onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
                   />
                 ))}
               </div>
@@ -379,6 +410,10 @@ export function VisitsModern() {
                     getStatusColor={getStatusColor}
                     getStatusIcon={getStatusIcon}
                     onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
                   />
                 ))}
               </div>
@@ -406,6 +441,10 @@ export function VisitsModern() {
                     getStatusColor={getStatusColor}
                     getStatusIcon={getStatusIcon}
                     onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
                   />
                 ))}
               </div>
@@ -426,6 +465,10 @@ export function VisitsModern() {
                     getStatusColor={getStatusColor}
                     getStatusIcon={getStatusIcon}
                     onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
                   />
                 ))}
               </div>
@@ -452,6 +495,7 @@ export function VisitsModern() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statusas</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydytojas</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pastabos</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -495,6 +539,18 @@ export function VisitsModern() {
                       <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
                         {visit.notes || '-'}
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Ištrinti vizitą"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -530,29 +586,36 @@ export function VisitsModern() {
   );
 }
 
-function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: {
+function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: {
   visit: VisitWithAnimal;
   getStatusColor: (status: VisitStatus) => string;
   getStatusIcon: (status: VisitStatus) => JSX.Element;
   onClick: () => void;
+  onDelete: (e: React.MouseEvent) => void;
 }) {
   return (
-    <div
-      onClick={onClick}
-      className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all cursor-pointer hover:border-blue-300"
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <div className="font-bold text-gray-900 text-lg">
-            {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
+    <div className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all hover:border-blue-300 relative group">
+      <button
+        onClick={onDelete}
+        className="absolute top-2 right-2 p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+        title="Ištrinti vizitą"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+
+      <div onClick={onClick} className="cursor-pointer">
+        <div className="flex items-start justify-between mb-3 pr-8">
+          <div>
+            <div className="font-bold text-gray-900 text-lg">
+              {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
+            </div>
+            <div className="text-sm text-gray-600">{visit.animal?.species || ''}</div>
           </div>
-          <div className="text-sm text-gray-600">{visit.animal?.species || ''}</div>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
+            {getStatusIcon(visit.status)}
+            {visit.status}
+          </span>
         </div>
-        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
-          {getStatusIcon(visit.status)}
-          {visit.status}
-        </span>
-      </div>
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -582,6 +645,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: {
         {visit.vet_name && (
           <p className="text-xs text-gray-500">Gyd.: {visit.vet_name}</p>
         )}
+      </div>
       </div>
     </div>
   );
