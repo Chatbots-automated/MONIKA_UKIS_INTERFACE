@@ -1985,7 +1985,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('diseases').select('*'),
       supabase.from('batches').select('*').order('expiry_date'),
-      supabase.from('users').select('id, full_name, email').order('full_name'),
+      supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
