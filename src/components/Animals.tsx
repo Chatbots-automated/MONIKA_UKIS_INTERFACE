@@ -62,9 +62,9 @@ export function Animals() {
       });
 
       // Enrich animals with collar numbers from GEA data
-      // Extract neck number from tag_no (last digits before country code)
+      // Extract neck number from tag_no (last 4 digits)
       const enrichedAnimals = allAnimals.map((animal: Animal) => {
-        const neckNo = animal.tag_no ? animal.tag_no.replace(/^[A-Z]{2}0*/, '') : null;
+        const neckNo = animal.tag_no ? animal.tag_no.slice(-4) : null;
         return {
           ...animal,
           collar_no: collarMap.get(animal.id) || null,
@@ -332,10 +332,6 @@ export function Animals() {
                   <div className="flex items-center justify-between">
                     <span className="text-blue-100">Rūšis:</span>
                     <span className="font-semibold">{selectedAnimal.sex || selectedAnimal.species}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-blue-100">Lytis:</span>
-                    <span className="font-semibold">{selectedAnimal.sex === 'male' ? 'Patinas' : selectedAnimal.sex === 'female' ? 'Patelė' : 'N/A'}</span>
                   </div>
                   {selectedAnimal.age_months && (
                     <div className="flex items-center justify-between">
@@ -1013,7 +1009,6 @@ export function Animals() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kaklo nr.</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rūšis</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lytis</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amžius</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Savininkas</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Veiksmai</th>
@@ -1024,7 +1019,7 @@ export function Animals() {
                 <tr key={animal.id} className="hover:bg-gray-50 transition-colors">
                   {editing === animal.id ? (
                     <>
-                      <td className="px-6 py-4" colSpan={7}>
+                      <td className="px-6 py-4" colSpan={6}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <input
                             type="text"
@@ -1099,7 +1094,6 @@ export function Animals() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).neck_no || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || animal.species}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{animal.sex === 'male' ? 'Patinas' : animal.sex === 'female' ? 'Patelė' : 'N/A'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}
                       </td>
