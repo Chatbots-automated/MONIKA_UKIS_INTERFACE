@@ -3577,6 +3577,16 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
       if (error) throw error;
 
+      if (visit.sync_step_id) {
+        await supabase
+          .from('synchronization_steps')
+          .update({
+            completed: true,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', visit.sync_step_id);
+      }
+
       await logAction('complete_visit', 'animal_visits', visit.id);
       onSuccess();
     } catch (error: any) {
@@ -3598,6 +3608,17 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         .eq('id', visit.id);
 
       if (error) throw error;
+
+      if (visit.sync_step_id) {
+        const isCompleted = status === 'Atliktas' || status === 'Baigtas';
+        await supabase
+          .from('synchronization_steps')
+          .update({
+            completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null
+          })
+          .eq('id', visit.sync_step_id);
+      }
 
       await logAction('update_visit', 'animal_visits', visit.id);
       alert('Vizitas atnaujintas!');

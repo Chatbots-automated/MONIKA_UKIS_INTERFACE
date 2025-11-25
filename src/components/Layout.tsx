@@ -17,7 +17,8 @@ import {
   Grid3x3,
   Users,
   Activity,
-  Calendar
+  Calendar,
+  Repeat
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -34,6 +35,7 @@ const menuItems = [
   { id: 'receive', label: 'Priėmimas', icon: FileText, permission: 'receive_stock' },
   { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
+  { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
   { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2, permission: 'waste' },
