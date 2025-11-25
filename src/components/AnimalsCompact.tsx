@@ -6,7 +6,7 @@ import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { fetchAllRows } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 
 interface GeaCollarData {
   animal_id: string;
@@ -80,14 +80,6 @@ export function AnimalsCompact() {
 
       console.log('🐄 Animals loaded:', allAnimals.length);
 
-      setAnimals(allAnimals);
-
-      const summaryMap = new Map<string, AnimalVisitSummary>();
-      (summariesData || []).forEach((summary: AnimalVisitSummary) => {
-        summaryMap.set(summary.animal_id, summary);
-      });
-      setVisitSummaries(summaryMap);
-
       // Create a map of animal_id to latest collar_no
       const collarMap = new Map<string, number>();
       if (geaData) {
@@ -98,6 +90,20 @@ export function AnimalsCompact() {
         });
       }
       setGeaCollars(collarMap);
+
+      // Enrich animals with collar numbers
+      const enrichedAnimals = allAnimals.map((animal: Animal) => ({
+        ...animal,
+        collar_no: collarMap.has(animal.id) ? collarMap.get(animal.id)?.toString() : null,
+      }));
+
+      setAnimals(enrichedAnimals);
+
+      const summaryMap = new Map<string, AnimalVisitSummary>();
+      (summariesData || []).forEach((summary: AnimalVisitSummary) => {
+        summaryMap.set(summary.animal_id, summary);
+      });
+      setVisitSummaries(summaryMap);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -355,7 +361,7 @@ export function AnimalsCompact() {
                     ) : (
                       <>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {animal.tag_no || '-'}
+                          {formatAnimalDisplay(animal)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {animal.species}

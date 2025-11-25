@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAllRows } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
@@ -22,6 +22,7 @@ export function Animals() {
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchByCollar, setSearchByCollar] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [diseases, setDiseases] = useState<Disease[]>([]);
 
@@ -42,13 +43,31 @@ export function Animals() {
 
   const loadData = async () => {
     try {
-      const [allAnimals, productsRes, diseasesRes] = await Promise.all([
+      const [allAnimals, productsRes, diseasesRes, geaData] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
+        supabase
+          .from('gea_daily')
+          .select('animal_id, collar_no')
+          .order('snapshot_date', { ascending: false }),
       ]);
 
-      setAnimals(allAnimals);
+      // Create a map of animal_id to latest collar_no
+      const collarMap = new Map<string, string>();
+      (geaData.data || []).forEach((gea: any) => {
+        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+          collarMap.set(gea.animal_id, gea.collar_no.toString());
+        }
+      });
+
+      // Enrich animals with collar numbers from GEA data
+      const enrichedAnimals = allAnimals.map((animal: Animal) => ({
+        ...animal,
+        collar_no: collarMap.get(animal.id) || null,
+      }));
+
+      setAnimals(enrichedAnimals);
       setProducts(productsRes.data || []);
       setDiseases(diseasesRes.data || []);
     } catch (error) {
@@ -229,10 +248,12 @@ export function Animals() {
     const searchLower = term.toLowerCase().trim();
 
     return animals.filter(animal => {
+      const collarNo = animal.collar_no?.toLowerCase() || '';
       const tagNo = animal.tag_no?.toLowerCase() || '';
       const holderName = animal.holder_name?.toLowerCase() || '';
       const holderAddress = animal.holder_address?.toLowerCase() || '';
 
+      if (searchByCollar && collarNo.includes(searchLower)) return true;
       if (tagNo.includes(searchLower)) return true;
       if (holderName.includes(searchLower)) return true;
       if (holderAddress.includes(searchLower)) return true;
@@ -878,15 +899,26 @@ export function Animals() {
         )}
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Ieškoti pagal ženklo numerį, savininkąarba paskutinius 5 skaitmenis atvirkštine tvarka (pvz., 71517)..."
-          className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={searchByCollar ? "Ieškoti pagal kaklo nr., ženklo numerį, savininką..." : "Ieškoti pagal ženklo numerį, savininką arba paskutinius 5 skaitmenis..."}
+            className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer ml-1">
+          <input
+            type="checkbox"
+            checked={searchByCollar}
+            onChange={(e) => setSearchByCollar(e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span>Ieškoti pagal kaklo numerį</span>
+        </label>
       </div>
 
       {showAdd && (
@@ -1050,7 +1082,7 @@ export function Animals() {
                           onClick={() => loadAnimalDetails(animal.id)}
                           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                         >
-                          {animal.tag_no || 'N/A'}
+                          {formatAnimalDisplay(animal)}
                         </button>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.species}</td>
