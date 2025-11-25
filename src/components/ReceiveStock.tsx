@@ -138,11 +138,28 @@ export function ReceiveStock() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error response:', errorText);
         throw new Error(`Serverio klaida: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('Webhook response:', data);
+      const responseText = await response.text();
+      console.log('Raw webhook response:', responseText);
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Serveris grąžino tuščią atsakymą');
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        console.error('Response text:', responseText);
+        throw new Error('Nepavyko perskaityti serverio atsakymo. Patikrinkite, ar webhook veikia teisingai.');
+      }
+
+      console.log('Parsed webhook response:', data);
 
       let invoiceObject;
       if (Array.isArray(data) && data.length > 0) {
