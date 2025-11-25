@@ -16,11 +16,11 @@ export function Synchronizations() {
   const [syncSteps, setSyncSteps] = useState<SyncStepDisplay[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterDate, setFilterDate] = useState<string>('today');
+  const [filterDate, setFilterDate] = useState<string>('week');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('pending');
 
   useEffect(() => {
     loadData();
@@ -32,17 +32,9 @@ export function Synchronizations() {
       const allAnimals = await fetchAllRows<Animal>('animals', '*', 'tag_no');
       setAnimals(allAnimals);
 
-      let dateFilter = '';
       const today = new Date().toISOString().split('T')[0];
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-
-      if (filterDate === 'today') {
-        dateFilter = today;
-      } else if (filterDate === 'tomorrow') {
-        dateFilter = tomorrow;
-      } else if (filterDate === 'custom' && customDateFrom) {
-        dateFilter = customDateFrom;
-      }
+      const weekFromNow = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
 
       let query = supabase
         .from('synchronization_steps')
@@ -54,8 +46,12 @@ export function Synchronizations() {
         .order('scheduled_date', { ascending: true })
         .order('step_number', { ascending: true });
 
-      if (filterDate === 'today' || filterDate === 'tomorrow') {
-        query = query.eq('scheduled_date', dateFilter);
+      if (filterDate === 'today') {
+        query = query.eq('scheduled_date', today);
+      } else if (filterDate === 'tomorrow') {
+        query = query.eq('scheduled_date', tomorrow);
+      } else if (filterDate === 'week') {
+        query = query.gte('scheduled_date', today).lte('scheduled_date', weekFromNow);
       } else if (filterDate === 'custom' && customDateFrom && customDateTo) {
         query = query.gte('scheduled_date', customDateFrom).lte('scheduled_date', customDateTo);
       } else if (filterDate === 'custom' && customDateFrom) {
@@ -206,6 +202,7 @@ export function Synchronizations() {
             >
               <option value="today">Šiandien</option>
               <option value="tomorrow">Rytoj</option>
+              <option value="week">Ši savaitė</option>
               <option value="custom">Pasirinkti datą</option>
             </select>
           </div>
