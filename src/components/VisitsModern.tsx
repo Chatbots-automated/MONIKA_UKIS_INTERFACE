@@ -643,14 +643,16 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete }: 
 
       <div onClick={onClick} className="cursor-pointer">
         <div className="flex items-start justify-between mb-3 pr-8">
-          <div>
+          <div className="flex-1">
             <div className="font-bold text-gray-900 text-lg">
               {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
             </div>
             {(visit.animal as any)?.neck_no && (
               <div className="text-sm text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
             )}
-            <div className="text-sm text-gray-600">{visit.animal?.class || ''}</div>
+            {(visit.animal as any)?.class && (
+              <div className="text-sm font-medium text-gray-700">{(visit.animal as any).class}</div>
+            )}
           </div>
           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${getStatusColor(visit.status)}`}>
             {getStatusIcon(visit.status)}
