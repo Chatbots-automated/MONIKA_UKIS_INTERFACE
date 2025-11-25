@@ -1,4 +1,22 @@
 import { supabase } from './supabase';
+import { Animal } from './types';
+
+/**
+ * Format animal display with collar number (primary) and tag number (in parentheses)
+ * Example: "11234 (LT01234567)" or just "11234" or just "LT01234567" depending on what's available
+ */
+export function formatAnimalDisplay(animal: Animal | null | undefined): string {
+  if (!animal) return '-';
+
+  const collarNo = animal.collar_no;
+  const tagNo = animal.tag_no;
+
+  if (collarNo && tagNo) {
+    return `${collarNo} (${tagNo})`;
+  }
+
+  return collarNo || tagNo || '-';
+}
 
 /**
  * Compare strings using Lithuanian locale for alphabetical sorting

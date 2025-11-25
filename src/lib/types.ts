@@ -47,6 +47,7 @@ export interface Batch {
 export interface Animal {
   id: string;
   tag_no: string | null;
+  collar_no: string | null;
   species: string;
   sex: string | null;
   age_months: number | null;

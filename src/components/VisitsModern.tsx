@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchAllRows } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
@@ -23,6 +23,7 @@ export function VisitsModern() {
   const [filterVet, setFilterVet] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
+  const [searchByCollar, setSearchByCollar] = useState<boolean>(true);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   useEffect(() => {
@@ -134,10 +135,14 @@ export function VisitsModern() {
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const matchesAnimal =
-        visit.animal?.tag_no?.toLowerCase().includes(term) ||
-        visit.animal?.species.toLowerCase().includes(term) ||
-        visit.animal?.holder_name?.toLowerCase().includes(term);
+      const matchesAnimal = searchByCollar
+        ? visit.animal?.collar_no?.toLowerCase().includes(term) ||
+          visit.animal?.tag_no?.toLowerCase().includes(term) ||
+          visit.animal?.species.toLowerCase().includes(term) ||
+          visit.animal?.holder_name?.toLowerCase().includes(term)
+        : visit.animal?.tag_no?.toLowerCase().includes(term) ||
+          visit.animal?.species.toLowerCase().includes(term) ||
+          visit.animal?.holder_name?.toLowerCase().includes(term);
       const matchesNotes = visit.notes?.toLowerCase().includes(term);
       const matchesVet = visit.vet_name?.toLowerCase().includes(term);
       if (!matchesAnimal && !matchesNotes && !matchesVet) return false;
@@ -272,15 +277,26 @@ export function VisitsModern() {
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Ieškoti pagal gyvūną, pastabas, gydytoją..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder={searchByCollar ? "Ieškoti pagal kaklo nr., gyvūną, pastabas..." : "Ieškoti pagal gyvūną, pastabas, gydytoją..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={searchByCollar}
+              onChange={(e) => setSearchByCollar(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span>Ieškoti pagal kaklo numerį</span>
+          </label>
         </div>
       </div>
 
@@ -430,7 +446,7 @@ export function VisitsModern() {
                         <div className="font-medium text-gray-900">{formatDateLT(visit.visit_datetime)}</div>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <div className="font-medium text-gray-900">{visit.animal?.tag_no || '-'}</div>
+                        <div className="font-medium text-gray-900">{formatAnimalDisplay(visit.animal)}</div>
                         <div className="text-gray-600">{visit.animal?.species}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -509,7 +525,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: {
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="font-bold text-gray-900 text-lg">
-            {visit.animal?.tag_no || <span className="text-red-500">Loading...</span>}
+            {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
           </div>
           <div className="text-sm text-gray-600">{visit.animal?.species || ''}</div>
         </div>
