@@ -3227,7 +3227,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                           <option value="l">l</option>
                           <option value="g">g</option>
                           <option value="kg">kg</option>
-                          <option value="pcs">vnt</option>
+                          <option value="vnt">vnt</option>
+                          <option value="bolus">bolus</option>
+                          <option value="syringe">syringe</option>
+                          <option value="tabletkė">tabletkė</option>
                         </select>
                       </div>
                       <div>
@@ -3415,7 +3418,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                           <option value="l">l</option>
                           <option value="g">g</option>
                           <option value="kg">kg</option>
-                          <option value="pcs">vnt</option>
+                          <option value="vnt">vnt</option>
+                          <option value="bolus">bolus</option>
+                          <option value="syringe">syringe</option>
+                          <option value="tabletkė">tabletkė</option>
                         </select>
                       </div>
                     </div>
