@@ -92,10 +92,14 @@ export function AnimalsCompact() {
       setGeaCollars(collarMap);
 
       // Enrich animals with collar numbers
-      const enrichedAnimals = allAnimals.map((animal: Animal) => ({
-        ...animal,
-        collar_no: collarMap.has(animal.id) ? collarMap.get(animal.id)?.toString() : null,
-      }));
+      const enrichedAnimals = allAnimals.map((animal: Animal) => {
+        const collarNo = collarMap.has(animal.id) ? collarMap.get(animal.id)?.toString() : null;
+        return {
+          ...animal,
+          collar_no: collarNo,
+          neck_no: collarNo,
+        };
+      });
 
       setAnimals(enrichedAnimals);
 
@@ -249,8 +253,8 @@ export function AnimalsCompact() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaklo nr.</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rūšis</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lytis</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amžius</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sekantis vizitas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paskutinis vizitas</th>
@@ -289,25 +293,8 @@ export function AnimalsCompact() {
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={animal.species}
-                            onChange={(e) => {
-                              const updated = animals.map(a =>
-                                a.id === animal.id ? { ...a, species: e.target.value } : a
-                              );
-                              setAnimals(updated);
-                            }}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <option value="bovine">Galvijas</option>
-                            <option value="porcine">Kiaulė</option>
-                            <option value="ovine">Avis</option>
-                            <option value="caprine">Ožka</option>
-                            <option value="equine">Arklys</option>
-                            <option value="other">Kita</option>
-                          </select>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {(animal as any).neck_no || '-'}
                         </td>
                         <td className="px-4 py-3">
                           <input
@@ -319,6 +306,7 @@ export function AnimalsCompact() {
                               );
                               setAnimals(updated);
                             }}
+                            placeholder="Karvė, Telyčaitė..."
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -361,13 +349,13 @@ export function AnimalsCompact() {
                     ) : (
                       <>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {formatAnimalDisplay(animal)}
+                          {animal.tag_no}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {animal.species}
+                          {(animal as any).neck_no || '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {animal.sex || '-'}
+                          {animal.sex || animal.species}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {animal.age_months ? `${animal.age_months} mėn.` : '-'}
