@@ -146,7 +146,7 @@ BEGIN
           (v_medication->>'product_id')::uuid,
           (v_medication->>'batch_id')::uuid,
           (v_medication->>'qty')::decimal,
-          COALESCE(v_medication->>'unit', 'ml'),
+          COALESCE(v_medication->>'unit', 'ml')::unit,
           COALESCE(v_medication->>'purpose', 'Gydymas'),
           v_medication->>'teat'
         );
