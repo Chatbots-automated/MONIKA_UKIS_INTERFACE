@@ -1,51 +1,81 @@
-# Database Fix Required - Unit Type Error
+# Database Fix - Visit Completion Error
 
-## Problem
-When finishing visits (changing status to "Baigtas"), the system throws this error:
+## Quick Summary
+
+**Problem:** Errors when completing visits (uzbaigti)
+**Solution:** Run the SQL fix in Supabase Dashboard
+**Time:** 2 minutes
+
+---
+
+## Step-by-Step Fix
+
+### 1. Open Supabase SQL Editor
+
+Go to: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/editor
+
+### 2. Create New Query
+
+Click the **"New Query"** button
+
+### 3. Copy the SQL Fix
+
+Open the file: `fix_visit_medications.sql`
+
+Copy ALL contents (Ctrl+A, Ctrl+C)
+
+### 4. Paste and Run
+
+Paste into the SQL Editor (Ctrl+V)
+
+Click **"Run"** button (or press Ctrl+Enter)
+
+### 5. Verify Success
+
+You should see messages like:
 ```
-column unit is of type unit but expression is of type text
+NOTICE: DROP FUNCTION
+NOTICE: CREATE FUNCTION
+NOTICE: DROP TRIGGER
+NOTICE: CREATE TRIGGER
 ```
 
-## Root Cause
-The `process_visit_medications()` database function inserts medication units as TEXT strings, but the `usage_items.unit` column expects values of the `unit` ENUM type.
+✅ **Done!** You can now complete visits without errors.
 
-## Solution
-The function needs to cast the unit value to the proper type using `::unit`.
+---
 
-## How to Apply the Fix
+## What Was Wrong?
 
-### Option 1: Run SQL in Supabase Dashboard (Recommended)
-1. Go to your Supabase project dashboard
-2. Navigate to SQL Editor
-3. Copy and paste the contents of `fix_unit_type.sql`
-4. Click "Run" to execute
+The original function had 3 errors:
 
-### Option 2: Use Supabase CLI (if available)
-```bash
-supabase db push
-```
+1. **Referenced non-existent table** (`stock_level`)
+   - System doesn't have this table
 
-## What Was Changed
-**Line 149 in the function:**
-- **Before:** `COALESCE(v_medication->>'unit', 'ml'),`
-- **After:** `COALESCE(v_medication->>'unit', 'ml')::unit,`
+2. **Referenced non-existent column** (`batches.updated_at`)
+   - Batches table doesn't have this column
 
-This change casts the text value to the proper `unit` ENUM type that the database expects.
+3. **Wrong approach to inventory**
+   - Tried to directly modify `batches.received_qty`
+   - Should only create `usage_items` records
 
-## Files Modified
-1. `/tmp/cc-agent/59000172/project/supabase/migrations/20251118120000_course_medication_deduction_on_completion.sql` - Updated for future reference
-2. `/tmp/cc-agent/59000172/project/fix_unit_type.sql` - Standalone SQL fix to apply now
+## How It Works Now
 
-## After Applying
-Once you run the SQL fix in your database:
-1. Visit completion should work without errors
-2. Medications will be properly recorded
-3. Stock levels will be correctly deducted
+### Correct Flow:
+1. Visit is completed → status = "Baigtas"
+2. Function creates `treatment` record (if needed)
+3. Function creates `usage_items` records for each medication
+4. **Database VIEW** (`stock_by_batch`) automatically calculates:
+   ```
+   on_hand = received_qty - SUM(usage_items.qty)
+   ```
 
-## Testing
-Try finishing a visit with medications to verify the fix works:
-1. Go to Vizitai tab
-2. Select a visit with planned medications
-3. Change status to "Baigtas"
-4. Verify no errors appear
-5. Check that medications were recorded in the treatment history
+### Benefits:
+- ✅ No errors
+- ✅ No double-deduction possible
+- ✅ Inventory automatically accurate
+- ✅ Medications only deducted when visit completed (not when planned)
+- ✅ Clear audit trail via `usage_items`
+
+---
+
+Last Updated: November 26, 2024

@@ -32,18 +32,26 @@
 ## 3. Visit Completion Database Error ⚠️ REQUIRES MANUAL ACTION
 
 **Problem:**
-When completing visits (uzbaigti), error appeared: `relation "stock_level" does not exist`
+When completing visits (uzbaigti), errors appeared:
+1. `relation "stock_level" does not exist`
+2. `column "updated_at" of relation "batches" does not exist`
 
 **Root cause:**
-Migration file `20251118120000_course_medication_deduction_on_completion.sql` incorrectly referenced a non-existent `stock_level` table. The system uses `batches` table for inventory.
+Migration file `20251118120000_course_medication_deduction_on_completion.sql` had multiple errors:
+1. Referenced non-existent `stock_level` table
+2. Tried to update non-existent `batches.updated_at` column
+3. Attempted to directly modify `batches.received_qty` instead of using the view-based system
+
+The system actually uses `usage_items` to track consumption, and a VIEW (`stock_by_batch`) automatically calculates: `on_hand = received_qty - SUM(usage_items.qty)`
 
 **Fixes created:**
 
 ### A. Fixed Migration File ✅
 **File:** `supabase/migrations/20251118120000_course_medication_deduction_on_completion.sql`
-- Updated function to use `batches` table instead of `stock_level`
-- Changed from updating `stock_level.quantity` to `batches.received_qty`
-- This prevents the error in fresh database installations
+- Updated function to ONLY create `usage_items` records
+- Removed direct batch updates
+- Inventory is now calculated automatically by `stock_by_batch` view
+- This prevents errors in fresh database installations
 
 ### B. SQL Fix for Existing Databases ⚠️ ACTION REQUIRED
 **Files created:**
@@ -88,7 +96,8 @@ After applying all fixes, test:
 - ✅ Create a visit with planned medications
 - ✅ Complete the visit (set status to "Baigtas")
 - ✅ No error appears
-- ✅ Inventory is deducted from the batch
+- ✅ `usage_items` records are created
+- ✅ `stock_by_batch` view shows reduced inventory
 - ✅ Treatment record is created automatically
 
 ---

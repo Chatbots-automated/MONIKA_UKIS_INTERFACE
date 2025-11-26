@@ -7,10 +7,15 @@ relation "stock_level" does not exist
 ```
 
 ## Root Cause
-The database migration `20251118120000_course_medication_deduction_on_completion.sql` incorrectly references a non-existent `stock_level` table. The system actually uses the `batches` table for inventory tracking.
+The database migration `20251118120000_course_medication_deduction_on_completion.sql` had multiple errors:
+1. Referenced a non-existent `stock_level` table
+2. Tried to update `batches.updated_at` column which doesn't exist
+3. Attempted to directly modify `batches.received_qty` instead of using the view-based system
+
+The system actually uses `usage_items` to track consumption, and a VIEW (`stock_by_batch`) automatically calculates: `on_hand = received_qty - SUM(usage_items.qty)`
 
 ## Solution
-Run the SQL fix that replaces the function to use the correct `batches` table.
+Run the SQL fix that only creates `usage_items` records. The inventory views will automatically calculate the correct remaining stock.
 
 ---
 
@@ -53,16 +58,25 @@ To get your database password:
 ## What the Fix Does
 
 The fix:
-1. Drops the old `process_visit_medications()` function that references `stock_level`
-2. Creates a new version that correctly uses the `batches` table
-3. Updates `batches.received_qty` to deduct inventory (instead of `stock_level.quantity`)
+1. Drops the old `process_visit_medications()` function with errors
+2. Creates a new version that ONLY creates `usage_items` records
+3. No direct batch updates - inventory is calculated automatically by `stock_by_batch` view
 4. Keeps all other logic intact (planned medications, processing flags, treatment creation)
+
+## How It Works
+
+When a visit is completed:
+1. Function creates a `treatment` record (if needed)
+2. Function creates `usage_items` records for each medication
+3. The `stock_by_batch` VIEW automatically calculates: `on_hand = received_qty - SUM(usage_items.qty)`
+4. No double-deduction possible because we only insert into `usage_items`
 
 ## After Applying the Fix
 
 Once applied, the system will:
 - ✅ Process visit medications without errors
-- ✅ Correctly deduct inventory from batches when visits are completed
+- ✅ Correctly track medication usage via `usage_items`
+- ✅ Inventory automatically reflects usage via views
 - ✅ Create treatment records automatically
 - ✅ Prevent double-deduction with the `medications_processed` flag
 
@@ -73,8 +87,9 @@ Once applied, the system will:
 After applying the fix, test by:
 1. Creating a visit with planned medications
 2. Completing the visit (status = "Baigtas")
-3. Check that inventory is deducted from the batch
-4. Verify no errors appear
+3. Check that `usage_items` records are created
+4. Verify the `stock_by_batch` view shows reduced inventory
+5. Verify no errors appear
 
 ---
 

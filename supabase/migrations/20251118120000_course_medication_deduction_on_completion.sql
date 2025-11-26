@@ -80,13 +80,13 @@ BEGIN
 END $$;
 
 -- Function to process visit medications when status becomes "Baigtas"
+-- Fixed to only create usage_items (inventory is calculated via views)
 CREATE OR REPLACE FUNCTION process_visit_medications()
 RETURNS TRIGGER AS $$
 DECLARE
   v_medication jsonb;
   v_treatment_id uuid;
   v_product record;
-  v_batch record;
 BEGIN
   -- Only process if status is changing TO "Baigtas" and medications haven't been processed yet
   IF NEW.status = 'Baigtas'
@@ -127,17 +127,13 @@ BEGIN
     LOOP
       RAISE NOTICE 'Processing medication: %', v_medication;
 
-      -- Get product details for unit conversion
+      -- Get product details for unit conversion if needed
       SELECT * INTO v_product
       FROM products
       WHERE id = (v_medication->>'product_id')::uuid;
 
-      -- Get batch details
-      SELECT * INTO v_batch
-      FROM batches
-      WHERE id = (v_medication->>'batch_id')::uuid;
-
       -- Create usage_item record if we have a treatment
+      -- The stock_by_batch view will automatically calculate remaining stock
       IF v_treatment_id IS NOT NULL THEN
         INSERT INTO usage_items (
           treatment_id,
@@ -157,47 +153,13 @@ BEGIN
           v_medication->>'teat'
         );
 
-        RAISE NOTICE 'Created usage_item for treatment %', v_treatment_id;
-      END IF;
-
-      -- Deduct from inventory (batches table)
-      -- Convert quantity to primary pack units for proper inventory tracking
-      DECLARE
-        v_qty_in_primary_units decimal;
-        v_current_qty decimal;
-      BEGIN
-        -- Convert used quantity to primary pack units
-        IF v_product.primary_pack_unit = 'ml' AND (v_medication->>'unit') = 'l' THEN
-          v_qty_in_primary_units := (v_medication->>'qty')::decimal * 1000;
-        ELSIF v_product.primary_pack_unit = 'l' AND (v_medication->>'unit') = 'ml' THEN
-          v_qty_in_primary_units := (v_medication->>'qty')::decimal / 1000;
-        ELSIF v_product.primary_pack_unit = 'g' AND (v_medication->>'unit') = 'kg' THEN
-          v_qty_in_primary_units := (v_medication->>'qty')::decimal * 1000;
-        ELSIF v_product.primary_pack_unit = 'kg' AND (v_medication->>'unit') = 'g' THEN
-          v_qty_in_primary_units := (v_medication->>'qty')::decimal / 1000;
-        ELSE
-          v_qty_in_primary_units := (v_medication->>'qty')::decimal;
-        END IF;
-
-        -- Get current batch quantity
-        SELECT received_qty INTO v_current_qty
-        FROM batches
-        WHERE id = (v_medication->>'batch_id')::uuid;
-
-        -- Deduct from batch inventory
-        UPDATE batches
-        SET received_qty = GREATEST(0, received_qty - v_qty_in_primary_units),
-            updated_at = now()
-        WHERE id = (v_medication->>'batch_id')::uuid;
-
-        RAISE NOTICE 'Deducted % % (% in primary units) from batch %. Qty was: %, now: %',
-          v_medication->>'qty',
-          v_medication->>'unit',
-          v_qty_in_primary_units,
+        RAISE NOTICE 'Created usage_item for treatment %. Product: %, Batch: %, Qty: % %',
+          v_treatment_id,
+          v_medication->>'product_id',
           v_medication->>'batch_id',
-          v_current_qty,
-          v_current_qty - v_qty_in_primary_units;
-      END;
+          v_medication->>'qty',
+          COALESCE(v_medication->>'unit', 'ml');
+      END IF;
     END LOOP;
 
     -- Mark medications as processed
@@ -221,4 +183,4 @@ CREATE TRIGGER trigger_process_visit_medications
 COMMENT ON COLUMN animal_visits.planned_medications IS 'JSONB array of medications planned for this visit. Each entry: {product_id, batch_id, qty, unit, purpose, teat}';
 COMMENT ON COLUMN animal_visits.medications_processed IS 'Whether planned medications have been deducted from inventory';
 COMMENT ON COLUMN animal_visits.related_visit_id IS 'Links to the original visit for course treatments';
-COMMENT ON FUNCTION process_visit_medications IS 'Automatically processes planned medications when visit status changes to Baigtas. Deducts from batches.received_qty.';
+COMMENT ON FUNCTION process_visit_medications IS 'Automatically creates usage_items when visit status changes to Baigtas. Inventory is calculated automatically via stock_by_batch view.';
