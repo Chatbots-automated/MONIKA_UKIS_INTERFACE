@@ -1,85 +1,25 @@
 /*
-  # Course Medication Deduction System
+  # Fix Visit Completion Inventory Deduction
 
-  ## Overview
-  This migration implements a system where medications for multi-day treatment courses
-  are only deducted from inventory when each individual visit is marked as "Baigtas" (completed).
-
-  ## Problem Being Solved
-  Previously, when creating a 3-day treatment course with 60ml total (20ml/day):
-  - ALL 60ml was deducted immediately from inventory
-  - If animal died on day 1, only 20ml was actually used but 60ml was recorded as used
-  - This creates inventory discrepancies and compliance issues
+  ## Problem
+  The previous migration referenced a non-existent `stock_level` table.
+  The system actually uses the `batches` table for inventory tracking.
 
   ## Solution
-  1. Store planned medications per visit in JSONB format
-  2. Only deduct medications from inventory when visit status changes to "Baigtas"
-  3. Create proper treatment records with registration numbers when each visit completes
-  4. Track which visits have had their medications processed
+  Replace the function to properly deduct inventory from the batches table
+  instead of the non-existent stock_level table.
 
   ## Changes
-
-  1. **Add planned_medications column to animal_visits**
-     - Stores medications that should be administered during this visit
-     - JSONB array containing: product_id, batch_id, qty, unit, purpose, teat
-     - NULL for visits without planned medications
-
-  2. **Add medications_processed flag to animal_visits**
-     - Tracks whether medications have been deducted from inventory
-     - Prevents double-deduction if status changes multiple times
-
-  3. **Create function to process visit medications**
-     - Called when visit status changes to "Baigtas"
-     - Creates usage_items records
-     - Deducts from inventory
-     - Updates medications_processed flag
-
-  4. **Create trigger on animal_visits status change**
-     - Automatically processes medications when status becomes "Baigtas"
-     - Ensures medications are only processed once
-
-  ## Security
-  - Uses existing RLS policies on animal_visits table
-  - Function runs with SECURITY DEFINER to ensure proper permissions
+  - Drop the old function
+  - Create new function that updates batches.received_qty instead
+  - Keep all other logic the same (planned_medications, processing flag, etc.)
 */
 
--- Add planned_medications column to store medications for each visit
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'animal_visits' AND column_name = 'planned_medications'
-  ) THEN
-    ALTER TABLE public.animal_visits
-    ADD COLUMN planned_medications jsonb NULL;
-  END IF;
-END $$;
-
--- Add flag to track if medications have been processed
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'animal_visits' AND column_name = 'medications_processed'
-  ) THEN
-    ALTER TABLE public.animal_visits
-    ADD COLUMN medications_processed boolean DEFAULT false;
-  END IF;
-END $$;
-
--- Add related_visit_id to link course visits together
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'animal_visits' AND column_name = 'related_visit_id'
-  ) THEN
-    ALTER TABLE public.animal_visits
-    ADD COLUMN related_visit_id uuid REFERENCES public.animal_visits(id) ON DELETE SET NULL;
-  END IF;
-END $$;
+-- Drop the old function that references non-existent table
+DROP FUNCTION IF EXISTS process_visit_medications() CASCADE;
 
 -- Function to process visit medications when status becomes "Baigtas"
+-- Fixed to use batches table instead of stock_level
 CREATE OR REPLACE FUNCTION process_visit_medications()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -217,8 +157,4 @@ CREATE TRIGGER trigger_process_visit_medications
   FOR EACH ROW
   EXECUTE FUNCTION process_visit_medications();
 
--- Add helpful comment
-COMMENT ON COLUMN animal_visits.planned_medications IS 'JSONB array of medications planned for this visit. Each entry: {product_id, batch_id, qty, unit, purpose, teat}';
-COMMENT ON COLUMN animal_visits.medications_processed IS 'Whether planned medications have been deducted from inventory';
-COMMENT ON COLUMN animal_visits.related_visit_id IS 'Links to the original visit for course treatments';
 COMMENT ON FUNCTION process_visit_medications IS 'Automatically processes planned medications when visit status changes to Baigtas. Deducts from batches.received_qty.';
