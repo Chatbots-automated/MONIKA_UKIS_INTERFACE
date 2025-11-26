@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Download } from 'lucide-react';
+import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Download, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -27,12 +27,12 @@ export function VisitsModern() {
   const [withdrawalStatuses, setWithdrawalStatuses] = useState<Map<string, WithdrawalStatus>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<VisitStatus | 'all'>('all');
   const [filterProcedure, setFilterProcedure] = useState<VisitProcedure | 'all'>('all');
   const [filterVet, setFilterVet] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [searchByCollar, setSearchByCollar] = useState<boolean>(true);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   useEffect(() => {
@@ -276,19 +276,23 @@ export function VisitsModern() {
       if (visitDate > toDate) return false;
     }
 
+    // General search (ID, holder, vet, notes)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const matchesAnimal = searchByCollar
-        ? visit.animal?.collar_no?.toLowerCase().includes(term) ||
-          visit.animal?.tag_no?.toLowerCase().includes(term) ||
-          visit.animal?.species.toLowerCase().includes(term) ||
-          visit.animal?.holder_name?.toLowerCase().includes(term)
-        : visit.animal?.tag_no?.toLowerCase().includes(term) ||
-          visit.animal?.species.toLowerCase().includes(term) ||
-          visit.animal?.holder_name?.toLowerCase().includes(term);
+      const matchesAnimal =
+        visit.animal?.tag_no?.toLowerCase().includes(term) ||
+        visit.animal?.species.toLowerCase().includes(term) ||
+        visit.animal?.holder_name?.toLowerCase().includes(term);
       const matchesNotes = visit.notes?.toLowerCase().includes(term);
       const matchesVet = visit.vet_name?.toLowerCase().includes(term);
       if (!matchesAnimal && !matchesNotes && !matchesVet) return false;
+    }
+
+    // Neck number search (exact match on collar_no)
+    if (neckNumberSearch) {
+      const neckTerm = neckNumberSearch.toLowerCase().trim();
+      const collarNo = (visit.animal as any)?.collar_no?.toLowerCase() || (visit.animal as any)?.neck_no?.toLowerCase() || '';
+      if (!collarNo.includes(neckTerm)) return false;
     }
 
     return true;
@@ -427,26 +431,45 @@ export function VisitsModern() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
-            <input
-              type="text"
-              placeholder={searchByCollar ? "Ieškoti pagal kaklo nr., gyvūną, pastabas..." : "Ieškoti pagal gyvūną, pastabas, gydytoją..."}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-            />
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
+            <div className="relative">
+              <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+              <input
+                type="text"
+                placeholder="Ieškoti pagal gyvūną, savininko vardą, pastabas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-1.5 sm:py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+            </div>
+            <div className="relative">
+              <Activity className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-emerald-500 w-4 h-4 sm:w-5 sm:h-5" />
+              <input
+                type="text"
+                placeholder="Ieškoti pagal kaklo numerį..."
+                value={neckNumberSearch}
+                onChange={(e) => setNeckNumberSearch(e.target.value)}
+                className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-1.5 sm:py-2 border-2 border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+              />
+            </div>
           </div>
-          <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={searchByCollar}
-              onChange={(e) => setSearchByCollar(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <span>Ieškoti pagal kaklo numerį</span>
-          </label>
+          {(searchTerm || neckNumberSearch || dateFrom || dateTo || filterStatus !== 'all' || filterProcedure !== 'all' || filterVet !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setNeckNumberSearch('');
+                setDateFrom('');
+                setDateTo('');
+                setFilterStatus('all');
+                setFilterProcedure('all');
+                setFilterVet('all');
+              }}
+              className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Išvalyti filtrus
+            </button>
+          )}
         </div>
       </div>
 
