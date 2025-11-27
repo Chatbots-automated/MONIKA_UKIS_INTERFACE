@@ -69,7 +69,7 @@ WITH treatment_products AS (
     p.id as product_id,
     p.name as product_name,
     p.category,
-    p.unit,
+    p.primary_pack_unit as unit,
     COUNT(ui.id) as usage_count,
     SUM(ui.qty) as total_quantity,
     SUM(ui.qty * COALESCE(b.purchase_price / NULLIF(b.received_qty, 0), 0)) as total_cost
@@ -78,7 +78,7 @@ WITH treatment_products AS (
   JOIN public.products p ON p.id = ui.product_id
   LEFT JOIN public.batches b ON b.id = ui.batch_id
   WHERE t.animal_id IS NOT NULL
-  GROUP BY t.animal_id, p.id, p.name, p.category, p.unit
+  GROUP BY t.animal_id, p.id, p.name, p.category, p.primary_pack_unit
 
   UNION ALL
 
@@ -88,7 +88,7 @@ WITH treatment_products AS (
     p.id as product_id,
     p.name as product_name,
     p.category,
-    p.unit,
+    p.primary_pack_unit as unit,
     COUNT(tc.id) as usage_count,
     SUM(tc.total_dose) as total_quantity,
     SUM(tc.total_dose * COALESCE(bc.purchase_price / NULLIF(bc.received_qty, 0), 0)) as total_cost
@@ -97,7 +97,7 @@ WITH treatment_products AS (
   JOIN public.products p ON p.id = tc.product_id
   LEFT JOIN public.batches bc ON bc.id = tc.batch_id
   WHERE t.animal_id IS NOT NULL
-  GROUP BY t.animal_id, p.id, p.name, p.category, p.unit
+  GROUP BY t.animal_id, p.id, p.name, p.category, p.primary_pack_unit
 ),
 combined_products AS (
   SELECT
