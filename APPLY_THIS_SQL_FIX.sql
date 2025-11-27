@@ -1,30 +1,10 @@
-# Bug Fix: Medicine Cost Analytics Not Including Treatment Courses
+-- =====================================================================
+-- FIX FOR MEDICINE COST BUG
+-- =====================================================================
+-- Problem: Medicine costs from treatment_courses are NOT included
+-- Solution: Update views to include both usage_items AND treatment_courses
+-- =====================================================================
 
-## Problem Identified
-
-The animal cost analytics view (`vw_animal_cost_analytics`) **only calculates costs from `usage_items`** but completely **ignores `treatment_courses`**.
-
-### Example Issue
-For cow **LT000044228034**:
-- Showing: **€0.34 Vaistai (2 gydymai)**
-- Should show: Actual cost including both immediate usage AND course medications
-
-### Root Cause
-The view at line 29-32 in migration `20251111000000_create_animal_analytics_views.sql`:
-```sql
-COALESCE(SUM(ui.qty * COALESCE(b.purchase_price / NULLIF(b.received_qty, 0), 0)), 0) as medicine_cost
-FROM public.treatments t
-LEFT JOIN public.usage_items ui ON ui.treatment_id = t.id
-LEFT JOIN public.batches b ON b.id = ui.batch_id
-```
-
-**Missing**: JOIN to `treatment_courses` table!
-
-## Solution
-
-Run the following SQL in Supabase SQL Editor to fix the views:
-
-```sql
 -- Drop and recreate the view with course support
 DROP VIEW IF EXISTS public.vw_animal_cost_analytics;
 
@@ -143,26 +123,7 @@ SELECT
   total_cost,
   ROW_NUMBER() OVER (PARTITION BY animal_id ORDER BY usage_count DESC) as usage_rank
 FROM combined_products;
-```
 
-## How to Apply
-
-1. Go to your Supabase Dashboard
-2. Navigate to **SQL Editor**
-3. Paste the SQL above
-4. Click **Run**
-5. Refresh the animal detail page
-
-## Expected Result
-
-After applying the fix, the medicine costs in "Išlaidų suvestinė" will correctly include:
-- ✅ Immediate usage from `usage_items`
-- ✅ Course usage from `treatment_courses`
-
-The product usage analytics will also show medications from both sources.
-
-## Impact
-
-- **vw_animal_cost_analytics**: Now includes ALL medication costs
-- **vw_animal_product_usage**: Now shows products used in BOTH immediate usage and courses
-- **AnimalAnalytics component**: Will display correct totals automatically
+-- =====================================================================
+-- DONE! Now refresh the animal detail page to see correct costs.
+-- =====================================================================

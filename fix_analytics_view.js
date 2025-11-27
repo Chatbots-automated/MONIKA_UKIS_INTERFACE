@@ -23,7 +23,7 @@ WITH treatment_costs AS (
     -- Medicine cost from immediate usage (usage_items)
     COALESCE(SUM(ui.qty * COALESCE(b.purchase_price / NULLIF(b.received_qty, 0), 0)), 0) +
     -- Medicine cost from courses (treatment_courses)
-    COALESCE(SUM(tc.total_quantity * COALESCE(bc.purchase_price / NULLIF(bc.received_qty, 0), 0)), 0) as medicine_cost
+    COALESCE(SUM(tc.total_dose * COALESCE(bc.purchase_price / NULLIF(bc.received_qty, 0), 0)), 0) as medicine_cost
   FROM public.treatments t
   LEFT JOIN public.usage_items ui ON ui.treatment_id = t.id
   LEFT JOIN public.batches b ON b.id = ui.batch_id
@@ -97,8 +97,8 @@ WITH treatment_products AS (
     p.category,
     p.unit,
     COUNT(tc.id) as usage_count,
-    SUM(tc.total_quantity) as total_quantity,
-    SUM(tc.total_quantity * COALESCE(bc.purchase_price / NULLIF(bc.received_qty, 0), 0)) as total_cost
+    SUM(tc.total_dose) as total_quantity,
+    SUM(tc.total_dose * COALESCE(bc.purchase_price / NULLIF(bc.received_qty, 0), 0)) as total_cost
   FROM public.treatments t
   JOIN public.treatment_courses tc ON tc.treatment_id = t.id
   JOIN public.products p ON p.id = tc.product_id
