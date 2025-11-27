@@ -99,7 +99,7 @@ export function TeatStatusCard({ animalId }: TeatStatusCardProps) {
     <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
       <h4 className="font-semibold text-gray-900 mb-3">Spenų būsena</h4>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-4">
         {TEAT_POSITIONS.map((teat) => {
           const status = teatStatuses.find(t => t.teat_position === teat.id);
           const isDisabled = status?.is_disabled || false;
@@ -123,21 +123,22 @@ export function TeatStatusCard({ animalId }: TeatStatusCardProps) {
             <div
               key={teat.id}
               className={`
-                relative aspect-square rounded-lg border-2 transition-all
+                relative rounded-lg border-2 transition-all
                 ${bgColor} ${borderColor}
               `}
+              style={{ height: '70px' }}
             >
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-bold text-gray-700">
+                <span className="text-lg font-bold text-gray-700">
                   {teat.label}
                 </span>
-                <span className="text-[10px] text-gray-600 mt-1">
+                <span className="text-[9px] text-gray-600 mt-0.5">
                   {teat.side}
                 </span>
               </div>
 
               {statusLabel && (
-                <div className={`absolute top-1 right-1 text-white text-[10px] px-1.5 py-0.5 rounded ${
+                <div className={`absolute top-1 right-1 text-white text-[9px] px-1.5 py-0.5 rounded ${
                   isDisabled ? 'bg-gray-700' : 'bg-red-600'
                 }`}>
                   {statusLabel}
