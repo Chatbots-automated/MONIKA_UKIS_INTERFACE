@@ -248,17 +248,12 @@ CREATE POLICY "Anyone can view condition codes"
   TO authenticated
   USING (true);
 
-DROP POLICY IF EXISTS "Admins can manage condition codes" ON hoof_condition_codes;
-CREATE POLICY "Admins can manage condition codes"
+DROP POLICY IF EXISTS "Users can manage condition codes" ON hoof_condition_codes;
+CREATE POLICY "Users can manage condition codes"
   ON hoof_condition_codes FOR ALL
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.username = current_user
-      AND users.role = 'admin'
-    )
-  );
+  USING (true)
+  WITH CHECK (true);
 
 -- RLS Policies for hoof_records
 DROP POLICY IF EXISTS "Users can view hoof records" ON hoof_records;
@@ -273,30 +268,18 @@ CREATE POLICY "Users can create hoof records"
   TO authenticated
   WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Users can update their own hoof records" ON hoof_records;
-CREATE POLICY "Users can update their own hoof records"
+DROP POLICY IF EXISTS "Users can update hoof records" ON hoof_records;
+CREATE POLICY "Users can update hoof records"
   ON hoof_records FOR UPDATE
   TO authenticated
-  USING (
-    technician_name = current_user
-    OR EXISTS (
-      SELECT 1 FROM users
-      WHERE users.username = current_user
-      AND users.role IN ('admin', 'veterinarian')
-    )
-  );
+  USING (true)
+  WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Admins can delete hoof records" ON hoof_records;
-CREATE POLICY "Admins can delete hoof records"
+DROP POLICY IF EXISTS "Users can delete hoof records" ON hoof_records;
+CREATE POLICY "Users can delete hoof records"
   ON hoof_records FOR DELETE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.username = current_user
-      AND users.role = 'admin'
-    )
-  );
+  USING (true);
 
 -- Add helpful comments
 COMMENT ON TABLE hoof_condition_codes IS 'Reference table for standardized hoof condition codes used internationally';
