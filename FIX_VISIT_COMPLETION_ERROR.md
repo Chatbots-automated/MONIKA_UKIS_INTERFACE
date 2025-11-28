@@ -15,4 +15,9 @@ This will:
 
 ## After Running
 
-The visits for LT000044225432 and all other APSĖK animals will show as "Atšauktas" (Cancelled) in the UI.
+The visits for LT000044225432 and all other APSĖK animals will be:
+1. Updated to status "Atšauktas" (Cancelled) in the database
+2. **Automatically hidden** from the Vizitai tab to avoid confusion
+3. Still accessible if needed by viewing the database directly
+
+The UI now automatically filters out cancelled visits so they don't show up in the visits list.

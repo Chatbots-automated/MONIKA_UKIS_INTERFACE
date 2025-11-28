@@ -258,6 +258,8 @@ export function VisitsModern() {
   };
 
   const filteredVisits = visits.filter(visit => {
+    // Hide cancelled visits (from auto-cancelled synchronization protocols)
+    if (visit.status === 'Atšauktas') return false;
 
     if (filterStatus !== 'all' && visit.status !== filterStatus) return false;
     if (filterProcedure !== 'all' && !visit.procedures.includes(filterProcedure)) return false;

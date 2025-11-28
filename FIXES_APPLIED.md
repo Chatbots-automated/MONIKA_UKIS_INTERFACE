@@ -1,126 +1,73 @@
 # Summary of Fixes Applied
 
-## 1. Neck Number Search in Animals Tab ✅
-**Location:** `src/components/AnimalsCompact.tsx`
+## Issue: APSĖK Animals Show Active Synchronization Visits
 
-**What was fixed:**
-- Changed neck number search from partial match to exact match
-- Before: searching "1" would show animals with collar numbers 1, 10, 100, 103, 186, etc.
-- After: searching "1" only shows animals with exact collar number 1
+### Root Causes Identified:
+1. **Database trigger was never applied** - The migration file existed but wasn't executed
+2. **SQL function had a bug** - The WHERE clause for updating visits was incorrect
+3. **UI showed cancelled visits** - No filtering to hide cancelled visits
 
-**Lines changed:** Line 217
+### Fixes Implemented:
 
----
-
-## 2. Neck Number Search in Vaccinations Tab ✅
-**Location:** `src/components/Vaccinations.tsx`
-
-**What was added:**
-- Added GEA collar data loading from `gea_daily` table
-- Added neck number search field (green/emerald border)
-- Added exact match filtering for neck numbers
-- Updated "Clear filters" button to also clear neck number search
-
-**Visual layout:**
-- Left field: Search by ID, holder name (gray border)
-- Right field: Search by neck/collar number (emerald border)
-
-**Lines changed:** Multiple lines in state management, data loading, filtering, and UI
-
----
-
-## 3. Visit Completion Database Error ⚠️ REQUIRES MANUAL ACTION
-
-**Problem:**
-When completing visits (uzbaigti), errors appeared:
-1. `relation "stock_level" does not exist`
-2. `column "updated_at" of relation "batches" does not exist`
-
-**Root cause:**
-Migration file `20251118120000_course_medication_deduction_on_completion.sql` had multiple errors:
-1. Referenced non-existent `stock_level` table
-2. Tried to update non-existent `batches.updated_at` column
-3. Attempted to directly modify `batches.received_qty` instead of using the view-based system
-
-The system actually uses `usage_items` to track consumption, and a VIEW (`stock_by_batch`) automatically calculates: `on_hand = received_qty - SUM(usage_items.qty)`
-
-**Fixes created:**
-
-### A. Fixed Migration File ✅
-**File:** `supabase/migrations/20251118120000_course_medication_deduction_on_completion.sql`
-- Updated function to ONLY create `usage_items` records
-- Removed direct batch updates
-- Inventory is now calculated automatically by `stock_by_batch` view
-- This prevents errors in fresh database installations
-
-### B. SQL Fix for Existing Databases ⚠️ ACTION REQUIRED
-**Files created:**
-- `fix_visit_medications.sql` - The SQL to run
-- `apply_visit_fix_pg.js` - Optional script to apply fix via command line
-- `FIX_VISIT_COMPLETION_ERROR.md` - Detailed instructions
-
-**What you need to do:**
-
-#### Option 1: Manual (RECOMMENDED)
-1. Go to: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/editor
-2. Click "New Query"
-3. Copy contents of `fix_visit_medications.sql`
-4. Paste and run
-
-#### Option 2: Command Line
-```bash
-DB_PASSWORD=your_password node apply_visit_fix_pg.js
+#### 1. Database Function Fix (`fix_visit_fix.sql`)
+**Problem:** The original function had this buggy WHERE clause:
+```sql
+WHERE sync_step_id IN (...)
+AND status != 'Baigtas';  -- Doesn't properly match planned visits
 ```
 
-Get your password from:
-https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/settings/database
+**Solution:** Changed to explicitly target planned visits:
+```sql
+WHERE sync_step_id IN (...)
+AND status IN ('Planuojamas', 'Suplanuota');  -- Explicitly cancel only planned visits
+```
 
----
+#### 2. UI Filter Added (`VisitsModern.tsx`)
+**Problem:** Cancelled visits were still showing in the Vizitai tab, causing confusion
 
-## Testing Checklist
+**Solution:** Added automatic filter to hide cancelled visits:
+```typescript
+const filteredVisits = visits.filter(visit => {
+  // Hide cancelled visits (from auto-cancelled synchronization protocols)
+  if (visit.status === 'Atšauktas') return false;
+  // ... rest of filters
+});
+```
 
-After applying all fixes, test:
+#### 3. Visual Indicators (Already Implemented)
+- APSĖK status shows with green badge
+- Warning message: "Visi aktyvūs sinchronizacijos protokolai automatiškai atšaukiami"
+- Prevention of new protocol creation for APSĖK animals
+- Real-time GEA status monitoring
 
-### Animals Tab
-- ✅ Search for neck number "1" - should show only exact match
-- ✅ Search for neck number "10" - should show only exact match
-- ✅ Clear search - should show all animals
+### How It Works:
 
-### Vaccinations Tab
-- ✅ Search by ID/holder name in left field
-- ✅ Search by exact neck number in right field
-- ✅ Both searches work together
-- ✅ "Clear filters" button clears both searches
+**For Existing APSĖK Animals:**
+1. Run `fix_visit_fix.sql` in Supabase SQL Editor
+2. Function is corrected
+3. All visits for APSĖK animals are updated to status "Atšauktas"
+4. UI automatically hides these cancelled visits
 
-### Visit Completion
-- ✅ Create a visit with planned medications
-- ✅ Complete the visit (set status to "Baigtas")
-- ✅ No error appears
-- ✅ `usage_items` records are created
-- ✅ `stock_by_batch` view shows reduced inventory
-- ✅ Treatment record is created automatically
+**For Future Status Changes (Automatic):**
+1. When any animal's GEA status changes to APSĖK
+2. Database trigger fires automatically
+3. All active synchronization protocols cancelled
+4. Pending visits marked as "Atšauktas"
+5. UI hides them automatically
+6. User sees notification toast
+7. No manual intervention needed
 
----
+### Files to Run:
+1. **`fix_visit_fix.sql`** - Run this in Supabase SQL Editor to fix the database
 
-## Files Modified
+### Expected Result:
+After running the SQL script and refreshing the UI:
+- Animal LT000044225432 will show no synchronization visits in the Vizitai tab
+- The GEA status card will still show the APSĖK warning
+- All other APSĖK animals will also have their visits hidden
+- Future APSĖK status changes will automatically cancel and hide visits
 
-1. `src/components/AnimalsCompact.tsx` - Exact neck number search
-2. `src/components/Vaccinations.tsx` - Added neck number search field
-3. `supabase/migrations/20251118120000_course_medication_deduction_on_completion.sql` - Fixed for future installs
-
-## Files Created
-
-1. `fix_visit_medications.sql` - SQL fix to apply
-2. `apply_visit_fix_pg.js` - Script to apply fix
-3. `FIX_VISIT_COMPLETION_ERROR.md` - Detailed instructions
-4. `FIXES_APPLIED.md` - This summary file
-
----
-
-## Current Status
-
-- ✅ Neck number search in Animals tab - COMPLETE
-- ✅ Neck number search in Vaccinations tab - COMPLETE
-- ⚠️ Visit completion error - FIX READY, NEEDS TO BE APPLIED
-
-**Next step:** Apply the database fix using one of the methods in `FIX_VISIT_COMPLETION_ERROR.md`
+### No Medicine Stock Impact:
+- Completed visits (already administered medicine) keep their stock deductions
+- Cancelled visits (not yet administered) do NOT deduct stock
+- Medicine inventory remains accurate
