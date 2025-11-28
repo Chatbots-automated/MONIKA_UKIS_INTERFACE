@@ -7,6 +7,7 @@ import { Products } from './components/Products';
 import { AnimalsCompact as Animals } from './components/AnimalsCompact';
 import { VisitsModern as Visits } from './components/VisitsModern';
 import { Synchronizations } from './components/Synchronizations';
+import { Hoofs } from './components/Hoofs';
 import { Suppliers } from './components/Suppliers';
 import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
@@ -143,6 +144,8 @@ function App() {
         return <Animals />;
       case 'visits':
         return <Visits />;
+      case 'hoofs':
+        return <Hoofs />;
       case 'synchronizations':
         return <Synchronizations />;
       case 'suppliers':
