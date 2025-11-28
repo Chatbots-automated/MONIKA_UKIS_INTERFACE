@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SynchronizationStepWithDetails, Animal } from '../lib/types';
 import { formatDateLT, formatDateTimeLT } from '../lib/formatters';
@@ -21,6 +21,7 @@ export function Synchronizations() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
@@ -105,15 +106,27 @@ export function Synchronizations() {
   };
 
   const filteredSteps = syncSteps.filter(step => {
-    if (!searchTerm) return true;
     const animal = step.animal;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      animal?.tag_no?.toLowerCase().includes(searchLower) ||
-      animal?.collar_no?.toString().includes(searchLower) ||
-      step.step_name?.toLowerCase().includes(searchLower) ||
-      step.protocol_name?.toLowerCase().includes(searchLower)
-    );
+
+    // General search (tag_no, step name, protocol name)
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesGeneral = (
+        animal?.tag_no?.toLowerCase().includes(searchLower) ||
+        step.step_name?.toLowerCase().includes(searchLower) ||
+        step.protocol_name?.toLowerCase().includes(searchLower)
+      );
+      if (!matchesGeneral) return false;
+    }
+
+    // Neck number search (exact match on collar_no)
+    if (neckNumberSearch) {
+      const neckTerm = neckNumberSearch.toLowerCase().trim();
+      const collarNo = animal?.collar_no?.toString().toLowerCase() || '';
+      if (!collarNo.includes(neckTerm)) return false;
+    }
+
+    return true;
   });
 
   const getStatusColor = (step: SyncStepDisplay) => {
@@ -145,7 +158,7 @@ export function Synchronizations() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Sinchronizacijos</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -157,6 +170,19 @@ export function Synchronizations() {
             />
           </div>
 
+          <div className="relative">
+            <Activity className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-500 w-5 h-5" />
+            <input
+              type="text"
+              value={neckNumberSearch}
+              onChange={(e) => setNeckNumberSearch(e.target.value)}
+              placeholder="Ieškoti pagal kaklo numerį..."
+              className="w-full pl-10 pr-4 py-2 border-2 border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <select
               value={filterDate}
@@ -199,6 +225,18 @@ export function Synchronizations() {
             </select>
           </div>
         </div>
+
+        {(searchTerm || neckNumberSearch) && (
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              setNeckNumberSearch('');
+            }}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium mb-4"
+          >
+            Išvalyti paieškos filtrus
+          </button>
+        )}
       </div>
 
       {loading ? (
