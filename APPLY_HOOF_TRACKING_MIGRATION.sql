@@ -158,7 +158,11 @@ SELECT
     ORDER BY COUNT(*) DESC
     LIMIT 1
   ) as most_common_condition,
-  EXTRACT(DAY FROM CURRENT_DATE - MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true))::integer as days_since_last_trim
+  CASE
+    WHEN MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true) IS NOT NULL
+    THEN EXTRACT(DAY FROM CURRENT_DATE - MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true))::integer
+    ELSE NULL
+  END as days_since_last_trim
 FROM animals a
 LEFT JOIN hoof_records hr ON hr.animal_id = a.id
 GROUP BY a.id, a.tag_no, a.species;
