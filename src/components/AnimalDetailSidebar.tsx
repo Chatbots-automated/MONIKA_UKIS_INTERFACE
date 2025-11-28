@@ -2071,6 +2071,40 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         });
       }
     }
+
+    // Load existing hoof records if visit has Nagai procedure
+    if (visitToEdit.procedures.includes('Nagai')) {
+      const { data: hoofRecords } = await supabase
+        .from('hoof_records')
+        .select('*')
+        .eq('visit_id', visitToEdit.id);
+
+      if (hoofRecords && hoofRecords.length > 0) {
+        const firstRecord = hoofRecords[0];
+        setHoofData({
+          examination_date: firstRecord.examination_date || new Date().toISOString().split('T')[0],
+          technician_name: firstRecord.technician_name || '',
+          general_notes: firstRecord.notes || '',
+          examinations: hoofRecords.map((record: any) => ({
+            leg: record.leg,
+            claw: record.claw,
+            condition_code: record.condition_code,
+            severity: record.severity || 0,
+            was_trimmed: record.was_trimmed || false,
+            was_treated: record.was_treated || false,
+            treatment_product_id: record.treatment_product_id || undefined,
+            treatment_batch_id: record.treatment_batch_id || undefined,
+            treatment_quantity: record.treatment_quantity?.toString() || undefined,
+            treatment_unit: record.treatment_unit || undefined,
+            treatment_notes: record.treatment_notes || undefined,
+            bandage_applied: record.bandage_applied || false,
+            requires_followup: record.requires_followup || false,
+            followup_date: record.followup_date || undefined,
+            notes: record.notes || undefined,
+          })),
+        });
+      }
+    }
   };
 
   const loadResources = async () => {
@@ -2204,6 +2238,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
     if (formData.procedures.includes('Vakcina') && vaccinationData.vaccines.length === 0) {
       alert('Vakcinai reikia pasirinkti bent vieną produktą');
+      return;
+    }
+
+    if (formData.procedures.includes('Nagai') && hoofData.examinations.length === 0) {
+      alert('Nagų apžiūrai reikia apžiūrėti bent vieną nagą');
       return;
     }
 
@@ -2777,6 +2816,93 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               console.log(`✅ Created ${futureVisits.length} future prevention visits with planned medications`);
             }
           }
+        }
+      }
+
+      // 5. If Nagai procedure, create hoof examination records
+      if (formData.procedures.includes('Nagai')) {
+        for (const exam of hoofData.examinations) {
+          if (!exam.condition_code) {
+            throw new Error('Visi nagų įrašai turi turėti būklės kodą');
+          }
+
+          const { data: hoofRecord, error: hoofError } = await supabase
+            .from('hoof_records')
+            .insert({
+              animal_id: animalId,
+              examination_date: hoofData.examination_date,
+              leg: exam.leg,
+              claw: exam.claw,
+              condition_code: exam.condition_code,
+              severity: exam.severity,
+              was_trimmed: exam.was_trimmed,
+              was_treated: exam.was_treated,
+              treatment_product_id: exam.treatment_product_id || null,
+              treatment_batch_id: exam.treatment_batch_id || null,
+              treatment_quantity: exam.treatment_quantity ? parseFloat(exam.treatment_quantity) : null,
+              treatment_unit: exam.treatment_unit || null,
+              treatment_notes: exam.treatment_notes || null,
+              bandage_applied: exam.bandage_applied,
+              requires_followup: exam.requires_followup,
+              followup_date: exam.followup_date || null,
+              followup_completed: false,
+              technician_name: hoofData.technician_name || null,
+              notes: exam.notes || null,
+              visit_id: visitData.id,
+            })
+            .select()
+            .single();
+
+          if (hoofError) throw hoofError;
+
+          await logAction('create_hoof_record', 'hoof_records', hoofRecord.id);
+
+          // If treatment was applied and product/batch selected, deduct from inventory
+          if (exam.was_treated && exam.treatment_product_id && exam.treatment_batch_id && exam.treatment_quantity) {
+            await supabase
+              .from('biocide_usage')
+              .insert({
+                product_id: exam.treatment_product_id,
+                batch_id: exam.treatment_batch_id,
+                use_date: hoofData.examination_date,
+                purpose: `Nagų gydymas - ${exam.leg} ${exam.claw === 'inner' ? 'Vidinis' : 'Išorinis'}`,
+                work_scope: `Gyvūnas: ${animalId}, Būklė: ${exam.condition_code}`,
+                qty: parseFloat(exam.treatment_quantity),
+                unit: exam.treatment_unit!,
+                used_by_name: hoofData.technician_name || formData.vet_name || null,
+              });
+          }
+
+          // If follow-up required, create a planned visit
+          if (exam.requires_followup && exam.followup_date) {
+            const { error: followupVisitError } = await supabase
+              .from('animal_visits')
+              .insert({
+                animal_id: animalId,
+                visit_datetime: `${exam.followup_date}T10:00:00`,
+                procedures: ['Nagai'],
+                status: 'Planuojamas',
+                notes: `Nagų pakartotinė apžiūra - ${exam.leg} ${exam.claw === 'inner' ? 'Vidinis' : 'Išorinis'} (${exam.condition_code})`,
+                vet_name: hoofData.technician_name || formData.vet_name || null,
+                next_visit_required: false,
+                treatment_required: false,
+              });
+
+            if (followupVisitError) {
+              console.error('Error creating follow-up visit:', followupVisitError);
+            }
+          }
+        }
+
+        // Add general notes to visit if provided
+        if (hoofData.general_notes) {
+          await supabase
+            .from('animal_visits')
+            .update({
+              notes: (visitData.notes ? visitData.notes + '\n\n' : '') +
+                     `Nagų apžiūros pastabos:\n${hoofData.general_notes}`
+            })
+            .eq('id', visitData.id);
         }
       }
 
