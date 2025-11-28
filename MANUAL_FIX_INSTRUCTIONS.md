@@ -1,51 +1,26 @@
-# Manual Fix Required: Cancel Existing APSĖK Synchronization Protocols
+# CRITICAL: Apply This Fix Immediately
 
 ## Problem
-The database trigger we created only fires when the GEA status **changes** to APSĖK. 
-Animals that already have APSĖK status before the trigger was created still have active synchronization protocols.
+The animal "LT000044225432" and other animals with APSĖK status still show active synchronization visits because:
+1. The database trigger only fires when status **changes** to APSĖK
+2. Animals that already had APSĖK status before the trigger was created weren't affected
+3. The migration was never applied to the database
 
-## Solution Steps
+## SOLUTION - ONE SIMPLE STEP
 
-### Step 1: Apply the Migration
-The migration file has been created at:
-`supabase/migrations/20251128000000_auto_cancel_sync_on_apsek.sql`
+### Run This SQL Script in Supabase SQL Editor
 
-You need to apply this migration to your database first.
+Open the file **`APPLY_THIS_SQL_FIX.sql`** in this project folder and copy/paste the entire contents into your Supabase SQL Editor, then click "Run".
 
-### Step 2: Run One-Time Cleanup Script
-After applying the migration, run this SQL script in your Supabase SQL Editor:
+This single script will:
+1. ✅ Create the database functions
+2. ✅ Create the automatic trigger
+3. ✅ Fix all existing APSĖK animals (including LT000044225432)
+4. ✅ Show you a summary of what was fixed
 
-```sql
--- One-time cleanup: Cancel all active synchronization protocols 
--- for animals that already have APSEK status
+**That's it!** One SQL script fixes everything - both existing data and future automatic cancellations.
 
-DO $$
-DECLARE
-  v_animal_record RECORD;
-  v_cancelled_count INTEGER;
-  v_total_cancelled INTEGER := 0;
-BEGIN
-  -- Find all animals with APSEK status
-  FOR v_animal_record IN
-    SELECT DISTINCT animal_id
-    FROM gea_daily
-    WHERE statusas = 'APSĖK'
-  LOOP
-    -- Cancel protocols for each animal
-    SELECT cancel_animal_synchronization_protocols(v_animal_record.animal_id)
-    INTO v_cancelled_count;
-    
-    IF v_cancelled_count > 0 THEN
-      v_total_cancelled := v_total_cancelled + v_cancelled_count;
-      RAISE NOTICE 'Cancelled % protocol(s) for animal %', v_cancelled_count, v_animal_record.animal_id;
-    END IF;
-  END LOOP;
-  
-  RAISE NOTICE 'Total protocols cancelled: %', v_total_cancelled;
-END $$;
-```
-
-### Step 3: Verify
+### Verify the Fix
 After running the cleanup script:
 1. Navigate to the animal "LT000044225432"
 2. Check the Vizitai tab

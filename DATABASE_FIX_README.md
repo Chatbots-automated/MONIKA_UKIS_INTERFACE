@@ -1,81 +1,37 @@
-# Database Fix - Visit Completion Error
+# 🚨 IMPORTANT: Database Fix Required
 
-## Quick Summary
+## What You Need to Do
 
-**Problem:** Errors when completing visits (uzbaigti)
-**Solution:** Run the SQL fix in Supabase Dashboard
-**Time:** 2 minutes
+1. **Open Supabase SQL Editor**
+   - Go to your Supabase dashboard
+   - Click on "SQL Editor" in the left sidebar
 
----
+2. **Run the Fix Script**
+   - Open the file `APPLY_THIS_SQL_FIX.sql` from this project
+   - Copy the entire contents
+   - Paste it into the Supabase SQL Editor
+   - Click "Run" button
 
-## Step-by-Step Fix
+3. **Done!**
+   - The script will output messages showing which animals were fixed
+   - Check animal "LT000044225432" - the visits should now be cancelled
 
-### 1. Open Supabase SQL Editor
+## What This Does
 
-Go to: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/editor
+### Fixes Existing Data
+- Cancels all active synchronization protocols for animals that already have APSĖK status
+- Marks their pending visits as "Atšauktas" (Cancelled)
+- Does NOT deduct medicine from stock for cancelled visits
 
-### 2. Create New Query
+### Sets Up Automatic Future Handling
+- Creates a database trigger that watches for GEA status changes
+- Automatically cancels protocols when ANY animal's status becomes APSĖK
+- Works in real-time, no manual intervention needed going forward
 
-Click the **"New Query"** button
+## Why This is Needed
 
-### 3. Copy the SQL Fix
+The UI shows the warning "Visi aktyvūs sinchronizacijos protokolai automatiškai atšaukiami" but the database trigger wasn't actually created yet. This script creates the trigger AND fixes all existing data in one go.
 
-Open the file: `fix_visit_medications.sql`
+## Questions?
 
-Copy ALL contents (Ctrl+A, Ctrl+C)
-
-### 4. Paste and Run
-
-Paste into the SQL Editor (Ctrl+V)
-
-Click **"Run"** button (or press Ctrl+Enter)
-
-### 5. Verify Success
-
-You should see messages like:
-```
-NOTICE: DROP FUNCTION
-NOTICE: CREATE FUNCTION
-NOTICE: DROP TRIGGER
-NOTICE: CREATE TRIGGER
-```
-
-✅ **Done!** You can now complete visits without errors.
-
----
-
-## What Was Wrong?
-
-The original function had 3 errors:
-
-1. **Referenced non-existent table** (`stock_level`)
-   - System doesn't have this table
-
-2. **Referenced non-existent column** (`batches.updated_at`)
-   - Batches table doesn't have this column
-
-3. **Wrong approach to inventory**
-   - Tried to directly modify `batches.received_qty`
-   - Should only create `usage_items` records
-
-## How It Works Now
-
-### Correct Flow:
-1. Visit is completed → status = "Baigtas"
-2. Function creates `treatment` record (if needed)
-3. Function creates `usage_items` records for each medication
-4. **Database VIEW** (`stock_by_batch`) automatically calculates:
-   ```
-   on_hand = received_qty - SUM(usage_items.qty)
-   ```
-
-### Benefits:
-- ✅ No errors
-- ✅ No double-deduction possible
-- ✅ Inventory automatically accurate
-- ✅ Medications only deducted when visit completed (not when planned)
-- ✅ Clear audit trail via `usage_items`
-
----
-
-Last Updated: November 26, 2024
+See `MANUAL_FIX_INSTRUCTIONS.md` for detailed technical information.
