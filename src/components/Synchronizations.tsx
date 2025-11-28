@@ -32,8 +32,27 @@ export function Synchronizations() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const allAnimals = await fetchAllRows<Animal>('animals', '*', 'tag_no');
-      setAnimals(allAnimals);
+      // Load animals and GEA data in parallel
+      const [allAnimals, geaData] = await Promise.all([
+        fetchAllRows<Animal>('animals', '*', 'tag_no'),
+        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'animal_id')
+      ]);
+
+      // Create a map of animal_id to collar_no (get the latest collar_no for each animal)
+      const collarMap = new Map<string, number>();
+      geaData.forEach(gea => {
+        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+          collarMap.set(gea.animal_id, gea.collar_no);
+        }
+      });
+
+      // Enrich animals with collar numbers
+      const enrichedAnimals = allAnimals.map(animal => ({
+        ...animal,
+        collar_no: collarMap.get(animal.id)
+      }));
+
+      setAnimals(enrichedAnimals);
 
       const today = new Date().toISOString().split('T')[0];
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -82,7 +101,7 @@ export function Synchronizations() {
 
         const enrichedSteps = stepsData.map(step => {
           const sync = syncsMap.get(step.synchronization_id);
-          const animal = allAnimals.find(a => a.id === sync?.animal_id);
+          const animal = enrichedAnimals.find(a => a.id === sync?.animal_id);
           return {
             ...step,
             animal,
