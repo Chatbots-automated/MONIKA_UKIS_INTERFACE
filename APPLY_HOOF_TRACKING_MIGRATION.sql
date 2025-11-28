@@ -192,7 +192,6 @@ SELECT
   hr.id as hoof_record_id,
   hr.animal_id,
   a.tag_no,
-  a.collar_no,
   hr.examination_date,
   hr.followup_date,
   hr.leg,
@@ -216,7 +215,6 @@ CREATE OR REPLACE VIEW hoof_recurring_problems AS
 SELECT
   hr1.animal_id,
   a.tag_no,
-  a.collar_no,
   hr1.leg,
   hr1.claw,
   hr1.condition_code,
