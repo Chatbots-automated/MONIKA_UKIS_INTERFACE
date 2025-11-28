@@ -19,16 +19,34 @@ import { TreatmentHistory } from './components/TreatmentHistory';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { InvoiceViewer } from './components/InvoiceViewer';
+import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro } from 'lucide-react';
 
 type Module = 'veterinarija' | 'islaidos' | 'admin' | null;
 
+interface Notification {
+  id: string;
+  message: string;
+  type: NotificationType;
+}
+
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedModule, setSelectedModule] = useState<Module>(null);
+  const [notification, setNotification] = useState<Notification | null>(null);
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    setNotificationCallback((message: string, type: NotificationType) => {
+      setNotification({
+        id: Date.now().toString(),
+        message,
+        type,
+      });
+    });
+  }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -153,6 +171,10 @@ function App() {
       >
         {renderView()}
       </Layout>
+      <NotificationToast
+        notification={notification}
+        onDismiss={() => setNotification(null)}
+      />
     </RealtimeProvider>
   );
 }

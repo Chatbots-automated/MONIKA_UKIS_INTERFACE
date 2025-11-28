@@ -34,12 +34,14 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   const [todayStepData, setTodayStepData] = useState<{[key: number]: {batchId: string, dosage: string, unit: string}}>({});
   const [globalDosage, setGlobalDosage] = useState<string>('');
   const [globalUnit, setGlobalUnit] = useState<string>('ml');
+  const [geaStatus, setGeaStatus] = useState<string | null>(null);
 
   useEffect(() => {
     loadProtocols();
     loadActiveSync();
     loadProducts();
     loadBatches();
+    loadGeaStatus();
   }, [animalId]);
 
   const loadProtocols = async () => {
@@ -102,9 +104,28 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     }
   };
 
+  const loadGeaStatus = async () => {
+    const { data } = await supabase
+      .from('gea_daily')
+      .select('statusas')
+      .eq('animal_id', animalId)
+      .order('snapshot_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      setGeaStatus(data.statusas);
+    }
+  };
+
   const handleCreateProtocol = async () => {
     if (!selectedProtocolId) {
       alert('Pasirinkite protokolą');
+      return;
+    }
+
+    if (geaStatus === 'APSĖK') {
+      alert('Negalima pradėti sinchronizacijos protokolo: gyvūnas jau apsėklintas (APSĖK statusas)');
       return;
     }
 
@@ -551,12 +572,30 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     );
   }
 
+  const isApsek = geaStatus === 'APSĖK';
+
   return (
     <div className="space-y-4">
+      {isApsek && !activeSync && (
+        <div className="bg-green-100 border-2 border-green-400 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-green-800">
+              <p className="font-semibold mb-1">Gyvūnas apsėklintas</p>
+              <p className="text-xs">Sinchronizacijos protokolai negalimi, nes gyvūnas jau turi APSĖK statusą</p>
+            </div>
+          </div>
+        </div>
+      )}
       {!showCreateForm ? (
         <button
           onClick={() => setShowCreateForm(true)}
-          className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 font-medium"
+          disabled={isApsek}
+          className={`w-full px-4 py-3 rounded-lg flex items-center justify-center gap-2 font-medium ${
+            isApsek
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-purple-600 text-white hover:bg-purple-700'
+          }`}
         >
           <Plus className="w-5 h-5" />
           Pradėti sinchronizacijos protokolą

@@ -10,6 +10,7 @@ import { TeatStatusCard } from './TeatStatusCard';
 import { TeatDisplay, TeatSelector } from './TeatSelector';
 import { SynchronizationProtocolComponent } from './SynchronizationProtocol';
 import { SearchableSelect } from './SearchableSelect';
+import { showNotification } from './NotificationToast';
 
 interface Vaccination {
   id: string;
@@ -138,12 +139,41 @@ function WithdrawalStatusCard({ animalId }: { animalId: string }) {
   );
 }
 
-function GeaDailyCard({ animalId }: { animalId: string }) {
+function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatusChange?: () => void }) {
   const [geaData, setGeaData] = useState<GeaDaily | null>(null);
   const [loading, setLoading] = useState(true);
+  const [prevStatus, setPrevStatus] = useState<string | null>(null);
 
   useEffect(() => {
     loadGeaData();
+
+    const channel = supabase
+      .channel(`gea_daily_${animalId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gea_daily',
+          filter: `animal_id=eq.${animalId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const newData = payload.new as GeaDaily;
+            setGeaData(newData);
+
+            if (newData.statusas === 'APSĖK' && prevStatus !== 'APSĖK') {
+              onStatusChange?.();
+            }
+            setPrevStatus(newData.statusas);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [animalId]);
 
   const loadGeaData = async () => {
@@ -158,6 +188,7 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
 
       if (error) throw error;
       setGeaData(data);
+      setPrevStatus(data?.statusas || null);
     } catch (error) {
       console.error('Error loading GEA data:', error);
     } finally {
@@ -209,15 +240,35 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
     return diffDays;
   })() : null;
 
+  const isApsek = geaData.statusas === 'APSĖK';
+
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm">
+    <div className={`bg-gradient-to-br ${isApsek ? 'from-green-50 to-emerald-50 border-green-300' : 'from-purple-50 to-pink-50 border-purple-200'} border-2 rounded-xl p-5 shadow-sm`}>
       <div className="flex items-center gap-2 mb-4">
-        <Milk className="w-5 h-5 text-purple-600" />
+        <Milk className={`w-5 h-5 ${isApsek ? 'text-green-600' : 'text-purple-600'}`} />
         <h3 className="font-bold text-gray-900 text-lg">GEA Duomenys</h3>
+        {isApsek && (
+          <span className="ml-2 px-2 py-1 bg-green-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            APSĖKLINTAS
+          </span>
+        )}
         <span className="text-xs text-gray-500 ml-auto">
           {formatDateLT(geaData.snapshot_date)}
         </span>
       </div>
+
+      {isApsek && (
+        <div className="bg-green-100 border-2 border-green-400 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-green-800">
+              <p className="font-semibold mb-1">Gyvūnas apsėklintas</p>
+              <p className="text-xs">Visi aktyvūs sinchronizacijos protokolai automatiškai atšaukiami</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white rounded-lg p-3 border border-purple-100">
@@ -228,9 +279,9 @@ function GeaDailyCard({ animalId }: { animalId: string }) {
           <span className="text-xs text-gray-500 block mb-1">Kaklo Nr.</span>
           <span className="font-bold text-gray-900 text-lg">{geaData.collar_no || '-'}</span>
         </div>
-        <div className="bg-white rounded-lg p-3 border border-purple-100">
+        <div className={`bg-white rounded-lg p-3 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-purple-100'}`}>
           <span className="text-xs text-gray-500 block mb-1">Statusas</span>
-          <span className="font-bold text-gray-900 text-lg">{geaData.statusas || '-'}</span>
+          <span className={`font-bold text-lg ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>{geaData.statusas || '-'}</span>
         </div>
         <div className="bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-xs text-gray-500 block mb-1">Grupė</span>
@@ -446,6 +497,14 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       const sortedData = sortByLithuanian(data, 'name');
       setProducts(sortedData);
     }
+  };
+
+  const handleApsekStatusChange = () => {
+    showNotification(
+      'Sinchronizacijos protokolai automatiškai atšaukti dėl APSĖK statuso',
+      'warning'
+    );
+    loadVisits();
   };
 
   // Categorize all visits by time
@@ -671,7 +730,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
 
             <TeatStatusCard animalId={animal.id} />
 
-            <GeaDailyCard animalId={animal.id} />
+            <GeaDailyCard animalId={animal.id} onStatusChange={handleApsekStatusChange} />
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
