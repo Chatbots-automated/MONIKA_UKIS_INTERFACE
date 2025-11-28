@@ -47,8 +47,6 @@ export function Vaccinations() {
     batch_id: '',
     dose_amount: '',
     unit: 'ml' as Unit,
-    is_course: false,
-    course_days: '1',
   }]);
 
   const [massVaccinationData, setMassVaccinationData] = useState({
@@ -168,130 +166,52 @@ export function Vaccinations() {
 
     try {
       const allVaccinationEntries = [];
-      const allVisits = [];
 
       for (const vaccine of validVaccines) {
-        // Check if this is a course (multiple days)
-        if (vaccine.is_course && parseInt(vaccine.course_days) > 1) {
-          const days = parseInt(vaccine.course_days);
-          const dailyDose = parseFloat(vaccine.dose_amount) / days;
-          const selectedProduct = products.find(p => p.id === vaccine.product_id);
+        const vaccinationEntries = Array.from(selectedAnimals).map(animalId => ({
+          animal_id: animalId,
+          product_id: vaccine.product_id,
+          batch_id: vaccine.batch_id || null,
+          vaccination_date: massVaccinationData.vaccination_date,
+          next_booster_date: massVaccinationData.next_booster_date || null,
+          dose_number: parseInt(massVaccinationData.dose_number),
+          dose_amount: parseFloat(vaccine.dose_amount),
+          unit: vaccine.unit,
+          administered_by: massVaccinationData.administered_by || null,
+          notes: massVaccinationData.notes || null,
+        }));
 
-          // Create a treatment course for each animal
-          for (const animalId of Array.from(selectedAnimals)) {
-            const { data: course, error: courseError } = await supabase
-              .from('treatment_courses')
-              .insert({
-                animal_id: animalId,
-                product_id: vaccine.product_id,
-                batch_id: vaccine.batch_id,
-                total_dose: parseFloat(vaccine.dose_amount),
-                daily_dose: dailyDose,
-                unit: vaccine.unit,
-                duration_days: days,
-                start_date: massVaccinationData.vaccination_date,
-                purpose: 'prevention',
-              })
-              .select()
-              .single();
+        allVaccinationEntries.push(...vaccinationEntries);
+      }
 
-            if (courseError) throw courseError;
+      const { error } = await supabase.from('vaccinations').insert(allVaccinationEntries);
 
-            // Create visits for each day of the course
-            for (let dayOffset = 0; dayOffset < days; dayOffset++) {
-              const visitDate = new Date(massVaccinationData.vaccination_date);
-              visitDate.setDate(visitDate.getDate() + dayOffset);
-              const visitDateStr = visitDate.toISOString().split('T')[0];
+      if (error) throw error;
 
-              allVisits.push({
-                animal_id: animalId,
-                visit_datetime: `${visitDateStr}T10:00:00`,
-                procedures: ['Profilaktika'],
-                status: 'Planuojamas',
-                notes: `Kursas: ${selectedProduct?.name || 'N/A'} - ${dailyDose.toFixed(2)} ${vaccine.unit} (${dayOffset + 1}/${days} diena)`,
-                vet_name: massVaccinationData.administered_by || null,
-                next_visit_required: false,
-                treatment_required: false,
-                treatment_course_id: course.id,
-              });
-            }
-
-            await logAction(
-              'create_prevention_course',
-              'treatment_courses',
-              course.id,
-              null,
-              {
-                animal_id: animalId,
-                product_id: vaccine.product_id,
-                product_name: selectedProduct?.name || 'N/A',
-                batch_id: vaccine.batch_id,
-                duration_days: days,
-                start_date: massVaccinationData.vaccination_date,
-              }
-            );
-          }
-        } else {
-          // Regular one-time vaccination (no course)
-          const vaccinationEntries = Array.from(selectedAnimals).map(animalId => ({
-            animal_id: animalId,
+      for (const vaccine of validVaccines) {
+        const selectedProduct = products.find(p => p.id === vaccine.product_id);
+        await logAction(
+          'create_mass_vaccination',
+          'vaccinations',
+          null,
+          null,
+          {
+            animal_count: selectedAnimals.size,
             product_id: vaccine.product_id,
-            batch_id: vaccine.batch_id || null,
+            product_name: selectedProduct?.name || 'N/A',
+            batch_id: vaccine.batch_id,
             vaccination_date: massVaccinationData.vaccination_date,
-            next_booster_date: massVaccinationData.next_booster_date || null,
-            dose_number: parseInt(massVaccinationData.dose_number),
-            dose_amount: parseFloat(vaccine.dose_amount),
-            unit: vaccine.unit,
-            administered_by: massVaccinationData.administered_by || null,
-            notes: massVaccinationData.notes || null,
-          }));
-
-          allVaccinationEntries.push(...vaccinationEntries);
-        }
+            dose_amount: vaccine.dose_amount,
+            dose_number: massVaccinationData.dose_number,
+          }
+        );
       }
 
-      // Insert regular vaccinations (non-course)
-      if (allVaccinationEntries.length > 0) {
-        const { error } = await supabase.from('vaccinations').insert(allVaccinationEntries);
-        if (error) throw error;
-
-        for (const vaccine of validVaccines.filter(v => !v.is_course || parseInt(v.course_days) <= 1)) {
-          const selectedProduct = products.find(p => p.id === vaccine.product_id);
-          await logAction(
-            'create_mass_vaccination',
-            'vaccinations',
-            null,
-            null,
-            {
-              animal_count: selectedAnimals.size,
-              product_id: vaccine.product_id,
-              product_name: selectedProduct?.name || 'N/A',
-              batch_id: vaccine.batch_id,
-              vaccination_date: massVaccinationData.vaccination_date,
-              dose_amount: vaccine.dose_amount,
-              dose_number: massVaccinationData.dose_number,
-            }
-          );
-        }
-      }
-
-      // Insert course visits
-      if (allVisits.length > 0) {
-        const { error: visitsError } = await supabase
-          .from('animal_visits')
-          .insert(allVisits);
-
-        if (visitsError) throw visitsError;
-      }
-
-      // Create future booster visits if needed (for non-course vaccinations)
-      if (massVaccinationData.next_booster_date && allVaccinationEntries.length > 0) {
-        const productNames = validVaccines
-          .filter(v => !v.is_course || parseInt(v.course_days) <= 1)
-          .map(v => {
-            const prod = products.find(p => p.id === v.product_id);
-            return prod?.name || 'N/A';
-          }).join(', ');
+      if (massVaccinationData.next_booster_date) {
+        const productNames = validVaccines.map(v => {
+          const prod = products.find(p => p.id === v.product_id);
+          return prod?.name || 'N/A';
+        }).join(', ');
 
         const futureVisits = Array.from(selectedAnimals).map(animalId => ({
           animal_id: animalId,
@@ -313,18 +233,7 @@ export function Vaccinations() {
         }
       }
 
-      const courseCount = validVaccines.filter(v => v.is_course && parseInt(v.course_days) > 1).length;
-      const regularCount = validVaccines.filter(v => !v.is_course || parseInt(v.course_days) <= 1).length;
-
-      let message = `Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų!`;
-      if (courseCount > 0) {
-        message += ` Sukurta ${courseCount} kursų su vizitais.`;
-      }
-      if (regularCount > 0) {
-        message += ` Įrašyta ${regularCount} vakcinų.`;
-      }
-
-      alert(message);
+      alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų su ${validVaccines.length} vakcina(-omis)!`);
 
       setSelectedAnimals(new Set());
       setShowMassVaccination(false);
@@ -333,8 +242,6 @@ export function Vaccinations() {
         batch_id: '',
         dose_amount: '',
         unit: 'ml',
-        is_course: false,
-        course_days: '1',
       }]);
       setMassVaccinationData({
         vaccination_date: new Date().toISOString().split('T')[0],
@@ -504,7 +411,7 @@ export function Vaccinations() {
               <label className="block text-sm font-bold text-gray-900">Vakcinos / prevencija</label>
               <button
                 type="button"
-                onClick={() => setMassVaccines([...massVaccines, { product_id: '', batch_id: '', dose_amount: '', unit: 'ml', is_course: false, course_days: '1' }])}
+                onClick={() => setMassVaccines([...massVaccines, { product_id: '', batch_id: '', dose_amount: '', unit: 'ml' }])}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
               >
                 + Pridėti vakciną
@@ -615,49 +522,6 @@ export function Vaccinations() {
                         >
                           Šalinti
                         </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Kursas section */}
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={vaccine.is_course}
-                        onChange={(e) => {
-                          const newVaccines = [...massVaccines];
-                          newVaccines[idx].is_course = e.target.checked;
-                          setMassVaccines(newVaccines);
-                        }}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-700 font-medium">Kursas (keli dienas)</span>
-                    </label>
-
-                    {vaccine.is_course && (
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Kurso trukmė (dienomis)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={vaccine.course_days}
-                            onChange={(e) => {
-                              const newVaccines = [...massVaccines];
-                              newVaccines[idx].course_days = e.target.value;
-                              setMassVaccines(newVaccines);
-                            }}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                          />
-                        </div>
-                        {parseInt(vaccine.course_days) > 1 && vaccine.dose_amount && (
-                          <div className="flex items-end">
-                            <p className="text-xs text-gray-600 bg-blue-50 px-2 py-1 rounded">
-                              = {(parseFloat(vaccine.dose_amount) / parseInt(vaccine.course_days)).toFixed(2)} {vaccine.unit} / dieną
-                            </p>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -887,7 +751,7 @@ export function Vaccinations() {
               onClick={() => {
                 setShowMassVaccination(false);
                 setSelectedAnimals(new Set());
-                setMassVaccines([{ product_id: '', batch_id: '', dose_amount: '', unit: 'ml', is_course: false, course_days: '1' }]);
+                setMassVaccines([{ product_id: '', batch_id: '', dose_amount: '', unit: 'ml' }]);
               }}
               className="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg font-medium hover:bg-gray-400 transition-colors"
             >
