@@ -160,7 +160,7 @@ SELECT
   ) as most_common_condition,
   CASE
     WHEN MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true) IS NOT NULL
-    THEN EXTRACT(DAY FROM CURRENT_DATE - MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true))::integer
+    THEN (CURRENT_DATE - MAX(hr.examination_date) FILTER (WHERE hr.was_trimmed = true))::integer
     ELSE NULL
   END as days_since_last_trim
 FROM animals a
@@ -202,7 +202,7 @@ SELECT
   hr.severity,
   hr.technician_name,
   hr.notes,
-  EXTRACT(DAY FROM hr.followup_date - CURRENT_DATE)::integer as days_until_followup
+  (hr.followup_date - CURRENT_DATE)::integer as days_until_followup
 FROM hoof_records hr
 JOIN animals a ON a.id = hr.animal_id
 LEFT JOIN hoof_condition_codes hcc ON hcc.code = hr.condition_code
@@ -223,7 +223,7 @@ SELECT
   hcc.name_lt as condition_name,
   hr1.examination_date as latest_examination,
   hr2.examination_date as previous_examination,
-  EXTRACT(DAY FROM hr1.examination_date - hr2.examination_date)::integer as days_between,
+  (hr1.examination_date - hr2.examination_date)::integer as days_between,
   COUNT(*) OVER (PARTITION BY hr1.animal_id, hr1.leg, hr1.claw, hr1.condition_code) as recurrence_count
 FROM hoof_records hr1
 JOIN hoof_records hr2 ON
