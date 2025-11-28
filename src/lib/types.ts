@@ -155,7 +155,7 @@ export interface StockByProduct {
 }
 
 export type VisitStatus = 'Planuojamas' | 'Vykdomas' | 'Baigtas' | 'Atšauktas' | 'Neįvykęs';
-export type VisitProcedure = 'Temperatūra' | 'Apžiūra' | 'Profilaktika' | 'Gydymas' | 'Vakcina' | 'Kita';
+export type VisitProcedure = 'Temperatūra' | 'Apžiūra' | 'Profilaktika' | 'Gydymas' | 'Vakcina' | 'Nagai' | 'Kita';
 
 export interface AnimalVisit {
   id: string;
@@ -249,4 +249,43 @@ export interface AnimalSynchronizationWithDetails extends AnimalSynchronization 
   protocol?: SynchronizationProtocol;
   steps?: SynchronizationStepWithDetails[];
   animal?: Animal;
+}
+
+export type HoofLeg = 'LF' | 'RF' | 'LH' | 'RH';
+export type HoofClaw = 'inner' | 'outer';
+
+export interface HoofConditionCode {
+  id: string;
+  code: string;
+  name_en: string;
+  name_lt: string;
+  description: string | null;
+  category: string | null;
+  created_at: string;
+}
+
+export interface HoofRecord {
+  id: string;
+  animal_id: string;
+  examination_date: string;
+  leg: HoofLeg;
+  claw: HoofClaw;
+  condition_code: string;
+  severity: number;
+  was_trimmed: boolean;
+  was_treated: boolean;
+  treatment_product_id: string | null;
+  treatment_batch_id: string | null;
+  treatment_quantity: number | null;
+  treatment_unit: Unit | null;
+  treatment_notes: string | null;
+  bandage_applied: boolean;
+  requires_followup: boolean;
+  followup_date: string | null;
+  followup_completed: boolean;
+  technician_name: string | null;
+  notes: string | null;
+  visit_id: string | null;
+  created_at: string;
+  updated_at: string;
 }

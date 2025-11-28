@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem } from '../lib/types';
+import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem, HoofLeg, HoofClaw, HoofConditionCode } from '../lib/types';
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { normalizeNumberInput, sortByLithuanian } from '../lib/helpers';
@@ -11,6 +11,7 @@ import { TeatDisplay, TeatSelector } from './TeatSelector';
 import { SynchronizationProtocolComponent } from './SynchronizationProtocol';
 import { SearchableSelect } from './SearchableSelect';
 import { showNotification } from './NotificationToast';
+import { HoofSelector } from './HoofSelector';
 
 interface Vaccination {
   id: string;
@@ -1871,6 +1872,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const vaccinationSectionRef = useRef<HTMLDivElement>(null);
   const preventionSectionRef = useRef<HTMLDivElement>(null);
   const temperatureSectionRef = useRef<HTMLDivElement>(null);
+  const hoofSectionRef = useRef<HTMLDivElement>(null);
 
   const isEditMode = !!visitToEdit;
 
@@ -1951,6 +1953,33 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }>,
     notes: '',
   });
+
+  // Hoof examination data
+  const [hoofConditions, setHoofConditions] = useState<HoofConditionCode[]>([]);
+  const [hoofData, setHoofData] = useState({
+    examination_date: new Date().toISOString().split('T')[0],
+    technician_name: '',
+    general_notes: '',
+    examinations: [] as Array<{
+      leg: HoofLeg;
+      claw: HoofClaw;
+      condition_code: string;
+      severity: number;
+      was_trimmed: boolean;
+      was_treated: boolean;
+      treatment_product_id?: string;
+      treatment_batch_id?: string;
+      treatment_quantity?: string;
+      treatment_unit?: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      treatment_notes?: string;
+      bandage_applied: boolean;
+      requires_followup: boolean;
+      followup_date?: string;
+      notes?: string;
+    }>,
+  });
+  const [selectedHoofLeg, setSelectedHoofLeg] = useState<HoofLeg | null>(null);
+  const [selectedHoofClaw, setSelectedHoofClaw] = useState<HoofClaw | null>(null);
 
   const [showNewDiseaseModal, setShowNewDiseaseModal] = useState(false);
   const [newDiseaseName, setNewDiseaseName] = useState('');
@@ -2045,17 +2074,19 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   };
 
   const loadResources = async () => {
-    const [productsRes, diseasesRes, batchesRes, usersRes] = await Promise.all([
+    const [productsRes, diseasesRes, batchesRes, usersRes, hoofConditionsRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('diseases').select('*'),
       supabase.from('batches').select('*').order('expiry_date'),
       supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
+      supabase.from('hoof_condition_codes').select('*').order('code'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (batchesRes.data) setBatches(batchesRes.data);
     if (usersRes.data) setUsers(usersRes.data);
+    if (hoofConditionsRes.data) setHoofConditions(hoofConditionsRes.data);
   };
 
   const handleCreateDisease = async () => {
@@ -2122,7 +2153,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }
   };
 
-  const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Kita'];
+  const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Nagai', 'Kita'];
 
   const toggleProcedure = (proc: VisitProcedure) => {
     const isAdding = !formData.procedures.includes(proc);
@@ -2140,6 +2171,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         else if (proc === 'Vakcina') targetRef = vaccinationSectionRef;
         else if (proc === 'Profilaktika') targetRef = preventionSectionRef;
         else if (proc === 'Temperatūra') targetRef = temperatureSectionRef;
+        else if (proc === 'Nagai') targetRef = hoofSectionRef;
 
         if (targetRef?.current && modalContentRef.current) {
           // Calculate position relative to modal container
@@ -3692,6 +3724,199 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   rows={2}
                 />
+              </div>
+            </div>
+          )}
+
+          {/* NAGAI (HOOF EXAMINATION) FORM */}
+          {formData.procedures.includes('Nagai') && (
+            <div ref={hoofSectionRef} className="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg space-y-4">
+              <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                Nagų apžiūra
+              </h4>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Apžiūros data</label>
+                    <input
+                      type="date"
+                      value={hoofData.examination_date}
+                      onChange={(e) => setHoofData({ ...hoofData, examination_date: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Technikas</label>
+                    <input
+                      type="text"
+                      value={hoofData.technician_name}
+                      onChange={(e) => setHoofData({ ...hoofData, technician_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Techniko vardas..."
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg border border-blue-200">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Pasirinkite nagą apžiūrai:</p>
+                  <HoofSelector
+                    selectedLeg={selectedHoofLeg}
+                    selectedClaw={selectedHoofClaw}
+                    onSelect={(leg, claw) => {
+                      setSelectedHoofLeg(leg);
+                      setSelectedHoofClaw(claw);
+                    }}
+                    examinedClaws={new Set(hoofData.examinations.map(e => `${e.leg}-${e.claw}`))}
+                    clawSeverities={new Map(hoofData.examinations.map(e => [`${e.leg}-${e.claw}`, e.severity]))}
+                  />
+                </div>
+
+                {selectedHoofLeg && selectedHoofClaw && (
+                  <div className="p-4 bg-white border-2 border-blue-300 rounded-lg space-y-3">
+                    <h5 className="font-semibold text-gray-900">
+                      {selectedHoofLeg} - {selectedHoofClaw === 'inner' ? 'Vidinis' : 'Išorinis'} nagas
+                    </h5>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Būklės kodas</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => {
+                          const existingIdx = hoofData.examinations.findIndex(
+                            ex => ex.leg === selectedHoofLeg && ex.claw === selectedHoofClaw
+                          );
+                          const newExam = {
+                            leg: selectedHoofLeg,
+                            claw: selectedHoofClaw,
+                            condition_code: e.target.value,
+                            severity: 0,
+                            was_trimmed: false,
+                            was_treated: false,
+                            bandage_applied: false,
+                            requires_followup: false,
+                          };
+
+                          if (existingIdx >= 0) {
+                            const updated = [...hoofData.examinations];
+                            updated[existingIdx] = { ...updated[existingIdx], condition_code: e.target.value };
+                            setHoofData({ ...hoofData, examinations: updated });
+                          } else {
+                            setHoofData({ ...hoofData, examinations: [...hoofData.examinations, newExam] });
+                          }
+                        }}
+                        value={hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw)?.condition_code || ''}
+                      >
+                        <option value="">Pasirinkite...</option>
+                        {hoofConditions.map(c => (
+                          <option key={c.id} value={c.code}>
+                            {c.code} - {c.name_lt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw) && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Sunkumas (0-4)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="4"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            value={hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw)?.severity || 0}
+                            onChange={(e) => {
+                              const updated = hoofData.examinations.map(ex =>
+                                ex.leg === selectedHoofLeg && ex.claw === selectedHoofClaw
+                                  ? { ...ex, severity: parseInt(e.target.value) || 0 }
+                                  : ex
+                              );
+                              setHoofData({ ...hoofData, examinations: updated });
+                            }}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw)?.was_trimmed || false}
+                              onChange={(e) => {
+                                const updated = hoofData.examinations.map(ex =>
+                                  ex.leg === selectedHoofLeg && ex.claw === selectedHoofClaw
+                                    ? { ...ex, was_trimmed: e.target.checked }
+                                    : ex
+                                );
+                                setHoofData({ ...hoofData, examinations: updated });
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-gray-700">Apkirpta</span>
+                          </label>
+
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw)?.requires_followup || false}
+                              onChange={(e) => {
+                                const updated = hoofData.examinations.map(ex =>
+                                  ex.leg === selectedHoofLeg && ex.claw === selectedHoofClaw
+                                    ? { ...ex, requires_followup: e.target.checked }
+                                    : ex
+                                );
+                                setHoofData({ ...hoofData, examinations: updated });
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-gray-700">Reikia pakartotinės apžiūros</span>
+                          </label>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                          <textarea
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            rows={2}
+                            value={hoofData.examinations.find(e => e.leg === selectedHoofLeg && e.claw === selectedHoofClaw)?.notes || ''}
+                            onChange={(e) => {
+                              const updated = hoofData.examinations.map(ex =>
+                                ex.leg === selectedHoofLeg && ex.claw === selectedHoofClaw
+                                  ? { ...ex, notes: e.target.value }
+                                  : ex
+                              );
+                              setHoofData({ ...hoofData, examinations: updated });
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bendros pastabos</label>
+                  <textarea
+                    value={hoofData.general_notes}
+                    onChange={(e) => setHoofData({ ...hoofData, general_notes: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                  />
+                </div>
+
+                {hoofData.examinations.length > 0 && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Apžiūrėti nagai: {hoofData.examinations.length}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {hoofData.examinations.map((exam, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                          {exam.leg}-{exam.claw === 'inner' ? 'V' : 'I'} ({exam.condition_code})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
