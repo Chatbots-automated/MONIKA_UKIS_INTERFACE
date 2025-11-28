@@ -1946,6 +1946,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       dose_qty: string;
       dose_unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
       purpose: string;
+      is_course: boolean;
+      course_days: string;
     }>,
     notes: '',
   });
@@ -2026,14 +2028,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         .eq('visit_id', visitToEdit.id);
 
       if (preventionRecords && preventionRecords.length > 0) {
-        const prev = preventionRecords[0];
         setPreventionData({
-          product_id: prev.product_id || '',
-          batch_id: prev.batch_id || '',
-          dose_qty: prev.dose_qty?.toString() || '',
-          dose_unit: prev.dose_unit || 'ml',
-          purpose: prev.purpose || '',
-          notes: prev.notes || '',
+          products: preventionRecords.map((prev: any) => ({
+            product_id: prev.product_id || '',
+            batch_id: prev.batch_id || '',
+            dose_qty: prev.qty?.toString() || '',
+            dose_unit: prev.unit || 'ml',
+            purpose: prev.purpose || '',
+            is_course: false,
+            course_days: '1',
+          })),
+          notes: preventionRecords[0].notes || '',
         });
       }
     }
@@ -2590,31 +2595,156 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
       }
 
-      // 4. If Profilaktika procedure, create prevention records (using biocide_usage table)
+      // 4. If Profilaktika procedure, create prevention records
       if (formData.procedures.includes('Profilaktika')) {
         for (const product of preventionData.products) {
           if (!product.product_id || !product.batch_id || !product.dose_qty) {
             throw new Error('Visi profilaktikos laukai privalomi: produktas, serija ir kiekis');
           }
 
-          const { data: preventionRecord, error: preventionError } = await supabase
-            .from('biocide_usage')
-            .insert({
+          // If this is a multi-day prevention course
+          if (product.is_course && parseInt(product.course_days) > 1) {
+            const totalQty = parseFloat(product.dose_qty);
+            const days = parseInt(product.course_days);
+            const dailyDose = totalQty / days;
+
+            // For TODAY'S visit: Only create biocide_usage if status is "Baigtas"
+            if (formData.status === 'Baigtas') {
+              const { data: preventionRecord, error: preventionError } = await supabase
+                .from('biocide_usage')
+                .insert({
+                  product_id: product.product_id,
+                  batch_id: product.batch_id,
+                  use_date: formData.visit_datetime.split('T')[0],
+                  purpose: product.purpose ? product.purpose : 'Profilaktika',
+                  work_scope: `Gyvūnas: ${animalId}`,
+                  qty: dailyDose,
+                  unit: product.dose_unit,
+                  used_by_name: formData.vet_name ? formData.vet_name : null,
+                })
+                .select()
+                .single();
+
+              if (preventionError) throw preventionError;
+              await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+            }
+          } else {
+            // Single dose - only create if visit is completed
+            if (formData.status === 'Baigtas') {
+              const { data: preventionRecord, error: preventionError } = await supabase
+                .from('biocide_usage')
+                .insert({
+                  product_id: product.product_id,
+                  batch_id: product.batch_id,
+                  use_date: formData.visit_datetime.split('T')[0],
+                  purpose: product.purpose ? product.purpose : 'Profilaktika',
+                  work_scope: `Gyvūnas: ${animalId}`,
+                  qty: parseFloat(product.dose_qty),
+                  unit: product.dose_unit,
+                  used_by_name: formData.vet_name ? formData.vet_name : null,
+                })
+                .select()
+                .single();
+
+              if (preventionError) throw preventionError;
+              await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+            }
+          }
+        }
+
+        // Update the visit with planned prevention medications if not completed
+        if (formData.status !== 'Baigtas') {
+          const plannedPreventions = preventionData.products.map(product => {
+            const dailyQty = product.is_course && parseInt(product.course_days) > 1
+              ? parseFloat(product.dose_qty) / parseInt(product.course_days)
+              : parseFloat(product.dose_qty);
+
+            return {
               product_id: product.product_id,
               batch_id: product.batch_id,
-              use_date: formData.visit_datetime.split('T')[0],
-              purpose: product.purpose ? product.purpose : 'Profilaktika',
-              work_scope: `Gyvūnas: ${animalId}`,
-              qty: parseFloat(product.dose_qty),
+              qty: dailyQty,
               unit: product.dose_unit,
-              used_by_name: formData.vet_name ? formData.vet_name : null,
+              purpose: product.purpose || 'Profilaktika',
+            };
+          });
+
+          await supabase
+            .from('animal_visits')
+            .update({
+              planned_medications: plannedPreventions,
+              medications_processed: false
             })
-            .select()
-            .single();
+            .eq('id', visitData.id);
+        }
 
-          if (preventionError) throw preventionError;
+        // Create future visits for prevention courses
+        const hasPreventionCourse = preventionData.products.some(
+          product => product.is_course && parseInt(product.course_days) > 1
+        );
 
-          await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+        if (hasPreventionCourse) {
+          const productNames = preventionData.products
+            .map(product => products.find(p => p.id === product.product_id)?.name)
+            .filter(Boolean)
+            .join(', ');
+
+          // Get course days from the first course product
+          const courseProduct = preventionData.products.find(
+            product => product.is_course && parseInt(product.course_days) > 1
+          );
+          const courseDays = parseInt(courseProduct?.course_days || '1');
+
+          // Calculate daily doses for each product
+          const dailyPreventions = preventionData.products.map(product => {
+            const dailyQty = product.is_course && parseInt(product.course_days) > 1
+              ? parseFloat(product.dose_qty) / parseInt(product.course_days)
+              : parseFloat(product.dose_qty);
+
+            return {
+              product_id: product.product_id,
+              batch_id: product.batch_id,
+              qty: dailyQty,
+              unit: product.dose_unit,
+              purpose: product.purpose || 'Profilaktika',
+            };
+          });
+
+          // Create visits for remaining days (day 2, 3, etc.)
+          const visitDate = new Date(formData.visit_datetime);
+          const futureVisits = [];
+
+          for (let i = 1; i < courseDays; i++) {
+            const nextDate = new Date(visitDate);
+            nextDate.setDate(nextDate.getDate() + i);
+            const dateStr = nextDate.toISOString().split('T')[0];
+
+            futureVisits.push({
+              animal_id: animalId,
+              visit_datetime: `${dateStr}T10:00:00`,
+              procedures: ['Profilaktika'],
+              status: 'Planuojamas',
+              notes: `Pakartotinė profilaktika (${courseDays} dienų kursas)\nProduktai: ${productNames}`,
+              vet_name: formData.vet_name || null,
+              next_visit_required: false,
+              treatment_required: false,
+              related_visit_id: visitData.id,
+              planned_medications: dailyPreventions,
+              medications_processed: false,
+            });
+          }
+
+          if (futureVisits.length > 0) {
+            const { error: futureVisitsError } = await supabase
+              .from('animal_visits')
+              .insert(futureVisits);
+
+            if (futureVisitsError) {
+              console.error('Error creating future prevention visits:', futureVisitsError);
+              alert('Įspėjimas: Būsimų profilaktikos vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message);
+            } else {
+              console.log(`✅ Created ${futureVisits.length} future prevention visits with planned medications`);
+            }
+          }
         }
       }
 
@@ -3499,6 +3629,44 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         placeholder="Parazitų prevencija, dezinfekcija, kt."
                       />
                     </div>
+
+                    {/* Course checkbox and days input */}
+                    <div className="border-t pt-3 space-y-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={product.is_course}
+                          onChange={(e) => {
+                            const newProducts = [...preventionData.products];
+                            newProducts[index].is_course = e.target.checked;
+                            setPreventionData({ ...preventionData, products: newProducts });
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-gray-700">Kursas (keli dienas)</span>
+                      </label>
+                      {product.is_course && (
+                        <>
+                          <input
+                            type="number"
+                            min="2"
+                            placeholder="Dienų"
+                            value={product.course_days}
+                            onChange={(e) => {
+                              const newProducts = [...preventionData.products];
+                              newProducts[index].course_days = e.target.value;
+                              setPreventionData({ ...preventionData, products: newProducts });
+                            }}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                          {parseInt(product.course_days) > 1 && product.dose_qty && (
+                            <span className="text-xs text-gray-600">
+                              = {(parseFloat(product.dose_qty) / parseInt(product.course_days)).toFixed(2)} {product.dose_unit} / dieną
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
                 <button
@@ -3506,7 +3674,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   onClick={() => {
                     setPreventionData({
                       ...preventionData,
-                      products: [...preventionData.products, { product_id: '', batch_id: '', dose_qty: '', dose_unit: 'ml', purpose: '' }]
+                      products: [...preventionData.products, { product_id: '', batch_id: '', dose_qty: '', dose_unit: 'ml', purpose: '', is_course: false, course_days: '1' }]
                     });
                   }}
                   className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
