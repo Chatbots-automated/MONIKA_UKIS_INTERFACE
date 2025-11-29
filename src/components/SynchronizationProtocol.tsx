@@ -44,6 +44,45 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     loadGeaStatus();
   }, [animalId]);
 
+  // Set default dosages for G7G and GGPG protocols
+  useEffect(() => {
+    if (selectedProtocolId && products.length > 0) {
+      const selectedProtocol = protocols.find(p => p.id === selectedProtocolId);
+      if (selectedProtocol && (selectedProtocol.name === 'G7G' || selectedProtocol.name === 'GGPG')) {
+        const updatedData = { ...todayStepData };
+        const today = new Date(startDate).toISOString().split('T')[0];
+
+        selectedProtocol.steps.forEach(step => {
+          const stepDate = new Date(startDate);
+          stepDate.setDate(stepDate.getDate() + step.day_offset);
+
+          if (stepDate.toISOString().split('T')[0] === today) {
+            const medicationName = step.medication.toLowerCase();
+            let defaultDosage = '';
+
+            // Check if it's Ovarelin (3ml) or Enzaprost (6ml)
+            if (medicationName.includes('ovarelin')) {
+              defaultDosage = '3';
+            } else if (medicationName.includes('enzaprost')) {
+              defaultDosage = '6';
+            }
+
+            if (defaultDosage && !updatedData[step.step]?.dosage) {
+              updatedData[step.step] = {
+                ...updatedData[step.step],
+                batchId: updatedData[step.step]?.batchId || '',
+                dosage: defaultDosage,
+                unit: 'ml'
+              };
+            }
+          }
+        });
+
+        setTodayStepData(updatedData);
+      }
+    }
+  }, [selectedProtocolId, products, startDate, protocols]);
+
   const loadProtocols = async () => {
     const { data } = await supabase
       .from('synchronization_protocols')
@@ -641,79 +680,6 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             />
           </div>
 
-          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 mb-2">
-              <Syringe className="w-4 h-4 text-blue-600" />
-              <h4 className="font-semibold text-gray-900 text-sm">Bendroji dozė visiems vaistams</h4>
-            </div>
-            <p className="text-xs text-gray-600 mb-2">Nustatykite vienodą dozę visiems vaistams (galite pakeisti individualiai žemiau)</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Dozė</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={globalDosage}
-                  onChange={(e) => {
-                    setGlobalDosage(e.target.value);
-                    // Apply to all today's steps
-                    if (selectedProtocol && e.target.value) {
-                      const updatedData = { ...todayStepData };
-                      const today = new Date(startDate).toISOString().split('T')[0];
-                      selectedProtocol.steps.forEach(step => {
-                        const stepDate = new Date(startDate);
-                        stepDate.setDate(stepDate.getDate() + step.day_offset);
-                        if (stepDate.toISOString().split('T')[0] === today) {
-                          updatedData[step.step] = {
-                            ...updatedData[step.step],
-                            dosage: e.target.value,
-                            unit: globalUnit
-                          };
-                        }
-                      });
-                      setTodayStepData(updatedData);
-                    }
-                  }}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="Pvz: 2"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Vienetas</label>
-                <select
-                  value={globalUnit}
-                  onChange={(e) => {
-                    setGlobalUnit(e.target.value);
-                    // Apply to all today's steps
-                    if (selectedProtocol && globalDosage) {
-                      const updatedData = { ...todayStepData };
-                      const today = new Date(startDate).toISOString().split('T')[0];
-                      selectedProtocol.steps.forEach(step => {
-                        const stepDate = new Date(startDate);
-                        stepDate.setDate(stepDate.getDate() + step.day_offset);
-                        if (stepDate.toISOString().split('T')[0] === today) {
-                          updatedData[step.step] = {
-                            ...updatedData[step.step],
-                            dosage: globalDosage,
-                            unit: e.target.value
-                          };
-                        }
-                      });
-                      setTodayStepData(updatedData);
-                    }
-                  }}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="ml">ml</option>
-                  <option value="mg">mg</option>
-                  <option value="g">g</option>
-                  <option value="vnt">vnt</option>
-                  <option value="IU">IU</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
           {selectedProtocol && (
             <div className="bg-white rounded-lg p-3 space-y-3">
               <h4 className="font-semibold text-gray-900 text-sm">Protokolo žingsniai:</h4>
@@ -782,9 +748,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Dozė * {stepData.dosage && globalDosage && stepData.dosage !== globalDosage && (
-                                <span className="text-blue-600 font-normal">(pakeista)</span>
-                              )}
+                              Dozė *
                             </label>
                             <input
                               type="number"
