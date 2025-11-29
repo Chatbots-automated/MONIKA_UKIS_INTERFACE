@@ -303,18 +303,19 @@ export function Inventory() {
     }));
 
     // Create CSV content with BOM for proper encoding
+    // Use semicolon delimiter for European Excel compatibility
     const BOM = '\uFEFF';
     const headers = Object.keys(exportData[0] || {});
     const csvContent = [
-      headers.join(','),
+      headers.join(';'),
       ...exportData.map(row =>
         headers.map(header => {
           const value = row[header as keyof typeof row]?.toString() || '';
-          // Escape quotes and wrap in quotes if contains comma or quote
-          return value.includes(',') || value.includes('"')
+          // Escape quotes and wrap in quotes if contains semicolon or quote
+          return value.includes(';') || value.includes('"')
             ? `"${value.replace(/"/g, '""')}"`
             : value;
-        }).join(',')
+        }).join(';')
       )
     ].join('\n');
 
