@@ -289,9 +289,9 @@ export function Synchronizations() {
                   </div>
 
                   <div className="text-sm space-y-1">
-                    {(step.animal as any)?.neck_no && (
+                    {(step.animal as any)?.collar_no && (
                       <div className="font-medium text-gray-700">
-                        Kaklo Nr.: <span className="font-bold">{(step.animal as any).neck_no}</span>
+                        Kaklo Nr.: <span className="font-bold">{(step.animal as any).collar_no}</span>
                       </div>
                     )}
                     <div className="font-medium text-gray-700">
