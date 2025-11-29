@@ -49,7 +49,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     if (selectedProtocolId && products.length > 0) {
       const selectedProtocol = protocols.find(p => p.id === selectedProtocolId);
       if (selectedProtocol && (selectedProtocol.name === 'G7G' || selectedProtocol.name === 'GGPG')) {
-        const updatedData = { ...todayStepData };
+        const updatedData: {[key: number]: {batchId: string, dosage: string, unit: string}} = {};
         const today = new Date(startDate).toISOString().split('T')[0];
 
         selectedProtocol.steps.forEach(step => {
@@ -69,10 +69,9 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
               defaultDosage = '6';
             }
 
-            if (defaultDosage && !updatedData[step.step]?.dosage) {
+            if (defaultDosage) {
               updatedData[step.step] = {
-                ...updatedData[step.step],
-                batchId: updatedData[step.step]?.batchId || '',
+                batchId: '',
                 dosage: defaultDosage,
                 unit: 'ml'
               };
