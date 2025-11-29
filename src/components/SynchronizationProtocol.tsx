@@ -222,6 +222,37 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
       if (stepsError) throw stepsError;
 
+      // Set correct default dosages for G7G and GGPG protocols
+      if (selectedProtocol && (selectedProtocol.name === 'G7G' || selectedProtocol.name === 'GGPG') && steps && steps.length > 0) {
+        for (const step of steps) {
+          const medicationName = step.medication_name.toLowerCase();
+          let defaultDosage = null;
+          let defaultUnit = 'ml';
+
+          // Ovarelin is always 3ml
+          // Enzaprost is always 6ml
+          if (medicationName.includes('ovarelin')) {
+            defaultDosage = 3;
+          } else if (medicationName.includes('enzaprost')) {
+            defaultDosage = 6;
+          }
+
+          if (defaultDosage) {
+            await supabase
+              .from('synchronization_steps')
+              .update({
+                dosage: defaultDosage,
+                dosage_unit: defaultUnit
+              })
+              .eq('id', step.id);
+
+            // Update the local step object as well
+            step.dosage = defaultDosage;
+            step.dosage_unit = defaultUnit;
+          }
+        }
+      }
+
       // Create a visit for each step and complete today's steps
       if (steps && steps.length > 0) {
         const today = new Date(startDate).toISOString().split('T')[0];
