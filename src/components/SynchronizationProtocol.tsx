@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Plus, X, Edit2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Plus, X, CreditCard as Edit2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
   SynchronizationProtocol,
