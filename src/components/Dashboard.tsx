@@ -131,6 +131,8 @@ export function Dashboard() {
       const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
+      const ownerMedsQuery = supabase.from('owner_med_admin').select('id', { count: 'exact', head: true }).gte('first_admin_date', monthStart);
+
       const [
         stockData,
         batchesData,
@@ -161,9 +163,8 @@ export function Dashboard() {
         supabase.from('stock_by_product').select('*'),
         supabase.from('stock_by_batch').select(`
           *,
-          batches!inner(expiry_date, purchase_price),
           products!inner(name)
-        `).gt('on_hand', 0).not('batches.expiry_date', 'is', null),
+        `).gt('on_hand', 0).not('expiry_date', 'is', null),
         supabase.from('treatments').select('id', { count: 'exact', head: true }).gte('reg_date', todayStart),
         supabase.from('treatments').select('id', { count: 'exact', head: true }).gte('reg_date', weekStart),
         supabase.from('treatments').select('id', { count: 'exact', head: true }).gte('reg_date', monthStart),
@@ -186,7 +187,7 @@ export function Dashboard() {
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
         supabase.from('biocide_usage').select('id', { count: 'exact', head: true }).gte('use_date', monthStart),
         supabase.from('medical_waste').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
-        supabase.from('owner_med_admin').select('id', { count: 'exact', head: true }).gte('first_admin_date', monthStart),
+        ownerMedsQuery.then(res => res.error && res.error.code === '404' ? { count: 0 } : res),
         supabase.from('batches').select('id, created_at'),
         supabase.from('usage_items').select(`
           qty,

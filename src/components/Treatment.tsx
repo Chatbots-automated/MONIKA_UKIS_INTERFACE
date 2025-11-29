@@ -58,8 +58,7 @@ export function Treatment() {
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('stock_by_batch').select(`
         *,
-        products!inner(name),
-        batches!inner(expiry_date)
+        products!inner(name)
       `).gt('on_hand', 0),
     ]);
 

@@ -60,11 +60,17 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             const medicationName = step.medication.toLowerCase();
             let defaultDosage = '';
 
-            // Check if it's Ovarelin (6ml) or Enzaprost (3ml)
+            // Default dosages for synchronization protocols
+            // Ovarelin is always 3ml
+            // Enzaprost: 6ml for G7G step 1, 3ml for other protocols/steps
             if (medicationName.includes('ovarelin')) {
-              defaultDosage = '6';
-            } else if (medicationName.includes('enzaprost')) {
               defaultDosage = '3';
+            } else if (medicationName.includes('enzaprost')) {
+              if (selectedProtocol.name === 'G7G' && step.step === 1) {
+                defaultDosage = '6';
+              } else {
+                defaultDosage = '3';
+              }
             }
 
             if (defaultDosage && !updatedData[step.step]?.dosage) {
