@@ -288,11 +288,12 @@ export function Synchronizations() {
                     </span>
                   </div>
 
-                  {(step.animal as any)?.neck_no && (
-                    <div className="text-xs text-gray-500 mb-2">Kaklo Nr.: {(step.animal as any).neck_no}</div>
-                  )}
-
                   <div className="text-sm space-y-1">
+                    {(step.animal as any)?.neck_no && (
+                      <div className="font-medium text-gray-700">
+                        Kaklo Nr.: <span className="font-bold">{(step.animal as any).neck_no}</span>
+                      </div>
+                    )}
                     <div className="font-medium text-gray-700">
                       Protokolas: <span className="font-bold">{step.protocol_name || 'Nežinomas'}</span>
                     </div>
