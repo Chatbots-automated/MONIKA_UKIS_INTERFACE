@@ -279,19 +279,18 @@ export function Synchronizations() {
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <div>
-                      <span className="font-bold text-lg">
-                        {step.animal ? formatAnimalDisplay(step.animal) : 'Nežinomas gyvūnas'}
-                      </span>
-                      {(step.animal as any)?.neck_no && (
-                        <div className="text-xs text-gray-500 mt-0.5">Kaklo Nr.: {(step.animal as any).neck_no}</div>
-                      )}
-                    </div>
+                    <span className="font-bold text-lg">
+                      {step.animal ? formatAnimalDisplay(step.animal) : 'Nežinomas gyvūnas'}
+                    </span>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 border-2`}>
                       {getStatusIcon(step)}
                       {getStatusText(step)}
                     </span>
                   </div>
+
+                  {(step.animal as any)?.neck_no && (
+                    <div className="text-xs text-gray-500 mb-2">Kaklo Nr.: {(step.animal as any).neck_no}</div>
+                  )}
 
                   <div className="text-sm space-y-1">
                     <div className="font-medium text-gray-700">
