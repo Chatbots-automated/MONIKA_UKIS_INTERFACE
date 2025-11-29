@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Plus, X, CreditCard as Edit2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Plus, X, Edit2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
   SynchronizationProtocol,
@@ -60,11 +60,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             const medicationName = step.medication.toLowerCase();
             let defaultDosage = '';
 
-            // Check if it's Ovarelin (3ml) or Enzaprost (6ml)
+            // Check if it's Ovarelin (6ml) or Enzaprost (3ml)
             if (medicationName.includes('ovarelin')) {
-              defaultDosage = '3';
-            } else if (medicationName.includes('enzaprost')) {
               defaultDosage = '6';
+            } else if (medicationName.includes('enzaprost')) {
+              defaultDosage = '3';
             }
 
             if (defaultDosage && !updatedData[step.step]?.dosage) {
