@@ -4,6 +4,7 @@ import { Search, AlertCircle, Package, Edit2, Save, X, Download } from 'lucide-r
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { translateCategory, sortByLithuanian } from '../lib/helpers';
+import * as XLSX from 'xlsx';
 
 interface StockItem {
   batch_id: string;
@@ -302,36 +303,28 @@ export function Inventory() {
       'Pagaminta': item.mfg_date ? new Date(item.mfg_date).toLocaleDateString('lt-LT') : '',
     }));
 
-    // Create CSV content with BOM for proper encoding
-    // Use semicolon delimiter for European Excel compatibility
-    const BOM = '\uFEFF';
-    const headers = Object.keys(exportData[0] || {});
-    const csvContent = [
-      headers.join(';'),
-      ...exportData.map(row =>
-        headers.map(header => {
-          const value = row[header as keyof typeof row]?.toString() || '';
-          // Escape quotes and wrap in quotes if contains semicolon or quote
-          return value.includes(';') || value.includes('"')
-            ? `"${value.replace(/"/g, '""')}"`
-            : value;
-        }).join(';')
-      )
-    ].join('\n');
+    // Create workbook and worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Atsargos');
 
-    // Create blob and download
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
+    // Set column widths for better readability
+    const columnWidths = [
+      { wch: 30 }, // Produktas
+      { wch: 20 }, // Kategorija
+      { wch: 10 }, // Kiekis
+      { wch: 12 }, // Vienetas
+      { wch: 15 }, // Pakuotės dydis
+      { wch: 15 }, // Pakuočių skaičius
+      { wch: 15 }, // Partija
+      { wch: 15 }, // Galioja iki
+      { wch: 15 }, // Pagaminta
+    ];
+    worksheet['!cols'] = columnWidths;
 
+    // Generate Excel file and download
     const timestamp = new Date().toISOString().split('T')[0];
-    link.setAttribute('href', url);
-    link.setAttribute('download', `atsargos_${timestamp}.csv`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    XLSX.writeFile(workbook, `atsargos_${timestamp}.xlsx`);
 
     logAction('export_inventory', null, null, null, {
       items_count: exportData.length,
