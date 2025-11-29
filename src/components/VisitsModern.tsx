@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { Animal, AnimalVisit, VisitStatus, VisitProcedure } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Download, Activity } from 'lucide-react';
+import { Calendar, Search, Filter, Thermometer, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Download, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -34,6 +34,7 @@ export function VisitsModern() {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [showPastVisits, setShowPastVisits] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -257,6 +258,22 @@ export function VisitsModern() {
     return date.toDateString() === today.toDateString();
   };
 
+  const isTomorrow = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return date.toDateString() === tomorrow.toDateString();
+  };
+
+  const isThisWeek = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+
+    return date > today && date <= nextWeek && !isTomorrow(dateStr);
+  };
+
   const filteredVisits = visits.filter(visit => {
     // Hide cancelled visits (from auto-cancelled synchronization protocols)
     if (visit.status === 'Atšauktas') return false;
@@ -315,6 +332,11 @@ export function VisitsModern() {
 
   const futureIncomplete = futureVisits.filter(v => v.status !== 'Baigtas');
   const futureCompleted = futureVisits.filter(v => v.status === 'Baigtas');
+
+  // Further categorize future incomplete visits
+  const tomorrowVisits = futureIncomplete.filter(v => isTomorrow(v.visit_datetime));
+  const thisWeekVisits = futureIncomplete.filter(v => isThisWeek(v.visit_datetime));
+  const laterVisits = futureIncomplete.filter(v => !isTomorrow(v.visit_datetime) && !isThisWeek(v.visit_datetime));
 
   const pastIncomplete = pastVisits.filter(v => v.status !== 'Baigtas');
   const pastCompleted = pastVisits.filter(v => v.status === 'Baigtas');
@@ -566,11 +588,55 @@ export function VisitsModern() {
             <h3 className="text-sm sm:text-lg lg:text-xl font-bold text-blue-700">Būsimi vizitai ({futureVisits.length})</h3>
           </div>
 
-          {futureIncomplete.length > 0 && (
+          {tomorrowVisits.length > 0 && (
             <div className="mb-6">
-              <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3 uppercase tracking-wide">Suplanuota</h4>
+              <h4 className="text-xs sm:text-sm font-semibold text-orange-700 mb-2 sm:mb-3 uppercase tracking-wide">Rytoj ({tomorrowVisits.length})</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {futureIncomplete.map(visit => (
+                {tomorrowVisits.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {thisWeekVisits.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-xs sm:text-sm font-semibold text-blue-700 mb-2 sm:mb-3 uppercase tracking-wide">Šią savaitę ({thisWeekVisits.length})</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {thisWeekVisits.map(visit => (
+                  <VisitCard
+                    key={visit.id}
+                    visit={visit}
+                    getStatusColor={getStatusColor}
+                    getStatusIcon={getStatusIcon}
+                    onClick={() => visit.animal && setSelectedAnimal(visit.animal)}
+                    onDelete={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVisit(visit.id, formatAnimalDisplay(visit.animal));
+                    }}
+                    withdrawalStatus={visit.animal ? withdrawalStatuses.get(visit.animal.id) : undefined}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {laterVisits.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3 uppercase tracking-wide">Vėliau ({laterVisits.length})</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {laterVisits.map(visit => (
                   <VisitCard
                     key={visit.id}
                     visit={visit}
@@ -618,12 +684,33 @@ export function VisitsModern() {
       {/* PAST COMPLETED VISITS */}
       {pastCompleted.length > 0 && (
         <div className="border-t-4 border-gray-300 pt-4 sm:pt-6">
-          <div className="flex items-center gap-2 mb-3 sm:mb-4">
-            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 flex-shrink-0" />
-            <h3 className="text-sm sm:text-lg lg:text-xl font-bold text-green-700">Ankstesni užbaigti vizitai ({pastCompleted.length})</h3>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 flex-shrink-0" />
+              <h3 className="text-sm sm:text-lg lg:text-xl font-bold text-green-700">Ankstesni užbaigti vizitai ({pastCompleted.length})</h3>
+            </div>
+            {!searchTerm && !neckNumberSearch && !dateFrom && !dateTo && filterStatus === 'all' && filterProcedure === 'all' && filterVet === 'all' && (
+              <button
+                onClick={() => setShowPastVisits(!showPastVisits)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                {showPastVisits ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    <span className="hidden sm:inline">Paslėpti</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    <span className="hidden sm:inline">Rodyti</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
+          {(showPastVisits || searchTerm || neckNumberSearch || dateFrom || dateTo || filterStatus !== 'all' || filterProcedure !== 'all' || filterVet !== 'all') && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -696,12 +783,13 @@ export function VisitsModern() {
                   ))}
                 </tbody>
               </table>
+              </div>
+              {pastCompleted.length > 20 && (
+                <p className="text-xs sm:text-sm text-gray-500 text-center py-2 sm:py-3 bg-gray-50 rounded-lg mt-2">
+                  + dar {pastCompleted.length - 20} užbaigti vizitai
+                </p>
+              )}
             </div>
-          </div>
-          {pastCompleted.length > 20 && (
-            <p className="text-xs sm:text-sm text-gray-500 text-center py-2 sm:py-3 bg-gray-50 rounded-lg mt-2">
-              + dar {pastCompleted.length - 20} užbaigti vizitai
-            </p>
           )}
         </div>
       )}
