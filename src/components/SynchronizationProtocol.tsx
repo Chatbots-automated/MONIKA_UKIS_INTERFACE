@@ -62,15 +62,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
             // Default dosages for synchronization protocols
             // Ovarelin is always 3ml
-            // Enzaprost: 6ml for G7G step 1, 3ml for other protocols/steps
+            // Enzaprost is always 6ml
             if (medicationName.includes('ovarelin')) {
               defaultDosage = '3';
             } else if (medicationName.includes('enzaprost')) {
-              if (selectedProtocol.name === 'G7G' && step.step === 1) {
-                defaultDosage = '6';
-              } else {
-                defaultDosage = '3';
-              }
+              defaultDosage = '6';
             }
 
             if (defaultDosage && !updatedData[step.step]?.dosage) {
