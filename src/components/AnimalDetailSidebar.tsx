@@ -2110,7 +2110,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const loadResources = async () => {
     const [productsRes, diseasesRes, batchesRes, usersRes, hoofConditionsRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true),
-      supabase.from('diseases').select('*'),
+      supabase.from('diseases').select('*').order('name'),
       supabase.from('batches').select('*').order('expiry_date'),
       supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
       supabase.from('hoof_condition_codes').select('*').order('code'),
