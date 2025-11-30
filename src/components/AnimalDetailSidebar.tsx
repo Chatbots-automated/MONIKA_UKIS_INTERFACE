@@ -1451,14 +1451,24 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                                         <div className="text-xs font-semibold text-amber-900 mb-1">📦 Planuojami vaistai:</div>
                                         {(visit as any).planned_medications.map((med: any, idx: number) => {
                                           const product = products.find(p => p.id === med.product_id);
+                                          const needsQty = !med.qty || med.qty === null || med.qty === '' || med.qty === '0';
                                           return (
                                             <div key={idx} className="text-xs text-amber-800">
-                                              • {product?.name || 'Produktas'}: {med.qty} {med.unit}
+                                              • {product?.name || 'Produktas'}
+                                              {needsQty ? (
+                                                <span className="ml-1 px-1 py-0.5 bg-orange-200 text-orange-900 rounded font-semibold">
+                                                  Reikia įvesti kiekį
+                                                </span>
+                                              ) : (
+                                                <span>: {med.qty} {med.unit}</span>
+                                              )}
                                             </div>
                                           );
                                         })}
                                         <div className="text-xs text-amber-600 mt-1 italic">
-                                          Nusirašys kai vizitas bus užbaigtas
+                                          {(visit as any).planned_medications.some((m: any) => !m.qty || m.qty === null || m.qty === '' || m.qty === '0')
+                                            ? '⚠️ Įveskite kiekius prieš užbaigiant'
+                                            : 'Nusirašys kai vizitas bus užbaigtas'}
                                         </div>
                                       </div>
                                     )}
@@ -2422,26 +2432,30 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         );
 
         for (const med of treatmentData.medications) {
-          if (!med.product_id || !med.batch_id || !med.qty) {
-            throw new Error('Visi vaistų laukai privalomi: produktas, serija ir kiekis');
+          const isCourse = med.is_course && parseInt(med.course_days) > 1;
+
+          if (!med.product_id || !med.batch_id) {
+            throw new Error('Produktas ir serija privalomi visiems vaistams');
+          }
+
+          if (!isCourse && !med.qty) {
+            throw new Error('Kiekis privalomas vienkartiniams gydymams');
           }
 
           // If this is a multi-day course
           if (med.is_course && parseInt(med.course_days) > 1) {
-            const totalQty = parseFloat(med.qty);
             const days = parseInt(med.course_days);
-            const dailyDose = totalQty / days;
 
-            // Store course information for tracking
+            // Store course information for tracking (without pre-calculated doses)
             const { error: courseError } = await supabase
               .from('treatment_courses')
               .insert({
                 treatment_id: treatmentRecord.id,
                 product_id: med.product_id,
                 batch_id: med.batch_id,
-                total_dose: totalQty,
+                total_dose: null,
                 days: days,
-                daily_dose: dailyDose,
+                daily_dose: null,
                 unit: med.unit,
                 start_date: formData.visit_datetime.split('T')[0],
                 teat: med.teat || null,
@@ -2449,22 +2463,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
             if (courseError) throw courseError;
 
-            // For TODAY'S visit: Only deduct daily dose if status is "Baigtas"
-            if (formData.status === 'Baigtas') {
-              const { error: usageError } = await supabase
-                .from('usage_items')
-                .insert({
-                  treatment_id: treatmentRecord.id,
-                  product_id: med.product_id,
-                  batch_id: med.batch_id,
-                  qty: dailyDose,
-                  unit: med.unit,
-                  purpose: med.purpose ? med.purpose : null,
-                  teat: med.teat || null,
-                });
-
-              if (usageError) throw usageError;
-            }
+            // For multi-day courses, medications will be entered per visit
+            // No immediate stock deduction
           } else {
             // Single dose - only create usage if visit is completed
             if (formData.status === 'Baigtas') {
@@ -2487,28 +2487,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         // Update the visit with planned medications if not completed
         if (formData.status !== 'Baigtas') {
-          const plannedMeds = treatmentData.medications.map(med => {
-            const dailyQty = med.is_course && parseInt(med.course_days) > 1
-              ? parseFloat(med.qty) / parseInt(med.course_days)
-              : parseFloat(med.qty);
+          const plannedMeds = treatmentData.medications
+            .filter(med => !(med.is_course && parseInt(med.course_days) > 1))
+            .map(med => {
+              return {
+                product_id: med.product_id,
+                batch_id: med.batch_id,
+                qty: parseFloat(med.qty),
+                unit: med.unit,
+                purpose: med.purpose || 'Gydymas',
+                teat: med.teat || null,
+              };
+            });
 
-            return {
-              product_id: med.product_id,
-              batch_id: med.batch_id,
-              qty: dailyQty,
-              unit: med.unit,
-              purpose: med.purpose || 'Gydymas',
-              teat: med.teat || null,
-            };
-          });
-
-          await supabase
-            .from('animal_visits')
-            .update({
-              planned_medications: plannedMeds,
-              medications_processed: false
-            })
-            .eq('id', visitData.id);
+          if (plannedMeds.length > 0) {
+            await supabase
+              .from('animal_visits')
+              .update({
+                planned_medications: plannedMeds,
+                medications_processed: false
+              })
+              .eq('id', visitData.id);
+          }
         }
 
         // Calculate withdrawal dates using database function
@@ -2529,16 +2529,12 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             .filter(Boolean)
             .join(', ');
 
-          // Calculate daily doses for each medication
+          // Store medication metadata without quantities (manual entry per visit)
           const dailyMedications = treatmentData.medications.map(med => {
-            const dailyQty = med.is_course && parseInt(med.course_days) > 1
-              ? parseFloat(med.qty) / parseInt(med.course_days)
-              : parseFloat(med.qty);
-
             return {
               product_id: med.product_id,
               batch_id: med.batch_id,
-              qty: dailyQty,
+              qty: null,
               unit: med.unit,
               purpose: med.purpose || 'Gydymas',
               teat: med.teat || null,
@@ -2551,7 +2547,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               visit_datetime: `${dateStr}T10:00:00`,
               procedures: ['Gydymas'],
               status: 'Planuojamas',
-              notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}`,
+              notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
               vet_name: formData.vet_name || null,
               next_visit_required: false,
               treatment_required: true,
@@ -3260,18 +3256,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                               </option>
                             ))}
                           </select>
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="Kiekis"
-                            value={med.qty}
-                            onChange={(e) => {
-                              const newMeds = [...treatmentData.medications];
-                              newMeds[idx].qty = normalizeNumberInput(e.target.value);
-                              setTreatmentData({ ...treatmentData, medications: newMeds });
-                            }}
-                            className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
-                          />
+                          {!med.is_course || parseInt(med.course_days) <= 1 ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="Kiekis"
+                              value={med.qty}
+                              onChange={(e) => {
+                                const newMeds = [...treatmentData.medications];
+                                newMeds[idx].qty = normalizeNumberInput(e.target.value);
+                                setTreatmentData({ ...treatmentData, medications: newMeds });
+                              }}
+                              className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
+                            />
+                          ) : (
+                            <div className="col-span-2 px-2 py-1 border border-blue-300 bg-blue-50 rounded text-xs flex items-center text-blue-700 font-medium">
+                              Vizite
+                            </div>
+                          )}
                           <div className="col-span-2 px-2 py-1 border border-gray-200 bg-gray-50 rounded text-sm flex items-center text-gray-700 font-medium">
                             {selectedProduct?.primary_pack_unit || med.unit || 'ml'}
                           </div>
@@ -3336,9 +3338,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                                 }}
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
                               />
-                              {parseInt(med.course_days) > 1 && med.qty && (
-                                <span className="text-xs text-gray-600">
-                                  = {(parseFloat(med.qty) / parseInt(med.course_days)).toFixed(2)} {med.unit} / dieną
+                              {parseInt(med.course_days) > 1 && (
+                                <span className="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded">
+                                  ✓ Kiekis bus įvedamas kiekviename vizite atskirai
                                 </span>
                               )}
                             </>
@@ -4126,6 +4128,41 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const [futureVisitDate, setFutureVisitDate] = useState('');
   const [futureVisitNotes, setFutureVisitNotes] = useState('');
   const [showEditMode, setShowEditMode] = useState(false);
+  const [showMedicationEntry, setShowMedicationEntry] = useState(false);
+  const [medicationQuantities, setMedicationQuantities] = useState<Record<string, string>>({});
+  const [products, setProducts] = useState<Product[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadProductsAndBatches();
+    checkMedicationEntry();
+  }, []);
+
+  const loadProductsAndBatches = async () => {
+    const [productsRes, batchesRes] = await Promise.all([
+      supabase.from('products').select('*').order('name'),
+      supabase.from('batches').select('*').order('expiry_date')
+    ]);
+
+    if (productsRes.data) setProducts(productsRes.data);
+    if (batchesRes.data) setBatches(batchesRes.data);
+  };
+
+  const checkMedicationEntry = () => {
+    if (visit.planned_medications && Array.isArray(visit.planned_medications)) {
+      const needsEntry = visit.planned_medications.some((med: any) =>
+        !med.qty || med.qty === null || med.qty === '' || med.qty === '0'
+      );
+      if (needsEntry && visit.status !== 'Baigtas') {
+        setShowMedicationEntry(true);
+        const initialQtys: Record<string, string> = {};
+        visit.planned_medications.forEach((med: any, idx: number) => {
+          initialQtys[`${idx}`] = med.qty || '';
+        });
+        setMedicationQuantities(initialQtys);
+      }
+    }
+  };
 
   if (showEditMode) {
     return (
@@ -4145,6 +4182,35 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
     if (status === 'Baigtas') {
       alert('Šis vizitas jau užbaigtas');
       return;
+    }
+
+    if (showMedicationEntry) {
+      const allEntered = visit.planned_medications?.every((_: any, idx: number) => {
+        const qty = medicationQuantities[`${idx}`];
+        return qty && parseFloat(qty) > 0;
+      });
+
+      if (!allEntered) {
+        alert('Prašome įvesti visų vaistų kiekius prieš užbaigiant vizitą');
+        return;
+      }
+
+      const updatedMeds = visit.planned_medications?.map((med: any, idx: number) => ({
+        ...med,
+        qty: parseFloat(medicationQuantities[`${idx}`])
+      }));
+
+      const { error: updateError } = await supabase
+        .from('animal_visits')
+        .update({
+          planned_medications: updatedMeds
+        })
+        .eq('id', visit.id);
+
+      if (updateError) {
+        alert('Klaida atnaujinant vaistų kiekius: ' + updateError.message);
+        return;
+      }
     }
 
     if (!confirm('Ar tikrai norite pažymėti šį vizitą kaip užbaigtą?')) {
@@ -4174,6 +4240,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       }
 
       await logAction('complete_visit', 'animal_visits', visit.id);
+      showNotification('Vizitas sėkmingai užbaigtas! Vaistai nurašyti iš atsargų.', 'success');
       onSuccess();
     } catch (error: any) {
       alert('Klaida: ' + error.message);
@@ -4395,6 +4462,73 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
           )}
 
           {visit.sync_step_id && <SyncStepMedicationDisplay visitId={visit.id} syncStepId={visit.sync_step_id} />}
+
+          {showMedicationEntry && visit.planned_medications && (
+            <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Pill className="w-5 h-5 text-orange-700" />
+                <h3 className="font-bold text-orange-900">Įveskite vaistų kiekius</h3>
+              </div>
+              <div className="bg-white rounded-lg p-3 mb-3">
+                <p className="text-sm text-gray-700 mb-2">
+                  Šis vizitas reikalauja rankiniu būdu įvesti faktinį sunaudotų vaistų kiekį.
+                </p>
+                <p className="text-xs text-gray-600">
+                  ⚠️ Vaistai bus nurašyti iš atsargų tik kai įvesite kiekius ir užbaigsite vizitą.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {visit.planned_medications.map((med: any, idx: number) => {
+                  const product = products.find(p => p.id === med.product_id);
+                  const batch = batches.find(b => b.id === med.batch_id);
+
+                  return (
+                    <div key={idx} className="bg-white rounded-lg border-2 border-orange-200 p-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">{product?.name || 'Nežinomas produktas'}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Serija: {batch?.lot || batch?.serial_number || 'N/A'}
+                            {batch?.expiry_date && ` · Galioja iki: ${formatDateLT(batch.expiry_date)}`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 items-center">
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Kiekis *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={medicationQuantities[`${idx}`] || ''}
+                            onChange={(e) => {
+                              setMedicationQuantities({
+                                ...medicationQuantities,
+                                [`${idx}`]: e.target.value
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                            placeholder="0.00"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Vnt.
+                          </label>
+                          <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium text-gray-700">
+                            {med.unit || product?.primary_pack_unit || 'ml'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
