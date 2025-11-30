@@ -253,19 +253,24 @@ export function TreatmentCompact() {
       console.log('✅ Treatment logged successfully');
 
       for (const line of usageLines) {
-        if (!line.product_id || !line.batch_id || !line.qty) continue;
+        const isCourse = line.is_course && parseInt(line.course_days) > 1;
 
-        if (line.is_course && parseInt(line.course_days) > 1) {
-          const totalQty = parseFloat(line.qty);
+        // For courses, only product_id is required (batch selected per visit)
+        // For single doses, product_id, batch_id, and qty are all required
+        if (!line.product_id) continue;
+        if (!isCourse && (!line.batch_id || !line.qty)) continue;
+
+        if (isCourse) {
+          const totalQty = line.qty ? parseFloat(line.qty) : null;
           const days = parseInt(line.course_days);
-          const dailyDose = totalQty / days;
+          const dailyDose = totalQty ? totalQty / days : null;
 
           const { data: course, error: courseError } = await supabase
             .from('treatment_courses')
             .insert({
               treatment_id: treatment.id,
               product_id: line.product_id,
-              batch_id: line.batch_id,
+              batch_id: line.batch_id || null,
               total_dose: totalQty,
               days: days,
               daily_dose: dailyDose,
