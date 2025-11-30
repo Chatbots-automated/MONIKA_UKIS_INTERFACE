@@ -63,7 +63,6 @@ export function CourseMedicationScheduler({
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .in('category', ['medicines', 'prevention', 'supplements'])
       .order('name');
 
     if (!error && data) {
