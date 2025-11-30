@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Plus, Trash2, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { SearchableSelect } from './SearchableSelect';
 
 interface Product {
   id: string;
@@ -306,19 +307,16 @@ export function CourseMedicationScheduler({
                 {(dateSchedule.get(selectedDates[currentDateIndex]) || []).map((med) => (
                   <div key={med.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Produktas</label>
-                        <select
-                          value={med.product_id}
-                          onChange={(e) => updateMedication(selectedDates[currentDateIndex], med.id, 'product_id', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="">Pasirinkite...</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <SearchableSelect
+                        options={products.map(p => ({
+                          value: p.id,
+                          label: p.name
+                        }))}
+                        value={med.product_id}
+                        onChange={(value) => updateMedication(selectedDates[currentDateIndex], med.id, 'product_id', value)}
+                        placeholder="Pasirinkite produktą..."
+                        label="Produktas"
+                      />
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
