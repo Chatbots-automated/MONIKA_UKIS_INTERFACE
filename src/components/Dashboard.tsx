@@ -51,6 +51,8 @@ interface DashboardStats {
   visitsThisMonth: number;
   upcomingVisits: number;
   animalsInWithdrawal: number;
+  activeSynchronizations: number;
+  completedSynchronizations: number;
 }
 
 interface CategoryStock {
@@ -107,6 +109,8 @@ export function Dashboard() {
     visitsThisMonth: 0,
     upcomingVisits: 0,
     animalsInWithdrawal: 0,
+    activeSynchronizations: 0,
+    completedSynchronizations: 0,
   });
   const [expiringBatches, setExpiringBatches] = useState<any[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStock[]>([]);
@@ -158,7 +162,9 @@ export function Dashboard() {
         visitsMonth,
         upcomingVisits,
         withdrawalCount,
-        withdrawalData
+        withdrawalData,
+        activeSyncs,
+        completedSyncs
       ] = await Promise.all([
         supabase.from('stock_by_product').select('*'),
         supabase.from('stock_by_batch').select(`
@@ -207,7 +213,9 @@ export function Dashboard() {
           withdrawal_until_meat,
           reg_date,
           animals!inner(id, tag_no, species)
-        `).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`).order('withdrawal_until_milk', { ascending: true, nullsFirst: false })
+        `).or(`withdrawal_until_milk.gte.${now.toISOString()},withdrawal_until_meat.gte.${now.toISOString()}`).order('withdrawal_until_milk', { ascending: true, nullsFirst: false }),
+        supabase.from('animal_synchronizations').select('id', { count: 'exact', head: true }).eq('status', 'Active'),
+        supabase.from('animal_synchronizations').select('id', { count: 'exact', head: true }).eq('status', 'Completed')
       ]);
 
       const totalProducts = stockData.data?.length || 0;
@@ -440,6 +448,8 @@ export function Dashboard() {
         visitsThisMonth: visitsMonth.count || 0,
         upcomingVisits: upcomingVisits.count || 0,
         animalsInWithdrawal: withdrawalCount.count || 0,
+        activeSynchronizations: activeSyncs.count || 0,
+        completedSynchronizations: completedSyncs.count || 0,
       });
       setExpiringBatches(expiringList);
       setCategoryStats(categoryStatsArray);
@@ -684,6 +694,25 @@ export function Dashboard() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-700">Suplanuota</span>
               <span className="text-lg font-semibold text-gray-700">{stats.upcomingVisits}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-xl shadow-sm p-6 border border-violet-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-violet-600 p-2 rounded-lg">
+              <Activity className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Sinchronizacijos</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Aktyvios</span>
+              <span className="text-2xl font-bold text-violet-600">{stats.activeSynchronizations}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Užbaigtos</span>
+              <span className="text-lg font-semibold text-gray-700">{stats.completedSynchronizations}</span>
             </div>
           </div>
         </div>
