@@ -2439,8 +2439,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         for (const med of treatmentData.medications) {
           const isCourse = med.is_course && parseInt(med.course_days) > 1;
 
-          if (!med.product_id || !med.batch_id) {
-            throw new Error('Produktas ir serija privalomi visiems vaistams');
+          // For multi-day courses, only product_id is required (batch selected per visit)
+          // For single doses, both product_id and batch_id are required
+          if (!med.product_id) {
+            throw new Error('Produktas privalomas');
+          }
+
+          if (!isCourse && !med.batch_id) {
+            throw new Error('Serija privaloma vienkartiniams gydymams');
           }
 
           if (!isCourse && !med.qty) {
@@ -2452,12 +2458,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             const days = parseInt(med.course_days);
 
             // Store course information for tracking (without pre-calculated doses)
+            // batch_id is null for courses - it will be selected per visit
             const { error: courseError } = await supabase
               .from('treatment_courses')
               .insert({
                 treatment_id: treatmentRecord.id,
                 product_id: med.product_id,
-                batch_id: med.batch_id,
+                batch_id: med.batch_id || null,
                 total_dose: null,
                 days: days,
                 daily_dose: null,
