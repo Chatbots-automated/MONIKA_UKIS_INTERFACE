@@ -12,6 +12,7 @@ import { SynchronizationProtocolComponent } from './SynchronizationProtocol';
 import { SearchableSelect } from './SearchableSelect';
 import { showNotification } from './NotificationToast';
 import { HoofSelector } from './HoofSelector';
+import { CourseMedicationScheduler } from './CourseMedicationScheduler';
 
 interface Vaccination {
   id: string;
@@ -1964,6 +1965,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     notes: '',
   });
 
+  // Course scheduler state
+  const [showCourseScheduler, setShowCourseScheduler] = useState(false);
+  const [courseSchedulerMedIndex, setCourseSchedulerMedIndex] = useState<number | null>(null);
+
   // Hoof examination data
   const [hoofConditions, setHoofConditions] = useState<HoofConditionCode[]>([]);
   const [hoofData, setHoofData] = useState({
@@ -3288,62 +3293,23 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                        {/* Course duration checkbox and fields */}
+                        {/* Course planning button */}
                         <div className="flex items-center gap-3 flex-wrap">
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={med.is_course}
-                              onChange={(e) => {
-                                const newMeds = [...treatmentData.medications];
-                                newMeds[idx].is_course = e.target.checked;
-                                setTreatmentData({ ...treatmentData, medications: newMeds });
-                              }}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-gray-700">Kursas (keli dienas)</span>
-                          </label>
-                          {med.is_course && (
-                            <>
-                              <input
-                                type="number"
-                                min="2"
-                                placeholder="Dienų"
-                                value={med.course_days}
-                                onChange={(e) => {
-                                  const newMeds = [...treatmentData.medications];
-                                  newMeds[idx].course_days = e.target.value;
-                                  setTreatmentData({ ...treatmentData, medications: newMeds });
-
-                                  const days = parseInt(e.target.value);
-                                  // Auto-populate recurring days when course duration is set
-                                  if (days > 1) {
-                                    // Auto-enable next visit
-                                    setFormData({ ...formData, next_visit_required: true });
-
-                                    // Generate dates for the next N days (excluding today)
-                                    const baseDate = new Date(formData.visit_datetime.split('T')[0]);
-                                    const futureDates: string[] = [];
-                                    for (let i = 1; i < days; i++) {
-                                      const futureDate = new Date(baseDate);
-                                      futureDate.setDate(baseDate.getDate() + i);
-                                      futureDates.push(futureDate.toISOString().split('T')[0]);
-                                    }
-                                    setTreatmentData({
-                                      ...treatmentData,
-                                      medications: newMeds,
-                                      recurring_days: futureDates
-                                    });
-                                  }
-                                }}
-                                className="w-20 px-2 py-1 border border-gray-300 rounded text-xs"
-                              />
-                              {parseInt(med.course_days) > 1 && (
-                                <span className="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded">
-                                  ✓ Kiekis bus įvedamas kiekviename vizite atskirai
-                                </span>
-                              )}
-                            </>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCourseSchedulerMedIndex(idx);
+                              setShowCourseScheduler(true);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 border-2 border-purple-300 rounded-lg hover:bg-purple-100 text-sm font-medium"
+                          >
+                            <Calendar className="w-4 h-4" />
+                            {med.is_course ? 'Redaguoti kursą' : 'Planuoti kursą'}
+                          </button>
+                          {med.is_course && med.course_days && (
+                            <span className="text-xs text-purple-700 font-medium bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
+                              ✓ Kursas: {med.course_days} dienų - Kiekis įvedamas per kiekvieną vizitą
+                            </span>
                           )}
                         </div>
                         {selectedProduct && (selectedProduct.withdrawal_days_milk || selectedProduct.withdrawal_days_meat) && (
@@ -4114,6 +4080,33 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             </div>
           </div>
         </div>
+      )}
+
+      {showCourseScheduler && courseSchedulerMedIndex !== null && (
+        <CourseMedicationScheduler
+          animalId={animalId}
+          initialStartDate={formData.visit_datetime.split('T')[0]}
+          onConfirm={(schedule) => {
+            const medIndex = courseSchedulerMedIndex;
+            const newMeds = [...treatmentData.medications];
+
+            newMeds[medIndex].is_course = true;
+            newMeds[medIndex].course_days = schedule.length.toString();
+
+            setTreatmentData({
+              ...treatmentData,
+              medications: newMeds,
+              recurring_days: schedule.map(s => s.date)
+            });
+
+            setShowCourseScheduler(false);
+            setCourseSchedulerMedIndex(null);
+          }}
+          onCancel={() => {
+            setShowCourseScheduler(false);
+            setCourseSchedulerMedIndex(null);
+          }}
+        />
       )}
     </div>
   );
