@@ -4498,10 +4498,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                   const product = products.find(p => p.id === med.product_id);
                   const selectedBatchId = medicationBatches[`${idx}`] || med.batch_id;
                   const selectedBatch = batches.find(b => b.id === selectedBatchId);
-                  const availableBatches = batches.filter(b =>
-                    b.product_id === med.product_id &&
-                    (b.available_qty > 0 || b.id === selectedBatchId)
-                  );
+                  const availableBatches = batches.filter(b => b.product_id === med.product_id);
 
                   return (
                     <div key={idx} className="bg-white rounded-lg border-2 border-orange-200 p-3">
@@ -4529,16 +4526,13 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                             <option value="">Pasirinkite seriją</option>
                             {availableBatches.map(batch => (
                               <option key={batch.id} value={batch.id}>
-                                {batch.lot || batch.serial_number || batch.batch_no}
-                                {batch.expiry_date ? ` (Galioja: ${formatDateLT(batch.expiry_date)})` : ''}
-                                {' · '}{batch.available_qty} {product?.primary_pack_unit || 'vnt'} likutis
+                                {batch.lot || batch.serial_number || batch.id.slice(0, 8)} · Exp: {batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString('lt') : 'N/A'}
                               </option>
                             ))}
                           </select>
-                          {selectedBatch && (
+                          {selectedBatch && selectedBatch.expiry_date && (
                             <div className="text-xs text-gray-600 mt-1">
-                              Likutis: {selectedBatch.available_qty} {product?.primary_pack_unit || 'vnt'}
-                              {selectedBatch.expiry_date && ` · Galioja iki: ${formatDateLT(selectedBatch.expiry_date)}`}
+                              Galioja iki: {formatDateLT(selectedBatch.expiry_date)}
                             </div>
                           )}
                         </div>
