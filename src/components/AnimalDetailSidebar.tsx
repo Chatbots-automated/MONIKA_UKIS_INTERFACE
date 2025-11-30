@@ -4140,6 +4140,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const [showEditMode, setShowEditMode] = useState(false);
   const [showMedicationEntry, setShowMedicationEntry] = useState(false);
   const [medicationQuantities, setMedicationQuantities] = useState<Record<string, string>>({});
+  const [medicationBatches, setMedicationBatches] = useState<Record<string, string>>({});
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
 
@@ -4166,10 +4167,13 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       if (needsEntry && visit.status !== 'Baigtas') {
         setShowMedicationEntry(true);
         const initialQtys: Record<string, string> = {};
+        const initialBatches: Record<string, string> = {};
         visit.planned_medications.forEach((med: any, idx: number) => {
           initialQtys[`${idx}`] = med.qty || '';
+          initialBatches[`${idx}`] = med.batch_id || '';
         });
         setMedicationQuantities(initialQtys);
+        setMedicationBatches(initialBatches);
       }
     }
   };
@@ -4197,17 +4201,19 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
     if (showMedicationEntry) {
       const allEntered = visit.planned_medications?.every((_: any, idx: number) => {
         const qty = medicationQuantities[`${idx}`];
-        return qty && parseFloat(qty) > 0;
+        const batch = medicationBatches[`${idx}`];
+        return qty && parseFloat(qty) > 0 && batch;
       });
 
       if (!allEntered) {
-        alert('Prašome įvesti visų vaistų kiekius prieš užbaigiant vizitą');
+        alert('Prašome įvesti visų vaistų kiekius ir pasirinkti serijas prieš užbaigiant vizitą');
         return;
       }
 
       const updatedMeds = visit.planned_medications?.map((med: any, idx: number) => ({
         ...med,
-        qty: parseFloat(medicationQuantities[`${idx}`])
+        qty: parseFloat(medicationQuantities[`${idx}`]),
+        batch_id: medicationBatches[`${idx}`]
       }));
 
       const { error: updateError } = await supabase
@@ -4490,46 +4496,80 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
               <div className="space-y-3">
                 {visit.planned_medications.map((med: any, idx: number) => {
                   const product = products.find(p => p.id === med.product_id);
-                  const batch = batches.find(b => b.id === med.batch_id);
+                  const selectedBatchId = medicationBatches[`${idx}`] || med.batch_id;
+                  const selectedBatch = batches.find(b => b.id === selectedBatchId);
+                  const availableBatches = batches.filter(b =>
+                    b.product_id === med.product_id &&
+                    (b.available_qty > 0 || b.id === selectedBatchId)
+                  );
 
                   return (
                     <div key={idx} className="bg-white rounded-lg border-2 border-orange-200 p-3">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">{product?.name || 'Nežinomas produktas'}</div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            Serija: {batch?.lot || batch?.serial_number || 'N/A'}
-                            {batch?.expiry_date && ` · Galioja iki: ${formatDateLT(batch.expiry_date)}`}
-                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 items-center">
-                        <div className="col-span-2">
+                      <div className="space-y-2">
+                        <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Kiekis *
+                            Serija *
                           </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={medicationQuantities[`${idx}`] || ''}
+                          <select
+                            value={selectedBatchId || ''}
                             onChange={(e) => {
-                              setMedicationQuantities({
-                                ...medicationQuantities,
+                              setMedicationBatches({
+                                ...medicationBatches,
                                 [`${idx}`]: e.target.value
                               });
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                            placeholder="0.00"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm"
                             required
-                          />
+                          >
+                            <option value="">Pasirinkite seriją</option>
+                            {availableBatches.map(batch => (
+                              <option key={batch.id} value={batch.id}>
+                                {batch.lot || batch.serial_number || batch.batch_no}
+                                {batch.expiry_date ? ` (Galioja: ${formatDateLT(batch.expiry_date)})` : ''}
+                                {' · '}{batch.available_qty} {product?.primary_pack_unit || 'vnt'} likutis
+                              </option>
+                            ))}
+                          </select>
+                          {selectedBatch && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              Likutis: {selectedBatch.available_qty} {product?.primary_pack_unit || 'vnt'}
+                              {selectedBatch.expiry_date && ` · Galioja iki: ${formatDateLT(selectedBatch.expiry_date)}`}
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Vnt.
-                          </label>
-                          <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium text-gray-700">
-                            {med.unit || product?.primary_pack_unit || 'ml'}
+                        <div className="grid grid-cols-3 gap-2 items-end">
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Kiekis *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={medicationQuantities[`${idx}`] || ''}
+                              onChange={(e) => {
+                                setMedicationQuantities({
+                                  ...medicationQuantities,
+                                  [`${idx}`]: e.target.value
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                              placeholder="0.00"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Vnt.
+                            </label>
+                            <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium text-gray-700">
+                              {med.unit || product?.primary_pack_unit || 'ml'}
+                            </div>
                           </div>
                         </div>
                       </div>
