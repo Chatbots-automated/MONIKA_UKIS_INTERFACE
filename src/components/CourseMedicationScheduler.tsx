@@ -63,7 +63,7 @@ export function CourseMedicationScheduler({
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .in('category', ['Vet Medicines', 'Vaccines', 'Supplements'])
+      .in('category', ['medicines', 'prevention', 'supplements'])
       .order('name');
 
     if (!error && data) {
@@ -275,108 +275,99 @@ export function CourseMedicationScheduler({
           )}
 
           {step === 'medications' && (
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Diena {currentDateIndex + 1} iš {selectedDates.length}
-                  </h3>
-                  <p className="text-sm text-gray-600">{formatDateLT(selectedDates[currentDateIndex])}</p>
-                </div>
-                <div className="flex gap-2">
-                  {currentDateIndex > 0 && (
-                    <button
-                      onClick={() => setCurrentDateIndex(currentDateIndex - 1)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                    >
-                      Atgal
-                    </button>
-                  )}
-                  {currentDateIndex < selectedDates.length - 1 && (
-                    <button
-                      onClick={() => setCurrentDateIndex(currentDateIndex + 1)}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                    >
-                      Toliau
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {(dateSchedule.get(selectedDates[currentDateIndex]) || []).map((med) => (
-                  <div key={med.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <div className="grid grid-cols-2 gap-3">
-                      <SearchableSelect
-                        options={products.map(p => ({
-                          value: p.id,
-                          label: p.name
-                        }))}
-                        value={med.product_id}
-                        onChange={(value) => updateMedication(selectedDates[currentDateIndex], med.id, 'product_id', value)}
-                        placeholder="Pasirinkite produktą..."
-                        label="Produktas"
-                      />
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
-                        <select
-                          value={med.unit}
-                          onChange={(e) => updateMedication(selectedDates[currentDateIndex], med.id, 'unit', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="ml">ml</option>
-                          <option value="l">l</option>
-                          <option value="g">g</option>
-                          <option value="kg">kg</option>
-                          <option value="pcs">vnt</option>
-                        </select>
+            <div className="space-y-4">
+              {selectedDates.map((date, dayIndex) => {
+                const dayMeds = dateSchedule.get(date) || [];
+                return (
+                  <div key={date} className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-purple-600 text-white rounded-lg flex items-center justify-center font-bold">
+                        {dayIndex + 1}
                       </div>
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Spenis (jei reikia)</label>
-                        <select
-                          value={med.teat || ''}
-                          onChange={(e) => updateMedication(selectedDates[currentDateIndex], med.id, 'teat', e.target.value || null)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="">Nėra</option>
-                          <option value="d1">D1 (Dešinė priekis)</option>
-                          <option value="d2">D2 (Dešinė galas)</option>
-                          <option value="k1">K1 (Kairė priekis)</option>
-                          <option value="k2">K2 (Kairė galas)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Paskirtis</label>
-                        <input
-                          type="text"
-                          value={med.purpose}
-                          onChange={(e) => updateMedication(selectedDates[currentDateIndex], med.id, 'purpose', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        />
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Diena {dayIndex + 1} iš {selectedDates.length}
+                        </h3>
+                        <p className="text-sm text-gray-600">{formatDateLT(date)}</p>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => removeMedication(selectedDates[currentDateIndex], med.id)}
-                      className="mt-3 text-red-600 hover:text-red-700 text-sm flex items-center gap-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Pašalinti
-                    </button>
-                  </div>
-                ))}
+                    <div className="space-y-3">
+                      {dayMeds.map((med) => {
+                        const selectedProduct = products.find(p => p.id === med.product_id);
+                        return (
+                          <div key={med.id} className="p-4 bg-white border border-gray-200 rounded-lg">
+                            <div className="grid grid-cols-2 gap-3">
+                              <SearchableSelect
+                                options={products.map(p => ({
+                                  value: p.id,
+                                  label: p.name
+                                }))}
+                                value={med.product_id}
+                                onChange={(value) => updateMedication(date, med.id, 'product_id', value)}
+                                placeholder="Pasirinkite produktą..."
+                                label="Produktas"
+                              />
 
-                <button
-                  onClick={() => addMedicationToDate(selectedDates[currentDateIndex])}
-                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Pridėti vaistą šiai dienai
-                </button>
-              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                                <input
+                                  type="text"
+                                  value={med.unit}
+                                  readOnly
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
+                                  placeholder={selectedProduct?.primary_pack_unit || 'ml'}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Spenis (jei reikia)</label>
+                                <select
+                                  value={med.teat || ''}
+                                  onChange={(e) => updateMedication(date, med.id, 'teat', e.target.value || null)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                >
+                                  <option value="">Nėra</option>
+                                  <option value="d1">D1 (Dešinė priekis)</option>
+                                  <option value="d2">D2 (Dešinė galas)</option>
+                                  <option value="k1">K1 (Kairė priekis)</option>
+                                  <option value="k2">K2 (Kairė galas)</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Paskirtis</label>
+                                <input
+                                  type="text"
+                                  value={med.purpose}
+                                  onChange={(e) => updateMedication(date, med.id, 'purpose', e.target.value)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => removeMedication(date, med.id)}
+                              className="mt-3 text-red-600 hover:text-red-700 text-sm flex items-center gap-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Pašalinti
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        onClick={() => addMedicationToDate(date)}
+                        className="w-full py-3 border-2 border-dashed border-purple-300 rounded-lg text-purple-600 hover:bg-purple-100 flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Pridėti vaistą šiai dienai
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
