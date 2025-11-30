@@ -37,6 +37,14 @@
   - No new permissions required
 */
 
+-- Allow NULL values in treatment_courses table for manual entry workflow
+ALTER TABLE treatment_courses
+  ALTER COLUMN total_dose DROP NOT NULL,
+  ALTER COLUMN daily_dose DROP NOT NULL;
+
+COMMENT ON COLUMN treatment_courses.total_dose IS 'Total dose for course. NULL when using manual entry per visit.';
+COMMENT ON COLUMN treatment_courses.daily_dose IS 'Daily dose for course. NULL when using manual entry per visit.';
+
 -- Function to update planned_medications qty values to null
 CREATE OR REPLACE FUNCTION reset_planned_medication_quantities(p_visit_id uuid)
 RETURNS void AS $$

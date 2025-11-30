@@ -55,6 +55,7 @@ The medication entry workflow for treatment courses has been completely overhaul
 **New SQL File:** `migrate_manual_medication_entry.sql`
 
 **What it does:**
+- **Alters `treatment_courses` table** - Removes NOT NULL constraint from `total_dose` and `daily_dose` columns (CRITICAL FIX)
 - Creates helper function `reset_planned_medication_quantities()` to reset qty to null
 - Creates function `visit_needs_medication_entry()` to check if visit needs quantities
 - Updates all existing future visits to reset their medication quantities
@@ -100,12 +101,16 @@ This will output the SQL that needs to be run in Supabase SQL Editor with servic
 ✅ **Audit Trail** - Clear record of actual usage
 ✅ **Stock Accuracy** - Inventory matches reality
 
-## Database Schema
+## Database Schema Changes
 
-No schema changes required! The existing `planned_medications` JSONB field is flexible enough to handle:
-- Null quantities (needs entry)
-- Calculated quantities (old system, migrated)
-- Manually entered quantities (new system)
+**Modified Tables:**
+- `treatment_courses` - `total_dose` and `daily_dose` columns now allow NULL values for manual entry workflow
+
+**No changes required for:**
+- `animal_visits` - Existing `planned_medications` JSONB field is flexible enough to handle:
+  - Null quantities (needs entry)
+  - Calculated quantities (old system, migrated)
+  - Manually entered quantities (new system)
 
 ## Compatibility
 
