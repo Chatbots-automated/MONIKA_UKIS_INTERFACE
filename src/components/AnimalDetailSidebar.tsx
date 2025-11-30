@@ -4097,6 +4097,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             const medIndex = courseSchedulerMedIndex;
             const newMeds = [...treatmentData.medications];
 
+            // Get the first day's first medication to populate the form
+            const firstDayMeds = schedule[0]?.medications[0];
+            if (firstDayMeds) {
+              newMeds[medIndex].product_id = firstDayMeds.product_id;
+              newMeds[medIndex].batch_id = firstDayMeds.batch_id || '';
+              newMeds[medIndex].unit = firstDayMeds.unit as any;
+              newMeds[medIndex].purpose = firstDayMeds.purpose;
+              newMeds[medIndex].teat = firstDayMeds.teat || '';
+            }
+
             newMeds[medIndex].is_course = true;
             newMeds[medIndex].course_days = schedule.length.toString();
 
