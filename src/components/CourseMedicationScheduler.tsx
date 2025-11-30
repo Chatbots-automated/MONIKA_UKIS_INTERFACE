@@ -115,25 +115,41 @@ export function CourseMedicationScheduler({
       teat: null,
       purpose: 'Gydymas'
     };
-    dateSchedule.set(date, [...currentMeds, newMed]);
-    setDateSchedule(new Map(dateSchedule));
+    const newSchedule = new Map(dateSchedule);
+    newSchedule.set(date, [...currentMeds, newMed]);
+    setDateSchedule(newSchedule);
   };
 
   const updateMedication = (date: string, medId: string, field: keyof ScheduledMedication, value: any) => {
     const meds = dateSchedule.get(date) || [];
-    const updated = meds.map(m => m.id === medId ? { ...m, [field]: value } : m);
-    dateSchedule.set(date, updated);
-    setDateSchedule(new Map(dateSchedule));
+    const updated = meds.map(m => {
+      if (m.id === medId) {
+        const updatedMed = { ...m, [field]: value };
 
-    if (field === 'product_id' && value) {
-      loadBatchesForProduct(value);
-    }
+        // Auto-load unit when product is selected
+        if (field === 'product_id' && value) {
+          const selectedProduct = products.find(p => p.id === value);
+          if (selectedProduct?.primary_pack_unit) {
+            updatedMed.unit = selectedProduct.primary_pack_unit;
+          }
+          loadBatchesForProduct(value);
+        }
+
+        return updatedMed;
+      }
+      return m;
+    });
+
+    const newSchedule = new Map(dateSchedule);
+    newSchedule.set(date, updated);
+    setDateSchedule(newSchedule);
   };
 
   const removeMedication = (date: string, medId: string) => {
     const meds = dateSchedule.get(date) || [];
-    dateSchedule.set(date, meds.filter(m => m.id !== medId));
-    setDateSchedule(new Map(dateSchedule));
+    const newSchedule = new Map(dateSchedule);
+    newSchedule.set(date, meds.filter(m => m.id !== medId));
+    setDateSchedule(newSchedule);
   };
 
   const canProceedToMedications = selectedDates.length >= 2;
