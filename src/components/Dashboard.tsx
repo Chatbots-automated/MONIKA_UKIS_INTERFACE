@@ -129,7 +129,19 @@ export function Dashboard() {
   const loadDashboardData = async () => {
     try {
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+      // Calculate "today" starting at 12:00 GMT+3
+      // Get current time in GMT+3
+      const nowGMT3 = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Vilnius' }));
+      const todayAt12GMT3 = new Date(nowGMT3.getFullYear(), nowGMT3.getMonth(), nowGMT3.getDate(), 12, 0, 0);
+
+      // If current time is before 12:00, use yesterday's 12:00
+      if (nowGMT3.getHours() < 12) {
+        todayAt12GMT3.setDate(todayAt12GMT3.getDate() - 1);
+      }
+
+      // Convert back to UTC for database queries
+      const todayStart = new Date(todayAt12GMT3.toLocaleString('en-US', { timeZone: 'UTC' })).toISOString();
       const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
