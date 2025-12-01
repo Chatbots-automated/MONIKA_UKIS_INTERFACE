@@ -123,7 +123,7 @@ BEGIN
     FROM (
       SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
       FROM gea_daily gd
-      ORDER BY gd.animal_id, gd.updated_at DESC
+      ORDER BY gd.animal_id, gd.created_at DESC
     ) latest_gd
     WHERE animal_synchronizations.animal_id = latest_gd.animal_id
       AND animal_synchronizations.status = 'Cancelled'
@@ -145,7 +145,7 @@ BEGIN
     JOIN (
       SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
       FROM gea_daily gd
-      ORDER BY gd.animal_id, gd.updated_at DESC
+      ORDER BY gd.animal_id, gd.created_at DESC
     ) latest_gd ON latest_gd.animal_id = asyn.animal_id
     WHERE animal_visits.sync_step_id = ss.id
       AND animal_visits.status = 'Atšauktas'
