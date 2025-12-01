@@ -99,7 +99,7 @@ BEGIN
   WITH reactivated_visits AS (
     UPDATE animal_visits av
     SET
-      status = 'Suplanuotas',
+      status = 'Planuojamas',
       notes = COALESCE(av.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
       updated_at = NOW()
     FROM synchronization_steps ss
