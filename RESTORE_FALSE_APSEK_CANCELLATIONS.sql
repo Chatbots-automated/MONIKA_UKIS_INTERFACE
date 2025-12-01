@@ -88,7 +88,7 @@ BEGIN
   FROM (
     SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
     FROM gea_daily gd
-    ORDER BY gd.animal_id, gd.updated_at DESC
+    ORDER BY gd.animal_id, gd.created_at DESC
   ) latest_gd
   WHERE animal_synchronizations.animal_id = latest_gd.animal_id
     AND animal_synchronizations.status = 'Active'
@@ -106,7 +106,7 @@ BEGIN
   JOIN (
     SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
     FROM gea_daily gd
-    ORDER BY gd.animal_id, gd.updated_at DESC
+    ORDER BY gd.animal_id, gd.created_at DESC
   ) latest_gd ON latest_gd.animal_id = asyn.animal_id
   WHERE animal_visits.sync_step_id = ss.id
     AND animal_visits.status = 'Planuojamas'
@@ -174,7 +174,7 @@ BEGIN
   JOIN (
     SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
     FROM gea_daily gd
-    ORDER BY gd.animal_id, gd.updated_at DESC
+    ORDER BY gd.animal_id, gd.created_at DESC
   ) latest_gd ON latest_gd.animal_id = asyn.animal_id
   WHERE latest_gd.statusas != 'APSĖK'
     AND asyn.status = 'Cancelled'
@@ -202,7 +202,7 @@ WITH restored_animals AS (
   JOIN (
     SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.collar_no, gd.statusas
     FROM gea_daily gd
-    ORDER BY gd.animal_id, gd.updated_at DESC
+    ORDER BY gd.animal_id, gd.created_at DESC
   ) latest_gd ON latest_gd.animal_id = a.id
   JOIN animal_synchronizations asyn ON asyn.animal_id = a.id
   LEFT JOIN synchronization_steps ss ON ss.synchronization_id = asyn.id
