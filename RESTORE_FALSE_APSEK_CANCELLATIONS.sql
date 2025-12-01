@@ -80,78 +80,78 @@ DECLARE
   v_reactivated_visits INTEGER := 0;
 BEGIN
   -- First, cancel any synchronizations that were incorrectly reactivated for animals with APSĖK status
-  UPDATE animal_synchronizations asyn
+  UPDATE animal_synchronizations
   SET
     status = 'Cancelled',
-    notes = COALESCE(asyn.notes, '') || E'\n[' || NOW()::date || '] Atšaukta: gyvūnas turi APSĖK statusą',
+    notes = COALESCE(animal_synchronizations.notes, '') || E'\n[' || NOW()::date || '] Atšaukta: gyvūnas turi APSĖK statusą',
     updated_at = NOW()
   FROM (
-    SELECT DISTINCT ON (animal_id) animal_id, statusas
-    FROM gea_daily
-    ORDER BY animal_id, updated_at DESC
+    SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
+    FROM gea_daily gd
+    ORDER BY gd.animal_id, gd.updated_at DESC
   ) latest_gd
-  WHERE asyn.animal_id = latest_gd.animal_id
-    AND asyn.status = 'Active'
-    AND asyn.notes LIKE '%Automatiškai atkurta: klaidingas atšaukimas ištaisytas%'
+  WHERE animal_synchronizations.animal_id = latest_gd.animal_id
+    AND animal_synchronizations.status = 'Active'
+    AND animal_synchronizations.notes LIKE '%Automatiškai atkurta: klaidingas atšaukimas ištaisytas%'
     AND latest_gd.statusas = 'APSĖK';
 
   -- Cancel associated visits for animals with APSĖK status
-  UPDATE animal_visits av
+  UPDATE animal_visits
   SET
     status = 'Atšauktas',
-    notes = COALESCE(av.notes, '') || E'\n[' || NOW()::date || '] Atšaukta: gyvūnas turi APSĖK statusą',
+    notes = COALESCE(animal_visits.notes, '') || E'\n[' || NOW()::date || '] Atšaukta: gyvūnas turi APSĖK statusą',
     updated_at = NOW()
   FROM synchronization_steps ss
   JOIN animal_synchronizations asyn ON asyn.id = ss.synchronization_id
   JOIN (
-    SELECT DISTINCT ON (animal_id) animal_id, statusas
-    FROM gea_daily
-    ORDER BY animal_id, updated_at DESC
+    SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
+    FROM gea_daily gd
+    ORDER BY gd.animal_id, gd.updated_at DESC
   ) latest_gd ON latest_gd.animal_id = asyn.animal_id
-  WHERE av.sync_step_id = ss.id
-    AND av.status = 'Planuojamas'
-    AND av.notes LIKE '%Automatiškai atkurta: klaidingas atšaukimas ištaisytas%'
+  WHERE animal_visits.sync_step_id = ss.id
+    AND animal_visits.status = 'Planuojamas'
+    AND animal_visits.notes LIKE '%Automatiškai atkurta: klaidingas atšaukimas ištaisytas%'
     AND latest_gd.statusas = 'APSĖK';
 
   -- Now properly reactivate synchronizations for animals whose LATEST status is NOT APSĖK
   WITH reactivated_syncs AS (
-    UPDATE animal_synchronizations asyn
+    UPDATE animal_synchronizations
     SET
       status = 'Active',
-      notes = COALESCE(asyn.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
+      notes = COALESCE(animal_synchronizations.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
       updated_at = NOW()
     FROM (
-      SELECT DISTINCT ON (animal_id) animal_id, statusas
-      FROM gea_daily
-      ORDER BY animal_id, updated_at DESC
+      SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
+      FROM gea_daily gd
+      ORDER BY gd.animal_id, gd.updated_at DESC
     ) latest_gd
-    WHERE asyn.animal_id = latest_gd.animal_id
-      AND asyn.status = 'Cancelled'
-      AND asyn.notes LIKE '%Automatiškai atšaukta dėl APSĖK statuso%'
+    WHERE animal_synchronizations.animal_id = latest_gd.animal_id
+      AND animal_synchronizations.status = 'Cancelled'
+      AND animal_synchronizations.notes LIKE '%Automatiškai atšaukta dėl APSĖK statuso%'
       AND latest_gd.statusas != 'APSĖK'
-    RETURNING asyn.id
+    RETURNING animal_synchronizations.id
   )
   SELECT COUNT(*) INTO v_reactivated_syncs FROM reactivated_syncs;
 
   -- Reactivate associated visits for animals whose LATEST status is NOT APSĖK
   WITH reactivated_visits AS (
-    UPDATE animal_visits av
+    UPDATE animal_visits
     SET
       status = 'Planuojamas',
-      notes = COALESCE(av.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
+      notes = COALESCE(animal_visits.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
       updated_at = NOW()
     FROM synchronization_steps ss
     JOIN animal_synchronizations asyn ON asyn.id = ss.synchronization_id
     JOIN (
-      SELECT DISTINCT ON (animal_id) animal_id, statusas
-      FROM gea_daily
-      ORDER BY animal_id, updated_at DESC
+      SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
+      FROM gea_daily gd
+      ORDER BY gd.animal_id, gd.updated_at DESC
     ) latest_gd ON latest_gd.animal_id = asyn.animal_id
-    WHERE av.sync_step_id = ss.id
-      AND av.status = 'Atšauktas'
-      AND av.notes LIKE '%Automatiškai atšaukta: gyvūnas apsėklintas (APSĖK statusas)%'
+    WHERE animal_visits.sync_step_id = ss.id
+      AND animal_visits.status = 'Atšauktas'
+      AND animal_visits.notes LIKE '%Automatiškai atšaukta: gyvūnas apsėklintas (APSĖK statusas)%'
       AND latest_gd.statusas != 'APSĖK'
-    RETURNING av.id
+    RETURNING animal_visits.id
   )
   SELECT COUNT(*) INTO v_reactivated_visits FROM reactivated_visits;
 
@@ -172,9 +172,9 @@ BEGIN
   SELECT COUNT(DISTINCT asyn.animal_id) INTO v_remaining_false
   FROM animal_synchronizations asyn
   JOIN (
-    SELECT DISTINCT ON (animal_id) animal_id, statusas
-    FROM gea_daily
-    ORDER BY animal_id, updated_at DESC
+    SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.statusas
+    FROM gea_daily gd
+    ORDER BY gd.animal_id, gd.updated_at DESC
   ) latest_gd ON latest_gd.animal_id = asyn.animal_id
   WHERE latest_gd.statusas != 'APSĖK'
     AND asyn.status = 'Cancelled'
@@ -200,9 +200,9 @@ WITH restored_animals AS (
     COUNT(DISTINCT av.id) as visits_restored
   FROM animals a
   JOIN (
-    SELECT DISTINCT ON (animal_id) animal_id, collar_no, statusas
-    FROM gea_daily
-    ORDER BY animal_id, updated_at DESC
+    SELECT DISTINCT ON (gd.animal_id) gd.animal_id, gd.collar_no, gd.statusas
+    FROM gea_daily gd
+    ORDER BY gd.animal_id, gd.updated_at DESC
   ) latest_gd ON latest_gd.animal_id = a.id
   JOIN animal_synchronizations asyn ON asyn.animal_id = a.id
   LEFT JOIN synchronization_steps ss ON ss.synchronization_id = asyn.id
