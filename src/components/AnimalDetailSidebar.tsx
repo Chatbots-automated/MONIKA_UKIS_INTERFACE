@@ -2039,6 +2039,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             teat: med.teat || '',
           })),
         });
+
+        // Load sick teats
+        if (treatment.sick_teats) {
+          setSickTeats(treatment.sick_teats);
+        }
+
+        // Load disabled teats from teat_status table
+        const { data: teatStatusRecords } = await supabase
+          .from('teat_status')
+          .select('teat_position')
+          .eq('animal_id', visitToEdit.animal_id)
+          .eq('is_disabled', true);
+
+        if (teatStatusRecords && teatStatusRecords.length > 0) {
+          setDisabledTeats(teatStatusRecords.map(t => t.teat_position));
+        }
       }
     }
 
@@ -2050,16 +2066,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         .eq('visit_id', visitToEdit.id);
 
       if (vaccinationRecords && vaccinationRecords.length > 0) {
-        const vacc = vaccinationRecords[0];
         setVaccinationData({
-          product_id: vacc.product_id || '',
-          batch_id: vacc.batch_id || '',
-          dose_amount: vacc.dose_amount?.toString() || '',
-          dose_number: vacc.dose_number?.toString() || '1',
-          unit: vacc.unit || 'ml',
-          next_booster_date: vacc.next_booster_date || '',
-          administered_by: vacc.administered_by || '',
-          notes: vacc.notes || '',
+          vaccines: vaccinationRecords.map((vacc: any) => ({
+            product_id: vacc.product_id || '',
+            batch_id: vacc.batch_id || '',
+            dose_amount: vacc.dose_amount?.toString() || '',
+            dose_number: vacc.dose_number?.toString() || '1',
+            unit: vacc.unit || 'ml',
+            next_booster_date: vacc.next_booster_date || '',
+          })),
+          administered_by: vaccinationRecords[0].administered_by || '',
+          notes: vaccinationRecords[0].notes || '',
         });
       }
     }
