@@ -123,3 +123,57 @@ WHERE gd.statusas = 'NVERŠ'
   AND asyn.status = 'Cancelled'
   AND asyn.notes LIKE '%APSĖK%'
 ORDER BY gd.collar_no;
+
+-- ============================================================================
+-- STEP 2: Reactivate incorrectly cancelled synchronizations
+-- ============================================================================
+--
+-- This will restore synchronizations that were falsely cancelled for animals
+-- with NVERŠ status (not APSĖK status)
+-- ============================================================================
+
+DO $$
+DECLARE
+  v_reactivated_count INTEGER;
+BEGIN
+  -- Reactivate synchronizations that were cancelled due to false APSĖK detection
+  -- Only reactivate if:
+  -- 1. Current status is NOT 'APSĖK' (it's NVERŠ or other)
+  -- 2. Synchronization was cancelled with APSĖK note
+  -- 3. Synchronization was not manually cancelled (has specific auto-cancel note)
+  WITH reactivated AS (
+    UPDATE animal_synchronizations asyn
+    SET
+      status = 'Active',
+      notes = COALESCE(notes, '') || E'\n[' || NOW()::date || '] Automatiškai atnaujinta: klaidingas atšaukimas ištaisytas',
+      updated_at = NOW()
+    FROM gea_daily gd
+    WHERE asyn.animal_id = gd.animal_id
+      AND asyn.status = 'Cancelled'
+      AND asyn.notes LIKE '%Automatiškai atšaukta: gyvūnas apsėklintas (APSĖK statusas)%'
+      AND gd.statusas != 'APSĖK'
+    RETURNING asyn.id
+  )
+  SELECT COUNT(*) INTO v_reactivated_count FROM reactivated;
+
+  IF v_reactivated_count > 0 THEN
+    RAISE NOTICE '✓ Reactivated % incorrectly cancelled synchronization(s)', v_reactivated_count;
+  ELSE
+    RAISE NOTICE 'ℹ No synchronizations needed reactivation';
+  END IF;
+END $$;
+
+-- Verification: Confirm no more false cancellations exist
+SELECT
+  a.tag_no,
+  gd.collar_no as neck_number,
+  gd.statusas as current_status,
+  asyn.status as sync_status,
+  asyn.notes as sync_notes
+FROM animals a
+JOIN gea_daily gd ON gd.animal_id = a.id
+JOIN animal_synchronizations asyn ON asyn.animal_id = a.id
+WHERE gd.statusas != 'APSĖK'
+  AND asyn.status = 'Cancelled'
+  AND asyn.notes LIKE '%APSĖK%'
+ORDER BY gd.collar_no;
