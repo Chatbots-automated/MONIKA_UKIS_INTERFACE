@@ -2057,15 +2057,39 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
       } else if ((visitToEdit as any).planned_medications) {
         // If no treatment record exists but visit has planned_medications, load those
+        // Check if there's a related treatment to get disease info
+        let diseaseId = '';
+        let clinicalDiagnosis = '';
+        let relatedNotes = '';
+
+        if ((visitToEdit as any).related_treatment_id) {
+          const { data: relatedTreatment } = await supabase
+            .from('treatments')
+            .select('disease_id, clinical_diagnosis, notes, sick_teats')
+            .eq('id', (visitToEdit as any).related_treatment_id)
+            .maybeSingle();
+
+          if (relatedTreatment) {
+            diseaseId = relatedTreatment.disease_id || '';
+            clinicalDiagnosis = relatedTreatment.clinical_diagnosis || '';
+            relatedNotes = relatedTreatment.notes || '';
+
+            // Load sick teats from related treatment
+            if (relatedTreatment.sick_teats) {
+              setSickTeats(relatedTreatment.sick_teats);
+            }
+          }
+        }
+
         setTreatmentData({
-          disease_id: '',
-          clinical_diagnosis: '',
+          disease_id: diseaseId,
+          clinical_diagnosis: clinicalDiagnosis,
           tests: '',
           animal_condition: '',
           outcome: '',
           services: '',
           withdrawal_until: '',
-          notes: '',
+          notes: relatedNotes,
           recurring_days: [],
           medications: (visitToEdit as any).planned_medications.map((med: any) => ({
             product_id: med.product_id,
