@@ -2055,6 +2055,29 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         if (teatStatusRecords && teatStatusRecords.length > 0) {
           setDisabledTeats(teatStatusRecords.map(t => t.teat_position));
         }
+      } else if ((visitToEdit as any).planned_medications) {
+        // If no treatment record exists but visit has planned_medications, load those
+        setTreatmentData({
+          disease_id: '',
+          clinical_diagnosis: '',
+          tests: '',
+          animal_condition: '',
+          outcome: '',
+          services: '',
+          withdrawal_until: '',
+          notes: '',
+          recurring_days: [],
+          medications: (visitToEdit as any).planned_medications.map((med: any) => ({
+            product_id: med.product_id,
+            batch_id: med.batch_id || '',
+            qty: med.qty?.toString() || '',
+            unit: med.unit || 'ml',
+            purpose: med.purpose || 'Gydymas',
+            is_course: med.is_course || false,
+            course_days: med.course_days?.toString() || '',
+            teat: med.teat || '',
+          })),
+        });
       }
     }
 
