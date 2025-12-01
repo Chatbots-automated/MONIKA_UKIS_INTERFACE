@@ -89,10 +89,24 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_cancelled_count INTEGER;
+  v_old_status TEXT;
+  v_new_status TEXT;
 BEGIN
-  -- Check if statusas changed to APSĖK
-  -- Handle both INSERT (new record with APSĖK) and UPDATE (status changed to APSĖK)
-  IF NEW.statusas = 'APSĖK' AND (TG_OP = 'INSERT' OR OLD.statusas IS DISTINCT FROM NEW.statusas) THEN
+  -- Normalize status values (trim whitespace, handle nulls)
+  v_old_status := TRIM(COALESCE(OLD.statusas, ''));
+  v_new_status := TRIM(COALESCE(NEW.statusas, ''));
+
+  -- CRITICAL FIX: Only trigger when status is TRANSITIONING TO 'APSĖK'
+  -- Must satisfy ALL conditions:
+  -- 1. New status is exactly 'APSĖK'
+  -- 2. Either it's a new INSERT with 'APSĖK', OR
+  -- 3. It's an UPDATE where old status was NOT 'APSĖK' (actual transition)
+  IF v_new_status = 'APSĖK' AND
+     (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND v_old_status != 'APSĖK')) THEN
+
+    RAISE NOTICE 'Auto-cancelling synchronizations for animal % - status transitioning to APSĖK (was: %)',
+      NEW.animal_id, v_old_status;
+
     -- Cancel all active synchronization protocols for this animal
     v_cancelled_count := cancel_animal_synchronization_protocols(NEW.animal_id);
 
