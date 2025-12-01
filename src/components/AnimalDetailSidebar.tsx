@@ -3568,7 +3568,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite vakciną</option>
-                        {products.filter(p => p.category === 'prevention').map(product => (
+                        {products.filter(p => p.category === 'prevention' || p.category === 'vakcina').map(product => (
                           <option key={product.id} value={product.id}>{product.name}</option>
                         ))}
                       </select>
