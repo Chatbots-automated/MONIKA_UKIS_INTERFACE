@@ -4506,6 +4506,26 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">{product?.name || 'Nežinomas produktas'}</div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm(`Ar tikrai norite pašalinti ${product?.name || 'šį vaistą'} iš vizito?`)) {
+                              const updatedMeds = visit.planned_medications.filter((_: any, i: number) => i !== idx);
+                              const { error } = await supabase
+                                .from('animal_visits')
+                                .update({ planned_medications: updatedMeds })
+                                .eq('id', visit.id);
+                              if (error) {
+                                alert('Klaida: ' + error.message);
+                              } else {
+                                onSuccess();
+                              }
+                            }
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                       <div className="space-y-2">
                         <div>
