@@ -112,7 +112,7 @@ END $$;
 -- List the affected animals for manual review
 SELECT
   a.tag_no,
-  a.neck_number,
+  a.collar_no as neck_number,
   gd.statusas as current_status,
   asyn.status as sync_status,
   asyn.notes as sync_notes
@@ -122,4 +122,4 @@ JOIN animal_synchronizations asyn ON asyn.animal_id = a.id
 WHERE gd.statusas = 'NVERŠ'
   AND asyn.status = 'Cancelled'
   AND asyn.notes LIKE '%APSĖK%'
-ORDER BY a.neck_number;
+ORDER BY a.collar_no;
