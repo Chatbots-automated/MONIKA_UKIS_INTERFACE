@@ -2018,6 +2018,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
       if (treatmentRecords && treatmentRecords.length > 0) {
         const treatment = treatmentRecords[0];
+
+        // Load future planned visits that are part of the treatment course
+        const { data: futureVisits } = await supabase
+          .from('animal_visits')
+          .select('visit_datetime')
+          .eq('related_visit_id', visitToEdit.id)
+          .eq('status', 'Planuojamas')
+          .order('visit_datetime', { ascending: true });
+
+        const recurringDays = futureVisits ? futureVisits.map(v => v.visit_datetime.split('T')[0]) : [];
+
         setTreatmentData({
           disease_id: treatment.disease_id || '',
           clinical_diagnosis: treatment.clinical_diagnosis || '',
@@ -2027,7 +2038,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           services: treatment.services || '',
           withdrawal_until: treatment.withdrawal_until || '',
           notes: treatment.notes || '',
-          recurring_days: [],
+          recurring_days: recurringDays,
           medications: (treatment.treatment_medications || []).map((med: any) => ({
             product_id: med.product_id,
             batch_id: med.batch_id,
@@ -2081,6 +2092,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           }
         }
 
+        // Load future planned visits that are part of the treatment course
+        const { data: futureVisits } = await supabase
+          .from('animal_visits')
+          .select('visit_datetime')
+          .eq('related_visit_id', visitToEdit.id)
+          .eq('status', 'Planuojamas')
+          .order('visit_datetime', { ascending: true });
+
+        const recurringDays = futureVisits ? futureVisits.map(v => v.visit_datetime.split('T')[0]) : [];
+
         setTreatmentData({
           disease_id: diseaseId,
           clinical_diagnosis: clinicalDiagnosis,
@@ -2090,7 +2111,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           services: '',
           withdrawal_until: '',
           notes: relatedNotes,
-          recurring_days: [],
+          recurring_days: recurringDays,
           medications: (visitToEdit as any).planned_medications.map((med: any) => ({
             product_id: med.product_id,
             batch_id: med.batch_id || '',
@@ -2143,8 +2164,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             dose_qty: prev.qty?.toString() || '',
             dose_unit: prev.unit || 'ml',
             purpose: prev.purpose || '',
-            is_course: false,
-            course_days: '1',
+            is_course: prev.is_course || false,
+            course_days: prev.course_days?.toString() || '1',
           })),
           notes: preventionRecords[0].notes || '',
         });
