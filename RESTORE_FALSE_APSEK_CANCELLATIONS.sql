@@ -84,7 +84,7 @@ BEGIN
     UPDATE animal_synchronizations asyn
     SET
       status = 'Active',
-      notes = COALESCE(notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
+      notes = COALESCE(asyn.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
       updated_at = NOW()
     FROM gea_daily gd
     WHERE asyn.animal_id = gd.animal_id
@@ -100,7 +100,7 @@ BEGIN
     UPDATE animal_visits av
     SET
       status = 'Suplanuotas',
-      notes = COALESCE(notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
+      notes = COALESCE(av.notes, '') || E'\n[' || NOW()::date || '] Automatiškai atkurta: klaidingas atšaukimas ištaisytas',
       updated_at = NOW()
     FROM synchronization_steps ss
     JOIN animal_synchronizations asyn ON asyn.id = ss.synchronization_id
