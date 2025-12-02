@@ -137,12 +137,21 @@ export function TreatmentCostAnalysis() {
 
       console.log('Vaccinations loaded:', vaccinations?.length);
 
-      // Get all visits
+      // Get all visits with planned_medications
       const { data: visits, error: visitsError } = await supabase
         .from('animal_visits')
-        .select('id, animal_id, visit_datetime, status');
+        .select('id, animal_id, visit_datetime, status, planned_medications');
 
       if (visitsError) throw visitsError;
+
+      // Get all batches for planned_medications cost calculation
+      const { data: batches, error: batchesError } = await supabase
+        .from('batches')
+        .select('id, purchase_price, received_qty');
+
+      if (batchesError) throw batchesError;
+
+      const batchMap = new Map(batches?.map(b => [b.id, b]) || []);
 
       // Calculate costs for each animal
       const animalCosts: AnimalCostData[] = [];
@@ -165,6 +174,22 @@ export function TreatmentCostAnalysis() {
                 usage.batches.received_qty
               );
               medicationCosts += usage.qty * unitCost;
+            }
+          }
+        }
+
+        // Add costs from planned_medications in visits
+        const animalVisits = (visits || []).filter(v => v.animal_id === animal.id);
+        for (const visit of animalVisits) {
+          if (visit.planned_medications && Array.isArray(visit.planned_medications)) {
+            for (const med of visit.planned_medications as any[]) {
+              if (med.batch_id && med.qty) {
+                const batch = batchMap.get(med.batch_id);
+                if (batch) {
+                  const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
+                  medicationCosts += med.qty * unitCost;
+                }
+              }
             }
           }
         }
