@@ -42,6 +42,8 @@ interface VisitDetail {
   status: string;
   procedures: string | null;
   notes: string | null;
+  medications: MedicationDetail[];
+  total_medication_cost: number;
 }
 
 interface AnimalDetailData {
@@ -53,6 +55,7 @@ export function TreatmentCostAnalysis() {
   const [costData, setCostData] = useState<AnimalCostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedAnimal, setExpandedAnimal] = useState<string | null>(null);
+  const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set());
   const [animalDetails, setAnimalDetails] = useState<Map<string, AnimalDetailData>>(new Map());
   const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -254,6 +257,19 @@ export function TreatmentCostAnalysis() {
               usage.batches.received_qty
             );
             const itemCost = usage.qty * unitCost;
+
+            // Debug logging for math verification
+            if (usage.qty === 40 && Math.abs(unitCost - 0.03) < 0.01) {
+              console.log('MATH CHECK:', {
+                product: (usage.products as any)?.name,
+                quantity: usage.qty,
+                unitCost: unitCost,
+                calculation: `${usage.qty} × ${unitCost}`,
+                result: itemCost,
+                expected: 1.20
+              });
+            }
+
             medicationCost += itemCost;
 
             medications.push({
@@ -279,7 +295,7 @@ export function TreatmentCostAnalysis() {
         });
       }
 
-      // Get all visits for this animal
+      // Get all visits for this animal with medications
       const { data: visits } = await supabase
         .from('animal_visits')
         .select('id, visit_datetime, status, procedures, notes')
@@ -287,9 +303,50 @@ export function TreatmentCostAnalysis() {
         .eq('status', 'Baigtas')
         .order('visit_datetime', { ascending: false });
 
+      // For each visit, get the medications used
+      const visitDetails: VisitDetail[] = [];
+      for (const visit of visits || []) {
+        const { data: visitMeds } = await supabase
+          .from('visit_medications')
+          .select(`
+            quantity,
+            products(name, primary_pack_unit),
+            batches(purchase_price, received_qty)
+          `)
+          .eq('visit_id', visit.id);
+
+        let visitMedicationCost = 0;
+        const medications: MedicationDetail[] = [];
+
+        for (const med of visitMeds || []) {
+          if (med.batches && med.quantity) {
+            const unitCost = calculateSafeUnitCost(
+              med.batches.purchase_price,
+              med.batches.received_qty
+            );
+            const itemCost = med.quantity * unitCost;
+            visitMedicationCost += itemCost;
+
+            medications.push({
+              name: (med.products as any)?.name || 'Nežinomas produktas',
+              quantity: med.quantity,
+              unit: (med.products as any)?.primary_pack_unit || 'vnt',
+              unit_cost: unitCost,
+              total_cost: itemCost,
+            });
+          }
+        }
+
+        visitDetails.push({
+          ...visit,
+          medications,
+          total_medication_cost: visitMedicationCost,
+        });
+      }
+
       setAnimalDetails(prev => new Map(prev).set(animalId, {
         treatments: treatmentDetails,
-        visits: visits || []
+        visits: visitDetails
       }));
     } catch (error) {
       console.error('Error loading animal details:', error);
@@ -299,10 +356,24 @@ export function TreatmentCostAnalysis() {
   const toggleExpand = (animalId: string) => {
     if (expandedAnimal === animalId) {
       setExpandedAnimal(null);
+      setExpandedVisits(new Set()); // Clear expanded visits when collapsing
     } else {
       setExpandedAnimal(animalId);
+      setExpandedVisits(new Set()); // Clear previous expanded visits
       loadAnimalDetails(animalId);
     }
+  };
+
+  const toggleVisitExpand = (visitId: string) => {
+    setExpandedVisits(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(visitId)) {
+        newSet.delete(visitId);
+      } else {
+        newSet.add(visitId);
+      }
+      return newSet;
+    });
   };
 
   const sortedData = [...costData].sort((a, b) => {
@@ -629,34 +700,97 @@ export function TreatmentCostAnalysis() {
                                       Nėra įrašytų vizitų
                                     </div>
                                   ) : (
-                                    detailData.visits.map((visit) => (
-                                      <div key={visit.id} className="bg-white p-3 rounded-lg border-l-4 border-blue-500 shadow-sm">
-                                        <div className="flex items-start justify-between">
-                                          <div className="flex-1">
-                                            <div className="font-semibold text-gray-900">
-                                              {formatDateLT(visit.visit_datetime)}
+                                    detailData.visits.map((visit) => {
+                                      const isVisitExpanded = expandedVisits.has(visit.id);
+                                      const totalVisitCost = TREATMENT_COST_CONFIG.VISIT_BASE_COST + visit.total_medication_cost;
+
+                                      return (
+                                        <div key={visit.id} className="bg-white rounded-lg border-l-4 border-blue-500 shadow-sm overflow-hidden">
+                                          <div
+                                            className="p-3 cursor-pointer hover:bg-blue-50 transition-colors"
+                                            onClick={() => toggleVisitExpand(visit.id)}
+                                          >
+                                            <div className="flex items-start justify-between">
+                                              <div className="flex-1 flex items-start gap-2">
+                                                {visit.medications.length > 0 && (
+                                                  isVisitExpanded ?
+                                                    <ChevronDown className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" /> :
+                                                    <ChevronRight className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
+                                                )}
+                                                <div className="flex-1">
+                                                  <div className="font-semibold text-gray-900">
+                                                    {formatDateLT(visit.visit_datetime)}
+                                                  </div>
+                                                  {visit.procedures && (
+                                                    <div className="text-xs text-gray-600 mt-1">{visit.procedures}</div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              <div className="text-right ml-3">
+                                                <div className="font-bold text-blue-600 text-lg">
+                                                  {formatCost(totalVisitCost)}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                  {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)} + {formatCost(visit.total_medication_cost)}
+                                                </div>
+                                              </div>
                                             </div>
-                                            {visit.procedures && (
-                                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{visit.procedures}</div>
-                                            )}
                                           </div>
-                                          <div className="font-bold text-blue-600 ml-3 text-lg">
-                                            {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
-                                          </div>
+
+                                          {/* Expanded medications for this visit */}
+                                          {isVisitExpanded && visit.medications.length > 0 && (
+                                            <div className="px-3 pb-3 pt-0 bg-blue-50 border-t border-blue-100">
+                                              <div className="text-xs font-semibold text-blue-800 uppercase mb-2 mt-2">
+                                                Panaudoti vaistai:
+                                              </div>
+                                              <div className="space-y-1.5">
+                                                {visit.medications.map((med, idx) => (
+                                                  <div key={idx} className="bg-white p-2 rounded flex items-center justify-between text-sm">
+                                                    <div className="flex-1">
+                                                      <div className="font-medium text-gray-900">{med.name}</div>
+                                                      <div className="text-xs text-gray-600">
+                                                        {formatNumberLT(med.quantity)} {med.unit} × {formatCost(med.unit_cost)}/{med.unit}
+                                                      </div>
+                                                    </div>
+                                                    <div className="font-bold text-blue-700 ml-3">
+                                                      {formatCost(med.total_cost)}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
-                                      </div>
-                                    ))
+                                      );
+                                    })
                                   )}
                                 </div>
 
                                 {/* Visits Summary */}
                                 {detailData.visits.length > 0 && (
                                   <div className="mt-4 bg-blue-100 p-3 rounded-lg border border-blue-300">
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-semibold text-blue-900">Viso vizitų:</span>
-                                      <span className="font-bold text-blue-900 text-xl">
-                                        {formatCost(detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
-                                      </span>
+                                    <div className="space-y-1">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="text-blue-800">Vizitai ({detailData.visits.length} × €10):</span>
+                                        <span className="font-semibold text-blue-900">
+                                          {formatCost(detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="text-blue-800">Vaistai viziuose:</span>
+                                        <span className="font-semibold text-blue-900">
+                                          {formatCost(detailData.visits.reduce((sum, v) => sum + v.total_medication_cost, 0))}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between pt-2 border-t border-blue-300">
+                                        <span className="font-bold text-blue-900">Viso vizitų:</span>
+                                        <span className="font-bold text-blue-900 text-xl">
+                                          {formatCost(
+                                            detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST +
+                                            detailData.visits.reduce((sum, v) => sum + v.total_medication_cost, 0)
+                                          )}
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
