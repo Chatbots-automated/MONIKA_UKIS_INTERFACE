@@ -107,7 +107,7 @@ export function ProductUsageAnalysis() {
       // Fetch all lookup data upfront (MUCH faster than individual queries)
       console.log('📚 Loading lookup data...');
       const products = await fetchAllRows<any>('products', 'id, name, category, subcategory, primary_pack_unit');
-      const batches = await fetchAllRows<any>('batches', 'id, purchase_price, received_qty, received_date, supplier_id');
+      const batches = await fetchAllRows<any>('batches', 'id, product_id, purchase_price, received_qty, created_at, supplier_id');
       const suppliers = await fetchAllRows<any>('suppliers', 'id, name');
       const treatments = await fetchAllRows<any>('treatments', 'id, animal_id');
       const animals = await fetchAllRows<any>('animals', 'id, tag_no');
@@ -299,17 +299,12 @@ export function ProductUsageAnalysis() {
       const supplierMap = new Map(suppliers.map(s => [s.id, s]));
 
       for (const record of usageByProduct.values()) {
-        // Find all batches for this product
-        const productBatches = batches.filter(b => {
-          // Check if this batch was used with this product
-          const usedInUsageItems = usageItems.some(ui => ui.batch_id === b.id && ui.product_id === record.product_id);
-          const usedInVaccinations = vaccinations.some(v => v.batch_id === b.id && v.product_id === record.product_id);
-          return usedInUsageItems || usedInVaccinations;
-        });
+        // Find all batches for this product using product_id
+        const productBatches = batches.filter(b => b.product_id === record.product_id);
 
         record.inventory_additions = productBatches.map(batch => ({
           batch_id: batch.id,
-          received_date: batch.received_date || 'N/A',
+          received_date: batch.created_at || 'N/A',
           received_qty: batch.received_qty || 0,
           purchase_price: batch.purchase_price || 0,
           supplier_name: batch.supplier_id ? (supplierMap.get(batch.supplier_id)?.name || 'N/A') : 'N/A'
