@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
 import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost } from '../lib/costCalculations';
@@ -259,15 +259,17 @@ export function TreatmentCostAnalysis() {
             const itemCost = usage.qty * unitCost;
 
             // Debug logging for math verification
-            if (usage.qty === 40 && Math.abs(unitCost - 0.03) < 0.01) {
-              console.log('MATH CHECK:', {
-                product: (usage.products as any)?.name,
-                quantity: usage.qty,
-                unitCost: unitCost,
-                calculation: `${usage.qty} × ${unitCost}`,
-                result: itemCost,
-                expected: 1.20
-              });
+            if (usage.qty >= 40 && unitCost > 0) {
+              console.log('=== MATH VERIFICATION ===');
+              console.log('Product:', (usage.products as any)?.name);
+              console.log('Quantity:', usage.qty, (usage.products as any)?.primary_pack_unit);
+              console.log('Batch purchase price:', usage.batches.purchase_price);
+              console.log('Batch received qty:', usage.batches.received_qty);
+              console.log('Unit cost:', unitCost.toFixed(6));
+              console.log('Calculation:', usage.qty, '×', unitCost.toFixed(6), '=', itemCost.toFixed(6));
+              console.log('Expected for 40×0.03:', (40 * 0.03).toFixed(2));
+              console.log('Actual result:', itemCost.toFixed(2));
+              console.log('========================');
             }
 
             medicationCost += itemCost;
@@ -295,50 +297,62 @@ export function TreatmentCostAnalysis() {
         });
       }
 
-      // Get all visits for this animal with medications
+      // Get all visits for this animal with medications from planned_medications JSONB
       const { data: visits } = await supabase
         .from('animal_visits')
-        .select('id, visit_datetime, status, procedures, notes')
+        .select('id, visit_datetime, status, procedures, notes, planned_medications')
         .eq('animal_id', animalId)
         .eq('status', 'Baigtas')
         .order('visit_datetime', { ascending: false });
 
-      // For each visit, get the medications used
+      // For each visit, parse the medications from planned_medications JSONB
       const visitDetails: VisitDetail[] = [];
       for (const visit of visits || []) {
-        const { data: visitMeds } = await supabase
-          .from('visit_medications')
-          .select(`
-            quantity,
-            products(name, primary_pack_unit),
-            batches(purchase_price, received_qty)
-          `)
-          .eq('visit_id', visit.id);
-
         let visitMedicationCost = 0;
         const medications: MedicationDetail[] = [];
 
-        for (const med of visitMeds || []) {
-          if (med.batches && med.quantity) {
-            const unitCost = calculateSafeUnitCost(
-              med.batches.purchase_price,
-              med.batches.received_qty
-            );
-            const itemCost = med.quantity * unitCost;
-            visitMedicationCost += itemCost;
+        // Parse planned_medications if it exists
+        const plannedMeds = visit.planned_medications as any[];
+        if (plannedMeds && Array.isArray(plannedMeds)) {
+          for (const med of plannedMeds) {
+            // Get product and batch details
+            const { data: product } = await supabase
+              .from('products')
+              .select('name, primary_pack_unit')
+              .eq('id', med.product_id)
+              .maybeSingle();
 
-            medications.push({
-              name: (med.products as any)?.name || 'Nežinomas produktas',
-              quantity: med.quantity,
-              unit: (med.products as any)?.primary_pack_unit || 'vnt',
-              unit_cost: unitCost,
-              total_cost: itemCost,
-            });
+            const { data: batch } = await supabase
+              .from('batches')
+              .select('purchase_price, received_qty')
+              .eq('id', med.batch_id)
+              .maybeSingle();
+
+            if (batch && med.qty) {
+              const unitCost = calculateSafeUnitCost(
+                batch.purchase_price,
+                batch.received_qty
+              );
+              const itemCost = med.qty * unitCost;
+              visitMedicationCost += itemCost;
+
+              medications.push({
+                name: product?.name || 'Nežinomas produktas',
+                quantity: med.qty,
+                unit: med.unit || product?.primary_pack_unit || 'vnt',
+                unit_cost: unitCost,
+                total_cost: itemCost,
+              });
+            }
           }
         }
 
         visitDetails.push({
-          ...visit,
+          id: visit.id,
+          visit_datetime: visit.visit_datetime,
+          status: visit.status,
+          procedures: visit.procedures,
+          notes: visit.notes,
           medications,
           total_medication_cost: visitMedicationCost,
         });
@@ -573,9 +587,8 @@ export function TreatmentCostAnalysis() {
                   const detailData = animalDetails.get(row.animal_id);
 
                   return (
-                    <>
+                    <React.Fragment key={row.animal_id}>
                       <tr
-                        key={row.animal_id}
                         className="hover:bg-emerald-50 transition-colors cursor-pointer"
                         onClick={() => toggleExpand(row.animal_id)}
                       >
@@ -799,7 +812,7 @@ export function TreatmentCostAnalysis() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
