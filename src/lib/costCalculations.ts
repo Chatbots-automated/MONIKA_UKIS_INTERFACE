@@ -28,6 +28,23 @@ export function formatCost(cost: number): string {
 }
 
 /**
+ * Format unit cost with appropriate precision
+ * Shows more decimals for small unit costs to avoid confusion
+ */
+export function formatUnitCost(unitCost: number): string {
+  // If cost is very small (< 0.01), show 4 decimals
+  if (unitCost < 0.01 && unitCost > 0) {
+    return `€${unitCost.toFixed(4)}`;
+  }
+  // If cost is small (< 0.10), show 3 decimals
+  if (unitCost < 0.10) {
+    return `€${unitCost.toFixed(3)}`;
+  }
+  // Otherwise show 2 decimals
+  return `€${unitCost.toFixed(2)}`;
+}
+
+/**
  * Calculate unit cost with fallback for missing data
  */
 export function calculateSafeUnitCost(

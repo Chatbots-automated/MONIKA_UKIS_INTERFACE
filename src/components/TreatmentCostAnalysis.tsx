@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
-import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost } from '../lib/costCalculations';
+import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost, formatUnitCost } from '../lib/costCalculations';
+import { fetchAllRows } from '../lib/helpers';
 import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
 interface AnimalCostData {
@@ -75,15 +76,8 @@ export function TreatmentCostAnalysis() {
     try {
       setLoading(true);
 
-      // Get all animals
-      const { data: animals, error: animalsError } = await supabase
-        .from('animals')
-        .select('id, tag_no');
-
-      if (animalsError) {
-        console.error('Animals error:', animalsError);
-        throw animalsError;
-      }
+      // Get all animals using pagination helper
+      const animals = await fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no', 'tag_no');
 
       console.log('Animals loaded:', animals?.length);
 
@@ -807,7 +801,7 @@ export function TreatmentCostAnalysis() {
                                                         <div className="flex-1">
                                                           <div className="font-semibold text-gray-900">{product.name}</div>
                                                           <div className="text-sm text-gray-600 mt-1">
-                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatCost(product.unit_cost)}/{product.unit}
+                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatUnitCost(product.unit_cost)}/{product.unit}
                                                           </div>
                                                         </div>
                                                         <div className="font-bold text-blue-700 text-lg ml-4">
@@ -834,7 +828,7 @@ export function TreatmentCostAnalysis() {
                                                         <div className="flex-1">
                                                           <div className="font-semibold text-gray-900">{product.name}</div>
                                                           <div className="text-sm text-gray-600 mt-1">
-                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatCost(product.unit_cost)}/{product.unit}
+                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatUnitCost(product.unit_cost)}/{product.unit}
                                                           </div>
                                                         </div>
                                                         <div className="font-bold text-purple-700 text-lg ml-4">
