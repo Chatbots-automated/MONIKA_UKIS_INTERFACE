@@ -51,49 +51,27 @@ export function ProductUsageAnalysis() {
       console.log('🔄 Loading product usage data...');
 
       // 1. Get all usage_items with product details
-      const usageItems = await fetchAllRows(
-        supabase
-          .from('usage_items')
-          .select(`
-            id,
-            qty,
-            created_at,
-            treatment_id,
-            product_id,
-            batch_id
-          `)
+      const usageItems = await fetchAllRows<any>(
+        'usage_items',
+        'id, qty, created_at, treatment_id, product_id, batch_id'
       );
 
       console.log('✅ Usage items loaded:', usageItems.length);
 
       // 2. Get all vaccinations
-      const vaccinations = await fetchAllRows(
-        supabase
-          .from('vaccinations')
-          .select(`
-            id,
-            dose_amount,
-            unit,
-            vaccination_date,
-            animal_id,
-            product_id,
-            batch_id
-          `)
+      const vaccinations = await fetchAllRows<any>(
+        'vaccinations',
+        'id, dose_amount, unit, vaccination_date, animal_id, product_id, batch_id'
       );
 
       console.log('✅ Vaccinations loaded:', vaccinations.length);
 
       // 3. Get all animal_visits with planned_medications
-      const visits = await fetchAllRows(
-        supabase
-          .from('animal_visits')
-          .select(`
-            id,
-            visit_datetime,
-            animal_id,
-            planned_medications
-          `)
-          .not('planned_medications', 'is', null)
+      const visits = await fetchAllRows<any>(
+        'animal_visits',
+        'id, visit_datetime, animal_id, planned_medications',
+        undefined,
+        [{ column: 'planned_medications', value: null, operator: 'not.is' }]
       );
 
       console.log('✅ Visits with planned meds loaded:', visits.length);
