@@ -707,11 +707,11 @@ export function TreatmentCostAnalysis() {
           <div className="text-xs font-semibold text-gray-600 uppercase">Vaistų išlaidų paskirstymas pagal šaltinį:</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
-              <span className="text-sm text-gray-600">Gydymo vaistai (usage_items):</span>
+              <span className="text-sm text-gray-600">Gydymo vaistai:</span>
               <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromUsageItems)}</span>
             </div>
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
-              <span className="text-sm text-gray-600">Planuoti vaistai (vizitai):</span>
+              <span className="text-sm text-gray-600">Planuoti vaistai:</span>
               <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromPlanned)}</span>
             </div>
           </div>
