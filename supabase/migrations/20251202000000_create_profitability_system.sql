@@ -28,7 +28,7 @@
     - Grant read access to views for authenticated users
 
   4. Important Notes
-    - Default milk price set to 0.45 EUR/liter (adjustable)
+    - Default milk price set to 0.50 EUR/liter (adjustable)
     - Default cow sale price set to 800 EUR (adjustable)
     - Profitability calculated over last 90 days by default
     - Views update in real-time as data changes
@@ -48,12 +48,12 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- Insert default settings
 INSERT INTO system_settings (setting_key, setting_value, setting_type, description)
 VALUES
-  ('milk_price_per_liter', '0.45', 'number', 'Price received per liter of milk in EUR'),
+  ('milk_price_per_liter', '0.50', 'number', 'Price received per liter of milk in EUR'),
   ('avg_cow_sale_price', '800', 'number', 'Average price when selling a cow in EUR'),
   ('profitability_period_days', '90', 'number', 'Number of days to calculate profitability over'),
   ('treatment_decision_threshold', '30', 'number', 'Days to payback treatment cost (decision threshold)'),
   ('withdrawal_daily_loss', '15', 'number', 'Estimated daily loss during withdrawal period in EUR')
-ON CONFLICT (setting_key) DO NOTHING;
+ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value;
 
 -- Enable RLS
 ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
@@ -129,7 +129,7 @@ SELECT
   mp.days_tracked,
   mp.total_milk_liters,
   mp.avg_daily_milk,
-  mp.total_milk_liters * get_setting('milk_price_per_liter', 0.45) as milk_revenue,
+  mp.total_milk_liters * get_setting('milk_price_per_liter', 0.50) as milk_revenue,
   mp.first_date,
   mp.last_date,
   mp.lactation_days,
@@ -241,7 +241,7 @@ SELECT
   END as success_rate_percentage,
   CASE
     WHEN p.avg_daily_milk > 0 AND rt.avg_treatment_cost > 0 THEN
-      ROUND(rt.avg_treatment_cost / (p.avg_daily_milk * get_setting('milk_price_per_liter', 0.45)), 0)
+      ROUND(rt.avg_treatment_cost / (p.avg_daily_milk * get_setting('milk_price_per_liter', 0.50)), 0)
     ELSE NULL
   END as days_to_payback_avg_treatment,
   CASE

@@ -80,6 +80,14 @@ interface HerdSummary {
   overall_cost_to_revenue_ratio: number;
 }
 
+interface SystemSetting {
+  id: string;
+  setting_key: string;
+  setting_value: string;
+  setting_type: string;
+  description: string | null;
+}
+
 type TabType = 'pelningumas' | 'sprendimai' | 'banda' | 'konfiguracija';
 
 export function ProfitabilityDashboard() {
@@ -96,27 +104,39 @@ export function ProfitabilityDashboard() {
   const [selectedAnimal, setSelectedAnimal] = useState<string>('');
   const [estimatedTreatmentCost, setEstimatedTreatmentCost] = useState<number>(0);
   const [decisionResult, setDecisionResult] = useState<any>(null);
+  const [decisionSearchTerm, setDecisionSearchTerm] = useState('');
+
+  // Animal detail modal state
+  const [selectedAnimalDetail, setSelectedAnimalDetail] = useState<ProfitabilityData | null>(null);
+
+  // System settings
+  const [milkPrice, setMilkPrice] = useState<number>(0.50);
+  const [editingMilkPrice, setEditingMilkPrice] = useState(false);
+  const [tempMilkPrice, setTempMilkPrice] = useState<string>('0.50');
 
   useEffect(() => {
     loadData();
+    loadSettings();
   }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
 
-      // Load profitability data
+      // Load profitability data - fetch all rows
       const { data: profData, error: profError } = await supabase
         .from('vw_animal_profitability')
-        .select('*');
+        .select('*', { count: 'exact' })
+        .range(0, 10000);
 
       if (profError) throw profError;
       setProfitabilityData(profData || []);
 
-      // Load ROI analysis data
+      // Load ROI analysis data - fetch all rows
       const { data: roiData, error: roiError } = await supabase
         .from('vw_treatment_roi_analysis')
-        .select('*');
+        .select('*', { count: 'exact' })
+        .range(0, 10000);
 
       if (roiError) throw roiError;
       setRoiAnalysis(roiData || []);
@@ -137,13 +157,58 @@ export function ProfitabilityDashboard() {
     }
   };
 
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('*')
+        .eq('setting_key', 'milk_price_per_liter')
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        const price = parseFloat(data.setting_value);
+        setMilkPrice(price);
+        setTempMilkPrice(price.toFixed(2));
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const updateMilkPrice = async () => {
+    try {
+      const newPrice = parseFloat(tempMilkPrice);
+      if (isNaN(newPrice) || newPrice <= 0) {
+        alert('Įveskite teisingą kainą');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ setting_value: newPrice.toString() })
+        .eq('setting_key', 'milk_price_per_liter');
+
+      if (error) throw error;
+
+      setMilkPrice(newPrice);
+      setEditingMilkPrice(false);
+
+      // Reload data to reflect new prices
+      await loadData();
+    } catch (error) {
+      console.error('Error updating milk price:', error);
+      alert('Klaida atnaujinant kainą');
+    }
+  };
+
   const calculateTreatmentDecision = () => {
     if (!selectedAnimal || !estimatedTreatmentCost) return;
 
     const animal = roiAnalysis.find(a => a.animal_id === selectedAnimal);
     if (!animal) return;
 
-    const dailyRevenue = animal.avg_daily_milk * 0.45; // Using default milk price
+    const dailyRevenue = animal.avg_daily_milk * milkPrice;
     const daysToPayback = dailyRevenue > 0 ? Math.ceil(estimatedTreatmentCost / dailyRevenue) : null;
 
     let decision: 'treat' | 'monitor' | 'cull';
@@ -389,6 +454,19 @@ export function ProfitabilityDashboard() {
                 Bandos Analizė
               </div>
             </button>
+            <button
+              onClick={() => setActiveTab('konfiguracija')}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'konfiguracija'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Konfigūracija
+              </div>
+            </button>
           </nav>
         </div>
 
@@ -442,7 +520,11 @@ export function ProfitabilityDashboard() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {getSortedAndFilteredData().map((animal) => (
-                      <tr key={animal.animal_id} className="hover:bg-gray-50">
+                      <tr
+                        key={animal.animal_id}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors"
+                        onClick={() => setSelectedAnimalDetail(animal)}
+                      >
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center">
                             <div>
@@ -517,17 +599,36 @@ export function ProfitabilityDashboard() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Pasirinkite Gyvulį
                   </label>
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="Ieškoti pagal auskarą arba kaklajuostės nr..."
+                      value={decisionSearchTerm}
+                      onChange={(e) => setDecisionSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
                   <select
                     value={selectedAnimal}
                     onChange={(e) => setSelectedAnimal(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    size={8}
                   >
                     <option value="">-- Pasirinkite --</option>
-                    {roiAnalysis.map((animal) => (
-                      <option key={animal.animal_id} value={animal.animal_id}>
-                        {animal.tag_no || 'Nežinomas'} (Kakl: {animal.collar_no || '—'})
-                      </option>
-                    ))}
+                    {roiAnalysis
+                      .filter(animal => {
+                        const searchLower = decisionSearchTerm.toLowerCase();
+                        return (
+                          (animal.tag_no?.toLowerCase().includes(searchLower) || false) ||
+                          (animal.collar_no?.toString().includes(searchLower) || false)
+                        );
+                      })
+                      .map((animal) => (
+                        <option key={animal.animal_id} value={animal.animal_id}>
+                          {animal.tag_no || 'Nežinomas'} (Kakl: {animal.collar_no || '—'})
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -682,8 +783,251 @@ export function ProfitabilityDashboard() {
               </div>
             </div>
           )}
+
+          {/* Konfigūracija Tab */}
+          {activeTab === 'konfiguracija' && (
+            <div className="space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">Sistemos Nustatymai</h3>
+                <p className="text-sm text-blue-700">
+                  Čia galite keisti pagrindines sistemos konfigūracijas, kurios naudojamos pelningumui skaičiuoti.
+                </p>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">Pieno Kaina</h3>
+
+                <div className="max-w-md">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Dabartinė Pieno Kaina (EUR už 1 L)
+                  </label>
+
+                  {!editingMilkPrice ? (
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <span className="text-2xl font-bold text-gray-900">
+                          {formatCurrencyLT(milkPrice)}
+                        </span>
+                        <span className="text-sm text-gray-600 ml-2">/ litras</span>
+                      </div>
+                      <button
+                        onClick={() => setEditingMilkPrice(true)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Keisti
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tempMilkPrice}
+                        onChange={(e) => setTempMilkPrice(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="0.50"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={updateMilkPrice}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                        >
+                          Išsaugoti
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingMilkPrice(false);
+                            setTempMilkPrice(milkPrice.toFixed(2));
+                          }}
+                          className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                        >
+                          Atšaukti
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="mt-4 text-sm text-gray-600">
+                    Ši kaina naudojama skaičiuojant pieno pajamas ir gydymo sprendimus.
+                    Po pakeitimo visi skaičiavimai bus automatiškai atnaujinti.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-semibold text-yellow-900 mb-1">Svarbu</h4>
+                    <p className="text-sm text-yellow-800">
+                      Keisdami pieno kainą, visi pelingumo skaičiavimai bus perskaičiuoti su nauja kaina.
+                      Tai gali pakeisti gydymo sprendimų rekomendacijas.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Animal Detail Modal */}
+      {selectedAnimalDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedAnimalDetail(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Gyvulio Detalės: {selectedAnimalDetail.tag_no || 'Nežinomas'}
+                </h2>
+                <button
+                  onClick={() => setSelectedAnimalDetail(null)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Basic Info */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">Pagrindinė Informacija</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Auskaras:</span>
+                      <span className="font-medium">{selectedAnimalDetail.tag_no || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Kaklajuostė:</span>
+                      <span className="font-medium">{selectedAnimalDetail.collar_no || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Grupė:</span>
+                      <span className="font-medium">{selectedAnimalDetail.current_group || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Statusas:</span>
+                      <span className="font-medium">{selectedAnimalDetail.current_status || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Laktacijos dienos:</span>
+                      <span className="font-medium">{selectedAnimalDetail.lactation_days || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Milk Production */}
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                    <Droplet className="w-5 h-5" />
+                    Pieno Gamyba
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Vidutiniškai per dieną:</span>
+                      <span className="font-bold text-blue-900">{formatNumberLT(selectedAnimalDetail.avg_daily_milk)} L</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Viso per 90 d.:</span>
+                      <span className="font-bold text-blue-900">{formatNumberLT(selectedAnimalDetail.total_milk_liters)} L</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Stebėta dienų:</span>
+                      <span className="font-medium text-blue-900">{selectedAnimalDetail.days_tracked}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Gamina:</span>
+                      <span className="font-medium text-blue-900">{selectedAnimalDetail.is_producing ? 'Taip' : 'Ne'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue */}
+                <div className="bg-green-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                    <Euro className="w-5 h-5" />
+                    Pajamos
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Pieno pajamos:</span>
+                      <span className="font-bold text-green-900">{formatCurrencyLT(selectedAnimalDetail.milk_revenue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Karatinos nuostoliai:</span>
+                      <span className="font-medium text-red-700">-{formatCurrencyLT(selectedAnimalDetail.withdrawal_revenue_loss)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Karatinos dienų:</span>
+                      <span className="font-medium text-green-900">{selectedAnimalDetail.days_in_withdrawal}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-green-200">
+                      <span className="text-green-700 font-semibold">Koreguotos pajamos:</span>
+                      <span className="font-bold text-green-900">{formatCurrencyLT(selectedAnimalDetail.adjusted_milk_revenue)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Costs */}
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-orange-900 mb-3 flex items-center gap-2">
+                    <Activity className="w-5 h-5" />
+                    Gydymo Kaštai
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Gydymų skaičius:</span>
+                      <span className="font-medium text-orange-900">{selectedAnimalDetail.treatment_count}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Vakcinacijų:</span>
+                      <span className="font-medium text-orange-900">{selectedAnimalDetail.vaccination_count}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Apsilankymų:</span>
+                      <span className="font-medium text-orange-900">{selectedAnimalDetail.visit_count}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700">Medikamentų:</span>
+                      <span className="font-medium text-orange-900">{formatCurrencyLT(selectedAnimalDetail.medication_costs)}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-orange-200">
+                      <span className="text-orange-700 font-semibold">Viso:</span>
+                      <span className="font-bold text-orange-900">{formatCurrencyLT(selectedAnimalDetail.total_costs)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Profitability Summary */}
+              <div className={`mt-6 rounded-lg p-6 ${getProfitabilityColor(selectedAnimalDetail.net_profit)}`}>
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  {getProfitabilityIcon(selectedAnimalDetail.net_profit)}
+                  Pelningumas
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-sm opacity-80">Grynasis Pelnas (90 d.)</p>
+                    <p className="text-3xl font-bold">{formatCurrencyLT(selectedAnimalDetail.net_profit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-80">ROI</p>
+                    <p className="text-3xl font-bold">
+                      {selectedAnimalDetail.roi_percentage ? `${selectedAnimalDetail.roi_percentage}%` : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-80">Kaštų / Pajamų Santykis</p>
+                    <p className="text-3xl font-bold">
+                      {selectedAnimalDetail.cost_to_revenue_ratio ? `${selectedAnimalDetail.cost_to_revenue_ratio}%` : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
