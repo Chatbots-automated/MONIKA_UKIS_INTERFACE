@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   setting_type text NOT NULL CHECK (setting_type IN ('number', 'text', 'boolean')),
   description text,
   updated_at timestamptz DEFAULT now(),
-  updated_by uuid REFERENCES user_profiles(user_id) ON DELETE SET NULL
+  updated_by uuid
 );
 
 -- Insert default settings
@@ -64,21 +64,11 @@ CREATE POLICY "Authenticated users can view settings"
   TO authenticated
   USING (true);
 
-CREATE POLICY "Admins can update settings"
+CREATE POLICY "Authenticated users can update settings"
   ON system_settings FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (true)
+  WITH CHECK (true);
 
 -- Create helper function to get setting value
 CREATE OR REPLACE FUNCTION get_setting(key text, default_value numeric DEFAULT 0)
