@@ -289,3 +289,65 @@ export interface HoofRecord {
   created_at: string;
   updated_at: string;
 }
+
+export interface MastitisMilkData {
+  animal_id: string;
+  tag_no: string | null;
+  collar_no: number | null;
+  m1_total: number | null;
+  m2_total: number | null;
+  m3_total: number | null;
+  m4_total: number | null;
+  m5_total: number | null;
+  total_milk_liters: number;
+  days_tracked: number;
+  first_milking_date: string | null;
+  last_milking_date: string | null;
+  first_group5_date: string | null;
+  last_group5_date: string | null;
+  days_in_group5: number | null;
+}
+
+export interface ProductUnitCost {
+  batch_id: string;
+  product_id: string;
+  product_name: string;
+  category: string;
+  primary_pack_unit: string;
+  lot: string | null;
+  purchase_price: number | null;
+  received_qty: number;
+  unit_cost: number;
+  package_size: number | null;
+  package_count: number | null;
+  batch_received_date: string;
+}
+
+export interface TreatmentCostDetail {
+  treatment_id: string;
+  animal_id: string;
+  tag_no: string | null;
+  disease_id: string | null;
+  disease_name: string | null;
+  treatment_start_date: string;
+  treatment_end_date: string | null;
+  outcome: string | null;
+  visit_count: number;
+  visit_costs: number;
+  medication_costs: number;
+  medication_item_count: number;
+  total_treatment_cost: number;
+}
+
+export interface AnimalCostSummary {
+  animal_id: string;
+  tag_no: string | null;
+  collar_no: string | null;
+  treatment_count: number;
+  total_visits: number;
+  total_visit_costs: number;
+  total_medication_costs: number;
+  vaccination_count: number;
+  total_vaccination_costs: number;
+  total_costs: number;
+}

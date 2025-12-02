@@ -18,7 +18,8 @@ import {
   Users,
   Activity,
   Calendar,
-  Repeat
+  Repeat,
+  Euro
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,6 +38,7 @@ const menuItems = [
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
   { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
+  { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
   { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2, permission: 'waste' },
   { id: 'products', label: 'Produktai', icon: Pill, permission: 'products' },

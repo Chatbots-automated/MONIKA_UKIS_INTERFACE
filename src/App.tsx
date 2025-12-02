@@ -17,6 +17,7 @@ import { UserManagement } from './components/UserManagement';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Vaccinations } from './components/Vaccinations';
 import { TreatmentHistory } from './components/TreatmentHistory';
+import { TreatmentCostTab } from './components/TreatmentCostTab';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { InvoiceViewer } from './components/InvoiceViewer';
@@ -136,6 +137,8 @@ function App() {
         return <ReceiveStock />;
       case 'treatment-history':
         return <TreatmentHistory />;
+      case 'treatment-costs':
+        return <TreatmentCostTab />;
       case 'vaccinations':
         return <Vaccinations />;
       case 'products':
