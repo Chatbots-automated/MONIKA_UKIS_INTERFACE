@@ -225,7 +225,14 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
       // Set correct default dosages for G7G and GGPG protocols
       if (selectedProtocol && (selectedProtocol.name === 'G7G' || selectedProtocol.name === 'GGPG') && steps && steps.length > 0) {
         for (const step of steps) {
-          const medicationName = step.medication_name.toLowerCase();
+          // Get medication name from the product using medication_product_id
+          if (!step.medication_product_id) continue;
+
+          const product = products.find(p => p.id === step.medication_product_id);
+          const medicationName = product?.name?.toLowerCase() || '';
+
+          if (!medicationName) continue;
+
           let defaultDosage = null;
           let defaultUnit = 'ml';
 
