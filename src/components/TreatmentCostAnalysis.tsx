@@ -298,26 +298,27 @@ export function TreatmentCostAnalysis() {
         const { data: vaccinations } = await supabase
           .from('vaccinations')
           .select(`
-            quantity,
+            dose_amount,
+            unit,
             products(name, primary_pack_unit, category),
             batches(purchase_price, received_qty)
           `)
           .eq('visit_id', visit.id);
 
         for (const vacc of vaccinations || []) {
-          if (vacc.batches && vacc.quantity) {
+          if (vacc.batches && vacc.dose_amount) {
             const unitCost = calculateSafeUnitCost(
               vacc.batches.purchase_price,
               vacc.batches.received_qty
             );
-            const itemCost = vacc.quantity * unitCost;
+            const itemCost = vacc.dose_amount * unitCost;
 
             totalProductsCost += itemCost;
 
             allProducts.push({
               name: (vacc.products as any)?.name || 'Nežinomas produktas',
-              quantity: vacc.quantity,
-              unit: (vacc.products as any)?.primary_pack_unit || 'vnt',
+              quantity: vacc.dose_amount,
+              unit: vacc.unit || (vacc.products as any)?.primary_pack_unit || 'vnt',
               unit_cost: unitCost,
               total_cost: itemCost,
             });
@@ -733,7 +734,7 @@ export function TreatmentCostAnalysis() {
                                                 )}
 
                                                 {/* Procedures - Format better */}
-                                                {visit.procedures && (
+                                                {visit.procedures && typeof visit.procedures === 'string' && (
                                                   <div className="text-sm text-gray-600 mt-2 bg-gray-50 px-3 py-1.5 rounded-md inline-block">
                                                     {visit.procedures.replace(/([A-Z])/g, ' $1').trim()}
                                                   </div>
