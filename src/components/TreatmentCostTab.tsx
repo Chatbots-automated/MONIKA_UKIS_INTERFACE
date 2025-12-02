@@ -2,16 +2,17 @@ import { useState } from 'react';
 import { MastitisMilk } from './MastitisMilk';
 import { TreatmentCostAnalysis } from './TreatmentCostAnalysis';
 import { ProductUsageAnalysis } from './ProductUsageAnalysis';
-import { Droplet, Euro, Package } from 'lucide-react';
+import { ProfitabilityDashboard } from './ProfitabilityDashboard';
+import { Droplet, Euro, Package, TrendingUp } from 'lucide-react';
 
 export function TreatmentCostTab() {
-  const [activeTab, setActiveTab] = useState<'costs' | 'usage' | 'mastitis'>('costs');
+  const [activeTab, setActiveTab] = useState<'costs' | 'usage' | 'mastitis' | 'profitability'>('costs');
 
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <button
             onClick={() => setActiveTab('costs')}
             className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
@@ -22,6 +23,17 @@ export function TreatmentCostTab() {
           >
             <Euro className="w-5 h-5" />
             <span>Gydymų Savikainos</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('profitability')}
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'profitability'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span>Pelningumas & ROI</span>
           </button>
           <button
             onClick={() => setActiveTab('usage')}
@@ -51,6 +63,7 @@ export function TreatmentCostTab() {
       {/* Tab Content */}
       <div>
         {activeTab === 'costs' && <TreatmentCostAnalysis />}
+        {activeTab === 'profitability' && <ProfitabilityDashboard />}
         {activeTab === 'usage' && <ProductUsageAnalysis />}
         {activeTab === 'mastitis' && <MastitisMilk />}
       </div>
