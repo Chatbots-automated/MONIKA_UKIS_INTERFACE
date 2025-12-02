@@ -95,6 +95,7 @@ export function ProfitabilityDashboard() {
   const [profitabilityData, setProfitabilityData] = useState<ProfitabilityData[]>([]);
   const [roiAnalysis, setRoiAnalysis] = useState<TreatmentROIAnalysis[]>([]);
   const [herdSummary, setHerdSummary] = useState<HerdSummary | null>(null);
+  const [geaGroupData, setGeaGroupData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'net_profit' | 'milk_revenue' | 'total_costs' | 'tag_no'>('net_profit');
@@ -176,6 +177,38 @@ export function ProfitabilityDashboard() {
 
       if (summaryError) throw summaryError;
       setHerdSummary(summaryData);
+
+      // Load GEA group data for group comparison (get latest snapshot for each animal)
+      let allGeaData: any[] = [];
+      let geaPage = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data: geaData, error: geaError } = await supabase
+          .from('gea_daily')
+          .select('animal_id, grupe, snapshot_date')
+          .order('snapshot_date', { ascending: false })
+          .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
+
+        if (geaError) throw geaError;
+        if (geaData && geaData.length > 0) {
+          allGeaData = [...allGeaData, ...geaData];
+          geaPage++;
+          hasMore = geaData.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Get only the most recent group for each animal
+      const animalGroupMap = new Map();
+      allGeaData.forEach(row => {
+        if (!animalGroupMap.has(row.animal_id) ||
+            new Date(row.snapshot_date) > new Date(animalGroupMap.get(row.animal_id).snapshot_date)) {
+          animalGroupMap.set(row.animal_id, row);
+        }
+      });
+      setGeaGroupData(Array.from(animalGroupMap.values()));
 
     } catch (error) {
       console.error('Error loading profitability data:', error);
@@ -936,61 +969,96 @@ export function ProfitabilityDashboard() {
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-blue-600" />
-                  Palyginimas Pagal Grupes
+                  Palyginimas Pagal Grupes (GEA Duomenys)
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                   {(() => {
-                    const groups = {};
+                    // Create profitability lookup by animal_id
+                    const profitabilityMap = new Map();
                     profitabilityData.forEach(animal => {
-                      const group = animal.current_group || 'Nežinoma';
+                      profitabilityMap.set(animal.animal_id, animal);
+                    });
+
+                    // Group by GEA group data (more complete)
+                    const groups = {};
+                    geaGroupData.forEach(geaAnimal => {
+                      const group = geaAnimal.grupe ?? 'Nežinoma';
                       if (!groups[group]) {
                         groups[group] = {
                           count: 0,
                           totalProfit: 0,
                           totalMilk: 0,
-                          totalCosts: 0
+                          totalCosts: 0,
+                          countWithData: 0
                         };
                       }
                       groups[group].count++;
-                      groups[group].totalProfit += animal.net_profit;
-                      groups[group].totalMilk += animal.total_milk_liters;
-                      groups[group].totalCosts += animal.total_costs;
+
+                      // If this animal has profitability data, add it
+                      const profData = profitabilityMap.get(geaAnimal.animal_id);
+                      if (profData) {
+                        groups[group].countWithData++;
+                        groups[group].totalProfit += profData.net_profit;
+                        groups[group].totalMilk += profData.total_milk_liters;
+                        groups[group].totalCosts += profData.total_costs;
+                      }
                     });
 
                     return Object.entries(groups)
-                      .sort(([a], [b]) => a.localeCompare(b))
+                      .sort(([a], [b]) => {
+                        // Sort numerically for numbers, alphabetically for text
+                        const numA = parseFloat(a);
+                        const numB = parseFloat(b);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                          return numA - numB;
+                        }
+                        return a.toString().localeCompare(b.toString());
+                      })
                       .map(([group, data]) => (
                         <div key={group} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                          <h4 className="font-semibold text-gray-900 mb-3">Grupė: {group}</h4>
+                          <h4 className="font-semibold text-gray-900 mb-3 text-center text-lg">Grupė {group}</h4>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-600">Gyvulių:</span>
                               <span className="font-bold">{data.count}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Pelnas:</span>
-                              <span className={`font-bold ${data.totalProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                {formatCurrencyLT(data.totalProfit)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Vid. pelnas:</span>
-                              <span className="font-medium">
-                                {formatCurrencyLT(data.totalProfit / data.count)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Pienas:</span>
-                              <span className="font-medium text-blue-700">
-                                {formatNumberLT(data.totalMilk)} L
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Kaštai:</span>
-                              <span className="font-medium text-orange-700">
-                                {formatCurrencyLT(data.totalCosts)}
-                              </span>
-                            </div>
+                            {data.countWithData > 0 && (
+                              <>
+                                <div className="flex justify-between text-xs text-gray-500">
+                                  <span>Su duomenimis:</span>
+                                  <span>{data.countWithData}</span>
+                                </div>
+                                <div className="flex justify-between pt-2 border-t border-gray-300">
+                                  <span className="text-gray-600">Pelnas:</span>
+                                  <span className={`font-bold ${data.totalProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                    {formatCurrencyLT(data.totalProfit)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Vid. pelnas:</span>
+                                  <span className="font-medium text-sm">
+                                    {formatCurrencyLT(data.totalProfit / data.countWithData)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Pienas:</span>
+                                  <span className="font-medium text-blue-700">
+                                    {formatNumberLT(data.totalMilk)} L
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Kaštai:</span>
+                                  <span className="font-medium text-orange-700">
+                                    {formatCurrencyLT(data.totalCosts)}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {data.countWithData === 0 && (
+                              <p className="text-xs text-gray-500 italic text-center pt-2">
+                                Nėra pelingumo duomenų
+                              </p>
+                            )}
                           </div>
                         </div>
                       ));
