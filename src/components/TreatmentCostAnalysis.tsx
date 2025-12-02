@@ -16,21 +16,44 @@ interface AnimalCostData {
   total_costs: number;
 }
 
+interface MedicationDetail {
+  name: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  total_cost: number;
+}
+
 interface TreatmentDetail {
   treatment_id: string;
   disease_name: string | null;
   start_date: string;
   end_date: string | null;
   visit_count: number;
+  visit_cost: number;
   medication_cost: number;
+  medications: MedicationDetail[];
   total_cost: number;
+}
+
+interface VisitDetail {
+  id: string;
+  visit_datetime: string;
+  status: string;
+  procedures: string | null;
+  notes: string | null;
+}
+
+interface AnimalDetailData {
+  treatments: TreatmentDetail[];
+  visits: VisitDetail[];
 }
 
 export function TreatmentCostAnalysis() {
   const [costData, setCostData] = useState<AnimalCostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedAnimal, setExpandedAnimal] = useState<string | null>(null);
-  const [animalDetails, setAnimalDetails] = useState<Map<string, TreatmentDetail[]>>(new Map());
+  const [animalDetails, setAnimalDetails] = useState<Map<string, AnimalDetailData>>(new Map());
   const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -192,6 +215,7 @@ export function TreatmentCostAnalysis() {
     }
 
     try {
+      // Get all treatments with full details
       const { data: treatments, error } = await supabase
         .from('treatments')
         .select(`
@@ -200,34 +224,50 @@ export function TreatmentCostAnalysis() {
           outcome,
           diseases(name)
         `)
-        .eq('animal_id', animalId);
+        .eq('animal_id', animalId)
+        .order('reg_date', { ascending: false });
 
       if (error) throw error;
 
-      // Calculate costs for each treatment
-      const details: TreatmentDetail[] = [];
+      // Calculate costs for each treatment with detailed medication info
+      const treatmentDetails: TreatmentDetail[] = [];
       for (const treatment of treatments || []) {
-        // Get usage items for this treatment
+        // Get usage items with product details
         const { data: usageItems } = await supabase
           .from('usage_items')
-          .select('qty, batches(purchase_price, received_qty)')
+          .select(`
+            qty,
+            products(name, primary_pack_unit),
+            batches(purchase_price, received_qty)
+          `)
           .eq('treatment_id', treatment.id);
 
         let medicationCost = 0;
+        const medications: MedicationDetail[] = [];
+
         for (const usage of usageItems || []) {
-          if (usage.batches) {
+          if (usage.batches && usage.qty) {
             const unitCost = calculateSafeUnitCost(
               usage.batches.purchase_price,
               usage.batches.received_qty
             );
-            medicationCost += (usage.qty || 0) * unitCost;
+            const itemCost = usage.qty * unitCost;
+            medicationCost += itemCost;
+
+            medications.push({
+              name: (usage.products as any)?.name || 'Nežinomas produktas',
+              quantity: usage.qty,
+              unit: (usage.products as any)?.primary_pack_unit || 'vnt',
+              unit_cost: unitCost,
+              total_cost: itemCost,
+            });
           }
         }
 
         // Count visits around the treatment date (within 30 days)
         const treatmentDate = new Date(treatment.reg_date);
         const endDate = new Date(treatmentDate);
-        endDate.setDate(endDate.getDate() + 30); // Look 30 days forward
+        endDate.setDate(endDate.getDate() + 30);
 
         const { count: visitCount } = await supabase
           .from('animal_visits')
@@ -239,18 +279,31 @@ export function TreatmentCostAnalysis() {
 
         const visitCost = (visitCount || 0) * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
 
-        details.push({
+        treatmentDetails.push({
           treatment_id: treatment.id,
-          disease_name: (treatment.diseases as any)?.name || null,
+          disease_name: (treatment.diseases as any)?.name || 'Nežinoma liga',
           start_date: treatment.reg_date,
           end_date: null,
           visit_count: visitCount || 0,
+          visit_cost: visitCost,
           medication_cost: medicationCost,
+          medications: medications,
           total_cost: visitCost + medicationCost,
         });
       }
 
-      setAnimalDetails(prev => new Map(prev).set(animalId, details));
+      // Get all visits for this animal
+      const { data: visits } = await supabase
+        .from('animal_visits')
+        .select('id, visit_datetime, status, procedures, notes')
+        .eq('animal_id', animalId)
+        .eq('status', 'Baigtas')
+        .order('visit_datetime', { ascending: false });
+
+      setAnimalDetails(prev => new Map(prev).set(animalId, {
+        treatments: treatmentDetails,
+        visits: visits || []
+      }));
     } catch (error) {
       console.error('Error loading animal details:', error);
     }
@@ -459,7 +512,7 @@ export function TreatmentCostAnalysis() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedData.map((row) => {
                   const isExpanded = expandedAnimal === row.animal_id;
-                  const details = animalDetails.get(row.animal_id) || [];
+                  const detailData = animalDetails.get(row.animal_id);
 
                   return (
                     <>
@@ -511,40 +564,114 @@ export function TreatmentCostAnalysis() {
                       </tr>
 
                       {/* Expanded Details */}
-                      {isExpanded && details.length > 0 && (
+                      {isExpanded && detailData && (
                         <tr>
                           <td colSpan={8} className="px-6 py-4 bg-gray-50">
-                            <div className="space-y-2">
-                              <h4 className="font-semibold text-gray-700 text-sm mb-2">Gydymų detalės:</h4>
-                              {details.map((detail, idx) => (
-                                <div
-                                  key={detail.treatment_id}
-                                  className="bg-white p-3 rounded-lg border border-gray-200"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <div className="font-medium text-gray-900 text-sm">
-                                        {detail.disease_name || 'Nežinoma liga'}
+                            <div className="space-y-4">
+
+                              {/* Treatments Section */}
+                              {detailData.treatments.length > 0 && (
+                                <div>
+                                  <h4 className="font-bold text-gray-800 text-base mb-3 flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-blue-600" />
+                                    Gydymai ({detailData.treatments.length})
+                                  </h4>
+                                  <div className="space-y-3">
+                                    {detailData.treatments.map((treatment) => (
+                                      <div key={treatment.treatment_id} className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm">
+                                        <div className="flex items-start justify-between mb-3">
+                                          <div>
+                                            <div className="font-semibold text-gray-900 text-base">
+                                              {treatment.disease_name}
+                                            </div>
+                                            <div className="text-sm text-gray-500 mt-1">
+                                              {formatDateLT(treatment.start_date)}
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="text-xs text-gray-500 mb-1">Viso:</div>
+                                            <div className="text-xl font-bold text-emerald-600">
+                                              {formatCost(treatment.total_cost)}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                          <div className="bg-blue-50 p-3 rounded-lg">
+                                            <div className="text-xs font-semibold text-blue-800 uppercase mb-1">Vizitai</div>
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-sm text-gray-700">{treatment.visit_count} vizitai</span>
+                                              <span className="text-lg font-bold text-blue-700">{formatCost(treatment.visit_cost)}</span>
+                                            </div>
+                                          </div>
+
+                                          <div className="bg-orange-50 p-3 rounded-lg">
+                                            <div className="text-xs font-semibold text-orange-800 uppercase mb-1">Vaistai</div>
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-sm text-gray-700">{treatment.medications.length} produktai</span>
+                                              <span className="text-lg font-bold text-orange-700">{formatCost(treatment.medication_cost)}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Medications List */}
+                                        {treatment.medications.length > 0 && (
+                                          <div className="mt-3">
+                                            <div className="text-xs font-semibold text-gray-600 uppercase mb-2">Panaudoti vaistai:</div>
+                                            <div className="space-y-2">
+                                              {treatment.medications.map((med, idx) => (
+                                                <div key={idx} className="bg-gray-50 p-2 rounded flex items-center justify-between text-sm">
+                                                  <div className="flex-1">
+                                                    <span className="font-medium text-gray-900">{med.name}</span>
+                                                    <span className="text-gray-500 ml-2">
+                                                      {med.quantity} {med.unit}
+                                                    </span>
+                                                  </div>
+                                                  <div className="text-right">
+                                                    <div className="font-bold text-orange-600">{formatCost(med.total_cost)}</div>
+                                                    <div className="text-xs text-gray-500">{formatCost(med.unit_cost)}/{med.unit}</div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="text-xs text-gray-500 mt-1">
-                                        {formatDateLT(detail.start_date)}
-                                        {detail.end_date && ` - ${formatDateLT(detail.end_date)}`}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-4 text-sm">
-                                      <span className="text-gray-600">
-                                        Vizitų: <span className="font-medium">{detail.visit_count}</span>
-                                      </span>
-                                      <span className="text-orange-600">
-                                        Vaistai: <span className="font-bold">{formatCost(detail.medication_cost)}</span>
-                                      </span>
-                                      <span className="text-emerald-700 font-bold">
-                                        Viso: {formatCost(detail.total_cost)}
-                                      </span>
-                                    </div>
+                                    ))}
                                   </div>
                                 </div>
-                              ))}
+                              )}
+
+                              {/* Visits Section */}
+                              {detailData.visits.length > 0 && (
+                                <div>
+                                  <h4 className="font-bold text-gray-800 text-base mb-3 flex items-center gap-2">
+                                    <Calendar className="w-5 h-5 text-purple-600" />
+                                    Visi vizitai ({detailData.visits.length})
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {detailData.visits.map((visit) => (
+                                      <div key={visit.id} className="bg-white p-3 rounded-lg border border-gray-200">
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex-1">
+                                            <div className="font-medium text-gray-900 text-sm">
+                                              {formatDateLT(visit.visit_datetime)}
+                                            </div>
+                                            {visit.procedures && (
+                                              <div className="text-xs text-gray-600 mt-1">{visit.procedures}</div>
+                                            )}
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="font-bold text-blue-600 text-sm">
+                                              {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
