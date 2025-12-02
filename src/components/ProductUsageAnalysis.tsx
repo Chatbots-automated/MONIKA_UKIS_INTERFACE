@@ -66,13 +66,29 @@ export function ProductUsageAnalysis() {
 
       console.log('✅ Vaccinations loaded:', vaccinations.length);
 
-      // 3. Get all animal_visits with planned_medications
-      const visits = await fetchAllRows<any>(
-        'animal_visits',
-        'id, visit_datetime, animal_id, planned_medications',
-        undefined,
-        [{ column: 'planned_medications', value: null, operator: 'not.is' }]
-      );
+      // 3. Get all animal_visits with planned_medications (manual pagination for not.is filter)
+      let visits: any[] = [];
+      let visitFrom = 0;
+      const visitPageSize = 1000;
+      let hasMoreVisits = true;
+
+      while (hasMoreVisits) {
+        const { data: visitPage, error: visitError } = await supabase
+          .from('animal_visits')
+          .select('id, visit_datetime, animal_id, planned_medications')
+          .not('planned_medications', 'is', null)
+          .range(visitFrom, visitFrom + visitPageSize - 1);
+
+        if (visitError) throw visitError;
+
+        if (visitPage && visitPage.length > 0) {
+          visits = [...visits, ...visitPage];
+          visitFrom += visitPageSize;
+          hasMoreVisits = visitPage.length === visitPageSize;
+        } else {
+          hasMoreVisits = false;
+        }
+      }
 
       console.log('✅ Visits with planned meds loaded:', visits.length);
 
