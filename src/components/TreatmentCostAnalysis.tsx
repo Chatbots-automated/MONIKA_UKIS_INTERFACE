@@ -294,7 +294,37 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        // 3. ALSO add products from planned_medications (in case they weren't processed yet)
+        // 3. Get ALL vaccinations for this visit (prevention products like Rycaps, Hydrocaps, etc.)
+        const { data: vaccinations } = await supabase
+          .from('vaccinations')
+          .select(`
+            quantity,
+            products(name, primary_pack_unit, category),
+            batches(purchase_price, received_qty)
+          `)
+          .eq('visit_id', visit.id);
+
+        for (const vacc of vaccinations || []) {
+          if (vacc.batches && vacc.quantity) {
+            const unitCost = calculateSafeUnitCost(
+              vacc.batches.purchase_price,
+              vacc.batches.received_qty
+            );
+            const itemCost = vacc.quantity * unitCost;
+
+            totalProductsCost += itemCost;
+
+            allProducts.push({
+              name: (vacc.products as any)?.name || 'Nežinomas produktas',
+              quantity: vacc.quantity,
+              unit: (vacc.products as any)?.primary_pack_unit || 'vnt',
+              unit_cost: unitCost,
+              total_cost: itemCost,
+            });
+          }
+        }
+
+        // 4. ALSO add products from planned_medications (in case they weren't processed yet)
         const plannedMeds = visit.planned_medications as any[];
         if (plannedMeds && Array.isArray(plannedMeds)) {
           for (const med of plannedMeds) {
@@ -334,6 +364,22 @@ export function TreatmentCostAnalysis() {
                 });
               }
             }
+          }
+        }
+
+        // Debug logging for cost calculation
+        if (allProducts.length > 0) {
+          console.log(`\n🔍 Visit ${visit.visit_datetime} - Cost Breakdown:`);
+          let sumCheck = 0;
+          allProducts.forEach((p, idx) => {
+            console.log(`  ${idx + 1}. ${p.name}: ${p.quantity} × €${p.unit_cost.toFixed(6)} = €${p.total_cost.toFixed(6)}`);
+            sumCheck += p.total_cost;
+          });
+          console.log(`  ➕ Sum of individual costs: €${sumCheck.toFixed(6)}`);
+          console.log(`  📊 Total products cost: €${totalProductsCost.toFixed(6)}`);
+          console.log(`  ✅ Rounded display: €${totalProductsCost.toFixed(2)}`);
+          if (Math.abs(sumCheck - totalProductsCost) > 0.001) {
+            console.log(`  ⚠️ MISMATCH DETECTED!`);
           }
         }
 
@@ -686,10 +732,10 @@ export function TreatmentCostAnalysis() {
                                                   </div>
                                                 )}
 
-                                                {/* Procedures */}
+                                                {/* Procedures - Format better */}
                                                 {visit.procedures && (
-                                                  <div className="text-sm text-gray-700 mt-2">
-                                                    {visit.procedures}
+                                                  <div className="text-sm text-gray-600 mt-2 bg-gray-50 px-3 py-1.5 rounded-md inline-block">
+                                                    {visit.procedures.replace(/([A-Z])/g, ' $1').trim()}
                                                   </div>
                                                 )}
                                               </div>
