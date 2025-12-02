@@ -48,63 +48,97 @@ export function ProductUsageAnalysis() {
   const loadProductUsage = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Loading product usage data...');
 
       // 1. Get all usage_items with product details
-      const { data: usageItems, error: usageError } = await supabase
-        .from('usage_items')
-        .select(`
-          id,
-          qty,
-          created_at,
-          treatment_id,
-          products(id, name, category, subcategory, primary_pack_unit),
-          batches(purchase_price, received_qty),
-          treatments(animal_id, animals(tag_no))
-        `);
+      const usageItems = await fetchAllRows(
+        supabase
+          .from('usage_items')
+          .select(`
+            id,
+            qty,
+            created_at,
+            treatment_id,
+            product_id,
+            batch_id
+          `)
+      );
 
-      if (usageError) throw usageError;
+      console.log('✅ Usage items loaded:', usageItems.length);
 
-      // 2. Get all vaccinations with product details
-      const { data: vaccinations, error: vaccError } = await supabase
-        .from('vaccinations')
-        .select(`
-          id,
-          dose_amount,
-          unit,
-          vaccination_date,
-          animal_id,
-          products(id, name, category, subcategory, primary_pack_unit),
-          batches(purchase_price, received_qty),
-          animals(tag_no)
-        `);
+      // 2. Get all vaccinations
+      const vaccinations = await fetchAllRows(
+        supabase
+          .from('vaccinations')
+          .select(`
+            id,
+            dose_amount,
+            unit,
+            vaccination_date,
+            animal_id,
+            product_id,
+            batch_id
+          `)
+      );
 
-      if (vaccError) throw vaccError;
+      console.log('✅ Vaccinations loaded:', vaccinations.length);
 
       // 3. Get all animal_visits with planned_medications
-      const { data: visits, error: visitsError } = await supabase
-        .from('animal_visits')
-        .select(`
-          id,
-          visit_datetime,
-          animal_id,
-          planned_medications,
-          animals(tag_no)
-        `)
-        .not('planned_medications', 'is', null);
+      const visits = await fetchAllRows(
+        supabase
+          .from('animal_visits')
+          .select(`
+            id,
+            visit_datetime,
+            animal_id,
+            planned_medications
+          `)
+          .not('planned_medications', 'is', null)
+      );
 
-      if (visitsError) throw visitsError;
+      console.log('✅ Visits with planned meds loaded:', visits.length);
 
       // Process all data into product-centric view
       const productMap = new Map<string, ProductUsageRecord>();
 
       // Process usage_items
+      console.log('📦 Processing usage_items...');
       for (const item of usageItems || []) {
-        if (!item.products || !item.batches || !item.qty) continue;
+        if (!item.product_id || !item.batch_id || !item.qty) continue;
 
-        const product = item.products as any;
-        const batch = item.batches as any;
-        const treatment = item.treatments as any;
-        const animal = treatment?.animals as any;
+        // Fetch product details
+        const { data: product } = await supabase
+          .from('products')
+          .select('id, name, category, subcategory, primary_pack_unit')
+          .eq('id', item.product_id)
+          .maybeSingle();
+
+        if (!product) continue;
+
+        // Fetch batch details
+        const { data: batch } = await supabase
+          .from('batches')
+          .select('purchase_price, received_qty')
+          .eq('id', item.batch_id)
+          .maybeSingle();
+
+        if (!batch) continue;
+
+        // Fetch treatment and animal details
+        let animalTag = null;
+        let animalId = null;
+        if (item.treatment_id) {
+          const { data: treatment } = await supabase
+            .from('treatments')
+            .select('animal_id, animals(tag_no)')
+            .eq('id', item.treatment_id)
+            .maybeSingle();
+
+          if (treatment) {
+            animalId = treatment.animal_id;
+            animalTag = (treatment.animals as any)?.tag_no || null;
+          }
+        }
 
         const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
         const totalCost = item.qty * unitCost;
@@ -131,8 +165,8 @@ export function ProductUsageAnalysis() {
         record.usage_count += 1;
         record.usages.push({
           date: item.created_at,
-          animal_tag: animal?.tag_no || null,
-          animal_id: treatment?.animal_id,
+          animal_tag: animalTag,
+          animal_id: animalId || '',
           quantity: item.qty,
           unit_cost: unitCost,
           total_cost: totalCost,
@@ -141,14 +175,37 @@ export function ProductUsageAnalysis() {
           source: 'usage_items',
         });
       }
+      console.log('✅ Usage items processed:', productMap.size, 'products');
 
       // Process vaccinations
+      console.log('💉 Processing vaccinations...');
       for (const vacc of vaccinations || []) {
-        if (!vacc.products || !vacc.batches || !vacc.dose_amount) continue;
+        if (!vacc.product_id || !vacc.batch_id || !vacc.dose_amount) continue;
 
-        const product = vacc.products as any;
-        const batch = vacc.batches as any;
-        const animal = vacc.animals as any;
+        // Fetch product details
+        const { data: product } = await supabase
+          .from('products')
+          .select('id, name, category, subcategory, primary_pack_unit')
+          .eq('id', vacc.product_id)
+          .maybeSingle();
+
+        if (!product) continue;
+
+        // Fetch batch details
+        const { data: batch } = await supabase
+          .from('batches')
+          .select('purchase_price, received_qty')
+          .eq('id', vacc.batch_id)
+          .maybeSingle();
+
+        if (!batch) continue;
+
+        // Fetch animal details
+        const { data: animal } = await supabase
+          .from('animals')
+          .select('tag_no')
+          .eq('id', vacc.animal_id)
+          .maybeSingle();
 
         const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
         const totalCost = vacc.dose_amount * unitCost;
@@ -185,13 +242,21 @@ export function ProductUsageAnalysis() {
           source: 'vaccinations',
         });
       }
+      console.log('✅ Vaccinations processed');
 
       // Process planned_medications from visits
+      console.log('📋 Processing planned medications...');
       for (const visit of visits || []) {
         const plannedMeds = visit.planned_medications as any[];
-        const animal = visit.animals as any;
 
         if (!plannedMeds || !Array.isArray(plannedMeds)) continue;
+
+        // Fetch animal details
+        const { data: animal } = await supabase
+          .from('animals')
+          .select('tag_no')
+          .eq('id', visit.animal_id)
+          .maybeSingle();
 
         for (const med of plannedMeds) {
           if (!med.product_id || !med.batch_id || !med.qty) continue;
@@ -247,6 +312,7 @@ export function ProductUsageAnalysis() {
           });
         }
       }
+      console.log('✅ Planned medications processed');
 
       // Calculate unique animals per product
       for (const record of productMap.values()) {
