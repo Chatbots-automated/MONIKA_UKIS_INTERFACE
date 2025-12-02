@@ -12,6 +12,8 @@ interface AnimalCostData {
   visit_count: number;
   visit_costs: number;
   medication_costs: number;
+  medication_costs_from_usage_items: number;
+  medication_costs_from_planned: number;
   vaccination_count: number;
   vaccination_costs: number;
   total_costs: number;
@@ -164,7 +166,7 @@ export function TreatmentCostAnalysis() {
         );
 
         // Calculate medication costs from usage items
-        let medicationCosts = 0;
+        let medicationCostsFromUsageItems = 0;
         for (const treatment of animalTreatments) {
           const treatmentUsage = (usageItems || []).filter(ui => ui.treatment_id === treatment.id);
           for (const usage of treatmentUsage) {
@@ -173,12 +175,13 @@ export function TreatmentCostAnalysis() {
                 usage.batches.purchase_price,
                 usage.batches.received_qty
               );
-              medicationCosts += usage.qty * unitCost;
+              medicationCostsFromUsageItems += usage.qty * unitCost;
             }
           }
         }
 
         // Add costs from planned_medications in visits
+        let medicationCostsFromPlanned = 0;
         const animalVisits = (visits || []).filter(v => v.animal_id === animal.id);
         for (const visit of animalVisits) {
           if (visit.planned_medications && Array.isArray(visit.planned_medications)) {
@@ -187,12 +190,14 @@ export function TreatmentCostAnalysis() {
                 const batch = batchMap.get(med.batch_id);
                 if (batch) {
                   const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
-                  medicationCosts += med.qty * unitCost;
+                  medicationCostsFromPlanned += med.qty * unitCost;
                 }
               }
             }
           }
         }
+
+        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromPlanned;
 
         // Calculate vaccination costs
         let vaccinationCosts = 0;
@@ -221,6 +226,8 @@ export function TreatmentCostAnalysis() {
             visit_count: visitCount,
             visit_costs: visitCosts,
             medication_costs: medicationCosts,
+            medication_costs_from_usage_items: medicationCostsFromUsageItems,
+            medication_costs_from_planned: medicationCostsFromPlanned,
             vaccination_count: animalVaccinations.length,
             vaccination_costs: vaccinationCosts,
             total_costs: totalCosts,
@@ -591,6 +598,8 @@ export function TreatmentCostAnalysis() {
       totalVisits: acc.totalVisits + row.visit_count,
       totalVisitCosts: acc.totalVisitCosts + row.visit_costs,
       totalMedicationCosts: acc.totalMedicationCosts + row.medication_costs,
+      totalMedicationCostsFromUsageItems: acc.totalMedicationCostsFromUsageItems + row.medication_costs_from_usage_items,
+      totalMedicationCostsFromPlanned: acc.totalMedicationCostsFromPlanned + row.medication_costs_from_planned,
       totalVaccinationCosts: acc.totalVaccinationCosts + row.vaccination_costs,
       totalCosts: acc.totalCosts + row.total_costs,
     }),
@@ -599,6 +608,8 @@ export function TreatmentCostAnalysis() {
       totalVisits: 0,
       totalVisitCosts: 0,
       totalMedicationCosts: 0,
+      totalMedicationCostsFromUsageItems: 0,
+      totalMedicationCostsFromPlanned: 0,
       totalVaccinationCosts: 0,
       totalCosts: 0,
     }
@@ -689,6 +700,20 @@ export function TreatmentCostAnalysis() {
               <span className="text-xs font-semibold text-gray-600 uppercase">Viso</span>
             </div>
             <div className="text-2xl font-bold text-emerald-600">{formatCost(totalStats.totalCosts)}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+          <div className="text-xs font-semibold text-gray-600 uppercase">Vaistų išlaidų paskirstymas pagal šaltinį:</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <span className="text-sm text-gray-600">Gydymo vaistai (usage_items):</span>
+              <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromUsageItems)}</span>
+            </div>
+            <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <span className="text-sm text-gray-600">Planuoti vaistai (vizitai):</span>
+              <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromPlanned)}</span>
+            </div>
           </div>
         </div>
 
