@@ -92,45 +92,42 @@ export function ProductUsageAnalysis() {
 
       console.log('✅ Visits with planned meds loaded:', visits.length);
 
+      // Fetch all lookup data upfront (MUCH faster than individual queries)
+      console.log('📚 Loading lookup data...');
+      const products = await fetchAllRows<any>('products', 'id, name, category, subcategory, primary_pack_unit');
+      const batches = await fetchAllRows<any>('batches', 'id, purchase_price, received_qty');
+      const treatments = await fetchAllRows<any>('treatments', 'id, animal_id');
+      const animals = await fetchAllRows<any>('animals', 'id, tag_no');
+
+      // Create lookup maps
+      const productMap = new Map(products.map(p => [p.id, p]));
+      const batchMap = new Map(batches.map(b => [b.id, b]));
+      const treatmentMap = new Map(treatments.map(t => [t.id, t]));
+      const animalMap = new Map(animals.map(a => [a.id, a]));
+
+      console.log('✅ Lookup data loaded:', products.length, 'products,', batches.length, 'batches,', animals.length, 'animals');
+
       // Process all data into product-centric view
-      const productMap = new Map<string, ProductUsageRecord>();
+      const usageByProduct = new Map<string, ProductUsageRecord>();
 
       // Process usage_items
       console.log('📦 Processing usage_items...');
       for (const item of usageItems || []) {
         if (!item.product_id || !item.batch_id || !item.qty) continue;
 
-        // Fetch product details
-        const { data: product } = await supabase
-          .from('products')
-          .select('id, name, category, subcategory, primary_pack_unit')
-          .eq('id', item.product_id)
-          .maybeSingle();
+        const product = productMap.get(item.product_id);
+        const batch = batchMap.get(item.batch_id);
+        if (!product || !batch) continue;
 
-        if (!product) continue;
-
-        // Fetch batch details
-        const { data: batch } = await supabase
-          .from('batches')
-          .select('purchase_price, received_qty')
-          .eq('id', item.batch_id)
-          .maybeSingle();
-
-        if (!batch) continue;
-
-        // Fetch treatment and animal details
+        // Get animal info if treatment exists
         let animalTag = null;
         let animalId = null;
         if (item.treatment_id) {
-          const { data: treatment } = await supabase
-            .from('treatments')
-            .select('animal_id, animals(tag_no)')
-            .eq('id', item.treatment_id)
-            .maybeSingle();
-
+          const treatment = treatmentMap.get(item.treatment_id);
           if (treatment) {
             animalId = treatment.animal_id;
-            animalTag = (treatment.animals as any)?.tag_no || null;
+            const animal = animalMap.get(treatment.animal_id);
+            animalTag = animal?.tag_no || null;
           }
         }
 
@@ -138,8 +135,8 @@ export function ProductUsageAnalysis() {
         const totalCost = item.qty * unitCost;
 
         const productId = product.id;
-        if (!productMap.has(productId)) {
-          productMap.set(productId, {
+        if (!usageByProduct.has(productId)) {
+          usageByProduct.set(productId, {
             product_id: productId,
             product_name: product.name,
             category: product.category,
@@ -153,7 +150,7 @@ export function ProductUsageAnalysis() {
           });
         }
 
-        const record = productMap.get(productId)!;
+        const record = usageByProduct.get(productId)!;
         record.total_quantity += item.qty;
         record.total_cost += totalCost;
         record.usage_count += 1;
@@ -169,44 +166,25 @@ export function ProductUsageAnalysis() {
           source: 'usage_items',
         });
       }
-      console.log('✅ Usage items processed:', productMap.size, 'products');
+      console.log('✅ Usage items processed:', usageByProduct.size, 'products');
 
       // Process vaccinations
       console.log('💉 Processing vaccinations...');
       for (const vacc of vaccinations || []) {
         if (!vacc.product_id || !vacc.batch_id || !vacc.dose_amount) continue;
 
-        // Fetch product details
-        const { data: product } = await supabase
-          .from('products')
-          .select('id, name, category, subcategory, primary_pack_unit')
-          .eq('id', vacc.product_id)
-          .maybeSingle();
+        const product = productMap.get(vacc.product_id);
+        const batch = batchMap.get(vacc.batch_id);
+        if (!product || !batch) continue;
 
-        if (!product) continue;
-
-        // Fetch batch details
-        const { data: batch } = await supabase
-          .from('batches')
-          .select('purchase_price, received_qty')
-          .eq('id', vacc.batch_id)
-          .maybeSingle();
-
-        if (!batch) continue;
-
-        // Fetch animal details
-        const { data: animal } = await supabase
-          .from('animals')
-          .select('tag_no')
-          .eq('id', vacc.animal_id)
-          .maybeSingle();
+        const animal = animalMap.get(vacc.animal_id);
 
         const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
         const totalCost = vacc.dose_amount * unitCost;
 
         const productId = product.id;
-        if (!productMap.has(productId)) {
-          productMap.set(productId, {
+        if (!usageByProduct.has(productId)) {
+          usageByProduct.set(productId, {
             product_id: productId,
             product_name: product.name,
             category: product.category,
@@ -220,7 +198,7 @@ export function ProductUsageAnalysis() {
           });
         }
 
-        const record = productMap.get(productId)!;
+        const record = usageByProduct.get(productId)!;
         record.total_quantity += vacc.dose_amount;
         record.total_cost += totalCost;
         record.usage_count += 1;
@@ -245,28 +223,13 @@ export function ProductUsageAnalysis() {
 
         if (!plannedMeds || !Array.isArray(plannedMeds)) continue;
 
-        // Fetch animal details
-        const { data: animal } = await supabase
-          .from('animals')
-          .select('tag_no')
-          .eq('id', visit.animal_id)
-          .maybeSingle();
+        const animal = animalMap.get(visit.animal_id);
 
         for (const med of plannedMeds) {
           if (!med.product_id || !med.batch_id || !med.qty) continue;
 
-          // Fetch product and batch details
-          const { data: product } = await supabase
-            .from('products')
-            .select('id, name, category, subcategory, primary_pack_unit')
-            .eq('id', med.product_id)
-            .maybeSingle();
-
-          const { data: batch } = await supabase
-            .from('batches')
-            .select('purchase_price, received_qty')
-            .eq('id', med.batch_id)
-            .maybeSingle();
+          const product = productMap.get(med.product_id);
+          const batch = batchMap.get(med.batch_id);
 
           if (!product || !batch) continue;
 
@@ -274,8 +237,8 @@ export function ProductUsageAnalysis() {
           const totalCost = med.qty * unitCost;
 
           const productId = product.id;
-          if (!productMap.has(productId)) {
-            productMap.set(productId, {
+          if (!usageByProduct.has(productId)) {
+            usageByProduct.set(productId, {
               product_id: productId,
               product_name: product.name,
               category: product.category,
@@ -289,7 +252,7 @@ export function ProductUsageAnalysis() {
             });
           }
 
-          const record = productMap.get(productId)!;
+          const record = usageByProduct.get(productId)!;
           record.total_quantity += med.qty;
           record.total_cost += totalCost;
           record.usage_count += 1;
@@ -309,13 +272,13 @@ export function ProductUsageAnalysis() {
       console.log('✅ Planned medications processed');
 
       // Calculate unique animals per product
-      for (const record of productMap.values()) {
+      for (const record of usageByProduct.values()) {
         const uniqueAnimals = new Set(record.usages.map(u => u.animal_id));
         record.animals_treated = uniqueAnimals.size;
       }
 
-      setUsageData(Array.from(productMap.values()));
-      console.log('📦 Product usage loaded:', productMap.size, 'unique products');
+      setUsageData(Array.from(usageByProduct.values()));
+      console.log('📦 Product usage loaded:', usageByProduct.size, 'unique products');
     } catch (error) {
       console.error('Error loading product usage:', error);
     } finally {
