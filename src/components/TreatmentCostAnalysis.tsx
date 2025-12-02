@@ -63,7 +63,7 @@ export function TreatmentCostAnalysis() {
   const [expandedAnimal, setExpandedAnimal] = useState<string | null>(null);
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set());
   const [animalDetails, setAnimalDetails] = useState<Map<string, AnimalDetailData>>(new Map());
-  const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications'>('total');
+  const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications' | 'vaccinations' | 'tag_no' | 'visit_count' | 'treatment_count'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
   const [neckNumberSearch, setNeckNumberSearch] = useState('');
@@ -251,7 +251,7 @@ export function TreatmentCostAnalysis() {
             .from('usage_items')
             .select(`
               qty,
-              products(name, primary_pack_unit, category),
+              products(name, primary_pack_unit, category, subcategory),
               batches(purchase_price, received_qty)
             `)
             .eq('treatment_id', treatment.id);
@@ -280,12 +280,18 @@ export function TreatmentCostAnalysis() {
 
               totalProductsCost += itemCost;
 
+              // Check if it's a vaccine based on category or subcategory
+              const isVaccine = (usage.products as any)?.category === 'prevention' ||
+                               (usage.products as any)?.subcategory === 'Vakcinos' ||
+                               (usage.products as any)?.name?.toLowerCase().includes('vakcin');
+
               allProducts.push({
                 name: (usage.products as any)?.name || 'Nežinomas produktas',
                 quantity: usage.qty,
                 unit: (usage.products as any)?.primary_pack_unit || 'vnt',
                 unit_cost: unitCost,
                 total_cost: itemCost,
+                is_vaccine: isVaccine,
               });
             }
           }
@@ -333,7 +339,7 @@ export function TreatmentCostAnalysis() {
           for (const med of plannedMeds) {
             const { data: product } = await supabase
               .from('products')
-              .select('name, primary_pack_unit')
+              .select('name, primary_pack_unit, category, subcategory')
               .eq('id', med.product_id)
               .maybeSingle();
 
@@ -358,12 +364,19 @@ export function TreatmentCostAnalysis() {
 
               if (!alreadyExists) {
                 totalProductsCost += itemCost;
+
+                // Check if it's a vaccine based on category or subcategory
+                const isVaccine = product?.category === 'prevention' ||
+                                 product?.subcategory === 'Vakcinos' ||
+                                 product?.name?.toLowerCase().includes('vakcin');
+
                 allProducts.push({
                   name: product?.name || 'Nežinomas produktas',
                   quantity: med.qty,
                   unit: med.unit || product?.primary_pack_unit || 'vnt',
                   unit_cost: unitCost,
                   total_cost: itemCost,
+                  is_vaccine: isVaccine,
                 });
               }
             }
@@ -452,6 +465,18 @@ export function TreatmentCostAnalysis() {
         break;
       case 'medications':
         compareValue = a.medication_costs - b.medication_costs;
+        break;
+      case 'vaccinations':
+        compareValue = a.vaccination_costs - b.vaccination_costs;
+        break;
+      case 'visit_count':
+        compareValue = a.visit_count - b.visit_count;
+        break;
+      case 'treatment_count':
+        compareValue = a.treatment_count - b.treatment_count;
+        break;
+      case 'tag_no':
+        compareValue = (a.tag_no || '').localeCompare(b.tag_no || '', 'lt');
         break;
     }
     return sortOrder === 'desc' ? -compareValue : compareValue;
@@ -597,9 +622,19 @@ export function TreatmentCostAnalysis() {
             onChange={(e) => setSortBy(e.target.value as any)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           >
-            <option value="total">Bendra kaina</option>
-            <option value="visits">Vizitų kaina</option>
-            <option value="medications">Vaistų kaina</option>
+            <optgroup label="Pagal kainą">
+              <option value="total">Bendra kaina</option>
+              <option value="visits">Vizitų kaina</option>
+              <option value="medications">Vaistų kaina</option>
+              <option value="vaccinations">Vakcinų kaina</option>
+            </optgroup>
+            <optgroup label="Pagal kiekį">
+              <option value="treatment_count">Gydymų skaičius</option>
+              <option value="visit_count">Vizitų skaičius</option>
+            </optgroup>
+            <optgroup label="Pagal gyvūną">
+              <option value="tag_no">Ausies numeris</option>
+            </optgroup>
           </select>
           <button
             onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
