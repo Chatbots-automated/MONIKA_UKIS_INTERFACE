@@ -412,6 +412,84 @@ export function TreatmentCostAnalysis() {
         });
       }
 
+      // Also load standalone vaccinations (not associated with any visit)
+      const { data: allVaccinations } = await supabase
+        .from('vaccinations')
+        .select(`
+          id,
+          dose_amount,
+          unit,
+          vaccination_date,
+          products(name, primary_pack_unit, category),
+          batches(purchase_price, received_qty)
+        `)
+        .eq('animal_id', animalId)
+        .order('vaccination_date', { ascending: false });
+
+      // Get dates of visits to exclude vaccinations already included
+      const visitDates = new Set((visits || []).map(v =>
+        new Date(v.visit_datetime).toISOString().split('T')[0]
+      ));
+
+      // Create synthetic "visit" entries for standalone vaccinations
+      const standaloneVaccsByDate = new Map<string, any[]>();
+
+      for (const vacc of allVaccinations || []) {
+        const vaccDate = new Date(vacc.vaccination_date).toISOString().split('T')[0];
+
+        // Skip if this vaccination date matches a visit date (already included)
+        if (visitDates.has(vaccDate)) continue;
+
+        if (!standaloneVaccsByDate.has(vaccDate)) {
+          standaloneVaccsByDate.set(vaccDate, []);
+        }
+        standaloneVaccsByDate.get(vaccDate)!.push(vacc);
+      }
+
+      // Add standalone vaccinations as synthetic visits
+      for (const [vaccDate, vaccs] of standaloneVaccsByDate.entries()) {
+        let totalVaccCost = 0;
+        const vaccProducts: MedicationDetail[] = [];
+
+        for (const vacc of vaccs) {
+          if (vacc.batches && vacc.dose_amount) {
+            const unitCost = calculateSafeUnitCost(
+              vacc.batches.purchase_price,
+              vacc.batches.received_qty
+            );
+            const itemCost = vacc.dose_amount * unitCost;
+
+            totalVaccCost += itemCost;
+            vaccProducts.push({
+              name: (vacc.products as any)?.name || 'Nežinomas produktas',
+              quantity: vacc.dose_amount,
+              unit: vacc.unit || (vacc.products as any)?.primary_pack_unit || 'vnt',
+              unit_cost: unitCost,
+              total_cost: itemCost,
+              is_vaccine: true,
+            });
+          }
+        }
+
+        // Add as a synthetic visit for standalone vaccinations
+        visitDetails.push({
+          id: `vacc-${vaccDate}`,
+          visit_datetime: vaccDate,
+          status: 'Baigtas',
+          procedures: ['Vakcina'],
+          notes: 'Vakcinacija be vizito',
+          vet_name: null,
+          treatment_info: null,
+          all_products: vaccProducts,
+          total_products_cost: totalVaccCost,
+        });
+      }
+
+      // Sort all visit details by date (newest first)
+      visitDetails.sort((a, b) =>
+        new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime()
+      );
+
       setAnimalDetails(prev => new Map(prev).set(animalId, {
         visits: visitDetails
       }));
