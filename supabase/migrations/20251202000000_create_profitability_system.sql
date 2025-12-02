@@ -82,12 +82,12 @@ CREATE POLICY "Admins can update settings"
 
 -- Create helper function to get setting value
 CREATE OR REPLACE FUNCTION get_setting(key text, default_value numeric DEFAULT 0)
-RETURNS numeric AS \$\$
+RETURNS numeric AS $$
   SELECT COALESCE(
     (SELECT setting_value::numeric FROM system_settings WHERE setting_key = key),
     default_value
   );
-\$\$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE;
 
 -- View: Animal Milk Revenue Calculation
 CREATE OR REPLACE VIEW vw_animal_milk_revenue AS
