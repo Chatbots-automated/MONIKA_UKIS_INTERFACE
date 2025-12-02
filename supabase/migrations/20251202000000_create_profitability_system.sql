@@ -127,11 +127,11 @@ withdrawal_days AS (
     UNION ALL
     SELECT
       animal_id,
-      date as created_at
+      vaccination_date as created_at
     FROM vaccinations
     WHERE withdrawal_until_milk IS NOT NULL
       AND withdrawal_until_milk >= CURRENT_DATE - INTERVAL '90 days'
-      AND date >= CURRENT_DATE - INTERVAL '90 days'
+      AND vaccination_date >= CURRENT_DATE - INTERVAL '90 days'
   ) withdrawals
   GROUP BY animal_id
 )
@@ -171,7 +171,7 @@ WITH animal_costs AS (
   LEFT JOIN treatments t ON t.animal_id = a.id
     AND t.reg_date >= CURRENT_DATE - INTERVAL '90 days'
   LEFT JOIN vaccinations v ON v.animal_id = a.id
-    AND v.date >= CURRENT_DATE - INTERVAL '90 days'
+    AND v.vaccination_date >= CURRENT_DATE - INTERVAL '90 days'
   LEFT JOIN animal_visits av ON av.animal_id = a.id
     AND av.visit_datetime >= CURRENT_DATE - INTERVAL '90 days'
   LEFT JOIN usage_items ui ON ui.treatment_id = t.id
@@ -298,7 +298,7 @@ WHERE days_tracked > 0;
 CREATE INDEX IF NOT EXISTS idx_gea_daily_animal_snapshot ON gea_daily(animal_id, snapshot_date DESC);
 CREATE INDEX IF NOT EXISTS idx_gea_daily_recent ON gea_daily(snapshot_date) WHERE snapshot_date >= CURRENT_DATE - INTERVAL '90 days';
 CREATE INDEX IF NOT EXISTS idx_treatments_animal_recent ON treatments(animal_id, reg_date) WHERE reg_date >= CURRENT_DATE - INTERVAL '90 days';
-CREATE INDEX IF NOT EXISTS idx_vaccinations_animal_recent ON vaccinations(animal_id, date) WHERE date >= CURRENT_DATE - INTERVAL '90 days';
+CREATE INDEX IF NOT EXISTS idx_vaccinations_animal_recent ON vaccinations(animal_id, vaccination_date) WHERE vaccination_date >= CURRENT_DATE - INTERVAL '90 days';
 
 -- Grant access to views
 GRANT SELECT ON vw_animal_milk_revenue TO authenticated;
