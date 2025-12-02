@@ -85,7 +85,7 @@ WITH milk_production AS (
   SELECT
     gd.animal_id,
     a.tag_no,
-    a.collar_no,
+    MAX(gd.collar_no) as collar_no,
     COUNT(*) as days_tracked,
     SUM(
       COALESCE(gd.m1_qty, 0) +
@@ -110,7 +110,7 @@ WITH milk_production AS (
   FROM gea_daily gd
   JOIN animals a ON a.id = gd.animal_id
   WHERE gd.snapshot_date >= CURRENT_DATE - INTERVAL '90 days'
-  GROUP BY gd.animal_id, a.tag_no, a.collar_no
+  GROUP BY gd.animal_id, a.tag_no
 ),
 withdrawal_days AS (
   SELECT
