@@ -852,55 +852,149 @@ export function ProfitabilityDashboard() {
           {/* Bandos Analizė Tab */}
           {activeTab === 'banda' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Top Performers */}
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <ArrowUpRight className="w-5 h-5 text-green-600" />
-                    Pelningiausi Gyvuliai (Top 10)
-                  </h3>
-                  <div className="space-y-2">
-                    {profitabilityData
-                      .filter(a => a.net_profit > 0)
-                      .sort((a, b) => b.net_profit - a.net_profit)
-                      .slice(0, 10)
-                      .map((animal, index) => (
-                        <div key={animal.animal_id} className="flex items-center justify-between p-2 bg-green-50 rounded">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-green-700">#{index + 1}</span>
-                            <span className="text-sm font-medium text-gray-900">{animal.tag_no}</span>
+              {/* Top/Bottom Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Top 100 Performers */}
+                <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg">
+                  <div className="p-4 border-b border-gray-200 bg-green-50">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <ArrowUpRight className="w-5 h-5 text-green-600" />
+                      Pelningiausi Gyvuliai (Top 100)
+                    </h3>
+                  </div>
+                  <div className="p-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-1">
+                      {profitabilityData
+                        .filter(a => a.net_profit > 0)
+                        .sort((a, b) => b.net_profit - a.net_profit)
+                        .slice(0, 100)
+                        .map((animal, index) => (
+                          <div
+                            key={animal.animal_id}
+                            className="flex items-center justify-between p-2 hover:bg-green-50 rounded cursor-pointer transition-colors"
+                            onClick={() => setSelectedAnimalDetail(animal)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-bold text-green-700 w-8">#{index + 1}</span>
+                              <div>
+                                <span className="text-sm font-medium text-gray-900">{animal.tag_no}</span>
+                                <span className="text-xs text-gray-500 ml-2">Kakl: {animal.collar_no || '—'}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-bold text-green-700">
+                                {formatCurrencyLT(animal.net_profit)}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {formatNumberLT(animal.avg_daily_milk)} L/d
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-sm font-bold text-green-700">
-                            {formatCurrencyLT(animal.net_profit)}
-                          </span>
-                        </div>
-                      ))}
+                        ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Bottom Performers */}
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <ArrowDownRight className="w-5 h-5 text-red-600" />
-                    Nuostolingiausi Gyvuliai (Top 10)
-                  </h3>
-                  <div className="space-y-2">
-                    {profitabilityData
-                      .filter(a => a.net_profit < 0)
-                      .sort((a, b) => a.net_profit - b.net_profit)
-                      .slice(0, 10)
-                      .map((animal, index) => (
-                        <div key={animal.animal_id} className="flex items-center justify-between p-2 bg-red-50 rounded">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-red-700">#{index + 1}</span>
-                            <span className="text-sm font-medium text-gray-900">{animal.tag_no}</span>
-                          </div>
-                          <span className="text-sm font-bold text-red-700">
-                            {formatCurrencyLT(animal.net_profit)}
-                          </span>
-                        </div>
-                      ))}
+                {/* Bottom 20 Performers */}
+                <div className="bg-white border border-gray-200 rounded-lg">
+                  <div className="p-4 border-b border-gray-200 bg-red-50">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <ArrowDownRight className="w-5 h-5 text-red-600" />
+                      Nuostolingiausi (Top 20)
+                    </h3>
                   </div>
+                  <div className="p-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-1">
+                      {profitabilityData
+                        .filter(a => a.net_profit < 0)
+                        .sort((a, b) => a.net_profit - b.net_profit)
+                        .slice(0, 20)
+                        .map((animal, index) => (
+                          <div
+                            key={animal.animal_id}
+                            className="flex items-center justify-between p-2 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                            onClick={() => setSelectedAnimalDetail(animal)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-red-700">#{index + 1}</span>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{animal.tag_no}</div>
+                                <div className="text-xs text-gray-500">{formatNumberLT(animal.avg_daily_milk)} L/d</div>
+                              </div>
+                            </div>
+                            <span className="text-sm font-bold text-red-700">
+                              {formatCurrencyLT(animal.net_profit)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Comparison */}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-blue-600" />
+                  Palyginimas Pagal Grupes
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {(() => {
+                    const groups = {};
+                    profitabilityData.forEach(animal => {
+                      const group = animal.current_group || 'Nežinoma';
+                      if (!groups[group]) {
+                        groups[group] = {
+                          count: 0,
+                          totalProfit: 0,
+                          totalMilk: 0,
+                          totalCosts: 0
+                        };
+                      }
+                      groups[group].count++;
+                      groups[group].totalProfit += animal.net_profit;
+                      groups[group].totalMilk += animal.total_milk_liters;
+                      groups[group].totalCosts += animal.total_costs;
+                    });
+
+                    return Object.entries(groups)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([group, data]) => (
+                        <div key={group} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <h4 className="font-semibold text-gray-900 mb-3">Grupė: {group}</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Gyvulių:</span>
+                              <span className="font-bold">{data.count}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Pelnas:</span>
+                              <span className={`font-bold ${data.totalProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                {formatCurrencyLT(data.totalProfit)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Vid. pelnas:</span>
+                              <span className="font-medium">
+                                {formatCurrencyLT(data.totalProfit / data.count)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Pienas:</span>
+                              <span className="font-medium text-blue-700">
+                                {formatNumberLT(data.totalMilk)} L
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Kaštai:</span>
+                              <span className="font-medium text-orange-700">
+                                {formatCurrencyLT(data.totalCosts)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                  })()}
                 </div>
               </div>
 
@@ -1059,22 +1153,28 @@ export function ProfitabilityDashboard() {
                 <div className="bg-blue-50 rounded-lg p-4">
                   <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
                     <Droplet className="w-5 h-5" />
-                    Pieno Gamyba
+                    Pieno Gamyba (GEA Duomenys)
                   </h3>
                   <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Stebėta dienų:</span>
+                      <span className="font-bold text-blue-900">{selectedAnimalDetail.days_tracked} d.</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-blue-700">Vidutiniškai per dieną:</span>
                       <span className="font-bold text-blue-900">{formatNumberLT(selectedAnimalDetail.avg_daily_milk)} L</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-blue-700">Viso per 90 d.:</span>
+                    <div className="flex justify-between border-t border-blue-200 pt-2">
+                      <span className="text-blue-700">Viso per {selectedAnimalDetail.days_tracked} d.:</span>
                       <span className="font-bold text-blue-900">{formatNumberLT(selectedAnimalDetail.total_milk_liters)} L</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-blue-700">Stebėta dienų:</span>
-                      <span className="font-medium text-blue-900">{selectedAnimalDetail.days_tracked}</span>
+                    <div className="flex justify-between text-xs text-blue-600">
+                      <span>Projekcija 90 d.:</span>
+                      <span className="font-medium">
+                        ~{formatNumberLT(selectedAnimalDetail.avg_daily_milk * 90)} L
+                      </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between pt-2 border-t border-blue-200">
                       <span className="text-blue-700">Gamina:</span>
                       <span className="font-medium text-blue-900">{selectedAnimalDetail.is_producing ? 'Taip' : 'Ne'}</span>
                     </div>
@@ -1085,20 +1185,26 @@ export function ProfitabilityDashboard() {
                 <div className="bg-green-50 rounded-lg p-4">
                   <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
                     <Euro className="w-5 h-5" />
-                    Pajamos
+                    Pajamos ({selectedAnimalDetail.days_tracked} d.)
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-green-700">Pieno pajamos:</span>
                       <span className="font-bold text-green-900">{formatCurrencyLT(selectedAnimalDetail.milk_revenue)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-xs text-green-600">
+                      <span>Per dieną vidutiniškai:</span>
+                      <span className="font-medium">
+                        {formatCurrencyLT(selectedAnimalDetail.milk_revenue / selectedAnimalDetail.days_tracked)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-green-200 pt-2">
                       <span className="text-green-700">Karatinos nuostoliai:</span>
                       <span className="font-medium text-red-700">-{formatCurrencyLT(selectedAnimalDetail.withdrawal_revenue_loss)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-green-700">Karatinos dienų:</span>
-                      <span className="font-medium text-green-900">{selectedAnimalDetail.days_in_withdrawal}</span>
+                      <span className="font-medium text-green-900">{selectedAnimalDetail.days_in_withdrawal} d.</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-green-200">
                       <span className="text-green-700 font-semibold">Koreguotos pajamos:</span>

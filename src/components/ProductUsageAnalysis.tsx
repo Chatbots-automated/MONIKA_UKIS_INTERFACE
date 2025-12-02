@@ -16,6 +16,18 @@ interface ProductUsageRecord {
   usage_count: number;
   animals_treated: number;
   usages: UsageDetail[];
+  inventory_additions: InventoryAddition[];
+  total_received: number;
+  total_used: number;
+  remaining_stock: number;
+}
+
+interface InventoryAddition {
+  batch_id: string;
+  received_date: string;
+  received_qty: number;
+  purchase_price: number;
+  supplier_name: string | null;
 }
 
 interface UsageDetail {
@@ -95,7 +107,8 @@ export function ProductUsageAnalysis() {
       // Fetch all lookup data upfront (MUCH faster than individual queries)
       console.log('📚 Loading lookup data...');
       const products = await fetchAllRows<any>('products', 'id, name, category, subcategory, primary_pack_unit');
-      const batches = await fetchAllRows<any>('batches', 'id, purchase_price, received_qty');
+      const batches = await fetchAllRows<any>('batches', 'id, purchase_price, received_qty, received_date, supplier_id');
+      const suppliers = await fetchAllRows<any>('suppliers', 'id, name');
       const treatments = await fetchAllRows<any>('treatments', 'id, animal_id');
       const animals = await fetchAllRows<any>('animals', 'id, tag_no');
 
@@ -147,6 +160,10 @@ export function ProductUsageAnalysis() {
             usage_count: 0,
             animals_treated: 0,
             usages: [],
+            inventory_additions: [],
+            total_received: 0,
+            total_used: 0,
+            remaining_stock: 0
           });
         }
 
@@ -275,6 +292,32 @@ export function ProductUsageAnalysis() {
       for (const record of usageByProduct.values()) {
         const uniqueAnimals = new Set(record.usages.map(u => u.animal_id));
         record.animals_treated = uniqueAnimals.size;
+      }
+
+      // Add inventory tracking information
+      console.log('📊 Processing inventory additions...');
+      const supplierMap = new Map(suppliers.map(s => [s.id, s]));
+
+      for (const record of usageByProduct.values()) {
+        // Find all batches for this product
+        const productBatches = batches.filter(b => {
+          // Check if this batch was used with this product
+          const usedInUsageItems = usageItems.some(ui => ui.batch_id === b.id && ui.product_id === record.product_id);
+          const usedInVaccinations = vaccinations.some(v => v.batch_id === b.id && v.product_id === record.product_id);
+          return usedInUsageItems || usedInVaccinations;
+        });
+
+        record.inventory_additions = productBatches.map(batch => ({
+          batch_id: batch.id,
+          received_date: batch.received_date || 'N/A',
+          received_qty: batch.received_qty || 0,
+          purchase_price: batch.purchase_price || 0,
+          supplier_name: batch.supplier_id ? (supplierMap.get(batch.supplier_id)?.name || 'N/A') : 'N/A'
+        })).sort((a, b) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime());
+
+        record.total_received = productBatches.reduce((sum, b) => sum + (b.received_qty || 0), 0);
+        record.total_used = record.total_quantity;
+        record.remaining_stock = record.total_received - record.total_used;
       }
 
       setUsageData(Array.from(usageByProduct.values()));
@@ -609,39 +652,110 @@ export function ProductUsageAnalysis() {
                       {/* Expanded Details */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={7} className="px-6 py-4 bg-gray-50">
-                            <div className="space-y-2">
-                              <div className="text-sm font-bold text-gray-700 mb-3">
-                                Panaudojimo istorija ({product.usages.length})
-                              </div>
-                              <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {product.usages
-                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                  .map((usage, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm"
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-3">
-                                            <span className="text-sm font-semibold text-gray-900">
-                                              {formatDateTimeLT(usage.date)}
-                                            </span>
-                                            <span className="text-sm text-gray-600">
-                                              Gyvūnas: {usage.animal_tag || 'N/A'}
-                                            </span>
+                          <td colSpan={7} className="px-6 py-6 bg-gray-50">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              {/* Inventory Tracking */}
+                              <div className="lg:col-span-1 bg-white rounded-lg p-4 border border-gray-300">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <Package className="w-5 h-5 text-blue-600" />
+                                  <h4 className="text-sm font-bold text-gray-900">Inventorius</h4>
+                                </div>
+
+                                <div className="space-y-3 mb-4">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Viso gauta:</span>
+                                    <span className="text-sm font-bold text-blue-700">
+                                      {formatNumberLT(product.total_received)} {product.unit}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Panaudota:</span>
+                                    <span className="text-sm font-bold text-orange-700">
+                                      {formatNumberLT(product.total_used)} {product.unit}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                                    <span className="text-sm font-semibold text-gray-700">Likutis:</span>
+                                    <span className={`text-sm font-bold ${product.remaining_stock > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                      {formatNumberLT(product.remaining_stock)} {product.unit}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-gray-300 pt-3">
+                                  <h5 className="text-xs font-semibold text-gray-700 uppercase mb-2">Gavimo Istorija:</h5>
+                                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {product.inventory_additions.length > 0 ? (
+                                      product.inventory_additions.map((inv, idx) => (
+                                        <div key={idx} className="bg-gray-50 p-2 rounded text-xs border border-gray-200">
+                                          <div className="flex justify-between items-start mb-1">
+                                            <span className="text-gray-600">{formatDateTimeLT(inv.received_date)}</span>
+                                            <span className="font-bold text-green-700">{formatNumberLT(inv.received_qty)} {product.unit}</span>
                                           </div>
-                                          <div className="text-sm text-gray-600 mt-1">
-                                            {formatNumberLT(usage.quantity)} {product.unit} × {formatUnitCost(usage.unit_cost)}/{product.unit}
+                                          <div className="text-gray-500">
+                                            {inv.supplier_name} • {formatCost(inv.purchase_price)}
                                           </div>
                                         </div>
-                                        <div className="font-bold text-blue-600 text-lg ml-4">
-                                          {formatCost(usage.total_cost)}
+                                      ))
+                                    ) : (
+                                      <p className="text-xs text-gray-500 italic">Nėra gavimo įrašų</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Usage History */}
+                              <div className="lg:col-span-2 bg-white rounded-lg p-4 border border-gray-300">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-orange-600" />
+                                    <h4 className="text-sm font-bold text-gray-900">
+                                      Panaudojimo Istorija ({product.usages.length})
+                                    </h4>
+                                  </div>
+                                  <span className="text-xs text-gray-500">Rodyti visi {product.usages.length} įrašai</span>
+                                </div>
+
+                                <div className="space-y-2" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                  {product.usages
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map((usage, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:bg-blue-50 transition-colors"
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-1">
+                                              <span className="text-xs font-bold text-gray-500">#{idx + 1}</span>
+                                              <span className="text-sm font-semibold text-gray-900">
+                                                {formatDateTimeLT(usage.date)}
+                                              </span>
+                                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                                                {usage.source === 'usage_items' ? 'Gydymas' :
+                                                 usage.source === 'vaccinations' ? 'Vakcina' :
+                                                 'Planuotas'}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-sm">
+                                              <span className="text-gray-600">
+                                                Gyvūnas: <span className="font-medium">{usage.animal_tag || 'N/A'}</span>
+                                              </span>
+                                              <span className="text-gray-600">
+                                                Kiekis: <span className="font-medium">{formatNumberLT(usage.quantity)} {product.unit}</span>
+                                              </span>
+                                              <span className="text-gray-600">
+                                                Vnt. kaina: <span className="font-medium">{formatUnitCost(usage.unit_cost)}/{product.unit}</span>
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="font-bold text-blue-600 text-lg ml-4">
+                                            {formatCost(usage.total_cost)}
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    ))}
+                                </div>
                               </div>
                             </div>
                           </td>
