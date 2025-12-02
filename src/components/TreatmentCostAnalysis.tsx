@@ -215,16 +215,18 @@ export function TreatmentCostAnalysis() {
     }
 
     try {
-      // Get all treatments with full details
+      // Get all treatments with full details (only those with disease_id)
       const { data: treatments, error } = await supabase
         .from('treatments')
         .select(`
           id,
           reg_date,
           outcome,
+          disease_id,
           diseases(name)
         `)
         .eq('animal_id', animalId)
+        .not('disease_id', 'is', null)
         .order('reg_date', { ascending: false });
 
       if (error) throw error;
@@ -264,31 +266,16 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        // Count visits around the treatment date (within 30 days)
-        const treatmentDate = new Date(treatment.reg_date);
-        const endDate = new Date(treatmentDate);
-        endDate.setDate(endDate.getDate() + 30);
-
-        const { count: visitCount } = await supabase
-          .from('animal_visits')
-          .select('*', { count: 'exact', head: true })
-          .eq('animal_id', animalId)
-          .eq('status', 'Baigtas')
-          .gte('visit_datetime', treatment.reg_date)
-          .lte('visit_datetime', endDate.toISOString());
-
-        const visitCost = (visitCount || 0) * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
-
         treatmentDetails.push({
           treatment_id: treatment.id,
-          disease_name: (treatment.diseases as any)?.name || 'Nežinoma liga',
+          disease_name: (treatment.diseases as any)?.name || 'Liga',
           start_date: treatment.reg_date,
           end_date: null,
-          visit_count: visitCount || 0,
-          visit_cost: visitCost,
+          visit_count: 0,
+          visit_cost: 0,
           medication_cost: medicationCost,
           medications: medications,
-          total_cost: visitCost + medicationCost,
+          total_cost: medicationCost,
         });
       }
 
@@ -566,112 +553,114 @@ export function TreatmentCostAnalysis() {
                       {/* Expanded Details */}
                       {isExpanded && detailData && (
                         <tr>
-                          <td colSpan={8} className="px-6 py-4 bg-gray-50">
-                            <div className="space-y-4">
+                          <td colSpan={8} className="px-6 py-4 bg-gradient-to-br from-gray-50 to-gray-100">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-                              {/* Treatments Section */}
-                              {detailData.treatments.length > 0 && (
-                                <div>
-                                  <h4 className="font-bold text-gray-800 text-base mb-3 flex items-center gap-2">
-                                    <Activity className="w-5 h-5 text-blue-600" />
-                                    Gydymai ({detailData.treatments.length})
-                                  </h4>
-                                  <div className="space-y-3">
-                                    {detailData.treatments.map((treatment) => (
-                                      <div key={treatment.treatment_id} className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm">
+                              {/* LEFT: Treatments Section */}
+                              <div>
+                                <h4 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2 pb-2 border-b-2 border-orange-300">
+                                  <Activity className="w-6 h-6 text-orange-600" />
+                                  Gydymai ir Vaistai ({detailData.treatments.length})
+                                </h4>
+                                <div className="space-y-3">
+                                  {detailData.treatments.length === 0 ? (
+                                    <div className="text-gray-500 text-sm italic p-4 bg-white rounded-lg">
+                                      Nėra įrašytų gydymų
+                                    </div>
+                                  ) : (
+                                    detailData.treatments.map((treatment) => (
+                                      <div key={treatment.treatment_id} className="bg-white p-4 rounded-lg border-l-4 border-orange-500 shadow-sm">
                                         <div className="flex items-start justify-between mb-3">
-                                          <div>
-                                            <div className="font-semibold text-gray-900 text-base">
+                                          <div className="flex-1">
+                                            <div className="font-bold text-gray-900">
                                               {treatment.disease_name}
                                             </div>
-                                            <div className="text-sm text-gray-500 mt-1">
+                                            <div className="text-xs text-gray-500 mt-1">
                                               {formatDateLT(treatment.start_date)}
                                             </div>
                                           </div>
-                                          <div className="text-right">
-                                            <div className="text-xs text-gray-500 mb-1">Viso:</div>
-                                            <div className="text-xl font-bold text-emerald-600">
-                                              {formatCost(treatment.total_cost)}
+                                          {treatment.medication_cost > 0 && (
+                                            <div className="text-right ml-4">
+                                              <div className="text-xs text-gray-500">Vaistai:</div>
+                                              <div className="text-lg font-bold text-orange-600">
+                                                {formatCost(treatment.medication_cost)}
+                                              </div>
                                             </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                                          <div className="bg-blue-50 p-3 rounded-lg">
-                                            <div className="text-xs font-semibold text-blue-800 uppercase mb-1">Vizitai</div>
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-sm text-gray-700">{treatment.visit_count} vizitai</span>
-                                              <span className="text-lg font-bold text-blue-700">{formatCost(treatment.visit_cost)}</span>
-                                            </div>
-                                          </div>
-
-                                          <div className="bg-orange-50 p-3 rounded-lg">
-                                            <div className="text-xs font-semibold text-orange-800 uppercase mb-1">Vaistai</div>
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-sm text-gray-700">{treatment.medications.length} produktai</span>
-                                              <span className="text-lg font-bold text-orange-700">{formatCost(treatment.medication_cost)}</span>
-                                            </div>
-                                          </div>
+                                          )}
                                         </div>
 
                                         {/* Medications List */}
-                                        {treatment.medications.length > 0 && (
-                                          <div className="mt-3">
-                                            <div className="text-xs font-semibold text-gray-600 uppercase mb-2">Panaudoti vaistai:</div>
-                                            <div className="space-y-2">
-                                              {treatment.medications.map((med, idx) => (
-                                                <div key={idx} className="bg-gray-50 p-2 rounded flex items-center justify-between text-sm">
-                                                  <div className="flex-1">
-                                                    <span className="font-medium text-gray-900">{med.name}</span>
-                                                    <span className="text-gray-500 ml-2">
-                                                      {med.quantity} {med.unit}
-                                                    </span>
-                                                  </div>
-                                                  <div className="text-right">
-                                                    <div className="font-bold text-orange-600">{formatCost(med.total_cost)}</div>
-                                                    <div className="text-xs text-gray-500">{formatCost(med.unit_cost)}/{med.unit}</div>
+                                        {treatment.medications.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {treatment.medications.map((med, idx) => (
+                                              <div key={idx} className="bg-orange-50 p-2.5 rounded flex items-center justify-between">
+                                                <div className="flex-1">
+                                                  <div className="font-medium text-gray-900 text-sm">{med.name}</div>
+                                                  <div className="text-xs text-gray-600">
+                                                    {formatNumberLT(med.quantity)} {med.unit} × {formatCost(med.unit_cost)}/{med.unit}
                                                   </div>
                                                 </div>
-                                              ))}
-                                            </div>
+                                                <div className="font-bold text-orange-700 ml-3">
+                                                  {formatCost(med.total_cost)}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="text-sm text-gray-500 italic">
+                                            Vaistai nebuvo panaudoti
                                           </div>
                                         )}
                                       </div>
-                                    ))}
-                                  </div>
+                                    ))
+                                  )}
                                 </div>
-                              )}
+                              </div>
 
-                              {/* Visits Section */}
-                              {detailData.visits.length > 0 && (
-                                <div>
-                                  <h4 className="font-bold text-gray-800 text-base mb-3 flex items-center gap-2">
-                                    <Calendar className="w-5 h-5 text-purple-600" />
-                                    Visi vizitai ({detailData.visits.length})
-                                  </h4>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {detailData.visits.map((visit) => (
-                                      <div key={visit.id} className="bg-white p-3 rounded-lg border border-gray-200">
+                              {/* RIGHT: Visits Section */}
+                              <div>
+                                <h4 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2 pb-2 border-b-2 border-blue-300">
+                                  <Calendar className="w-6 h-6 text-blue-600" />
+                                  Vizitai ({detailData.visits.length})
+                                </h4>
+                                <div className="space-y-2">
+                                  {detailData.visits.length === 0 ? (
+                                    <div className="text-gray-500 text-sm italic p-4 bg-white rounded-lg">
+                                      Nėra įrašytų vizitų
+                                    </div>
+                                  ) : (
+                                    detailData.visits.map((visit) => (
+                                      <div key={visit.id} className="bg-white p-3 rounded-lg border-l-4 border-blue-500 shadow-sm">
                                         <div className="flex items-start justify-between">
                                           <div className="flex-1">
-                                            <div className="font-medium text-gray-900 text-sm">
+                                            <div className="font-semibold text-gray-900">
                                               {formatDateLT(visit.visit_datetime)}
                                             </div>
                                             {visit.procedures && (
-                                              <div className="text-xs text-gray-600 mt-1">{visit.procedures}</div>
+                                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{visit.procedures}</div>
                                             )}
                                           </div>
-                                          <div className="text-right">
-                                            <div className="font-bold text-blue-600 text-sm">
-                                              {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
-                                            </div>
+                                          <div className="font-bold text-blue-600 ml-3 text-lg">
+                                            {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
                                           </div>
                                         </div>
                                       </div>
-                                    ))}
-                                  </div>
+                                    ))
+                                  )}
                                 </div>
-                              )}
+
+                                {/* Visits Summary */}
+                                {detailData.visits.length > 0 && (
+                                  <div className="mt-4 bg-blue-100 p-3 rounded-lg border border-blue-300">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-semibold text-blue-900">Viso vizitų:</span>
+                                      <span className="font-bold text-blue-900 text-xl">
+                                        {formatCost(detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
