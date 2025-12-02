@@ -283,9 +283,9 @@ WHERE days_tracked > 0;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_gea_daily_animal_snapshot ON gea_daily(animal_id, snapshot_date DESC);
-CREATE INDEX IF NOT EXISTS idx_gea_daily_recent ON gea_daily(snapshot_date) WHERE snapshot_date >= CURRENT_DATE - INTERVAL '90 days';
-CREATE INDEX IF NOT EXISTS idx_treatments_animal_recent ON treatments(animal_id, reg_date) WHERE reg_date >= CURRENT_DATE - INTERVAL '90 days';
-CREATE INDEX IF NOT EXISTS idx_vaccinations_animal_recent ON vaccinations(animal_id, vaccination_date) WHERE vaccination_date >= CURRENT_DATE - INTERVAL '90 days';
+CREATE INDEX IF NOT EXISTS idx_gea_daily_recent ON gea_daily(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_treatments_animal_recent ON treatments(animal_id, reg_date);
+CREATE INDEX IF NOT EXISTS idx_vaccinations_animal_recent ON vaccinations(animal_id, vaccination_date);
 
 -- Grant access to views
 GRANT SELECT ON vw_animal_milk_revenue TO authenticated;
