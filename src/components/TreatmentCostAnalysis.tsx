@@ -47,7 +47,12 @@ export function TreatmentCostAnalysis() {
         .from('animals')
         .select('id, tag_no');
 
-      if (animalsError) throw animalsError;
+      if (animalsError) {
+        console.error('Animals error:', animalsError);
+        throw animalsError;
+      }
+
+      console.log('Animals loaded:', animals?.length);
 
       // Get all treatments with usage items
       const { data: treatments, error: treatmentsError } = await supabase
@@ -57,11 +62,16 @@ export function TreatmentCostAnalysis() {
           animal_id,
           disease_id,
           reg_date,
-          end_date,
+          outcome,
           diseases(name)
         `);
 
-      if (treatmentsError) throw treatmentsError;
+      if (treatmentsError) {
+        console.error('Treatments error:', treatmentsError);
+        throw treatmentsError;
+      }
+
+      console.log('Treatments loaded:', treatments?.length);
 
       // Get all usage items with batch info
       const { data: usageItems, error: usageError } = await supabase
@@ -75,7 +85,12 @@ export function TreatmentCostAnalysis() {
           batches(purchase_price, received_qty)
         `);
 
-      if (usageError) throw usageError;
+      if (usageError) {
+        console.error('Usage items error:', usageError);
+        throw usageError;
+      }
+
+      console.log('Usage items loaded:', usageItems?.length);
 
       // Get all vaccinations with batch info
       const { data: vaccinations, error: vaccinationsError } = await supabase
@@ -88,7 +103,12 @@ export function TreatmentCostAnalysis() {
           batches(purchase_price, received_qty)
         `);
 
-      if (vaccinationsError) throw vaccinationsError;
+      if (vaccinationsError) {
+        console.error('Vaccinations error:', vaccinationsError);
+        throw vaccinationsError;
+      }
+
+      console.log('Vaccinations loaded:', vaccinations?.length);
 
       // Get all visits
       const { data: visits, error: visitsError } = await supabase
@@ -140,8 +160,8 @@ export function TreatmentCostAnalysis() {
 
         const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
 
-        // Only include animals with costs
-        if (totalCosts > 0 || animalTreatments.length > 0 || animalVaccinations.length > 0) {
+        // Include animals with any treatment activity
+        if (animalTreatments.length > 0 || animalVaccinations.length > 0 || visitCount > 0) {
           animalCosts.push({
             animal_id: animal.id,
             tag_no: animal.tag_no,
@@ -156,6 +176,8 @@ export function TreatmentCostAnalysis() {
         }
       }
 
+      console.log('Final animal costs calculated:', animalCosts.length);
+      console.log('Sample data:', animalCosts.slice(0, 3));
       setCostData(animalCosts);
     } catch (error) {
       console.error('Error loading cost data:', error);
@@ -175,7 +197,7 @@ export function TreatmentCostAnalysis() {
         .select(`
           id,
           reg_date,
-          end_date,
+          outcome,
           diseases(name)
         `)
         .eq('animal_id', animalId);
@@ -202,14 +224,18 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        // Count visits for this treatment period
+        // Count visits around the treatment date (within 30 days)
+        const treatmentDate = new Date(treatment.reg_date);
+        const endDate = new Date(treatmentDate);
+        endDate.setDate(endDate.getDate() + 30); // Look 30 days forward
+
         const { count: visitCount } = await supabase
           .from('animal_visits')
           .select('*', { count: 'exact', head: true })
           .eq('animal_id', animalId)
           .eq('status', 'Baigtas')
           .gte('visit_datetime', treatment.reg_date)
-          .lte('visit_datetime', treatment.end_date || new Date().toISOString());
+          .lte('visit_datetime', endDate.toISOString());
 
         const visitCost = (visitCount || 0) * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
 
@@ -217,7 +243,7 @@ export function TreatmentCostAnalysis() {
           treatment_id: treatment.id,
           disease_name: (treatment.diseases as any)?.name || null,
           start_date: treatment.reg_date,
-          end_date: treatment.end_date,
+          end_date: null,
           visit_count: visitCount || 0,
           medication_cost: medicationCost,
           total_cost: visitCost + medicationCost,
