@@ -523,7 +523,11 @@ export function ProfitabilityDashboard() {
                       <tr
                         key={animal.animal_id}
                         className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedAnimalDetail(animal)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          console.log('Row clicked:', animal.tag_no);
+                          setSelectedAnimalDetail(animal);
+                        }}
                       >
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center">
