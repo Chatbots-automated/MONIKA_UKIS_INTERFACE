@@ -295,15 +295,19 @@ export function TreatmentCostAnalysis() {
         }
 
         // 3. Get ALL vaccinations for this visit (prevention products like Rycaps, Hydrocaps, etc.)
+        // Vaccinations are linked to animal_id, not visit_id, so we match by date
+        const visitDate = new Date(visit.visit_datetime).toISOString().split('T')[0];
         const { data: vaccinations } = await supabase
           .from('vaccinations')
           .select(`
             dose_amount,
             unit,
+            vaccination_date,
             products(name, primary_pack_unit, category),
             batches(purchase_price, received_qty)
           `)
-          .eq('visit_id', visit.id);
+          .eq('animal_id', animalId)
+          .eq('vaccination_date', visitDate);
 
         for (const vacc of vaccinations || []) {
           if (vacc.batches && vacc.dose_amount) {
