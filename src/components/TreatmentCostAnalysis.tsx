@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
 import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost } from '../lib/costCalculations';
-import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
 interface AnimalCostData {
   animal_id: string;
@@ -22,6 +22,7 @@ interface MedicationDetail {
   unit: string;
   unit_cost: number;
   total_cost: number;
+  is_vaccine?: boolean;
 }
 
 interface TreatmentDetail {
@@ -63,6 +64,8 @@ export function TreatmentCostAnalysis() {
   const [animalDetails, setAnimalDetails] = useState<Map<string, AnimalDetailData>>(new Map());
   const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [neckNumberSearch, setNeckNumberSearch] = useState('');
 
   useEffect(() => {
     loadCostData();
@@ -325,6 +328,7 @@ export function TreatmentCostAnalysis() {
               unit: vacc.unit || (vacc.products as any)?.primary_pack_unit || 'vnt',
               unit_cost: unitCost,
               total_cost: itemCost,
+              is_vaccine: true,
             });
           }
         }
@@ -432,7 +436,18 @@ export function TreatmentCostAnalysis() {
     });
   };
 
-  const sortedData = [...costData].sort((a, b) => {
+  const filteredData = costData.filter(animal => {
+    let matchesGeneral = true;
+
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      matchesGeneral = animal.tag_no?.toLowerCase().includes(searchLower) || false;
+    }
+
+    return matchesGeneral;
+  });
+
+  const sortedData = [...filteredData].sort((a, b) => {
     let compareValue = 0;
     switch (sortBy) {
       case 'total':
@@ -496,6 +511,20 @@ export function TreatmentCostAnalysis() {
           >
             <RefreshCw className="w-5 h-5 text-gray-600" />
           </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Ieškoti pagal gyvūno numerį..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -764,27 +793,59 @@ export function TreatmentCostAnalysis() {
                                         {/* Expanded Products List */}
                                         {isVisitExpanded && hasProducts && (
                                           <div className="px-4 pb-4 pt-2 bg-gradient-to-r from-blue-50 to-white border-t border-blue-200">
-                                            <div className="text-xs font-bold text-blue-900 uppercase mb-3 flex items-center gap-2">
-                                              <Package className="w-4 h-4" />
-                                              Panaudoti produktai ({visit.all_products.length})
-                                            </div>
-                                            <div className="space-y-2">
-                                              {visit.all_products.map((product, idx) => (
-                                                <div key={idx} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                                                  <div className="flex items-center justify-between">
-                                                    <div className="flex-1">
-                                                      <div className="font-semibold text-gray-900">{product.name}</div>
-                                                      <div className="text-sm text-gray-600 mt-1">
-                                                        {formatNumberLT(product.quantity)} {product.unit} × {formatCost(product.unit_cost)}/{product.unit}
+                                            {/* Medicines Section */}
+                                            {visit.all_products.some(p => !p.is_vaccine) && (
+                                              <div className="mb-4">
+                                                <div className="text-xs font-bold text-blue-900 uppercase mb-3 flex items-center gap-2">
+                                                  <Package className="w-4 h-4" />
+                                                  Vaistai ir priemonės ({visit.all_products.filter(p => !p.is_vaccine).length})
+                                                </div>
+                                                <div className="space-y-2">
+                                                  {visit.all_products.filter(p => !p.is_vaccine).map((product, idx) => (
+                                                    <div key={idx} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                                                      <div className="flex items-center justify-between">
+                                                        <div className="flex-1">
+                                                          <div className="font-semibold text-gray-900">{product.name}</div>
+                                                          <div className="text-sm text-gray-600 mt-1">
+                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatCost(product.unit_cost)}/{product.unit}
+                                                          </div>
+                                                        </div>
+                                                        <div className="font-bold text-blue-700 text-lg ml-4">
+                                                          {formatCost(product.total_cost)}
+                                                        </div>
                                                       </div>
                                                     </div>
-                                                    <div className="font-bold text-blue-700 text-lg ml-4">
-                                                      {formatCost(product.total_cost)}
-                                                    </div>
-                                                  </div>
+                                                  ))}
                                                 </div>
-                                              ))}
-                                            </div>
+                                              </div>
+                                            )}
+
+                                            {/* Vaccines Section */}
+                                            {visit.all_products.some(p => p.is_vaccine) && (
+                                              <div>
+                                                <div className="text-xs font-bold text-purple-900 uppercase mb-3 flex items-center gap-2">
+                                                  <Syringe className="w-4 h-4" />
+                                                  Vakcinacijos ({visit.all_products.filter(p => p.is_vaccine).length})
+                                                </div>
+                                                <div className="space-y-2">
+                                                  {visit.all_products.filter(p => p.is_vaccine).map((product, idx) => (
+                                                    <div key={idx} className="bg-purple-50 p-3 rounded-lg border border-purple-200 shadow-sm">
+                                                      <div className="flex items-center justify-between">
+                                                        <div className="flex-1">
+                                                          <div className="font-semibold text-gray-900">{product.name}</div>
+                                                          <div className="text-sm text-gray-600 mt-1">
+                                                            {formatNumberLT(product.quantity)} {product.unit} × {formatCost(product.unit_cost)}/{product.unit}
+                                                          </div>
+                                                        </div>
+                                                        <div className="font-bold text-purple-700 text-lg ml-4">
+                                                          {formatCost(product.total_cost)}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>
