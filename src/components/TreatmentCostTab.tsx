@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { MastitisMilk } from './MastitisMilk';
 import { TreatmentCostAnalysis } from './TreatmentCostAnalysis';
-import { Droplet, Euro } from 'lucide-react';
+import { ProductUsageAnalysis } from './ProductUsageAnalysis';
+import { Droplet, Euro, Package } from 'lucide-react';
 
 export function TreatmentCostTab() {
-  const [activeTab, setActiveTab] = useState<'mastitis' | 'costs'>('costs');
+  const [activeTab, setActiveTab] = useState<'costs' | 'usage' | 'mastitis'>('costs');
 
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
-        <div className="flex gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => setActiveTab('costs')}
-            className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
               activeTab === 'costs'
                 ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -23,8 +24,19 @@ export function TreatmentCostTab() {
             <span>Gydymų Savikainos</span>
           </button>
           <button
+            onClick={() => setActiveTab('usage')}
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'usage'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Package className="w-5 h-5" />
+            <span>Vaistų Panaudojimas</span>
+          </button>
+          <button
             onClick={() => setActiveTab('mastitis')}
-            className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
               activeTab === 'mastitis'
                 ? 'bg-purple-600 text-white shadow-md'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -39,6 +51,7 @@ export function TreatmentCostTab() {
       {/* Tab Content */}
       <div>
         {activeTab === 'costs' && <TreatmentCostAnalysis />}
+        {activeTab === 'usage' && <ProductUsageAnalysis />}
         {activeTab === 'mastitis' && <MastitisMilk />}
       </div>
     </div>
