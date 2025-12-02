@@ -119,21 +119,20 @@ withdrawal_days AS (
   FROM (
     SELECT
       animal_id,
-      created_at,
-      withdrawal_until_milk
+      created_at
     FROM treatments
     WHERE withdrawal_until_milk IS NOT NULL
       AND withdrawal_until_milk >= CURRENT_DATE - INTERVAL '90 days'
+      AND created_at >= CURRENT_DATE - INTERVAL '90 days'
     UNION ALL
     SELECT
       animal_id,
-      created_at,
-      withdrawal_until_milk
+      date as created_at
     FROM vaccinations
     WHERE withdrawal_until_milk IS NOT NULL
       AND withdrawal_until_milk >= CURRENT_DATE - INTERVAL '90 days'
+      AND date >= CURRENT_DATE - INTERVAL '90 days'
   ) withdrawals
-  WHERE withdrawal_until_milk >= CURRENT_DATE - INTERVAL '90 days'
   GROUP BY animal_id
 )
 SELECT
