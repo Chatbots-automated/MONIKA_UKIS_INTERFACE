@@ -123,23 +123,50 @@ export function ProfitabilityDashboard() {
     try {
       setLoading(true);
 
-      // Load profitability data - fetch all rows
-      const { data: profData, error: profError } = await supabase
-        .from('vw_animal_profitability')
-        .select('*', { count: 'exact' })
-        .range(0, 10000);
+      // Load profitability data - fetch ALL rows (Supabase default limit is 1000, need to paginate)
+      let allProfData: ProfitabilityData[] = [];
+      let profPage = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (profError) throw profError;
-      setProfitabilityData(profData || []);
+      while (hasMore) {
+        const { data: profData, error: profError } = await supabase
+          .from('vw_animal_profitability')
+          .select('*')
+          .range(profPage * pageSize, (profPage + 1) * pageSize - 1);
 
-      // Load ROI analysis data - fetch all rows
-      const { data: roiData, error: roiError } = await supabase
-        .from('vw_treatment_roi_analysis')
-        .select('*', { count: 'exact' })
-        .range(0, 10000);
+        if (profError) throw profError;
+        if (profData && profData.length > 0) {
+          allProfData = [...allProfData, ...profData];
+          profPage++;
+          hasMore = profData.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      setProfitabilityData(allProfData);
 
-      if (roiError) throw roiError;
-      setRoiAnalysis(roiData || []);
+      // Load ROI analysis data - fetch ALL rows
+      let allRoiData: TreatmentROIAnalysis[] = [];
+      let roiPage = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data: roiData, error: roiError } = await supabase
+          .from('vw_treatment_roi_analysis')
+          .select('*')
+          .range(roiPage * pageSize, (roiPage + 1) * pageSize - 1);
+
+        if (roiError) throw roiError;
+        if (roiData && roiData.length > 0) {
+          allRoiData = [...allRoiData, ...roiData];
+          roiPage++;
+          hasMore = roiData.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      setRoiAnalysis(allRoiData);
 
       // Load herd summary
       const { data: summaryData, error: summaryError } = await supabase
@@ -246,7 +273,8 @@ export function ProfitabilityDashboard() {
       daysToPayback,
       dailyRevenue,
       currentProfit: animal.net_profit,
-      successRate: animal.success_rate_percentage
+      successRate: animal.success_rate_percentage,
+      avgDailyMilk: animal.avg_daily_milk
     });
   };
 
@@ -594,76 +622,141 @@ export function ProfitabilityDashboard() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">Ar Verta Gydyti Šį Gyvulį?</h3>
                 <p className="text-sm text-blue-700">
-                  Įveskite numatomas gydymo išlaidas ir gaukite rekomendaciją ar verta investuoti į gydymą.
+                  Pasirinkite gyvulį, įveskite numatomas gydymo išlaidas ir gaukite rekomendaciją ar verta investuoti į gydymą.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Pasirinkite Gyvulį
-                  </label>
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Ieškoti pagal auskarą arba kaklajuostės nr..."
-                      value={decisionSearchTerm}
-                      onChange={(e) => setDecisionSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Step 1: Search and Select Animal */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      1. Pasirinkite Gyvulį
+                    </label>
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        placeholder="Ieškoti pagal auskarą..."
+                        value={decisionSearchTerm}
+                        onChange={(e) => setDecisionSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="border border-gray-300 rounded-lg overflow-hidden">
+                      {roiAnalysis
+                        .filter(animal => {
+                          const searchLower = decisionSearchTerm.toLowerCase();
+                          return (
+                            (animal.tag_no?.toLowerCase().includes(searchLower) || false) ||
+                            (animal.collar_no?.toString().includes(searchLower) || false)
+                          );
+                        })
+                        .slice(0, 8)
+                        .map((animal) => (
+                          <button
+                            key={animal.animal_id}
+                            onClick={() => setSelectedAnimal(animal.animal_id)}
+                            className={`w-full px-4 py-2 text-left border-b border-gray-200 hover:bg-blue-50 transition-colors ${
+                              selectedAnimal === animal.animal_id ? 'bg-blue-100 font-semibold' : ''
+                            }`}
+                          >
+                            <div className="text-sm font-medium text-gray-900">
+                              {animal.tag_no || 'Nežinomas'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Kakl: {animal.collar_no || '—'}
+                            </div>
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                  <select
-                    value={selectedAnimal}
-                    onChange={(e) => setSelectedAnimal(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    size={8}
-                  >
-                    <option value="">-- Pasirinkite --</option>
-                    {roiAnalysis
-                      .filter(animal => {
-                        const searchLower = decisionSearchTerm.toLowerCase();
-                        return (
-                          (animal.tag_no?.toLowerCase().includes(searchLower) || false) ||
-                          (animal.collar_no?.toString().includes(searchLower) || false)
-                        );
-                      })
-                      .map((animal) => (
-                        <option key={animal.animal_id} value={animal.animal_id}>
-                          {animal.tag_no || 'Nežinomas'} (Kakl: {animal.collar_no || '—'})
-                        </option>
-                      ))}
-                  </select>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Numatoma Gydymo Kaina (EUR)
-                  </label>
-                  <input
-                    type="number"
-                    value={estimatedTreatmentCost}
-                    onChange={(e) => setEstimatedTreatmentCost(Number(e.target.value))}
-                    placeholder="0.00"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  {/* Step 2: Selected Animal Info */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      2. Gyvulio Informacija
+                    </label>
+                    {selectedAnimal ? (
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        {(() => {
+                          const animal = roiAnalysis.find(a => a.animal_id === selectedAnimal);
+                          if (!animal) return null;
+                          return (
+                            <>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Auskaras:</span>
+                                  <span className="font-medium">{animal.tag_no || '—'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Pieno per dieną:</span>
+                                  <span className="font-bold text-blue-700">{formatNumberLT(animal.avg_daily_milk)} L</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Dienos pajamos:</span>
+                                  <span className="font-bold text-green-700">
+                                    {formatCurrencyLT(animal.avg_daily_milk * milkPrice)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between pt-2 border-t border-gray-300">
+                                  <span className="text-gray-600">Pelnas (90d):</span>
+                                  <span className={`font-bold ${animal.net_profit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                    {formatCurrencyLT(animal.net_profit)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Gydymų sk.:</span>
+                                  <span className="font-medium">{animal.treatment_count_last_90_days}</span>
+                                </div>
+                                {animal.success_rate_percentage !== null && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Sėkmės rodiklis:</span>
+                                    <span className="font-medium">{animal.success_rate_percentage}%</span>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 h-full flex items-center justify-center">
+                        <p className="text-sm text-gray-500">Pasirinkite gyvulį iš sąrašo</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 3: Treatment Cost */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      3. Gydymo Kaina
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={estimatedTreatmentCost || ''}
+                      onChange={(e) => setEstimatedTreatmentCost(Number(e.target.value))}
+                      placeholder="Įveskite kainą (EUR)"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-lg"
+                    />
+                    <button
+                      onClick={calculateTreatmentDecision}
+                      disabled={!selectedAnimal || !estimatedTreatmentCost}
+                      className="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Calculator className="w-5 h-5" />
+                      Skaičiuoti Rekomendaciją
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <button
-                onClick={calculateTreatmentDecision}
-                disabled={!selectedAnimal || !estimatedTreatmentCost}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Calculator className="w-5 h-5" />
-                Skaičiuoti Rekomendaciją
-              </button>
-
               {decisionResult && (
                 <div className={`rounded-lg p-6 ${
-                  decisionResult.decision === 'treat' ? 'bg-green-50 border border-green-200' :
-                  decisionResult.decision === 'monitor' ? 'bg-yellow-50 border border-yellow-200' :
-                  'bg-red-50 border border-red-200'
+                  decisionResult.decision === 'treat' ? 'bg-green-50 border-2 border-green-300' :
+                  decisionResult.decision === 'monitor' ? 'bg-yellow-50 border-2 border-yellow-300' :
+                  'bg-red-50 border-2 border-red-300'
                 }`}>
                   <div className="flex items-start gap-4">
                     {decisionResult.decision === 'treat' ? (
@@ -674,36 +767,78 @@ export function ProfitabilityDashboard() {
                       <AlertTriangle className="w-12 h-12 text-red-600 flex-shrink-0" />
                     )}
                     <div className="flex-1">
-                      <h3 className={`text-xl font-bold mb-2 ${
+                      <h3 className={`text-2xl font-bold mb-3 ${
                         decisionResult.decision === 'treat' ? 'text-green-900' :
                         decisionResult.decision === 'monitor' ? 'text-yellow-900' :
                         'text-red-900'
                       }`}>
-                        {decisionResult.decision === 'treat' ? 'GYDYTI' :
-                         decisionResult.decision === 'monitor' ? 'STEBĖTI' :
-                         'ŠALINTI IŠ BANDOS'}
+                        {decisionResult.decision === 'treat' ? 'GYDYTI ✓' :
+                         decisionResult.decision === 'monitor' ? 'STEBĖTI ⚠' :
+                         'ŠALINTI IŠ BANDOS ✗'}
                       </h3>
-                      <p className="text-gray-700 mb-4">{decisionResult.reasoning}</p>
+                      <p className="text-gray-800 mb-4 text-base font-medium">{decisionResult.reasoning}</p>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                      {/* Calculation Details */}
+                      <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
+                        <h4 className="font-semibold text-gray-900 mb-3">Skaičiavimo Detalės:</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-700">Vidutinis pieno kiekis per dieną:</span>
+                            <span className="font-bold text-blue-700">{formatNumberLT(decisionResult.avgDailyMilk)} L</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-700">Pieno kaina už litrą:</span>
+                            <span className="font-bold text-blue-700">{formatCurrencyLT(milkPrice)}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                            <span className="text-gray-700">Dienos pajamos iš pieno:</span>
+                            <span className="font-bold text-green-700">{formatCurrencyLT(decisionResult.dailyRevenue)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-700">Numatoma gydymo kaina:</span>
+                            <span className="font-bold text-orange-700">{formatCurrencyLT(estimatedTreatmentCost)}</span>
+                          </div>
+                          {decisionResult.daysToPayback && (
+                            <>
+                              <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                                <span className="text-gray-700">Kaip apskaičiuota:</span>
+                                <span className="text-xs text-gray-600">
+                                  {formatCurrencyLT(estimatedTreatmentCost)} ÷ {formatCurrencyLT(decisionResult.dailyRevenue)} = {decisionResult.daysToPayback} dienų
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Key Metrics */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {decisionResult.daysToPayback && (
-                          <div className="bg-white rounded-lg p-3 shadow-sm">
-                            <p className="text-xs text-gray-600">Atsipirkimas</p>
-                            <p className="text-lg font-bold text-gray-900">{decisionResult.daysToPayback} d.</p>
+                          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                            <p className="text-xs text-gray-600 mb-1">Atsipirkimo Laikas</p>
+                            <p className="text-xl font-bold text-gray-900">{decisionResult.daysToPayback} d.</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {decisionResult.daysToPayback <= 30 ? 'Greitas' : decisionResult.daysToPayback <= 60 ? 'Vidutinis' : 'Lėtas'}
+                            </p>
                           </div>
                         )}
-                        <div className="bg-white rounded-lg p-3 shadow-sm">
-                          <p className="text-xs text-gray-600">Dienos Pajamos</p>
-                          <p className="text-lg font-bold text-gray-900">{formatCurrencyLT(decisionResult.dailyRevenue)}</p>
+                        <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                          <p className="text-xs text-gray-600 mb-1">Dabartinis Pelnas</p>
+                          <p className={`text-xl font-bold ${decisionResult.currentProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                            {formatCurrencyLT(decisionResult.currentProfit)}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Per 90 dienų</p>
                         </div>
-                        <div className="bg-white rounded-lg p-3 shadow-sm">
-                          <p className="text-xs text-gray-600">Dabartinis Pelnas</p>
-                          <p className="text-lg font-bold text-gray-900">{formatCurrencyLT(decisionResult.currentProfit)}</p>
+                        <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                          <p className="text-xs text-gray-600 mb-1">Dienos Pajamos</p>
+                          <p className="text-xl font-bold text-green-700">{formatCurrencyLT(decisionResult.dailyRevenue)}</p>
+                          <p className="text-xs text-gray-500 mt-1">Iš pieno</p>
                         </div>
-                        {decisionResult.successRate && (
-                          <div className="bg-white rounded-lg p-3 shadow-sm">
-                            <p className="text-xs text-gray-600">Sėkmės Rodiklis</p>
-                            <p className="text-lg font-bold text-gray-900">{decisionResult.successRate}%</p>
+                        {decisionResult.successRate !== null && (
+                          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                            <p className="text-xs text-gray-600 mb-1">Sėkmės Rodiklis</p>
+                            <p className="text-xl font-bold text-gray-900">{decisionResult.successRate}%</p>
+                            <p className="text-xs text-gray-500 mt-1">Ankstesnių gydymų</p>
                           </div>
                         )}
                       </div>
