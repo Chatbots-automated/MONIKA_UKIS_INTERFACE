@@ -823,8 +823,12 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete, wi
   onDelete: (e: React.MouseEvent) => void;
   withdrawalStatus?: WithdrawalStatus;
 }) {
+  const isCancelled = visit.status === 'Atšauktas';
+
   return (
-    <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-lg transition-all hover:border-blue-300 relative group">
+    <div className={`bg-white border-2 rounded-lg p-3 sm:p-4 hover:shadow-lg transition-all relative group ${
+      isCancelled ? 'border-red-300 bg-gray-50 opacity-75' : 'border-gray-200 hover:border-blue-300'
+    }`}>
       <button
         onClick={onDelete}
         className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 p-1 sm:p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -869,7 +873,9 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete, wi
       <div className="space-y-1.5 sm:space-y-2">
         <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700">
           <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
-          <span className="truncate">{formatDateLT(visit.visit_datetime)}</span>
+          <span className={`truncate ${isCancelled ? 'line-through text-gray-500' : ''}`}>
+            {formatDateLT(visit.visit_datetime)}
+          </span>
         </div>
 
         <div className="flex flex-wrap gap-1">

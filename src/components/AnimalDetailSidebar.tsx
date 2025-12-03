@@ -1824,15 +1824,24 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
 }
 
 function VisitCard({ visit, getStatusColor, getStatusIcon, onClick }: { visit: AnimalVisit; getStatusColor: (status: VisitStatus) => string; getStatusIcon: (status: VisitStatus) => JSX.Element; onClick: () => void }) {
+  const isCancelled = visit.status === 'Atšauktas';
+
   return (
-    <div onClick={onClick} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all cursor-pointer transform hover:scale-[1.01]">
+    <div
+      onClick={onClick}
+      className={`bg-white border rounded-lg p-4 hover:shadow-lg transition-all cursor-pointer transform hover:scale-[1.01] ${
+        isCancelled ? 'border-red-300 bg-gray-50 opacity-75' : 'border-gray-200'
+      }`}
+    >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(visit.status)}`}>
             {getStatusIcon(visit.status)}
             {visit.status}
           </span>
-          <span className="text-sm text-gray-600">{formatDateTimeLT(visit.visit_datetime)}</span>
+          <span className={`text-sm ${isCancelled ? 'text-gray-500 line-through' : 'text-gray-600'}`}>
+            {formatDateTimeLT(visit.visit_datetime)}
+          </span>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mb-2">
