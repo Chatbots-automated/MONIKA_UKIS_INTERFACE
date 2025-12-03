@@ -12,13 +12,17 @@ When viewing cow LT000008564183 in Pelningumas section:
 
 But the animal actually has:
 - 2 completed synchronization visits
-- Used Enzaprost (€0.31-0.41 per use)
-- Used Ovarelin (has cost)
+- 1 completed synchronization step with Enzaprost 6 ml
+- Actual cost: **€3.06** (but showing as 0.00!)
 
 **Root Cause:**
-The `vw_animal_profitability` view only counted medications linked to `treatments` table via `usage_items.treatment_id`, but **completely ignored** medications linked to visits via `usage_items.visit_id`.
+The `vw_animal_profitability` view only counted medications linked to `treatments` table via `usage_items.treatment_id`, but **completely ignored** synchronization medications which are stored in the `synchronization_steps` table (NOT in `usage_items`).
 
-Synchronization medications are recorded as visits, not treatments, so their costs were missing.
+Synchronization medications use a different storage mechanism:
+- Regular treatment meds: `treatments` → `usage_items` → `batches`
+- Synchronization meds: `animal_synchronizations` → `synchronization_steps` → `batches`
+
+The view was missing the entire `synchronization_steps` join, so all sync medication costs were at 0!
 
 ### Problem 2: GEA Milk Data Discrepancy
 
@@ -114,8 +118,8 @@ Gydymo Kaštai:
 - Gydymų skaičius: 0
 - Vakcinacijų: 0
 - Apsilankymų: 2          ← Only completed visits
-- Medikamentų: ~€0.62+    ← Now shows sync medication costs!
-- Viso: ~€20.62+          ← Correct total
+- Medikamentų: €3.06      ← Now shows sync medication costs!
+- Viso: €23.06            ← Correct total (€20 visits + €3.06 meds)
 ```
 
 ### Verification Steps:
