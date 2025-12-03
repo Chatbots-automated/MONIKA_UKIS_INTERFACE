@@ -95,12 +95,15 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   };
 
   const loadActiveSync = async () => {
-    const { data: syncData } = await supabase
+    // Load the most recent synchronization (Active or Cancelled)
+    const { data: syncList } = await supabase
       .from('animal_synchronizations')
       .select('*')
       .eq('animal_id', animalId)
-      .eq('status', 'Active')
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const syncData = syncList?.[0];
 
     if (syncData) {
       const { data: protocolData } = await supabase
@@ -441,23 +444,39 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     const totalSteps = activeSync.steps?.length || 0;
     const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
+    const isCancelled = activeSync.status === 'Cancelled';
+
     return (
       <div className="space-y-4">
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-4">
+        <div className={`bg-gradient-to-r ${isCancelled ? 'from-gray-100 to-gray-200 border-gray-400' : 'from-purple-50 to-pink-50 border-purple-300'} border-2 rounded-lg p-4`}>
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-purple-600" />
                 {activeSync.protocol?.name}
+                {isCancelled && (
+                  <span className="ml-2 px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full">
+                    ATŠAUKTAS
+                  </span>
+                )}
               </h3>
-              <p className="text-sm text-gray-600 mt-1">Pradėta: {new Date(activeSync.start_date).toLocaleDateString('lt-LT')}</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Pradėta: {new Date(activeSync.start_date).toLocaleDateString('lt-LT')}
+              </p>
+              {isCancelled && activeSync.notes && (
+                <p className="text-xs text-red-600 mt-1 italic">
+                  {activeSync.notes.split('\n').pop()}
+                </p>
+              )}
             </div>
-            <button
-              onClick={handleCancelProtocol}
-              className="text-red-600 hover:text-red-700 text-sm"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {!isCancelled && (
+              <button
+                onClick={handleCancelProtocol}
+                className="text-red-600 hover:text-red-700 text-sm"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
           <div className="mb-3">
@@ -476,18 +495,20 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
           <div className="space-y-2">
             {activeSync.steps?.map((step) => {
               const status = getStepStatus(step);
-              const statusColor = getStatusColor(status);
+              const statusColor = isCancelled ? 'bg-gray-100 border-gray-300' : getStatusColor(status);
 
               return (
                 <div
                   key={step.id}
-                  className={`p-3 rounded-lg border-2 ${statusColor}`}
+                  className={`p-3 rounded-lg border-2 ${statusColor} ${isCancelled && !step.completed ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         {step.completed ? (
                           <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        ) : isCancelled ? (
+                          <X className="w-5 h-5 text-red-500 flex-shrink-0" />
                         ) : (
                           <Circle className="w-5 h-5 text-gray-400 flex-shrink-0" />
                         )}
@@ -495,6 +516,11 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                           {step.step_number}. {step.step_name}
                         </span>
                         {step.is_evening && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Vakare</span>}
+                        {isCancelled && !step.completed && (
+                          <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-semibold">
+                            Atšauktas
+                          </span>
+                        )}
                       </div>
                       <div className="ml-7 mt-1 text-sm">
                         <div className="flex items-center gap-4">
@@ -516,7 +542,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                         )}
                       </div>
                     </div>
-                    {!step.completed && showCompleteForm !== step.id && (
+                    {!step.completed && !isCancelled && showCompleteForm !== step.id && (
                       <button
                         onClick={() => handleCompleteStep(step)}
                         className="ml-2 px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
