@@ -351,3 +351,51 @@ export interface AnimalCostSummary {
   total_vaccination_costs: number;
   total_costs: number;
 }
+
+export type InseminationProductType = 'SPERM' | 'GLOVES';
+
+export interface InseminationProduct {
+  id: string;
+  name: string;
+  product_type: InseminationProductType;
+  supplier_group: string;
+  unit: string;
+  price: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InseminationInventory {
+  id: string;
+  product_id: string;
+  quantity: number;
+  batch_number: string | null;
+  expiry_date: string | null;
+  received_date: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  product?: InseminationProduct;
+}
+
+export interface InseminationRecord {
+  id: string;
+  sync_step_id: string | null;
+  animal_id: string;
+  insemination_date: string;
+  sperm_product_id: string;
+  sperm_quantity: number;
+  glove_product_id: string | null;
+  glove_quantity: number | null;
+  notes: string | null;
+  performed_by: string | null;
+  pregnancy_confirmed: boolean | null;
+  pregnancy_check_date: string | null;
+  pregnancy_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  animal?: Animal;
+  sperm_product?: InseminationProduct;
+  glove_product?: InseminationProduct;
+}

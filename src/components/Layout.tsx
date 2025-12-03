@@ -19,7 +19,8 @@ import {
   Activity,
   Calendar,
   Repeat,
-  Euro
+  Euro,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,6 +38,7 @@ const menuItems = [
   { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
   { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
+  { id: 'insemination', label: 'Sėklinimas', icon: Heart, permission: 'animals' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
