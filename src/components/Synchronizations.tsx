@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X, Activity } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X, Activity, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SynchronizationStepWithDetails, Animal } from '../lib/types';
 import { formatDateLT, formatDateTimeLT } from '../lib/formatters';
@@ -127,6 +127,56 @@ export function Synchronizations() {
   const handleStepClick = (step: SyncStepDisplay) => {
     if (step.animal) {
       setSelectedAnimal(step.animal);
+    }
+  };
+
+  const handleDeleteSync = async (e: React.MouseEvent, step: SyncStepDisplay) => {
+    e.stopPropagation();
+
+    if (!step.synchronization_id) return;
+
+    const confirmMessage = `Ar tikrai norite ištrinti sinchronizacijos protokolą gyvūnui ${step.animal ? formatAnimalDisplay(step.animal) : 'nežinomam'}?\n\nTai ištrins:\n- Visus sinchronizacijos žingsnius\n- Visus susietus vizitus\n- Sinchronizacijos protokolą\n\nŠio veiksmo negalima atšaukti!`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      // Delete synchronization steps first
+      const { error: stepsError } = await supabase
+        .from('synchronization_steps')
+        .delete()
+        .eq('synchronization_id', step.synchronization_id);
+
+      if (stepsError) throw stepsError;
+
+      // Delete related visits of type Sinchronizacija
+      if (step.animal?.id) {
+        const { error: visitsError } = await supabase
+          .from('animal_visits')
+          .delete()
+          .eq('animal_id', step.animal.id)
+          .eq('visit_type', 'Sinchronizacija');
+
+        if (visitsError) throw visitsError;
+      }
+
+      // Delete the synchronization itself
+      const { error: syncError } = await supabase
+        .from('animal_synchronizations')
+        .delete()
+        .eq('id', step.synchronization_id);
+
+      if (syncError) throw syncError;
+
+      await logAction('delete', 'animal_synchronizations', step.synchronization_id, {
+        animal_tag: step.animal?.tag_no,
+        protocol: step.protocol_name
+      });
+
+      alert('Sinchronizacija sėkmingai ištrinta!');
+      loadData();
+    } catch (error) {
+      console.error('Error deleting synchronization:', error);
+      alert('Klaida trinant sinchronizaciją. Bandykite dar kartą.');
     }
   };
 
@@ -288,7 +338,7 @@ export function Synchronizations() {
               onClick={() => handleStepClick(step)}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
+                <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-3 mb-2">
                     <span className={`font-bold text-lg ${step.is_cancelled && !step.completed ? 'line-through' : ''}`}>
                       {step.animal ? formatAnimalDisplay(step.animal) : 'Nežinomas gyvūnas'}
@@ -317,16 +367,25 @@ export function Synchronizations() {
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="flex items-start gap-3">
+                  <button
+                    onClick={(e) => handleDeleteSync(e, step)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                    title="Ištrinti sinchronizaciją"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                  <div className="text-right">
                   <div className="flex items-center gap-2 text-gray-700">
                     <Calendar className="w-4 h-4" />
                     <span className="font-semibold">{formatDateLT(step.scheduled_date)}</span>
                   </div>
-                  {step.completed && step.completed_at && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Atlikta: {formatDateTimeLT(step.completed_at)}
-                    </div>
-                  )}
+                    {step.completed && step.completed_at && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Atlikta: {formatDateTimeLT(step.completed_at)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
