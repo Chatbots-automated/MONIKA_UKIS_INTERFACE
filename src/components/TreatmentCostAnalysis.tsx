@@ -14,6 +14,7 @@ interface AnimalCostData {
   medication_costs: number;
   medication_costs_from_usage_items: number;
   medication_costs_from_planned: number;
+  medication_costs_from_sync: number;
   vaccination_count: number;
   vaccination_costs: number;
   total_costs: number;
@@ -78,12 +79,17 @@ export function TreatmentCostAnalysis() {
     try {
       setLoading(true);
 
+      // Calculate 90 days ago for time filtering (to match profitability view)
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
+
       // Get all animals using pagination helper
       const animals = await fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no', 'tag_no');
 
       console.log('Animals loaded:', animals?.length);
 
-      // Get all treatments with usage items
+      // Get all treatments from last 90 days (to match profitability view)
       const { data: treatments, error: treatmentsError } = await supabase
         .from('treatments')
         .select(`
@@ -93,14 +99,15 @@ export function TreatmentCostAnalysis() {
           reg_date,
           outcome,
           diseases(name)
-        `);
+        `)
+        .gte('reg_date', ninetyDaysAgoStr);
 
       if (treatmentsError) {
         console.error('Treatments error:', treatmentsError);
         throw treatmentsError;
       }
 
-      console.log('Treatments loaded:', treatments?.length);
+      console.log('Treatments loaded (last 90 days):', treatments?.length);
 
       // Get all usage items with batch info
       const { data: usageItems, error: usageError } = await supabase
@@ -139,12 +146,41 @@ export function TreatmentCostAnalysis() {
 
       console.log('Vaccinations loaded:', vaccinations?.length);
 
-      // Get all visits with planned_medications
+      // Get all visits from last 90 days with planned_medications
       const { data: visits, error: visitsError } = await supabase
         .from('animal_visits')
-        .select('id, animal_id, visit_datetime, status, planned_medications');
+        .select('id, animal_id, visit_datetime, status, planned_medications')
+        .gte('visit_datetime', ninetyDaysAgoStr);
 
       if (visitsError) throw visitsError;
+
+      // Get all synchronization data for sync medication costs
+      const { data: syncs, error: syncsError } = await supabase
+        .from('animal_synchronizations')
+        .select('id, animal_id, start_date')
+        .gte('start_date', ninetyDaysAgoStr);
+
+      if (syncsError) throw syncsError;
+
+      // Get completed synchronization steps with batch info
+      const { data: syncSteps, error: syncStepsError } = await supabase
+        .from('synchronization_steps')
+        .select(`
+          id,
+          synchronization_id,
+          dosage,
+          batch_id,
+          completed,
+          completed_at,
+          batches(purchase_price, received_qty)
+        `)
+        .eq('completed', true)
+        .not('batch_id', 'is', null)
+        .gte('completed_at', ninetyDaysAgoStr);
+
+      if (syncStepsError) throw syncStepsError;
+
+      console.log('Sync steps loaded:', syncSteps?.length);
 
       // Get all batches for planned_medications cost calculation
       const { data: batches, error: batchesError } = await supabase
@@ -197,7 +233,23 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromPlanned;
+        // Add costs from synchronization steps (NEW - to match profitability view)
+        let medicationCostsFromSync = 0;
+        const animalSyncs = (syncs || []).filter(s => s.animal_id === animal.id);
+        for (const sync of animalSyncs) {
+          const syncStepsForAnimal = (syncSteps || []).filter(ss => ss.synchronization_id === sync.id);
+          for (const step of syncStepsForAnimal) {
+            if (step.batches && step.dosage) {
+              const unitCost = calculateSafeUnitCost(
+                step.batches.purchase_price,
+                step.batches.received_qty
+              );
+              medicationCostsFromSync += step.dosage * unitCost;
+            }
+          }
+        }
+
+        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromPlanned + medicationCostsFromSync;
 
         // Calculate vaccination costs
         let vaccinationCosts = 0;
@@ -228,6 +280,7 @@ export function TreatmentCostAnalysis() {
             medication_costs: medicationCosts,
             medication_costs_from_usage_items: medicationCostsFromUsageItems,
             medication_costs_from_planned: medicationCostsFromPlanned,
+            medication_costs_from_sync: medicationCostsFromSync,
             vaccination_count: animalVaccinations.length,
             vaccination_costs: vaccinationCosts,
             total_costs: totalCosts,
