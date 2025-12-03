@@ -1,83 +1,83 @@
-# Pelningumas (Profitability) Bug Fix
+# Pelningumas (Profitability) Bug Fix - CRITICAL
 
 ## 🐛 Problems Identified
 
-### Problem 1: Missing Medication Costs from Synchronization Visits
+### Problem 1: Missing Synchronization Medication Costs
 
 **Symptom:**
-When viewing cow LT000008564183 in Pelningumas section:
-- Shows: **Medikamentų: 0,00 €**
-- Shows: **Apsilankymų: 6**
-- Shows: **Viso: 60,00 €** (only visit costs: 6 × €10)
+Cow LT000008564183 shows **Medikamentų: 18,36 €** but should be **€3.06**
 
-But the animal actually has:
-- 2 completed synchronization visits
-- 1 completed synchronization step with Enzaprost 6 ml
-- Actual cost: **€3.06** (but showing as 0.00!)
+**Root Cause - TWO BUGS:**
 
-**Root Cause:**
-The `vw_animal_profitability` view only counted medications linked to `treatments` table via `usage_items.treatment_id`, but **completely ignored** synchronization medications which are stored in the `synchronization_steps` table (NOT in `usage_items`).
+1. **Missing sync medications:** The view only counted `usage_items` (regular treatments) but ignored `synchronization_steps` (sync medications)
 
-Synchronization medications use a different storage mechanism:
+2. **CARTESIAN PRODUCT BUG:** When joining both `animal_visits` AND `synchronization_steps` to the same animal:
+   - Animal has 6 visits
+   - Animal has 6 sync steps
+   - JOIN creates 6 × 6 = 36 rows
+   - SUM() counts each medication **6 times**
+   - Actual cost: €3.06
+   - Reported cost: €18.36 (6x multiplication!)
+
+**Database structure:**
 - Regular treatment meds: `treatments` → `usage_items` → `batches`
-- Synchronization meds: `animal_synchronizations` → `synchronization_steps` → `batches`
+- Sync meds: `animal_synchronizations` → `synchronization_steps` → `batches`
 
-The view was missing the entire `synchronization_steps` join, so all sync medication costs were at 0!
-
-### Problem 2: GEA Milk Data Discrepancy
+### Problem 2: GEA Milk Data Using Wrong Time Period
 
 **Symptom:**
-- **Pelningumas section:** Shows 114.55 L average per day over 14 days
-- **GEA Duomenys sidebar:** Shows 67.1 L average
+- Pelningumas shows "14 d." but calculates average over 90 days
+- Results in inflated milk production averages
+- Example: Shows 114.47 L/day but recent production is ~67 L/day
 
 **Root Cause:**
-The `vw_animal_milk_revenue` view calculates over **90 days** period (hardcoded in SQL), but the UI displays `days_tracked` which can be any number (14, 30, etc.) depending on available data. The longer period inflates the average by including historical high-production days.
-
-Recent milkings show:
-- 2025-12-03: 27.56 L
-- 2025-12-02: 18.27 L + 18.76 L + 28.35 L
-- 2025-12-01: 18.91 L
-
-Daily total ~67 L is more accurate for recent production.
+The `vw_animal_milk_revenue` view filters GEA data for last 90 days, then counts how many records exist (`days_tracked`). If only 14 days have data, it shows "14 d." but the average includes all 90 days worth of data (including older, higher-production periods).
 
 ## ✅ Fixes Applied
 
-### Fix 1: Include Visit Medications in Cost Calculation
+### Fix 1: Separate CTEs to Prevent Cartesian Product
 
-**Changes to `vw_animal_profitability` view:**
+**Solution:** Calculate treatment costs and sync costs in **SEPARATE CTEs**, then combine them.
 
-1. **Updated medication cost calculation** to include BOTH:
-   ```sql
-   -- OLD (only treatment medications):
-   LEFT JOIN usage_items ui ON ui.treatment_id = t.id
+```sql
+WITH treatment_costs AS (
+  -- Calculate treatment medications + visit counts
+  -- (Safe: visits don't multiply with usage_items)
+  ...
+),
+sync_costs AS (
+  -- Calculate sync medications SEPARATELY
+  -- (No visits joined here = no multiplication)
+  ...
+),
+combined_costs AS (
+  -- LEFT JOIN the two CTEs
+  -- (No cartesian product possible)
+  ...
+)
+```
 
-   -- NEW (both treatment AND visit medications):
-   LEFT JOIN usage_items ui ON (ui.treatment_id = t.id OR ui.visit_id = av.id)
-   ```
+**Key changes:**
+1. Split into 3 CTEs instead of 1 big GROUP BY
+2. Treatment costs CTE handles visits and usage_items
+3. Sync costs CTE handles synchronization_steps **separately**
+4. Combined CTE merges results via LEFT JOIN (safe)
 
-2. **Only count completed visits:**
-   ```sql
-   -- Only count visits with status = 'Baigtas'
-   COUNT(DISTINCT CASE WHEN av.status = 'Baigtas' THEN av.id END)
-   ```
+### Fix 2: GEA Milk Period Changed from 90 to 14 Days
 
-3. **Separate cost calculation** for treatment vs visit medications:
-   ```sql
-   -- Costs from treatment medications
-   SUM(CASE WHEN ui.treatment_id IS NOT NULL THEN ... END) +
-   -- Costs from visit medications (only completed)
-   SUM(CASE WHEN ui.visit_id IS NOT NULL AND av_med.status = 'Baigtas' THEN ... END)
-   ```
+**Changed:**
+```sql
+-- OLD:
+WHERE gd.snapshot_date >= CURRENT_DATE - INTERVAL '90 days'
 
-### Fix 2: GEA Milk Data Calculation
+-- NEW:
+WHERE gd.snapshot_date >= CURRENT_DATE - INTERVAL '14 days'
+```
 
-**Status:** NOT YET FIXED - Needs further investigation
-
-**Options to consider:**
-1. Make the time period configurable (14d, 30d, 90d selector)
-2. Show both: "Recent average" (14d) vs "Long-term average" (90d)
-3. Change default period from 90d to 30d or 14d
-4. Add date range labels to clarify what's being calculated
+**Impact:**
+- Milk averages now reflect recent (last 14 days) production
+- "Stebėta dienų: 14 d." will match actual calculation period
+- More accurate representation of current milk output
 
 ## 🚀 How to Apply the Fix
 
@@ -86,7 +86,7 @@ Daily total ~67 L is more accurate for recent production.
 1. Go to: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/editor
 2. Click "SQL Editor"
 3. Open file: `fix_profitability_medication_costs.sql`
-4. Copy ALL contents
+4. Copy ALL contents (includes both fixes)
 5. Paste into SQL Editor
 6. Click "Run" or press Ctrl+Enter
 
@@ -98,147 +98,173 @@ DB_PASSWORD=your_password_here node apply_profitability_fix.js
 
 ## ✔️ Testing the Fix
 
-After applying the fix, test with cow **LT000008564183**:
+Test with cow **LT000008564183**:
 
 ### Expected Results:
 
 **Before fix:**
 ```
 Gydymo Kaštai:
-- Gydymų skaičius: 0
-- Vakcinacijų: 0
-- Apsilankymų: 6
-- Medikamentų: 0,00 €    ← WRONG
-- Viso: 60,00 €          ← Missing medication costs
+- Medikamentų: 18,36 €    ← WRONG (6x multiplication)
+- Apsilankymų: 6          ← Includes planned visits
+- Viso: 78,36 €           ← Inflated
+
+Pieno Gamyba:
+- Vidutiniškai: 114.47 L  ← 90-day average
 ```
 
 **After fix:**
 ```
 Gydymo Kaštai:
-- Gydymų skaičius: 0
-- Vakcinacijų: 0
+- Medikamentų: 3,06 €     ← CORRECT (1 sync step)
 - Apsilankymų: 2          ← Only completed visits
-- Medikamentų: €3.06      ← Now shows sync medication costs!
-- Viso: €23.06            ← Correct total (€20 visits + €3.06 meds)
+- Viso: 23,06 €           ← Correct (€20 visits + €3.06 meds)
+
+Pieno Gamyba:
+- Vidutiniškai: ~67 L     ← 14-day average (recent production)
 ```
 
 ### Verification Steps:
 
-1. **Refresh Pelningumas page** in your browser
+1. **Refresh Pelningumas page**
 2. **Click on cow LT000008564183**
-3. **Check the "Medikamentų" line** - should now show cost (not 0,00 €)
-4. **Verify the total** includes medication costs
-5. **Cross-reference** with Vaistų Panaudojimas section:
-   - Search for "Enzaprost 5mg/ml inj.tirp.50ml N1"
-   - Find usages for this cow
-   - Costs should match
+3. **Check medication costs:**
+   - Should be €3.06 (not €18.36)
+   - Should match 1 completed sync step with 6 ml Enzaprost
+4. **Check milk production:**
+   - Should show recent 14-day average (~67 L/day)
+   - Should match GEA Duomenys sidebar values
 
 ## 📊 What Changed in the Database
 
-### View Updated:
-- `vw_animal_profitability` - Medication cost calculation logic
+### Views Updated:
+1. `vw_animal_profitability` - Fixed cartesian product, added sync costs
+2. `vw_animal_milk_revenue` - Changed from 90 to 14 days
 
 ### Tables Affected:
-None - this is a view-only change, no data modified
+None - view-only changes, no data modified
 
 ### Performance Impact:
-Minimal - added one additional LEFT JOIN to animal_visits for status checking
+- Slightly better (fewer rows to process with 14d vs 90d)
+- Separate CTEs may be marginally slower but necessary for correctness
 
 ## 🔍 Technical Details
 
-### Join Logic Change:
+### The Cartesian Product Problem
 
-**OLD:**
+**What happened:**
 ```sql
-LEFT JOIN usage_items ui ON ui.treatment_id = t.id
-```
-Only counted medications where `treatment_id` was set.
-
-**NEW:**
-```sql
-LEFT JOIN usage_items ui ON (ui.treatment_id = t.id OR ui.visit_id = av.id)
-LEFT JOIN animal_visits av_med ON av_med.id = ui.visit_id
-```
-Counts medications where EITHER `treatment_id` OR `visit_id` is set, and checks visit status.
-
-### Cost Calculation Logic:
-
-```sql
-COALESCE(
-  -- Treatment medications
-  SUM(CASE
-    WHEN ui.treatment_id IS NOT NULL THEN
-      ui.qty * b.purchase_price / NULLIF(b.received_qty, 0)
-    ELSE 0
-  END) +
-  -- Visit medications (only completed visits)
-  SUM(CASE
-    WHEN ui.visit_id IS NOT NULL AND av_med.status = 'Baigtas' THEN
-      ui.qty * b.purchase_price / NULLIF(b.received_qty, 0)
-    ELSE 0
-  END),
-  0
-) as medication_costs
+-- This creates a cartesian product:
+FROM animals a
+LEFT JOIN animal_visits av ON av.animal_id = a.id  -- 6 visits
+LEFT JOIN synchronization_steps ss ON ss.sync.animal_id = a.id  -- 6 steps
+-- Result: 6 × 6 = 36 rows per animal!
 ```
 
-This ensures:
-- Treatment medications are counted
-- Visit medications are counted (if visit is completed)
-- Planned visit medications are NOT counted
-- NULL values don't break the calculation
+**When summing:**
+```sql
+SUM(ss.dosage * batch.price)
+-- Counts €3.06 medication cost 6 times = €18.36
+```
+
+**The fix:**
+```sql
+-- Calculate separately:
+WITH sync_costs AS (
+  SELECT animal_id, SUM(dosage * price) FROM sync_steps ...
+),
+treatment_costs AS (
+  SELECT animal_id, ... FROM visits ...
+)
+-- Then JOIN the CTEs (not the raw tables)
+SELECT * FROM treatment_costs LEFT JOIN sync_costs USING (animal_id)
+```
+
+### Why 14 Days for GEA Data?
+
+- Milk production changes daily based on feed, health, lactation stage
+- 90-day averages hide recent changes (illness, treatment effects)
+- 14 days provides recent, actionable insight
+- Matches typical veterinary monitoring periods
+- Still shows trends but reflects current state
 
 ## 🎯 Impact
 
 ### Who is affected:
-- **All animals** with synchronization visits
-- **All animals** with visit-based medications (not just treatments)
+- **All animals** with synchronization protocols
+- **All animals** with visit-based medications
+- **All milk production** calculations now use 14-day window
 
 ### What improves:
-- ✅ Accurate profitability calculations
-- ✅ Correct treatment cost reporting
-- ✅ Proper visit cost counting (only completed)
-- ✅ Medication costs match usage reports
+- ✅ Accurate medication costs (no multiplication)
+- ✅ Sync medication costs now included
+- ✅ Visit counts correct (only completed)
+- ✅ Milk averages reflect recent production
+- ✅ Better treatment ROI decisions
 
 ### What to watch:
-- Some animals' profitability may **decrease** (because costs were underreported)
-- This is CORRECT - it reveals true costs that were hidden before
-- Animals previously showing as "profitable" might now show as "at risk"
+- Some animals' profitability will **change significantly**:
+  - Lower medication costs (no 6x multiplier)
+  - Lower milk revenue (14d vs 90d period)
+  - This reveals **true current state**, not inflated averages
+- Animals previously "profitable" might now be "at risk" (if recent production dropped)
+- This is CORRECT - shows current reality for better decisions
 
-## 📝 Future Improvements
+## 📝 Examples
 
-1. **GEA Milk Period Selection**
-   - Add UI toggle: 14d / 30d / 90d
-   - Show both recent and historical averages
+### Example 1: Cartesian Product Bug
+```
+Cow with:
+- 6 visits (4 planned, 2 completed)
+- 1 sync with 6 steps (1 completed with €3.06 med)
 
-2. **Detailed Cost Breakdown**
-   - Show per-visit costs
-   - List medications used
-   - Include batch and pricing info
+BEFORE FIX:
+- Joins create 36 rows
+- Medication cost: €3.06 × 6 = €18.36 ❌
+- Visit count: 6 (includes planned) ❌
 
-3. **Cost Validation Report**
-   - Compare profitability costs with Vaistų Panaudojimas
-   - Highlight discrepancies
-   - Export validation data
+AFTER FIX:
+- Separate CTEs, no multiplication
+- Medication cost: €3.06 ✅
+- Visit count: 2 (only completed) ✅
+```
+
+### Example 2: GEA Milk Period
+```
+Cow producing:
+- Days 1-14: 67 L/day (recent, lower)
+- Days 15-90: 95 L/day (historical, higher)
+
+BEFORE FIX (90 days):
+- Average: ~90 L/day (misleading)
+
+AFTER FIX (14 days):
+- Average: ~67 L/day (accurate current state)
+```
 
 ## ❓ FAQ
 
-**Q: Why were my costs showing as 0,00 €?**
-A: The system only looked at treatments table, not visits. Synchronization medications are recorded as visits.
+**Q: Why were medication costs multiplied by 6?**
+A: Cartesian product from joining 6 visits with 6 sync steps created 36 rows. Each row included the same €3.06 cost, so SUM counted it 6 times.
 
-**Q: Will this change my historical data?**
-A: No, it only changes HOW data is calculated/displayed. The raw data is unchanged.
+**Q: Why change from 90 to 14 days for milk?**
+A: 90 days includes historical data that doesn't reflect current production. 14 days shows recent, actionable trends for treatment decisions.
 
-**Q: Why do I now see different profitability numbers?**
-A: Because the costs are now ACCURATE. Previous numbers underreported costs.
+**Q: Will this affect my historical data?**
+A: No data is changed. Only the calculation/display logic is fixed. You're now seeing accurate current numbers instead of inflated averages.
 
-**Q: Should I adjust my business decisions?**
-A: Yes - use the corrected numbers for treat vs cull decisions. Some animals are less profitable than previously thought.
+**Q: Some animals show lower profitability now?**
+A: Yes - because costs were underreported (0 meds) and revenue was overreported (90d avg). The new numbers are CORRECT.
 
-**Q: What about the GEA milk discrepancy?**
-A: Still under investigation. The 90-day calculation may be inflating averages. Will fix in next update.
+**Q: Should I re-evaluate treatment decisions?**
+A: Yes - use the corrected numbers for treat vs cull decisions. Some animals may be less profitable than you thought.
+
+**Q: Can I change back to 90 days?**
+A: Yes, but 14 days is more accurate for current decisions. If you need long-term trends, we can add a separate view or make it configurable.
 
 ---
 
 **Applied:** 2025-12-03
-**Version:** 1.0
+**Version:** 2.0 (Corrected after finding cartesian product bug)
 **Status:** Ready to deploy
+**Critical:** YES - Affects all profitability calculations

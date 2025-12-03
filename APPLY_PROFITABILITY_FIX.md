@@ -1,20 +1,34 @@
 # Kaip pritaikyti Pelningumas (Profitability) pataisymą
 
-## Problema
+## Problema - KRITINĖ
 
-Pelningumas sistemoje medikamentų kainos rodė **0,00 €**, nors gyvūnas turėjo sinchronizacijos vizitus su vaistais.
+Pelningumas sistemoje medikamentų kainos buvo **NETEISINGOS** dėl dviejų klaidų:
 
-Pavyzdys su karve **LT000008564183**:
-- Turėjo 6 vizitus (2 užbaigti)
-- Naudojo Enzaprost ir Ovarelin
-- Bet rodė: **Medikamentų: 0,00 €** ❌
+**Klaida 1: Dauginimas 6 kartų (Cartesian Product)**
+- Karve **LT000008564183** rodė: **Medikamentų: 18,36 €**
+- Turėtų būti: **€3.06**
+- Priežastis: 6 vizitai × 6 sinchronizacijos žingsniai = 36 eilutės duomenų bazėje
+- Kiekviena eilutė skaičiuoja tą patį €3.06 vaistą → €3.06 × 6 = €18.36 ❌
+
+**Klaida 2: Neteisingas GEA pieno skaičiavimo laikotarpis**
+- Rodo "14 d." bet skaičiuoja vidurkį per 90 dienų
+- Pavyzdys: Rodo 114.47 L/dieną, bet tikras dabartinis gamyba ~67 L/dieną
+- Senesnė gamyba (didesni skaičiai) išpučia vidurkį
 
 ## Sprendimas
 
-Sukurtas SQL pataisymas, kuris:
-- ✅ Įtraukia vaistų kainas iš vizitų (ne tik iš gydymų)
-- ✅ Skaičiuoja tik užbaigtus vizitus (ne planuotus)
-- ✅ Tinkamai prideda sinchronizacijos vaistų kainas
+Sukurtas SQL pataisymas su DVIEM pataisymais:
+
+**Pataisymas 1: Atskirti skaičiavimai (išvengti dauginimo)**
+- ✅ Gydymų kaštai skaičiuojami ATSKIRAI
+- ✅ Sinchronizacijos kaštai skaičiuojami ATSKIRAI
+- ✅ Tada sudedama be dauginimo
+- ✅ Skaičiuojami tik užbaigti vizitai
+
+**Pataisymas 2: GEA pieno laikotarpis pakeistas iš 90 į 14 dienų**
+- ✅ Dabar rodo tikrą dabartinę gamybą (ne senus duomenis)
+- ✅ "14 d." atitinka realų skaičiavimo laikotarpį
+- ✅ Tikslesni sprendimai dėl gydymo
 
 ## Kaip pritaikyti
 
@@ -47,9 +61,13 @@ Po pataisymo pritaikymo:
 2. **Spauskite** ant karves LT000008564183
 
 3. **Patikrinkite** "Gydymo Kaštai" sekcijoje:
-   - Medikamentų: dabar turėtų rodyti kainą (ne 0,00 €) ✅
-   - Apsilankymų: turėtų būti 2 (ne 6) ✅
-   - Viso: turėtų būti ~20-25 € (ne 60 €) ✅
+   - Medikamentų: turėtų būti **€3.06** (ne €18.36) ✅
+   - Apsilankymų: turėtų būti **2** (ne 6) ✅
+   - Viso: turėtų būti **€23.06** (ne €78.36) ✅
+
+4. **Patikrinkite** "Pieno Gamyba" sekcijoje:
+   - Vidutiniškai per dieną: turėtų būti **~67 L** (ne 114 L) ✅
+   - Turėtų sutapti su GEA Duomenys skyriumi ✅
 
 4. **Palyginkite** su "Vaistų Panaudojimas" skyriumi:
    - Suraskite Enzaprost produktą
@@ -65,24 +83,28 @@ Po pataisymo pritaikymo:
 ## Poveikis
 
 Po pataisymo:
-- ✅ Tikslūs pelningumas skaičiavimai
-- ✅ Teisingos gydymo kainos
+- ✅ Tikslūs medikamentų kaštai (be dauginimo)
 - ✅ Sinchronizacijos vaistai įskaičiuojami
-- ⚠️ Kai kurių gyvūnų pelningumas SUMAŽĖS (nes kaštai buvo per maži)
-- ⚠️ Tai yra TEISINGA - dabar matote tikras kainas
+- ✅ Tik užbaigti vizitai skaičiuojami
+- ✅ Pieno gamyba atspindi dabartinį (14 d.) laikotarpį
+- ✅ Geresni sprendimai dėl gydymo
 
-## Pastabos
+### ⚠️ SVARBU - Skaičiai pasikeis:
 
-### Apie GEA pieno duomenis
+**Medikamentų kaštai SUMAŽĖS:**
+- Buvo: padauginti 6 kartų (per daug)
+- Dabar: tikri kaštai
+- Pavyzdys: €18.36 → €3.06
 
-**Problema:**
-- Pelningumas rodo 114.55 L vidurkis
-- GEA duomenys rodo 67.1 L vidurkis
+**Pieno pajamos SUMAŽĖS:**
+- Buvo: 90 dienų vidurkis (su senais aukštais skaičiais)
+- Dabar: 14 dienų vidurkis (dabartinė gamyba)
+- Pavyzdys: 114 L/d → 67 L/d
 
-**Priežastis:**
-- Sistema skaičiuoja per 90 dienų
-- Gali būti senesni didesnės gamybos duomenys
-- Bus pataisyta kitame atnaujinime
+**Pelningumas kai kurių gyvūnų SUMAŽĖS:**
+- Tai yra TEISINGA - dabar matote tikrus dabartinius skaičius
+- Kai kurie gyvūnai gali būti MAŽIAU pelningi nei atrodė
+- Naudokite naujus skaičius sprendimams dėl gydymo
 
 ### Jei kyla problemų
 
