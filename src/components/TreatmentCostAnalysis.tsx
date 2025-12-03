@@ -13,7 +13,6 @@ interface AnimalCostData {
   visit_costs: number;
   medication_costs: number;
   medication_costs_from_usage_items: number;
-  medication_costs_from_planned: number;
   medication_costs_from_sync: number;
   vaccination_count: number;
   vaccination_costs: number;
@@ -146,10 +145,10 @@ export function TreatmentCostAnalysis() {
 
       console.log('Vaccinations loaded:', vaccinations?.length);
 
-      // Get all visits from last 90 days with planned_medications
+      // Get all visits from last 90 days (for counting only)
       const { data: visits, error: visitsError } = await supabase
         .from('animal_visits')
-        .select('id, animal_id, visit_datetime, status, planned_medications')
+        .select('id, animal_id, visit_datetime, status')
         .gte('visit_datetime', ninetyDaysAgoStr);
 
       if (visitsError) throw visitsError;
@@ -182,15 +181,6 @@ export function TreatmentCostAnalysis() {
 
       console.log('Sync steps loaded:', syncSteps?.length);
 
-      // Get all batches for planned_medications cost calculation
-      const { data: batches, error: batchesError } = await supabase
-        .from('batches')
-        .select('id, purchase_price, received_qty');
-
-      if (batchesError) throw batchesError;
-
-      const batchMap = new Map(batches?.map(b => [b.id, b]) || []);
-
       // Calculate costs for each animal
       const animalCosts: AnimalCostData[] = [];
 
@@ -216,24 +206,11 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        // Add costs from planned_medications in visits
-        let medicationCostsFromPlanned = 0;
-        const animalVisits = (visits || []).filter(v => v.animal_id === animal.id);
-        for (const visit of animalVisits) {
-          if (visit.planned_medications && Array.isArray(visit.planned_medications)) {
-            for (const med of visit.planned_medications as any[]) {
-              if (med.batch_id && med.qty) {
-                const batch = batchMap.get(med.batch_id);
-                if (batch) {
-                  const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
-                  medicationCostsFromPlanned += med.qty * unitCost;
-                }
-              }
-            }
-          }
-        }
+        // NOTE: We DO NOT add planned_medications here because they are converted to usage_items
+        // when visits are completed. Adding both would be double-counting!
+        // The dropdown detail view handles planned_medications with proper duplicate detection.
 
-        // Add costs from synchronization steps (NEW - to match profitability view)
+        // Add costs from synchronization steps (to match profitability view)
         let medicationCostsFromSync = 0;
         const animalSyncs = (syncs || []).filter(s => s.animal_id === animal.id);
         for (const sync of animalSyncs) {
@@ -249,7 +226,7 @@ export function TreatmentCostAnalysis() {
           }
         }
 
-        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromPlanned + medicationCostsFromSync;
+        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromSync;
 
         // Calculate vaccination costs
         let vaccinationCosts = 0;
@@ -279,7 +256,6 @@ export function TreatmentCostAnalysis() {
             visit_costs: visitCosts,
             medication_costs: medicationCosts,
             medication_costs_from_usage_items: medicationCostsFromUsageItems,
-            medication_costs_from_planned: medicationCostsFromPlanned,
             medication_costs_from_sync: medicationCostsFromSync,
             vaccination_count: animalVaccinations.length,
             vaccination_costs: vaccinationCosts,
@@ -652,7 +628,7 @@ export function TreatmentCostAnalysis() {
       totalVisitCosts: acc.totalVisitCosts + row.visit_costs,
       totalMedicationCosts: acc.totalMedicationCosts + row.medication_costs,
       totalMedicationCostsFromUsageItems: acc.totalMedicationCostsFromUsageItems + row.medication_costs_from_usage_items,
-      totalMedicationCostsFromPlanned: acc.totalMedicationCostsFromPlanned + row.medication_costs_from_planned,
+      totalMedicationCostsFromSync: acc.totalMedicationCostsFromSync + row.medication_costs_from_sync,
       totalVaccinationCosts: acc.totalVaccinationCosts + row.vaccination_costs,
       totalCosts: acc.totalCosts + row.total_costs,
     }),
@@ -662,7 +638,7 @@ export function TreatmentCostAnalysis() {
       totalVisitCosts: 0,
       totalMedicationCosts: 0,
       totalMedicationCostsFromUsageItems: 0,
-      totalMedicationCostsFromPlanned: 0,
+      totalMedicationCostsFromSync: 0,
       totalVaccinationCosts: 0,
       totalCosts: 0,
     }
@@ -764,8 +740,8 @@ export function TreatmentCostAnalysis() {
               <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromUsageItems)}</span>
             </div>
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
-              <span className="text-sm text-gray-600">Planuoti vaistai:</span>
-              <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromPlanned)}</span>
+              <span className="text-sm text-gray-600">Sinchronizacijos vaistai:</span>
+              <span className="text-sm font-semibold text-gray-900">{formatCost(totalStats.totalMedicationCostsFromSync)}</span>
             </div>
           </div>
         </div>
