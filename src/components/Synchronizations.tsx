@@ -140,24 +140,32 @@ export function Synchronizations() {
     if (!window.confirm(confirmMessage)) return;
 
     try {
-      // Delete synchronization steps first
+      // First, get all step IDs for this synchronization
+      const { data: steps, error: fetchError } = await supabase
+        .from('synchronization_steps')
+        .select('id')
+        .eq('synchronization_id', step.synchronization_id);
+
+      if (fetchError) throw fetchError;
+
+      // Delete visits linked to these steps (via sync_step_id)
+      if (steps && steps.length > 0) {
+        const stepIds = steps.map(s => s.id);
+        const { error: visitsError } = await supabase
+          .from('animal_visits')
+          .delete()
+          .in('sync_step_id', stepIds);
+
+        if (visitsError) throw visitsError;
+      }
+
+      // Delete synchronization steps
       const { error: stepsError } = await supabase
         .from('synchronization_steps')
         .delete()
         .eq('synchronization_id', step.synchronization_id);
 
       if (stepsError) throw stepsError;
-
-      // Delete related visits of type Sinchronizacija
-      if (step.animal?.id) {
-        const { error: visitsError } = await supabase
-          .from('animal_visits')
-          .delete()
-          .eq('animal_id', step.animal.id)
-          .eq('visit_type', 'Sinchronizacija');
-
-        if (visitsError) throw visitsError;
-      }
 
       // Delete the synchronization itself
       const { error: syncError } = await supabase
