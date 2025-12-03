@@ -346,7 +346,7 @@ export function Synchronizations() {
               onClick={() => handleStepClick(step)}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+                <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <span className={`font-bold text-lg ${step.is_cancelled && !step.completed ? 'line-through' : ''}`}>
                       {step.animal ? formatAnimalDisplay(step.animal) : 'Nežinomas gyvūnas'}
