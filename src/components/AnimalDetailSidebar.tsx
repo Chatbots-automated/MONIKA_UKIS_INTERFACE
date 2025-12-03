@@ -3187,7 +3187,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   Sekančio vizito data *
                 </label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={formData.next_visit_date}
                   onChange={(e) => setFormData({ ...formData, next_visit_date: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
