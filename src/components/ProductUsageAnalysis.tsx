@@ -39,7 +39,7 @@ interface UsageDetail {
   total_cost: number;
   visit_id: string | null;
   treatment_id: string | null;
-  source: 'usage_items' | 'vaccinations' | 'planned_medications';
+  source: 'usage_items' | 'vaccinations';
 }
 
 export function ProductUsageAnalysis() {
@@ -78,31 +78,8 @@ export function ProductUsageAnalysis() {
 
       console.log('✅ Vaccinations loaded:', vaccinations.length);
 
-      // 3. Get all animal_visits with planned_medications (manual pagination for not.is filter)
-      let visits: any[] = [];
-      let visitFrom = 0;
-      const visitPageSize = 1000;
-      let hasMoreVisits = true;
-
-      while (hasMoreVisits) {
-        const { data: visitPage, error: visitError } = await supabase
-          .from('animal_visits')
-          .select('id, visit_datetime, animal_id, planned_medications')
-          .not('planned_medications', 'is', null)
-          .range(visitFrom, visitFrom + visitPageSize - 1);
-
-        if (visitError) throw visitError;
-
-        if (visitPage && visitPage.length > 0) {
-          visits = [...visits, ...visitPage];
-          visitFrom += visitPageSize;
-          hasMoreVisits = visitPage.length === visitPageSize;
-        } else {
-          hasMoreVisits = false;
-        }
-      }
-
-      console.log('✅ Visits with planned meds loaded:', visits.length);
+      // NOTE: We DO NOT load planned_medications because they are converted to usage_items
+      // when visits are completed. Loading both would cause double-counting!
 
       // Fetch all lookup data upfront (MUCH faster than individual queries)
       console.log('📚 Loading lookup data...');
@@ -233,60 +210,8 @@ export function ProductUsageAnalysis() {
       }
       console.log('✅ Vaccinations processed');
 
-      // Process planned_medications from visits
-      console.log('📋 Processing planned medications...');
-      for (const visit of visits || []) {
-        const plannedMeds = visit.planned_medications as any[];
-
-        if (!plannedMeds || !Array.isArray(plannedMeds)) continue;
-
-        const animal = animalMap.get(visit.animal_id);
-
-        for (const med of plannedMeds) {
-          if (!med.product_id || !med.batch_id || !med.qty) continue;
-
-          const product = productMap.get(med.product_id);
-          const batch = batchMap.get(med.batch_id);
-
-          if (!product || !batch) continue;
-
-          const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
-          const totalCost = med.qty * unitCost;
-
-          const productId = product.id;
-          if (!usageByProduct.has(productId)) {
-            usageByProduct.set(productId, {
-              product_id: productId,
-              product_name: product.name,
-              category: product.category,
-              subcategory: product.subcategory,
-              total_quantity: 0,
-              unit: med.unit || product.primary_pack_unit || 'vnt',
-              total_cost: 0,
-              usage_count: 0,
-              animals_treated: 0,
-              usages: [],
-            });
-          }
-
-          const record = usageByProduct.get(productId)!;
-          record.total_quantity += med.qty;
-          record.total_cost += totalCost;
-          record.usage_count += 1;
-          record.usages.push({
-            date: visit.visit_datetime,
-            animal_tag: animal?.tag_no || null,
-            animal_id: visit.animal_id,
-            quantity: med.qty,
-            unit_cost: unitCost,
-            total_cost: totalCost,
-            visit_id: visit.id,
-            treatment_id: null,
-            source: 'planned_medications',
-          });
-        }
-      }
-      console.log('✅ Planned medications processed');
+      // NOTE: We skip planned_medications processing to avoid double-counting
+      // (they're already included in usage_items after visit completion)
 
       // Calculate unique animals per product
       for (const record of usageByProduct.values()) {
@@ -391,12 +316,10 @@ export function ProductUsageAnalysis() {
         acc.usageItems += usage.total_cost;
       } else if (usage.source === 'vaccinations') {
         acc.vaccinations += usage.total_cost;
-      } else if (usage.source === 'planned_medications') {
-        acc.plannedMedications += usage.total_cost;
       }
     });
     return acc;
-  }, { usageItems: 0, vaccinations: 0, plannedMedications: 0 });
+  }, { usageItems: 0, vaccinations: 0 });
 
   if (loading) {
     return (
@@ -467,7 +390,7 @@ export function ProductUsageAnalysis() {
         {/* Source Breakdown */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="text-xs font-semibold text-gray-600 uppercase mb-2">Išlaidų paskirstymas pagal šaltinį:</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
               <span className="text-sm text-gray-600">Gydymo vaistai:</span>
               <span className="text-sm font-semibold text-gray-900">{formatCost(sourceBreakdown.usageItems)}</span>
@@ -475,10 +398,6 @@ export function ProductUsageAnalysis() {
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
               <span className="text-sm text-gray-600">Vakcinacijos:</span>
               <span className="text-sm font-semibold text-gray-900">{formatCost(sourceBreakdown.vaccinations)}</span>
-            </div>
-            <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
-              <span className="text-sm text-gray-600">Planuoti vaistai:</span>
-              <span className="text-sm font-semibold text-gray-900">{formatCost(sourceBreakdown.plannedMedications)}</span>
             </div>
           </div>
         </div>
