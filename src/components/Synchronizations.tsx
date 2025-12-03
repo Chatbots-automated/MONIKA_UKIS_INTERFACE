@@ -10,6 +10,8 @@ import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 interface SyncStepDisplay extends SynchronizationStepWithDetails {
   animal?: Animal;
   protocol_name?: string;
+  sync_status?: string;
+  is_cancelled?: boolean;
 }
 
 export function Synchronizations() {
@@ -94,7 +96,7 @@ export function Synchronizations() {
         const syncIds = [...new Set(stepsData.map(s => s.synchronization_id))];
         const { data: syncsData } = await supabase
           .from('animal_synchronizations')
-          .select('id, animal_id, protocol_id, synchronization_protocols(name)')
+          .select('id, animal_id, protocol_id, status, synchronization_protocols(name)')
           .in('id', syncIds);
 
         const syncsMap = new Map(syncsData?.map(s => [s.id, s]) || []);
@@ -102,10 +104,14 @@ export function Synchronizations() {
         const enrichedSteps = stepsData.map(step => {
           const sync = syncsMap.get(step.synchronization_id);
           const animal = enrichedAnimals.find(a => a.id === sync?.animal_id);
+          const isCancelled = sync?.status === 'Cancelled';
+
           return {
             ...step,
             animal,
             protocol_name: (sync?.synchronization_protocols as any)?.name,
+            sync_status: sync?.status,
+            is_cancelled: isCancelled,
           };
         });
 
@@ -149,6 +155,7 @@ export function Synchronizations() {
   });
 
   const getStatusColor = (step: SyncStepDisplay) => {
+    if (step.is_cancelled && !step.completed) return 'bg-gray-100 text-gray-700 border-gray-400';
     if (step.completed) return 'bg-green-100 text-green-800 border-green-300';
     const today = new Date().toISOString().split('T')[0];
     if (step.scheduled_date < today) return 'bg-red-100 text-red-800 border-red-300';
@@ -157,6 +164,7 @@ export function Synchronizations() {
   };
 
   const getStatusIcon = (step: SyncStepDisplay) => {
+    if (step.is_cancelled && !step.completed) return <X className="w-4 h-4" />;
     if (step.completed) return <CheckCircle2 className="w-4 h-4" />;
     const today = new Date().toISOString().split('T')[0];
     if (step.scheduled_date < today) return <AlertCircle className="w-4 h-4" />;
@@ -165,6 +173,7 @@ export function Synchronizations() {
   };
 
   const getStatusText = (step: SyncStepDisplay) => {
+    if (step.is_cancelled && !step.completed) return 'Atšauktas';
     if (step.completed) return 'Atlikta';
     const today = new Date().toISOString().split('T')[0];
     if (step.scheduled_date < today) return 'Praleista';
@@ -273,13 +282,15 @@ export function Synchronizations() {
           {filteredSteps.map((step) => (
             <div
               key={step.id}
-              className={`border-2 rounded-lg p-4 transition-all ${getStatusColor(step)} hover:shadow-lg cursor-pointer`}
+              className={`border-2 rounded-lg p-4 transition-all ${getStatusColor(step)} hover:shadow-lg cursor-pointer ${
+                step.is_cancelled && !step.completed ? 'opacity-60' : ''
+              }`}
               onClick={() => handleStepClick(step)}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="font-bold text-lg">
+                    <span className={`font-bold text-lg ${step.is_cancelled && !step.completed ? 'line-through' : ''}`}>
                       {step.animal ? formatAnimalDisplay(step.animal) : 'Nežinomas gyvūnas'}
                     </span>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 border-2`}>
