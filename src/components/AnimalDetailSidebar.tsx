@@ -428,7 +428,40 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       .order('visit_datetime', { ascending: false });
 
     if (!error && data) {
-      setVisits(data);
+      // Filter out visits from cancelled synchronizations
+      const filteredVisits = [];
+
+      for (const visit of data) {
+        // If visit has sync_step_id, check if parent synchronization is cancelled
+        if (visit.sync_step_id) {
+          const { data: step } = await supabase
+            .from('synchronization_steps')
+            .select('synchronization_id')
+            .eq('id', visit.sync_step_id)
+            .maybeSingle();
+
+          if (step) {
+            const { data: sync } = await supabase
+              .from('animal_synchronizations')
+              .select('status')
+              .eq('id', step.synchronization_id)
+              .maybeSingle();
+
+            // Only include if synchronization is NOT cancelled
+            if (sync && sync.status !== 'Cancelled') {
+              filteredVisits.push(visit);
+            }
+          } else {
+            // No step found, include the visit
+            filteredVisits.push(visit);
+          }
+        } else {
+          // No sync_step_id, include the visit
+          filteredVisits.push(visit);
+        }
+      }
+
+      setVisits(filteredVisits);
     }
   };
 
