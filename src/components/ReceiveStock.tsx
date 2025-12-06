@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Product, Supplier } from '../lib/types';
+import { Product, Supplier, InseminationProduct } from '../lib/types';
 import { normalizeNumberInput } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -10,6 +10,7 @@ import { getSubcategories, getNestedSubcategories, hasSubcategories, hasNestedSu
 export function ReceiveStock() {
   const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [inseminationProducts, setInseminationProducts] = useState<InseminationProduct[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -76,12 +77,14 @@ export function ReceiveStock() {
   });
 
   const loadData = async () => {
-    const [productsRes, suppliersRes] = await Promise.all([
+    const [productsRes, inseminationProductsRes, suppliersRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true).order('name'),
+      supabase.from('insemination_products').select('*').eq('is_active', true).order('name'),
       supabase.from('suppliers').select('*').order('name'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
+    if (inseminationProductsRes.data) setInseminationProducts(inseminationProductsRes.data);
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
   };
 
@@ -572,43 +575,79 @@ export function ReceiveStock() {
     setSuccess(false);
 
     try {
-      const batchData: any = {
-        product_id: formData.product_id,
-        lot: formData.lot || null,
-        mfg_date: formData.mfg_date || null,
-        expiry_date: formData.expiry_date || null,
-        supplier_id: formData.supplier_id || null,
-        doc_title: formData.doc_title,
-        doc_number: formData.doc_number || null,
-        doc_date: formData.doc_date || null,
-        purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : null,
-        currency: formData.currency,
-      };
+      const isInseminationProduct = formData.product_id.startsWith('insem-');
 
-      if (formData.package_size && formData.package_count) {
-        batchData.package_size = parseFloat(formData.package_size);
-        batchData.package_count = parseFloat(formData.package_count);
-        batchData.received_qty = parseFloat(formData.package_size) * parseFloat(formData.package_count);
-      } else if (formData.received_qty) {
-        batchData.received_qty = parseFloat(formData.received_qty);
-      }
+      if (isInseminationProduct) {
+        const actualProductId = formData.product_id.replace('insem-', '');
+        let receivedQty = 0;
 
-      const { error } = await supabase.from('batches').insert(batchData);
-
-      if (error) throw error;
-
-      await logAction(
-        'receive_stock',
-        'batches',
-        null,
-        null,
-        {
-          product_id: formData.product_id,
-          lot: formData.lot,
-          received_qty: formData.received_qty,
-          doc_number: formData.doc_number,
+        if (formData.package_size && formData.package_count) {
+          receivedQty = parseFloat(formData.package_size) * parseFloat(formData.package_count);
+        } else if (formData.received_qty) {
+          receivedQty = parseFloat(formData.received_qty);
         }
-      );
+
+        const inventoryData = {
+          product_id: actualProductId,
+          quantity: receivedQty,
+          batch_number: formData.lot || null,
+          expiry_date: formData.expiry_date || null,
+          received_date: new Date().toISOString().split('T')[0],
+          notes: formData.doc_number ? `Sąskaita: ${formData.doc_number}` : null,
+        };
+
+        const { error } = await supabase.from('insemination_inventory').insert(inventoryData);
+        if (error) throw error;
+
+        await logAction(
+          'receive_stock',
+          'insemination_inventory',
+          null,
+          null,
+          {
+            product_id: actualProductId,
+            quantity: receivedQty,
+            batch_number: formData.lot,
+          }
+        );
+      } else {
+        const batchData: any = {
+          product_id: formData.product_id,
+          lot: formData.lot || null,
+          mfg_date: formData.mfg_date || null,
+          expiry_date: formData.expiry_date || null,
+          supplier_id: formData.supplier_id || null,
+          doc_title: formData.doc_title,
+          doc_number: formData.doc_number || null,
+          doc_date: formData.doc_date || null,
+          purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : null,
+          currency: formData.currency,
+        };
+
+        if (formData.package_size && formData.package_count) {
+          batchData.package_size = parseFloat(formData.package_size);
+          batchData.package_count = parseFloat(formData.package_count);
+          batchData.received_qty = parseFloat(formData.package_size) * parseFloat(formData.package_count);
+        } else if (formData.received_qty) {
+          batchData.received_qty = parseFloat(formData.received_qty);
+        }
+
+        const { error } = await supabase.from('batches').insert(batchData);
+        if (error) throw error;
+
+        await logAction(
+          'receive_stock',
+          'batches',
+          null,
+          null,
+          {
+            product_id: formData.product_id,
+            lot: formData.lot,
+            received_qty: formData.received_qty,
+            doc_number: formData.doc_number,
+          }
+        );
+      }
 
       setSuccess(true);
       setFormData({
@@ -1589,17 +1628,28 @@ export function ReceiveStock() {
                 required
               >
                 <option value="">Pasirinkite produktą...</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} - {product.primary_pack_size}{product.primary_pack_unit} ({product.category})
-                  </option>
-                ))}
+                <optgroup label="Vaistai ir produktai">
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} - {product.primary_pack_size}{product.primary_pack_unit} ({product.category})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Sėklinimo produktai">
+                  {inseminationProducts.map((product) => (
+                    <option key={`insem-${product.id}`} value={`insem-${product.id}`}>
+                      {product.name} - {product.unit} ({product.product_type === 'SPERM' ? 'Sperma' : 'Pirštinės'})
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               {formData.product_id && (() => {
                 const selectedProduct = products.find(p => p.id === formData.product_id);
-                return selectedProduct ? (
+                const selectedInsemProduct = inseminationProducts.find(p => `insem-${p.id}` === formData.product_id);
+                const unit = selectedProduct?.primary_pack_unit || selectedInsemProduct?.unit || 'vnt';
+                return (selectedProduct || selectedInsemProduct) ? (
                   <p className="text-xs text-blue-600 mt-1 font-medium">
-                    📦 Matavimo vienetas: {selectedProduct.primary_pack_unit}
+                    📦 Matavimo vienetas: {unit}
                   </p>
                 ) : null;
               })()}
@@ -1838,7 +1888,8 @@ export function ReceiveStock() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {(() => {
                   const selectedProduct = products.find(p => p.id === formData.product_id);
-                  const unit = selectedProduct?.primary_pack_unit || 'vnt';
+                  const selectedInsemProduct = inseminationProducts.find(p => `insem-${p.id}` === formData.product_id);
+                  const unit = selectedProduct?.primary_pack_unit || selectedInsemProduct?.unit || 'vnt';
                   const unitLabels: Record<string, string> = {
                     'ml': 'Mililitro',
                     'l': 'Litro',
@@ -1866,7 +1917,8 @@ export function ReceiveStock() {
                 {formData.received_qty && formData.purchase_price ? (
                   `${formData.purchase_price} EUR ÷ ${formData.received_qty} = ${formData.unit_price} EUR/${(() => {
                     const selectedProduct = products.find(p => p.id === formData.product_id);
-                    return selectedProduct?.primary_pack_unit || 'vnt';
+                    const selectedInsemProduct = inseminationProducts.find(p => `insem-${p.id}` === formData.product_id);
+                    return selectedProduct?.primary_pack_unit || selectedInsemProduct?.unit || 'vnt';
                   })()}`
                 ) : (
                   'Automatiškai apskaičiuojama iš kainos ir kiekio'
