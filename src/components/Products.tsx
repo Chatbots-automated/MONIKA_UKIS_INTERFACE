@@ -21,6 +21,7 @@ export function Products() {
     subcategory_2: '',
     primary_pack_unit: 'ml' as Unit,
     primary_pack_size: '',
+    package_weight_g: '',
     active_substance: '',
     withdrawal_days_meat: '0',
     withdrawal_days_milk: '0',
@@ -72,6 +73,7 @@ export function Products() {
         subcategory_2: formData.subcategory_2 || null,
         primary_pack_unit: formData.primary_pack_unit,
         primary_pack_size: formData.primary_pack_size ? parseFloat(formData.primary_pack_size) : null,
+        package_weight_g: formData.package_weight_g ? parseFloat(formData.package_weight_g) : null,
         active_substance: formData.active_substance || null,
         withdrawal_days_meat: (['medicines', 'svirkstukai'].includes(formData.category) && formData.withdrawal_days_meat) ? parseInt(formData.withdrawal_days_meat) : null,
         withdrawal_days_milk: (['medicines', 'svirkstukai'].includes(formData.category) && formData.withdrawal_days_milk) ? parseInt(formData.withdrawal_days_milk) : null,
@@ -131,6 +133,7 @@ export function Products() {
       category: product.category,
       primary_pack_unit: product.primary_pack_unit,
       primary_pack_size: product.primary_pack_size?.toString() || '',
+      package_weight_g: product.package_weight_g?.toString() || '',
       active_substance: product.active_substance || '',
       withdrawal_days_meat: product.withdrawal_days_meat?.toString() || '',
       withdrawal_days_milk: product.withdrawal_days_milk?.toString() || '',
@@ -269,6 +272,24 @@ export function Products() {
             <option value="bolus">bolus</option>
             <option value="syringe">syringe</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+            Pakuotės svoris (tuščios)
+            <span className="text-xs text-gray-500 font-normal">g</span>
+          </label>
+          <input
+            type="number"
+            step="0.1"
+            value={formData.package_weight_g}
+            onChange={(e) => setFormData({ ...formData, package_weight_g: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="pvz., 45.5"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Tuščios pakuotės svoris gramais. Automatiškai sukuriamas medicininių atliekų įrašas kai visas paketas panaudotas.
+          </p>
         </div>
 
         <div className="md:col-span-2">

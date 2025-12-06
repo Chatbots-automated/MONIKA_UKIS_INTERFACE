@@ -12,6 +12,7 @@ export interface Product {
   withdrawal_days: number | null;
   dosage_notes: string | null;
   is_active: boolean;
+  package_weight_g: number | null;
   created_at: string;
 }
 
@@ -135,7 +136,23 @@ export interface MedicalWaste {
   transfer_date: string | null;
   doc_no: string | null;
   responsible: string | null;
+  auto_generated: boolean;
+  source_batch_id: string | null;
+  source_product_id: string | null;
+  package_count: number | null;
   created_at: string;
+}
+
+export type WasteSource = 'automatic' | 'manual';
+
+export interface MedicalWasteWithDetails extends MedicalWaste {
+  source_type: WasteSource;
+  product_name: string | null;
+  product_category: ProductCategory | null;
+  batch_lot: string | null;
+  batch_expiry: string | null;
+  batch_mfg_date: string | null;
+  auto_generated_at: string | null;
 }
 
 export interface StockByBatch {
