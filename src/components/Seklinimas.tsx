@@ -18,8 +18,7 @@ import {
 import {
   InseminationRecord,
   InseminationProduct,
-  InseminationInventory,
-  Animal
+  InseminationInventory
 } from '../lib/types';
 import { formatAnimalDisplay } from '../lib/helpers';
 
@@ -32,19 +31,8 @@ export function Seklinimas() {
   const [products, setProducts] = useState<InseminationProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showNewRecordForm, setShowNewRecordForm] = useState(false);
   const [showNewProductForm, setShowNewProductForm] = useState(false);
   const [showReceiveStockForm, setShowReceiveStockForm] = useState(false);
-  const [animals, setAnimals] = useState<Animal[]>([]);
-  const [formData, setFormData] = useState({
-    animal_id: '',
-    insemination_date: new Date().toISOString().split('T')[0],
-    sperm_product_id: '',
-    sperm_quantity: 1,
-    glove_product_id: '',
-    glove_quantity: 0,
-    notes: '',
-  });
   const [productFormData, setProductFormData] = useState({
     name: '',
     product_type: 'SPERM',
@@ -65,26 +53,10 @@ export function Seklinimas() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (showNewRecordForm) {
-      loadAnimalsAndProducts();
-    }
-  }, [showNewRecordForm]);
-
-  useEffect(() => {
     if (showReceiveStockForm) {
       loadProducts();
     }
   }, [showReceiveStockForm]);
-
-  const loadAnimalsAndProducts = async () => {
-    const [animalsRes, productsRes] = await Promise.all([
-      supabase.from('animals').select('*').eq('alive', true).order('tag_no'),
-      supabase.from('insemination_products').select('*').eq('is_active', true).order('name')
-    ]);
-
-    if (animalsRes.data) setAnimals(animalsRes.data);
-    if (productsRes.data) setProducts(productsRes.data);
-  };
 
   const loadData = async () => {
     setLoading(true);
@@ -138,41 +110,6 @@ export function Seklinimas() {
       .order('name');
 
     if (data) setProducts(data);
-  };
-
-  const handleSubmitNewRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const { error } = await supabase.from('insemination_records').insert({
-        animal_id: formData.animal_id,
-        insemination_date: formData.insemination_date,
-        sperm_product_id: formData.sperm_product_id,
-        sperm_quantity: formData.sperm_quantity,
-        glove_product_id: formData.glove_product_id || null,
-        glove_quantity: formData.glove_quantity || 0,
-        notes: formData.notes || null,
-      });
-
-      if (error) throw error;
-
-      setShowNewRecordForm(false);
-      setFormData({
-        animal_id: '',
-        insemination_date: new Date().toISOString().split('T')[0],
-        sperm_product_id: '',
-        sperm_quantity: 1,
-        glove_product_id: '',
-        glove_quantity: 0,
-        notes: '',
-      });
-
-      await loadRecords();
-      alert('Sėklinimo įrašas sėkmingai sukurtas!');
-    } catch (error) {
-      console.error('Error creating record:', error);
-      alert('Klaida kuriant įrašą');
-    }
   };
 
   const handleSubmitNewProduct = async (e: React.FormEvent) => {
@@ -361,13 +298,6 @@ export function Seklinimas() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
             />
           </div>
-          <button
-            onClick={() => setShowNewRecordForm(true)}
-            className="ml-4 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Naujas įrašas
-          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -735,155 +665,6 @@ export function Seklinimas() {
           {activeTab === 'inventory' && renderInventory()}
           {activeTab === 'products' && renderProducts()}
           {activeTab === 'analytics' && renderAnalytics()}
-        </div>
-      )}
-
-      {showNewRecordForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Naujas sėklinimo įrašas</h2>
-                <button
-                  onClick={() => setShowNewRecordForm(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <XCircle className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmitNewRecord} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Gyvūnas *
-                  </label>
-                  <select
-                    required
-                    value={formData.animal_id}
-                    onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  >
-                    <option value="">Pasirinkite gyvūną</option>
-                    {animals.map(animal => (
-                      <option key={animal.id} value={animal.id}>
-                        {formatAnimalDisplay(animal)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sėklinimo data *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.insemination_date}
-                    onChange={(e) => setFormData({ ...formData, insemination_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sperma *
-                  </label>
-                  <select
-                    required
-                    value={formData.sperm_product_id}
-                    onChange={(e) => setFormData({ ...formData, sperm_product_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  >
-                    <option value="">Pasirinkite spermą</option>
-                    {products.filter(p => p.product_type === 'SPERM').map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Spermos kiekis *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0.1"
-                    step="0.1"
-                    value={formData.sperm_quantity}
-                    onChange={(e) => setFormData({ ...formData, sperm_quantity: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pirštinės (neprivaloma)
-                  </label>
-                  <select
-                    value={formData.glove_product_id}
-                    onChange={(e) => setFormData({ ...formData, glove_product_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  >
-                    <option value="">Pasirinkite pirštines</option>
-                    {products.filter(p => p.product_type === 'GLOVES').map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {formData.glove_product_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Pirštinių kiekis
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={formData.glove_quantity}
-                      onChange={(e) => setFormData({ ...formData, glove_quantity: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pastabos
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                    placeholder="Papildoma informacija..."
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium"
-                  >
-                    Sukurti įrašą
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewRecordForm(false)}
-                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
-                  >
-                    Atšaukti
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
         </div>
       )}
 
