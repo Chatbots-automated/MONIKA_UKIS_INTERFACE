@@ -10,7 +10,10 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Trash2,
+  Check,
+  X
 } from 'lucide-react';
 import {
   InseminationRecord,
@@ -235,6 +238,83 @@ export function Seklinimas() {
     }
   };
 
+  const handleDeleteInsemination = async (recordId: string, animalId: string, syncStepId: string | null) => {
+    if (!confirm('Ar tikrai norite ištrinti šį sėklinimo įrašą? Visa susijusi informacija bus ištrinta.')) {
+      return;
+    }
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('insemination_records')
+        .delete()
+        .eq('id', recordId);
+
+      if (deleteError) throw deleteError;
+
+      if (syncStepId) {
+        const { data: syncData } = await supabase
+          .from('synchronization_steps')
+          .select('synchronization_id')
+          .eq('id', syncStepId)
+          .single();
+
+        if (syncData) {
+          const { data: step6 } = await supabase
+            .from('synchronization_steps')
+            .select('id')
+            .eq('synchronization_id', syncData.synchronization_id)
+            .eq('step_number', 6)
+            .single();
+
+          if (step6) {
+            const { data: allSteps } = await supabase
+              .from('synchronization_steps')
+              .select('id, step_number')
+              .eq('synchronization_id', syncData.synchronization_id)
+              .gt('step_number', 6)
+              .order('step_number');
+
+            if (allSteps) {
+              for (const step of allSteps) {
+                await supabase
+                  .from('synchronization_steps')
+                  .update({ completed: false, completed_at: null })
+                  .eq('id', step.id);
+              }
+            }
+          }
+        }
+      }
+
+      await loadRecords();
+      alert('Sėklinimo įrašas sėkmingai ištrintas!');
+    } catch (error) {
+      console.error('Error deleting insemination:', error);
+      alert('Klaida trinant įrašą');
+    }
+  };
+
+  const handleUpdatePregnancyStatus = async (recordId: string, confirmed: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('insemination_records')
+        .update({
+          pregnancy_confirmed: confirmed,
+          pregnancy_check_date: new Date().toISOString().split('T')[0],
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', recordId);
+
+      if (error) throw error;
+
+      await loadRecords();
+      alert(`Nėštumas ${confirmed ? 'patvirtintas' : 'nepatvirtintas'}!`);
+    } catch (error) {
+      console.error('Error updating pregnancy status:', error);
+      alert('Klaida atnaujinant nėštumo statusą');
+    }
+  };
+
   const getPregnancyStatusBadge = (record: InseminationRecord) => {
     if (record.pregnancy_confirmed === true) {
       return (
@@ -340,9 +420,33 @@ export function Seklinimas() {
                       {getPregnancyStatusBadge(record)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-rose-600 hover:text-rose-900">
-                        Redaguoti
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {record.pregnancy_confirmed === null && (
+                          <>
+                            <button
+                              onClick={() => handleUpdatePregnancyStatus(record.id, true)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              title="Patvirtinti nėštumą"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleUpdatePregnancyStatus(record.id, false)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Nepatvirtinti nėštumo"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleDeleteInsemination(record.id, record.animal_id, record.sync_step_id || null)}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 hover:text-red-600 rounded transition-colors"
+                          title="Ištrinti"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -784,13 +888,17 @@ export function Seklinimas() {
       )}
 
       {showNewProductForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Naujas produktas</h3>
-              <form onSubmit={handleSubmitNewProduct} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-rose-50 to-pink-50">
+              <h3 className="text-2xl font-semibold text-gray-900">Naujas produktas</h3>
+              <p className="text-sm text-gray-600 mt-1">Pridėkite naują spermos ar pirštinių produktą</p>
+            </div>
+
+            <form onSubmit={handleSubmitNewProduct} className="p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Pavadinimas *
                   </label>
                   <input
@@ -798,20 +906,21 @@ export function Seklinimas() {
                     required
                     value={productFormData.name}
                     onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                    placeholder="Pvz: HO XYZ 123456"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors"
+                    placeholder="Pvz: HO XYZ 123456 arba Pirštinės uždengiančios petį"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Įveskite pilną produkto pavadinimą</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Tipas *
                   </label>
                   <select
                     required
                     value={productFormData.product_type}
                     onChange={(e) => setProductFormData({ ...productFormData, product_type: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-white transition-colors"
                   >
                     <option value="SPERM">Sperma</option>
                     <option value="GLOVES">Pirštinės</option>
@@ -819,64 +928,80 @@ export function Seklinimas() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Tiekėjas
                   </label>
                   <input
                     type="text"
                     value={productFormData.supplier_group}
                     onChange={(e) => setProductFormData({ ...productFormData, supplier_group: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors"
                     placeholder="Pvz: VikingGenetics"
+                    list="supplier-suggestions"
                   />
+                  <datalist id="supplier-suggestions">
+                    <option value="PASARU GRUPE" />
+                    <option value="VikingGenetics" />
+                    <option value="CRV" />
+                    <option value="Semex" />
+                    <option value="ABS Global" />
+                  </datalist>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Vienetas *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={productFormData.unit}
                     onChange={(e) => setProductFormData({ ...productFormData, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                    placeholder="Pvz: vnt, ml, pak"
-                  />
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-white transition-colors"
+                  >
+                    <option value="vnt">vnt (vienetai)</option>
+                    <option value="ml">ml (mililitrai)</option>
+                    <option value="pak">pak (pakuotė)</option>
+                    <option value="doz">doz (dozė)</option>
+                  </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Kaina (€) *
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Kaina už vienetą (€) *
                   </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={productFormData.price}
-                    onChange={(e) => setProductFormData({ ...productFormData, price: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={productFormData.price}
+                      onChange={(e) => setProductFormData({ ...productFormData, price: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors"
+                      placeholder="0.00"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">€</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Įveskite kainą už vieną vienetą</p>
                 </div>
+              </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium"
-                  >
-                    Sukurti produktą
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewProductForm(false)}
-                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
-                  >
-                    Atšaukti
-                  </button>
-                </div>
-              </form>
-            </div>
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowNewProductForm(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-rose-700 hover:to-pink-700 font-medium transition-all shadow-lg shadow-rose-500/30"
+                >
+                  Sukurti produktą
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
