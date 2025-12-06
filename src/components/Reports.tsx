@@ -17,13 +17,15 @@ import {
   Filter,
   X,
   RefreshCw,
-  Printer
+  Printer,
+  Heart
 } from 'lucide-react';
 import {
   TreatedAnimalsReport,
   MedicalWasteReport,
   DrugJournalReport,
-  BiocideJournalReport
+  BiocideJournalReport,
+  InseminationJournalReport
 } from './ReportTemplates';
 import { SearchableSelect } from './SearchableSelect';
 import { InvoiceViewer } from './InvoiceViewer';
@@ -45,7 +47,7 @@ interface AnalyticsData {
   inventoryByCategory: Array<{ category: string; value: number }>;
 }
 
-type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'medical_waste' | 'invoices';
+type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices';
 
 export function Reports() {
   const [reportType, setReportType] = useState<ReportType>('analytics');
@@ -337,6 +339,28 @@ export function Reports() {
           if (filterBatch) {
             result = result.filter(r => r.batch_number?.toLowerCase().includes(filterBatch.toLowerCase()));
           }
+          break;
+        }
+
+        case 'insemination_journal': {
+          let query = supabase
+            .from('insemination_records')
+            .select(`
+              *,
+              animal:animals(tag_no, species),
+              sperm_product:insemination_products!insemination_records_sperm_product_id_fkey(name, unit),
+              glove_product:insemination_products!insemination_records_glove_product_id_fkey(name, unit)
+            `)
+            .order('insemination_date', { ascending: false });
+
+          if (dateFrom) query = query.gte('insemination_date', dateFrom);
+          if (dateTo) query = query.lte('insemination_date', dateTo);
+          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          result = data || [];
           break;
         }
 
@@ -678,6 +702,8 @@ export function Reports() {
         return <DrugJournalReport data={data} />;
       case 'biocide_journal':
         return <BiocideJournalReport data={data} />;
+      case 'insemination_journal':
+        return <InseminationJournalReport data={data} />;
       default:
         return null;
     }
@@ -689,6 +715,7 @@ export function Reports() {
     drug_journal: { name: 'Veterinarinių vaistų žurnalas', icon: Syringe, color: 'emerald' },
     treated_animals: { name: 'Gydomų gyvūnų registras', icon: Activity, color: 'teal' },
     biocide_journal: { name: 'Biocidų žurnalas', icon: Package, color: 'purple' },
+    insemination_journal: { name: 'Sėklinimo žurnalas', icon: Heart, color: 'rose' },
     medical_waste: { name: 'Medicininių atliekų žurnalas', icon: AlertTriangle, color: 'orange' },
   };
 
@@ -806,7 +833,7 @@ export function Reports() {
                     </div>
                   </div>
 
-                  {reportType === 'treated_animals' && (
+                  {(reportType === 'treated_animals' || reportType === 'insemination_journal') && (
                     <SearchableSelect
                       label="Gyvūnas"
                       placeholder="Pasirinkite gyvūną"

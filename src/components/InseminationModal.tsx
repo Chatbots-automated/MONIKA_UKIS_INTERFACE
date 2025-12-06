@@ -31,7 +31,7 @@ export function InseminationModal({
     sperm_product_id: '',
     sperm_quantity: 1,
     glove_product_id: '',
-    glove_quantity: 0,
+    glove_quantity: 1,
     notes: '',
   });
 
@@ -90,8 +90,8 @@ export function InseminationModal({
           insemination_date: scheduledDate,
           sperm_product_id: formData.sperm_product_id,
           sperm_quantity: formData.sperm_quantity,
-          glove_product_id: formData.glove_product_id || null,
-          glove_quantity: formData.glove_quantity || 0,
+          glove_product_id: formData.glove_product_id,
+          glove_quantity: formData.glove_quantity,
           notes: formData.notes || null,
         })
         .select()
@@ -221,7 +221,7 @@ export function InseminationModal({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
                 <Package className="w-5 h-5" />
-                Pirštinės (neprivaloma)
+                Pirštinės *
               </h3>
 
               <div className="space-y-3">
@@ -230,6 +230,7 @@ export function InseminationModal({
                     Pasirinkite pirštines
                   </label>
                   <select
+                    required
                     value={formData.glove_product_id}
                     onChange={(e) => setFormData({ ...formData, glove_product_id: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -257,16 +258,17 @@ export function InseminationModal({
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Kiekis
+                        Kiekis *
                       </label>
                       <div className="flex gap-2">
                         <input
                           type="number"
-                          min="0"
+                          required
+                          min="1"
                           step="1"
                           max={selectedGloveProduct.total_stock}
                           value={formData.glove_quantity}
-                          onChange={(e) => setFormData({ ...formData, glove_quantity: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => setFormData({ ...formData, glove_quantity: parseInt(e.target.value) || 1 })}
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                         <div className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg flex items-center">
@@ -295,7 +297,7 @@ export function InseminationModal({
             <div className="flex gap-3 pt-4 border-t border-gray-200">
               <button
                 type="submit"
-                disabled={submitting || !formData.sperm_product_id}
+                disabled={submitting || !formData.sperm_product_id || !formData.glove_product_id}
                 className="flex-1 bg-rose-600 text-white px-4 py-3 rounded-lg hover:bg-rose-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {submitting ? 'Įrašoma...' : 'Įrašyti sėklinimą'}

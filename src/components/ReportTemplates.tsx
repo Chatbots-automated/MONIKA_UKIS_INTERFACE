@@ -423,3 +423,137 @@ export function OwnerMedsReport({ data }: OwnerMedsReportProps) {
     </div>
   );
 }
+
+interface InseminationJournalReportProps {
+  data: any[];
+}
+
+export function InseminationJournalReport({ data }: InseminationJournalReportProps) {
+  const pregnancyStats = {
+    total: data.length,
+    confirmed: data.filter(r => r.pregnancy_confirmed === true).length,
+    notConfirmed: data.filter(r => r.pregnancy_confirmed === false).length,
+    pending: data.filter(r => r.pregnancy_confirmed === null).length,
+  };
+
+  const successRate = pregnancyStats.total > 0
+    ? ((pregnancyStats.confirmed / pregnancyStats.total) * 100).toFixed(1)
+    : '0';
+
+  return (
+    <div className="bg-white">
+      <div className="text-center mb-6 no-print">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">SĖKLINIMO ŽURNALAS</h1>
+        <p className="text-sm text-gray-500">Sugeneruota: {formatDateLT(new Date().toISOString())}</p>
+      </div>
+
+      {data.length > 0 && (
+        <div className="grid grid-cols-4 gap-4 mb-6 no-print">
+          <div className="bg-rose-50 border-2 border-rose-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-rose-600 uppercase">Viso sėklinimų</p>
+            <p className="text-2xl font-bold text-rose-900 mt-1">{pregnancyStats.total}</p>
+          </div>
+          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-green-600 uppercase">Patvirtinti nėštumai</p>
+            <p className="text-2xl font-bold text-green-900 mt-1">{pregnancyStats.confirmed}</p>
+          </div>
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-red-600 uppercase">Nepatvirtinti</p>
+            <p className="text-2xl font-bold text-red-900 mt-1">{pregnancyStats.notConfirmed}</p>
+          </div>
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-blue-600 uppercase">Sėkmės rodiklis</p>
+            <p className="text-2xl font-bold text-blue-900 mt-1">{successRate}%</p>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border-2 border-gray-300 shadow-sm">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gradient-to-r from-rose-50 to-pink-50">
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Eil. Nr.</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Sėklinimo data</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gyvūno duomenys</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Spermos produktas</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Spermos kiekis</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Pirštinės</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Pirštinių kiekis</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Nėštumas</th>
+              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Pastabos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, idx) => (
+              <tr key={idx} className="hover:bg-rose-50 transition-colors print-break-avoid">
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-semibold text-gray-600">{idx + 1}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs font-medium text-gray-900">
+                  {row.insemination_date ? formatDateLT(row.insemination_date) : '-'}
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="font-bold text-gray-900">{row.animal?.tag_no || '-'}</div>
+                    <div className="text-gray-600">{row.animal?.species || '-'}</div>
+                  </div>
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs font-medium text-gray-900">
+                  {row.sperm_product?.name || '-'}
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-700">
+                    {row.sperm_quantity || '-'} {row.sperm_product?.unit || ''}
+                  </span>
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">
+                  {row.glove_product?.name || '-'}
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                    {row.glove_quantity || '-'} {row.glove_product?.unit || ''}
+                  </span>
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center">
+                  {row.pregnancy_confirmed === true && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                      ✓ Patvirtintas
+                    </span>
+                  )}
+                  {row.pregnancy_confirmed === false && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                      ✗ Nepatvirtintas
+                    </span>
+                  )}
+                  {row.pregnancy_confirmed === null && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                      ⏳ Laukiama
+                    </span>
+                  )}
+                  {row.pregnancy_check_date && (
+                    <div className="text-[10px] text-gray-500 mt-1">
+                      {formatDateLT(row.pregnancy_check_date)}
+                    </div>
+                  )}
+                </td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-700">
+                  {row.notes || '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {data.length === 0 && (
+        <div className="text-center py-16">
+          <p className="text-lg text-gray-500">Nėra duomenų</p>
+        </div>
+      )}
+
+      {data.length > 0 && (
+        <div className="mt-4 text-sm text-gray-600 no-print">
+          <p>Viso įrašų: <span className="font-semibold text-gray-900">{data.length}</span></p>
+        </div>
+      )}
+    </div>
+  );
+}
