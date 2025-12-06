@@ -287,6 +287,13 @@ export function Seklinimas() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
             />
           </div>
+          <button
+            onClick={() => setShowReceiveStockForm(true)}
+            className="ml-4 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Priimti atsargas
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -358,6 +365,13 @@ export function Seklinimas() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-medium text-gray-900">Produktų sąrašas</h3>
+          <button
+            onClick={() => setShowNewProductForm(true)}
+            className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Pridėti produktą
+          </button>
         </div>
 
         <div>
