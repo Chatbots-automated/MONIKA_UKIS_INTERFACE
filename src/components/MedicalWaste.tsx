@@ -141,16 +141,26 @@ export function MedicalWaste() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="bg-red-50 p-2 rounded-lg">
             <Trash2 className="w-6 h-6 text-red-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Medicininių Atliekų Valdymas</h2>
-            <p className="text-sm text-gray-600">Sekti veterinarinių medicininių atliekų susidarymą ir šalinimą</p>
+            <h2 className="text-lg font-bold text-gray-900 uppercase">
+              Veterinarinių Medicininių Atliekų Susidarymo Apskaitos Žurnalas
+            </h2>
+            <p className="text-xs text-gray-600 mt-1">Oficialus veterinarinių medicininių atliekų registras pagal LR reikalavimus</p>
           </div>
+        </div>
+
+        <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+          <p className="font-medium mb-1">Automatinis atliekų registravimas</p>
+          <p className="text-xs text-blue-700">
+            Sistema automatiškai užregistruoja medicininių atliekų susidarymą kai naudojami vaistai per apsilankymus.
+            Šią formą naudokite tik rankiniam atliekų registravimui (pvz., pernešant atliekas tvarkymo įmonei).
+          </p>
         </div>
 
         {success && (
@@ -161,123 +171,170 @@ export function MedicalWaste() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Atliekų kodas *</label>
-              <input
-                type="text"
-                value={formData.waste_code}
-                onChange={(e) => setFormData({ ...formData, waste_code: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="e.g., 18 02 02"
-                required
-              />
-            </div>
+          {/* Section 1: Basic Information */}
+          <div className="border-b border-gray-200 pb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">Atliekų identifikavimas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų kodas *
+                </label>
+                <input
+                  type="text"
+                  value={formData.waste_code}
+                  onChange={(e) => setFormData({ ...formData, waste_code: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="Pvz.: 18 02 02"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">18 02 02 - Nepavojingos atliekos, 18 02 01 - Aštrūs daiktai</p>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Atliekų pavadinimas *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Atliekų aprašymas"
-                required
-              />
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų pavadinimas *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="Atliekų aprašymas"
+                  required
+                />
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Laikotarpis</label>
-              <input
-                type="text"
-                value={formData.period}
-                onChange={(e) => setFormData({ ...formData, period: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="2025 K1, Sausis, ir t.t."
-              />
+          {/* Section 2: Generation Information */}
+          <div className="border-b border-gray-200 pb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">Atliekų susidarymo informacija</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų susidarymo periodas
+                </label>
+                <input
+                  type="text"
+                  value={formData.period}
+                  onChange={(e) => setFormData({ ...formData, period: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="2025 K1, Sausis, ir t.t."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų susidarymo data
+                </label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų kiekis (kg)
+                </label>
+                <input
+                  type="number"
+                  step="0.001"
+                  value={formData.qty_generated}
+                  onChange={(e) => setFormData({ ...formData, qty_generated: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="0.000"
+                />
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              />
+          {/* Section 3: Transfer Information */}
+          <div className="border-b border-gray-200 pb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">Atliekų perdavimo informacija</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Perduotas veterinarinių medicininių atliekų kiekis (kg)
+                </label>
+                <input
+                  type="number"
+                  step="0.001"
+                  value={formData.qty_transferred}
+                  onChange={(e) => setFormData({ ...formData, qty_transferred: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="0.000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Veterinarinių medicininių atliekų perdavimo data
+                </label>
+                <input
+                  type="date"
+                  value={formData.transfer_date}
+                  onChange={(e) => setFormData({ ...formData, transfer_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Atliekų vežėjas, kuriam perduotos veterinarinės medicininės atliekos
+                </label>
+                <input
+                  type="text"
+                  value={formData.carrier}
+                  onChange={(e) => setFormData({ ...formData, carrier: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="Įmonės pavadinimas"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Atliekų tvarkytojas, kuris tvarkys veterinarines medicinines atliekas
+                </label>
+                <input
+                  type="text"
+                  value={formData.processor}
+                  onChange={(e) => setFormData({ ...formData, processor: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="Įmonės pavadinimas"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Atliekų perdavimą patvirtinančio dokumento numeris ir data
+                </label>
+                <input
+                  type="text"
+                  value={formData.doc_no}
+                  onChange={(e) => setFormData({ ...formData, doc_no: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                  placeholder="Pvz.: Nr. A123456, 2025-01-15"
+                />
+              </div>
             </div>
+          </div>
 
+          {/* Section 4: Responsible Person */}
+          <div className="pb-2">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">Atsakingas asmuo</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Susidariusi kiekis (kg)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.qty_generated}
-                onChange={(e) => setFormData({ ...formData, qty_generated: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Perduotas kiekis (kg)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.qty_transferred}
-                onChange={(e) => setFormData({ ...formData, qty_transferred: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Vežėjas</label>
-              <input
-                type="text"
-                value={formData.carrier}
-                onChange={(e) => setFormData({ ...formData, carrier: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Transporto įmonė"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Perdirbėjas / Šalinimo įmonė</label>
-              <input
-                type="text"
-                value={formData.processor}
-                onChange={(e) => setFormData({ ...formData, processor: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Perdavimo data</label>
-              <input
-                type="date"
-                value={formData.transfer_date}
-                onChange={(e) => setFormData({ ...formData, transfer_date: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Dokumento numeris</label>
-              <input
-                type="text"
-                value={formData.doc_no}
-                onChange={(e) => setFormData({ ...formData, doc_no: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                placeholder="Perdavimo dokumento nr."
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Atsakingas asmuo</label>
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                Veterinarinių medicininių atliekų darytojo atsakingo asmens v. pavardė ir parašas
+              </label>
               <input
                 type="text"
                 value={formData.responsible}
                 onChange={(e) => setFormData({ ...formData, responsible: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 text-sm"
+                placeholder="Vardas Pavardė"
               />
             </div>
           </div>
@@ -296,13 +353,13 @@ export function MedicalWaste() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">Atliekų įrašai</h3>
+          <h3 className="font-semibold text-gray-900 uppercase">Registruotų atliekų žurnalas</h3>
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-500" />
             <select
               value={wasteFilter}
               onChange={(e) => setWasteFilter(e.target.value as WasteFilter)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-red-500"
             >
               <option value="all">Visi įrašai</option>
               <option value="automatic">Tik automatiniai</option>
@@ -310,78 +367,89 @@ export function MedicalWaste() {
             </select>
           </div>
         </div>
-        <div className="space-y-3">
-          {records
-            .filter(record => {
-              if (wasteFilter === 'all') return true;
-              return record.source_type === wasteFilter;
-            })
-            .map((record) => (
-            <div
-              key={record.id}
-              className={`p-4 rounded-lg border ${
-                record.auto_generated
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-gray-50 border-gray-200'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium text-gray-900">{record.waste_code} - {record.name}</p>
-                      {record.auto_generated ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                          <Package className="w-3 h-3" />
-                          AUTOMATINIS
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
-                          RANKINIS
-                        </span>
-                      )}
-                    </div>
 
-                    {record.auto_generated && (
-                      <div className="text-sm text-gray-600 mb-1">
-                        <span className="font-medium">Produktas:</span> {record.product_name || 'N/A'}
-                        {record.batch_lot && <span className="ml-2"><span className="font-medium">Partija:</span> {record.batch_lot}</span>}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-y border-gray-300">
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Kodas</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Pavadinimas</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Periodas / Data</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-300">Kiekis (kg)</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-300">Perduota (kg)</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Vežėjas</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Tvarkytojas</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Perdavimo data</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-300">Dok. nr.</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Atsakingas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records
+                .filter(record => {
+                  if (wasteFilter === 'all') return true;
+                  return record.source_type === wasteFilter;
+                })
+                .map((record) => (
+                  <tr
+                    key={record.id}
+                    className={`border-b border-gray-200 hover:bg-gray-50 ${
+                      record.auto_generated ? 'bg-blue-50/30' : ''
+                    }`}
+                  >
+                    <td className="px-3 py-3 border-r border-gray-200">
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono">{record.waste_code}</span>
+                        {record.auto_generated && (
+                          <Package className="w-3 h-3 text-blue-600" title="Automatinis" />
+                        )}
                       </div>
-                    )}
-
-                    {record.package_count && (
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">Pakuočių skaičius:</span> {record.package_count} vnt
-                      </p>
-                    )}
-
-                    <p className="text-sm text-gray-600">
-                      {record.carrier && `Vežėjas: ${record.carrier}`}
-                      {record.processor && ` • Perdirbėjas: ${record.processor}`}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {record.qty_generated ? `${(record.qty_generated / 1000).toFixed(3)} kg` : 'N/A'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {record.date ? new Date(record.date).toLocaleDateString('lt-LT') : 'N/A'}
-                  </p>
-                  {record.auto_generated_at && (
-                    <p className="text-xs text-blue-600 mt-1">
-                      Sugeneruota: {new Date(record.auto_generated_at).toLocaleDateString('lt-LT')}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+                    </td>
+                    <td className="px-3 py-3 border-r border-gray-200">
+                      <div>
+                        <div className="font-medium">{record.name}</div>
+                        {record.auto_generated && record.product_name && (
+                          <div className="text-blue-700 mt-0.5">
+                            {record.product_name}
+                            {record.batch_lot && <span className="text-gray-600"> ({record.batch_lot})</span>}
+                          </div>
+                        )}
+                        {record.package_count && (
+                          <div className="text-gray-600 mt-0.5">{record.package_count} pakuotės</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border-r border-gray-200">
+                      {record.period && <div>{record.period}</div>}
+                      {record.date && <div className="text-gray-600">{new Date(record.date).toLocaleDateString('lt-LT')}</div>}
+                      {record.auto_generated_at && (
+                        <div className="text-blue-600 text-[10px] mt-0.5">
+                          Auto: {new Date(record.auto_generated_at).toLocaleDateString('lt-LT')}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right border-r border-gray-200 font-mono">
+                      {record.qty_generated ? `${(record.qty_generated / 1000).toFixed(3)}` : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-right border-r border-gray-200 font-mono">
+                      {record.qty_transferred ? `${(record.qty_transferred / 1000).toFixed(3)}` : '-'}
+                    </td>
+                    <td className="px-3 py-3 border-r border-gray-200">{record.carrier || '-'}</td>
+                    <td className="px-3 py-3 border-r border-gray-200">{record.processor || '-'}</td>
+                    <td className="px-3 py-3 border-r border-gray-200">
+                      {record.transfer_date ? new Date(record.transfer_date).toLocaleDateString('lt-LT') : '-'}
+                    </td>
+                    <td className="px-3 py-3 border-r border-gray-200">{record.doc_no || '-'}</td>
+                    <td className="px-3 py-3">{record.responsible || '-'}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
           {records.filter(record => {
             if (wasteFilter === 'all') return true;
             return record.source_type === wasteFilter;
           }).length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 text-sm">
               Atliekų įrašų nerasta
             </div>
           )}
