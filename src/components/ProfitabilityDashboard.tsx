@@ -325,9 +325,9 @@ export function ProfitabilityDashboard() {
     // Query visits with date filter
     const { data: visitsData, error: visitsError } = await supabase
       .from('animal_visits')
-      .select('animal_id, visit_date')
-      .gte('visit_date', startDateStr)
-      .lte('visit_date', endDateStr);
+      .select('animal_id, visit_datetime')
+      .gte('visit_datetime', startDateStr)
+      .lte('visit_datetime', endDateStr);
 
     if (visitsError) throw visitsError;
 
