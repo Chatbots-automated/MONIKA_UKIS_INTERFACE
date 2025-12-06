@@ -236,11 +236,234 @@ export function ProfitabilityDashboard() {
     setGeaGroupData(Array.from(animalGroupMap.values()));
   };
 
+  const calculateHerdSummary = (data: ProfitabilityData[]): HerdSummary => {
+    const total_animals = data.length;
+    const profitable_count = data.filter(a => a.net_profit > 0).length;
+    const unprofitable_count = data.filter(a => a.net_profit <= 0).length;
+    const severe_loss_count = data.filter(a => a.net_profit < -50).length;
+    const total_herd_milk = data.reduce((sum, a) => sum + a.total_milk_liters, 0);
+    const total_milk_revenue = data.reduce((sum, a) => sum + a.milk_revenue, 0);
+    const total_treatment_costs = data.reduce((sum, a) => sum + a.total_costs, 0);
+    const total_herd_profit = data.reduce((sum, a) => sum + a.net_profit, 0);
+    const avg_profit_per_animal = total_animals > 0 ? total_herd_profit / total_animals : 0;
+    const avg_daily_milk_per_animal = total_animals > 0 ? data.reduce((sum, a) => sum + a.avg_daily_milk, 0) / total_animals : 0;
+    const total_withdrawal_days = data.reduce((sum, a) => sum + a.days_in_withdrawal, 0);
+    const total_withdrawal_loss = data.reduce((sum, a) => sum + a.withdrawal_revenue_loss, 0);
+    const overall_cost_to_revenue_ratio = total_milk_revenue > 0 ? (total_treatment_costs / total_milk_revenue * 100) : 0;
+
+    return {
+      total_animals,
+      profitable_count,
+      unprofitable_count,
+      severe_loss_count,
+      total_herd_milk,
+      total_milk_revenue,
+      total_treatment_costs,
+      total_herd_profit,
+      avg_profit_per_animal,
+      avg_daily_milk_per_animal,
+      total_withdrawal_days,
+      total_withdrawal_loss,
+      overall_cost_to_revenue_ratio
+    };
+  };
+
   const loadDataWithDateFilter = async (startDateStr: string, endDateStr: string) => {
-    // TODO: Implement custom date range calculation
-    // For now, fall back to default view behavior
-    console.log('Custom date filtering - using view data as approximation');
-    await loadDataFromViews();
+    // Query raw data with custom date range
+    const pageSize = 1000;
+
+    // Query gea_daily with date filter
+    let allGeaData: any[] = [];
+    let geaPage = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: geaData, error: geaError } = await supabase
+        .from('gea_daily')
+        .select('animal_id, snapshot_date, m1_qty, m2_qty, m3_qty, m4_qty, m5_qty, lact_days, grupe, statusas, in_milk, collar_no')
+        .gte('snapshot_date', startDateStr)
+        .lte('snapshot_date', endDateStr)
+        .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
+
+      if (geaError) throw geaError;
+      if (geaData && geaData.length > 0) {
+        allGeaData = [...allGeaData, ...geaData];
+        geaPage++;
+        hasMore = geaData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Query treatments with date filter
+    const { data: treatmentsData, error: treatmentsError } = await supabase
+      .from('treatments')
+      .select('animal_id, reg_date, withdrawal_until_milk, usage_items(qty, batch:batches(purchase_price, received_qty))')
+      .gte('reg_date', startDateStr)
+      .lte('reg_date', endDateStr);
+
+    if (treatmentsError) throw treatmentsError;
+
+    // Query vaccinations with date filter
+    const { data: vaccinationsData, error: vaccinationsError } = await supabase
+      .from('vaccinations')
+      .select('animal_id, vaccination_date')
+      .gte('vaccination_date', startDateStr)
+      .lte('vaccination_date', endDateStr);
+
+    if (vaccinationsError) throw vaccinationsError;
+
+    // Query visits with date filter
+    const { data: visitsData, error: visitsError } = await supabase
+      .from('animal_visits')
+      .select('animal_id, visit_date')
+      .gte('visit_date', startDateStr)
+      .lte('visit_date', endDateStr);
+
+    if (visitsError) throw visitsError;
+
+    // Get animals
+    const { data: animalsData, error: animalsError } = await supabase
+      .from('animals')
+      .select('id, tag_no');
+
+    if (animalsError) throw animalsError;
+
+    // Calculate profitability for each animal
+    const animalMap = new Map<string, ProfitabilityData>();
+
+    // Process GEA data
+    const animalGea = new Map<string, any[]>();
+    allGeaData.forEach(row => {
+      if (!animalGea.has(row.animal_id)) {
+        animalGea.set(row.animal_id, []);
+      }
+      animalGea.get(row.animal_id)!.push(row);
+    });
+
+    // Build profitability data
+    animalsData?.forEach(animal => {
+      const geaRecords = animalGea.get(animal.id) || [];
+      const totalMilk = geaRecords.reduce((sum, r) => sum +
+        (r.m1_qty || 0) + (r.m2_qty || 0) + (r.m3_qty || 0) + (r.m4_qty || 0) + (r.m5_qty || 0), 0);
+      const daysTracked = geaRecords.length;
+      const avgDailyMilk = daysTracked > 0 ? totalMilk / daysTracked : 0;
+
+      // Calculate treatment costs
+      const animalTreatments = (treatmentsData || []).filter(t => t.animal_id === animal.id);
+      let medicationCosts = 0;
+      animalTreatments.forEach((t: any) => {
+        const items = t.usage_items || [];
+        items.forEach((item: any) => {
+          if (item.batch && item.batch.received_qty > 0) {
+            medicationCosts += item.qty * item.batch.purchase_price / item.batch.received_qty;
+          }
+        });
+      });
+
+      const vaccinations = (vaccinationsData || []).filter(v => v.animal_id === animal.id);
+      const visits = (visitsData || []).filter(v => v.animal_id === animal.id);
+      const visitCosts = visits.length * 10;
+      const totalCosts = medicationCosts + visitCosts;
+
+      // Calculate withdrawal days
+      const withdrawalDays = animalTreatments.filter(t => t.withdrawal_until_milk).length;
+      const withdrawalLoss = withdrawalDays * 15; // Default daily loss
+
+      const milkRevenue = totalMilk * milkPrice;
+      const adjustedRevenue = milkRevenue - withdrawalLoss;
+      const netProfit = adjustedRevenue - totalCosts;
+      const roi = totalCosts > 0 ? (netProfit / totalCosts) * 100 : null;
+      const costToRevenueRatio = adjustedRevenue > 0 ? (totalCosts / adjustedRevenue) * 100 : null;
+
+      const latestGea = geaRecords.length > 0 ? geaRecords[geaRecords.length - 1] : null;
+
+      animalMap.set(animal.id, {
+        animal_id: animal.id,
+        tag_no: animal.tag_no,
+        collar_no: latestGea?.collar_no || null,
+        days_tracked: daysTracked,
+        total_milk_liters: totalMilk,
+        avg_daily_milk: avgDailyMilk,
+        milk_revenue: milkRevenue,
+        withdrawal_revenue_loss: withdrawalLoss,
+        adjusted_milk_revenue: adjustedRevenue,
+        treatment_count: animalTreatments.length,
+        vaccination_count: vaccinations.length,
+        visit_count: visits.length,
+        medication_costs: medicationCosts,
+        visit_costs: visitCosts,
+        total_costs: totalCosts,
+        net_profit: netProfit,
+        roi_percentage: roi,
+        cost_to_revenue_ratio: costToRevenueRatio,
+        lactation_days: latestGea?.lact_days || null,
+        current_group: latestGea?.grupe || null,
+        current_status: latestGea?.statusas || null,
+        is_producing: latestGea?.in_milk || null,
+        days_in_withdrawal: withdrawalDays
+      });
+    });
+
+    const profData = Array.from(animalMap.values());
+    setProfitabilityData(profData);
+
+    // Calculate herd summary from filtered data
+    const summary = calculateHerdSummary(profData);
+    setHerdSummary(summary);
+
+    // Load ROI and GEA data (use default views for now)
+    let allRoiData: TreatmentROIAnalysis[] = [];
+    let roiPage = 0;
+    hasMore = true;
+
+    while (hasMore) {
+      const { data: roiData, error: roiError } = await supabase
+        .from('vw_treatment_roi_analysis')
+        .select('*')
+        .range(roiPage * pageSize, (roiPage + 1) * pageSize - 1);
+
+      if (roiError) throw roiError;
+      if (roiData && roiData.length > 0) {
+        allRoiData = [...allRoiData, ...roiData];
+        roiPage++;
+        hasMore = roiData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+    setRoiAnalysis(allRoiData);
+
+    // Load GEA group data
+    let allGeaGroupData: any[] = [];
+    let geaGroupPage = 0;
+    hasMore = true;
+
+    while (hasMore) {
+      const { data: geaGroupData, error: geaGroupError } = await supabase
+        .from('gea_daily')
+        .select('animal_id, grupe, snapshot_date')
+        .order('snapshot_date', { ascending: false })
+        .range(geaGroupPage * pageSize, (geaGroupPage + 1) * pageSize - 1);
+
+      if (geaGroupError) throw geaGroupError;
+      if (geaGroupData && geaGroupData.length > 0) {
+        allGeaGroupData = [...allGeaGroupData, ...geaGroupData];
+        geaGroupPage++;
+        hasMore = geaGroupData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    const animalGroupMap = new Map();
+    allGeaGroupData.forEach(row => {
+      if (!animalGroupMap.has(row.animal_id) ||
+          new Date(row.snapshot_date) > new Date(animalGroupMap.get(row.animal_id).snapshot_date)) {
+        animalGroupMap.set(row.animal_id, row);
+      }
+    });
+    setGeaGroupData(Array.from(animalGroupMap.values()));
   };
 
   const loadSettings = async () => {
