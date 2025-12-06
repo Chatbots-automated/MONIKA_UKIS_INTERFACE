@@ -30,6 +30,8 @@ export function Seklinimas() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewRecordForm, setShowNewRecordForm] = useState(false);
+  const [showNewProductForm, setShowNewProductForm] = useState(false);
+  const [showReceiveStockForm, setShowReceiveStockForm] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [formData, setFormData] = useState({
     animal_id: '',
@@ -38,6 +40,20 @@ export function Seklinimas() {
     sperm_quantity: 1,
     glove_product_id: '',
     glove_quantity: 0,
+    notes: '',
+  });
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    product_type: 'SPERM',
+    supplier_group: '',
+    unit: 'vnt',
+    price: 0,
+  });
+  const [stockFormData, setStockFormData] = useState({
+    product_id: '',
+    quantity: 0,
+    batch_number: '',
+    expiry_date: '',
     notes: '',
   });
 
@@ -50,6 +66,12 @@ export function Seklinimas() {
       loadAnimalsAndProducts();
     }
   }, [showNewRecordForm]);
+
+  useEffect(() => {
+    if (showReceiveStockForm) {
+      loadProducts();
+    }
+  }, [showReceiveStockForm]);
 
   const loadAnimalsAndProducts = async () => {
     const [animalsRes, productsRes] = await Promise.all([
@@ -147,6 +169,69 @@ export function Seklinimas() {
     } catch (error) {
       console.error('Error creating record:', error);
       alert('Klaida kuriant įrašą');
+    }
+  };
+
+  const handleSubmitNewProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const { error } = await supabase.from('insemination_products').insert({
+        name: productFormData.name,
+        product_type: productFormData.product_type,
+        supplier_group: productFormData.supplier_group,
+        unit: productFormData.unit,
+        price: productFormData.price,
+        is_active: true,
+      });
+
+      if (error) throw error;
+
+      setShowNewProductForm(false);
+      setProductFormData({
+        name: '',
+        product_type: 'SPERM',
+        supplier_group: '',
+        unit: 'vnt',
+        price: 0,
+      });
+
+      await loadProducts();
+      alert('Produktas sėkmingai sukurtas!');
+    } catch (error) {
+      console.error('Error creating product:', error);
+      alert('Klaida kuriant produktą');
+    }
+  };
+
+  const handleSubmitReceiveStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const { error } = await supabase.from('insemination_inventory').insert({
+        product_id: stockFormData.product_id,
+        quantity: stockFormData.quantity,
+        batch_number: stockFormData.batch_number || null,
+        expiry_date: stockFormData.expiry_date || null,
+        notes: stockFormData.notes || null,
+      });
+
+      if (error) throw error;
+
+      setShowReceiveStockForm(false);
+      setStockFormData({
+        product_id: '',
+        quantity: 0,
+        batch_number: '',
+        expiry_date: '',
+        notes: '',
+      });
+
+      await loadInventory();
+      alert('Atsargos sėkmingai priimtos!');
+    } catch (error) {
+      console.error('Error receiving stock:', error);
+      alert('Klaida priimant atsargas');
     }
   };
 
@@ -687,6 +772,203 @@ export function Seklinimas() {
                   <button
                     type="button"
                     onClick={() => setShowNewRecordForm(false)}
+                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
+                  >
+                    Atšaukti
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Naujas produktas</h3>
+              <form onSubmit={handleSubmitNewProduct} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pavadinimas *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={productFormData.name}
+                    onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    placeholder="Pvz: HO XYZ 123456"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipas *
+                  </label>
+                  <select
+                    required
+                    value={productFormData.product_type}
+                    onChange={(e) => setProductFormData({ ...productFormData, product_type: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="SPERM">Sperma</option>
+                    <option value="GLOVES">Pirštinės</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tiekėjas
+                  </label>
+                  <input
+                    type="text"
+                    value={productFormData.supplier_group}
+                    onChange={(e) => setProductFormData({ ...productFormData, supplier_group: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    placeholder="Pvz: VikingGenetics"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vienetas *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={productFormData.unit}
+                    onChange={(e) => setProductFormData({ ...productFormData, unit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    placeholder="Pvz: vnt, ml, pak"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Kaina (€) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={productFormData.price}
+                    onChange={(e) => setProductFormData({ ...productFormData, price: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium"
+                  >
+                    Sukurti produktą
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewProductForm(false)}
+                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
+                  >
+                    Atšaukti
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReceiveStockForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Priimti atsargas</h3>
+              <form onSubmit={handleSubmitReceiveStock} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Produktas *
+                  </label>
+                  <select
+                    required
+                    value={stockFormData.product_id}
+                    onChange={(e) => setStockFormData({ ...stockFormData, product_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="">Pasirinkite produktą</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} ({product.product_type === 'SPERM' ? 'Sperma' : 'Pirštinės'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Kiekis *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    value={stockFormData.quantity}
+                    onChange={(e) => setStockFormData({ ...stockFormData, quantity: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Partijos numeris
+                  </label>
+                  <input
+                    type="text"
+                    value={stockFormData.batch_number}
+                    onChange={(e) => setStockFormData({ ...stockFormData, batch_number: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    placeholder="Pvz: BATCH-2024-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Galiojimo data
+                  </label>
+                  <input
+                    type="date"
+                    value={stockFormData.expiry_date}
+                    onChange={(e) => setStockFormData({ ...stockFormData, expiry_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pastabos
+                  </label>
+                  <textarea
+                    value={stockFormData.notes}
+                    onChange={(e) => setStockFormData({ ...stockFormData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    placeholder="Papildoma informacija..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium"
+                  >
+                    Priimti atsargas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowReceiveStockForm(false)}
                     className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
                   >
                     Atšaukti
