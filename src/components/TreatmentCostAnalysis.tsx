@@ -127,7 +127,7 @@ export function TreatmentCostAnalysis() {
 
       console.log('Usage items loaded:', usageItems?.length);
 
-      // Get all vaccinations with batch info
+      // Get vaccinations from last 90 days with batch info (to match profitability view)
       const { data: vaccinations, error: vaccinationsError } = await supabase
         .from('vaccinations')
         .select(`
@@ -135,15 +135,17 @@ export function TreatmentCostAnalysis() {
           animal_id,
           dose_amount,
           batch_id,
+          vaccination_date,
           batches(purchase_price, received_qty)
-        `);
+        `)
+        .gte('vaccination_date', ninetyDaysAgoStr);
 
       if (vaccinationsError) {
         console.error('Vaccinations error:', vaccinationsError);
         throw vaccinationsError;
       }
 
-      console.log('Vaccinations loaded:', vaccinations?.length);
+      console.log('Vaccinations loaded (last 90 days):', vaccinations?.length);
 
       // Get all visits from last 90 days (for counting only)
       const { data: visits, error: visitsError } = await supabase

@@ -78,6 +78,32 @@ export function ProductUsageAnalysis() {
 
       console.log('✅ Vaccinations loaded:', vaccinations.length);
 
+      // 3. Get synchronization steps (sync medications)
+      const { data: syncSteps, error: syncStepsError } = await supabase
+        .from('synchronization_steps')
+        .select(`
+          id,
+          synchronization_id,
+          dosage,
+          batch_id,
+          completed,
+          completed_at,
+          batches(id, product_id, purchase_price, received_qty)
+        `)
+        .eq('completed', true)
+        .not('batch_id', 'is', null);
+
+      if (syncStepsError) {
+        console.error('Sync steps error:', syncStepsError);
+        throw syncStepsError;
+      }
+
+      console.log('✅ Sync steps loaded:', syncSteps?.length || 0);
+
+      // Get synchronizations for animal lookup
+      const synchronizations = await fetchAllRows<any>('animal_synchronizations', 'id, animal_id');
+      const syncMap = new Map(synchronizations.map(s => [s.id, s]));
+
       // NOTE: We DO NOT load planned_medications because they are converted to usage_items
       // when visits are completed. Loading both would cause double-counting!
 
@@ -209,6 +235,66 @@ export function ProductUsageAnalysis() {
         });
       }
       console.log('✅ Vaccinations processed');
+
+      // Process synchronization steps (sync medications)
+      console.log('🔄 Processing sync medications...');
+      for (const step of syncSteps || []) {
+        if (!step.batches || !step.dosage) continue;
+
+        const batch = step.batches;
+        const product = productMap.get(batch.product_id);
+        if (!product) continue;
+
+        // Get animal info from synchronization
+        const sync = syncMap.get(step.synchronization_id);
+        let animalTag = null;
+        let animalId = null;
+        if (sync) {
+          animalId = sync.animal_id;
+          const animal = animalMap.get(sync.animal_id);
+          animalTag = animal?.tag_no || null;
+        }
+
+        const unitCost = calculateSafeUnitCost(batch.purchase_price, batch.received_qty);
+        const totalCost = step.dosage * unitCost;
+
+        const productId = product.id;
+        if (!usageByProduct.has(productId)) {
+          usageByProduct.set(productId, {
+            product_id: productId,
+            product_name: product.name,
+            category: product.category,
+            subcategory: product.subcategory,
+            total_quantity: 0,
+            unit: product.primary_pack_unit || 'vnt',
+            total_cost: 0,
+            usage_count: 0,
+            animals_treated: 0,
+            usages: [],
+            inventory_additions: [],
+            total_received: 0,
+            total_used: 0,
+            remaining_stock: 0
+          });
+        }
+
+        const record = usageByProduct.get(productId)!;
+        record.total_quantity += step.dosage;
+        record.total_cost += totalCost;
+        record.usage_count += 1;
+        record.usages.push({
+          date: step.completed_at || new Date().toISOString(),
+          animal_tag: animalTag,
+          animal_id: animalId || '',
+          quantity: step.dosage,
+          unit_cost: unitCost,
+          total_cost: totalCost,
+          visit_id: null,
+          treatment_id: null,
+          source: 'usage_items', // sync medications are tracked similarly to usage_items
+        });
+      }
+      console.log('✅ Sync medications processed');
 
       // NOTE: We skip planned_medications processing to avoid double-counting
       // (they're already included in usage_items after visit completion)
