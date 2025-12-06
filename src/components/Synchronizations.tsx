@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X, Activity, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Clock, Syringe, AlertCircle, Filter, Search, X, Activity, Trash2, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SynchronizationStepWithDetails, Animal } from '../lib/types';
 import { formatDateLT, formatDateTimeLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
+import { InseminationModal } from './InseminationModal';
 
 interface SyncStepDisplay extends SynchronizationStepWithDetails {
   animal?: Animal;
@@ -26,6 +27,7 @@ export function Synchronizations() {
   const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [inseminationStep, setInseminationStep] = useState<SyncStepDisplay | null>(null);
 
   useEffect(() => {
     loadData();
@@ -125,7 +127,9 @@ export function Synchronizations() {
   };
 
   const handleStepClick = (step: SyncStepDisplay) => {
-    if (step.animal) {
+    if (step.step_name === 'Sėklinti' && !step.completed && step.animal) {
+      setInseminationStep(step);
+    } else if (step.animal) {
       setSelectedAnimal(step.animal);
     }
   };
@@ -366,11 +370,20 @@ export function Synchronizations() {
                     <div className="font-medium text-gray-700">
                       Protokolas: <span className="font-bold">{step.protocol_name || 'Nežinomas'}</span>
                     </div>
-                    <div className="font-medium text-gray-700">
-                      Žingsnis {step.step_number}: <span className="font-semibold">{step.step_name}</span>
+                    <div className="font-medium text-gray-700 flex items-center gap-2">
+                      <span>Žingsnis {step.step_number}:</span>
+                      <span className="font-semibold">{step.step_name}</span>
+                      {step.step_name === 'Sėklinti' && (
+                        <Heart className="w-4 h-4 text-rose-600 fill-rose-600" />
+                      )}
                     </div>
                     {step.is_evening && (
                       <div className="text-orange-600 font-medium">🌙 Vakare</div>
+                    )}
+                    {step.step_name === 'Sėklinti' && !step.completed && (
+                      <div className="mt-1 text-sm text-rose-600 font-medium">
+                        ➜ Spustelėkite, kad įrašytumėte sėklinimą
+                      </div>
                     )}
                   </div>
                 </div>
@@ -430,6 +443,19 @@ export function Synchronizations() {
           defaultTab="visits"
           onClose={() => {
             setSelectedAnimal(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {inseminationStep && inseminationStep.animal && (
+        <InseminationModal
+          animal={inseminationStep.animal}
+          syncStepId={inseminationStep.id}
+          scheduledDate={inseminationStep.scheduled_date}
+          onClose={() => setInseminationStep(null)}
+          onSuccess={() => {
+            setInseminationStep(null);
             loadData();
           }}
         />
