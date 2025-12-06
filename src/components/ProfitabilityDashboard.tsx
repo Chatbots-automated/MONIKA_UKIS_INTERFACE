@@ -117,27 +117,31 @@ export function ProfitabilityDashboard() {
   const [editingMilkPrice, setEditingMilkPrice] = useState(false);
   const [tempMilkPrice, setTempMilkPrice] = useState<string>('0.50');
 
-  useEffect(() => {
-    loadData();
-    loadSettings();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = async (forceStartDate?: string | null, forceEndDate?: string | null) => {
     try {
       setLoading(true);
 
-      // Determine date range for filtering
-      const hasDateFilter = startDate || endDate;
-      const filterStartDate = startDate || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const filterEndDate = endDate || new Date().toISOString().split('T')[0];
+      // Use forced dates if provided, otherwise use current state
+      const useStartDate = forceStartDate !== undefined ? forceStartDate : startDate;
+      const useEndDate = forceEndDate !== undefined ? forceEndDate : endDate;
 
-      console.log('Loading data with date range:', filterStartDate, 'to', filterEndDate);
+      console.log('=== LOAD DATA ===');
+      console.log('State - startDate:', startDate, 'endDate:', endDate);
+      console.log('Forced - forceStartDate:', forceStartDate, 'forceEndDate:', forceEndDate);
+      console.log('Using - useStartDate:', useStartDate, 'useEndDate:', useEndDate);
+
+      // Determine date range for filtering
+      const hasDateFilter = useStartDate || useEndDate;
+      const filterStartDate = useStartDate || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const filterEndDate = useEndDate || new Date().toISOString().split('T')[0];
+
+      console.log('hasDateFilter:', hasDateFilter, 'range:', filterStartDate, 'to', filterEndDate);
 
       if (hasDateFilter) {
-        // Custom date range - query raw data and recalculate
+        console.log('>>> QUERYING WITH DATE FILTER');
         await loadDataWithDateFilter(filterStartDate, filterEndDate);
       } else {
-        // Default 90-day view - use optimized database views
+        console.log('>>> QUERYING DATABASE VIEWS (90 days)');
         await loadDataFromViews();
       }
     } catch (error) {
@@ -146,6 +150,11 @@ export function ProfitabilityDashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadData();
+    loadSettings();
+  }, []);
 
   const loadDataFromViews = async () => {
     // Load profitability data - fetch ALL rows (Supabase default limit is 1000, need to paginate)
@@ -819,16 +828,26 @@ export function ProfitabilityDashboard() {
                   onClick={() => {
                     setStartDate('');
                     setEndDate('');
+                    loadData('', '');
                   }}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+                  disabled={loading}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2 disabled:opacity-50"
                 >
                   Išvalyti
                 </button>
                 <button
-                  onClick={loadData}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  onClick={() => {
+                    console.log('Atnaujinti clicked - dates:', startDate, endDate);
+                    loadData(startDate, endDate);
+                  }}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  {loading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
                   Atnaujinti
                 </button>
               </div>
