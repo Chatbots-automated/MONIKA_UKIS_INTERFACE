@@ -42,7 +42,6 @@ const menuItems = [
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
-  { id: 'waste', label: 'Medicininės Atliekos', icon: Trash2, permission: 'waste' },
   { id: 'products', label: 'Produktai', icon: Pill, permission: 'products' },
   { id: 'reports', label: 'Ataskaitos', icon: FileText, permission: 'view' },
   { id: 'users', label: 'Vartotojai', icon: Users, permission: 'manage_users' },
