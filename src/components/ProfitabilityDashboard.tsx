@@ -100,6 +100,8 @@ export function ProfitabilityDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'net_profit' | 'milk_revenue' | 'total_costs' | 'tag_no'>('net_profit');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Treatment decision calculator state
   const [selectedAnimal, setSelectedAnimal] = useState<string>('');
@@ -124,97 +126,121 @@ export function ProfitabilityDashboard() {
     try {
       setLoading(true);
 
-      // Load profitability data - fetch ALL rows (Supabase default limit is 1000, need to paginate)
-      let allProfData: ProfitabilityData[] = [];
-      let profPage = 0;
-      const pageSize = 1000;
-      let hasMore = true;
+      // Determine date range for filtering
+      const hasDateFilter = startDate || endDate;
+      const filterStartDate = startDate || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const filterEndDate = endDate || new Date().toISOString().split('T')[0];
 
-      while (hasMore) {
-        const { data: profData, error: profError } = await supabase
-          .from('vw_animal_profitability')
-          .select('*')
-          .range(profPage * pageSize, (profPage + 1) * pageSize - 1);
+      console.log('Loading data with date range:', filterStartDate, 'to', filterEndDate);
 
-        if (profError) throw profError;
-        if (profData && profData.length > 0) {
-          allProfData = [...allProfData, ...profData];
-          profPage++;
-          hasMore = profData.length === pageSize;
-        } else {
-          hasMore = false;
-        }
+      if (hasDateFilter) {
+        // Custom date range - query raw data and recalculate
+        await loadDataWithDateFilter(filterStartDate, filterEndDate);
+      } else {
+        // Default 90-day view - use optimized database views
+        await loadDataFromViews();
       }
-      setProfitabilityData(allProfData);
-
-      // Load ROI analysis data - fetch ALL rows
-      let allRoiData: TreatmentROIAnalysis[] = [];
-      let roiPage = 0;
-      hasMore = true;
-
-      while (hasMore) {
-        const { data: roiData, error: roiError } = await supabase
-          .from('vw_treatment_roi_analysis')
-          .select('*')
-          .range(roiPage * pageSize, (roiPage + 1) * pageSize - 1);
-
-        if (roiError) throw roiError;
-        if (roiData && roiData.length > 0) {
-          allRoiData = [...allRoiData, ...roiData];
-          roiPage++;
-          hasMore = roiData.length === pageSize;
-        } else {
-          hasMore = false;
-        }
-      }
-      setRoiAnalysis(allRoiData);
-
-      // Load herd summary
-      const { data: summaryData, error: summaryError } = await supabase
-        .from('vw_herd_profitability_summary')
-        .select('*')
-        .single();
-
-      if (summaryError) throw summaryError;
-      setHerdSummary(summaryData);
-
-      // Load GEA group data for group comparison (get latest snapshot for each animal)
-      let allGeaData: any[] = [];
-      let geaPage = 0;
-      hasMore = true;
-
-      while (hasMore) {
-        const { data: geaData, error: geaError } = await supabase
-          .from('gea_daily')
-          .select('animal_id, grupe, snapshot_date')
-          .order('snapshot_date', { ascending: false })
-          .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
-
-        if (geaError) throw geaError;
-        if (geaData && geaData.length > 0) {
-          allGeaData = [...allGeaData, ...geaData];
-          geaPage++;
-          hasMore = geaData.length === pageSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      // Get only the most recent group for each animal
-      const animalGroupMap = new Map();
-      allGeaData.forEach(row => {
-        if (!animalGroupMap.has(row.animal_id) ||
-            new Date(row.snapshot_date) > new Date(animalGroupMap.get(row.animal_id).snapshot_date)) {
-          animalGroupMap.set(row.animal_id, row);
-        }
-      });
-      setGeaGroupData(Array.from(animalGroupMap.values()));
-
     } catch (error) {
       console.error('Error loading profitability data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadDataFromViews = async () => {
+    // Load profitability data - fetch ALL rows (Supabase default limit is 1000, need to paginate)
+    let allProfData: ProfitabilityData[] = [];
+    let profPage = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: profData, error: profError } = await supabase
+        .from('vw_animal_profitability')
+        .select('*')
+        .range(profPage * pageSize, (profPage + 1) * pageSize - 1);
+
+      if (profError) throw profError;
+      if (profData && profData.length > 0) {
+        allProfData = [...allProfData, ...profData];
+        profPage++;
+        hasMore = profData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    setProfitabilityData(allProfData);
+
+    // Load ROI analysis data - fetch ALL rows
+    let allRoiData: TreatmentROIAnalysis[] = [];
+    let roiPage = 0;
+    hasMore = true;
+
+    while (hasMore) {
+      const { data: roiData, error: roiError } = await supabase
+        .from('vw_treatment_roi_analysis')
+        .select('*')
+        .range(roiPage * pageSize, (roiPage + 1) * pageSize - 1);
+
+      if (roiError) throw roiError;
+      if (roiData && roiData.length > 0) {
+        allRoiData = [...allRoiData, ...roiData];
+        roiPage++;
+        hasMore = roiData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+    setRoiAnalysis(allRoiData);
+
+    // Load herd summary
+    const { data: summaryData, error: summaryError } = await supabase
+      .from('vw_herd_profitability_summary')
+      .select('*')
+      .single();
+
+    if (summaryError) throw summaryError;
+    setHerdSummary(summaryData);
+
+    // Load GEA group data for group comparison (get latest snapshot for each animal)
+    let allGeaData: any[] = [];
+    let geaPage = 0;
+    hasMore = true;
+
+    while (hasMore) {
+      const { data: geaData, error: geaError } = await supabase
+        .from('gea_daily')
+        .select('animal_id, grupe, snapshot_date')
+        .order('snapshot_date', { ascending: false })
+        .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
+
+      if (geaError) throw geaError;
+      if (geaData && geaData.length > 0) {
+        allGeaData = [...allGeaData, ...geaData];
+        geaPage++;
+        hasMore = geaData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Get only the most recent group for each animal
+    const animalGroupMap = new Map();
+    allGeaData.forEach(row => {
+      if (!animalGroupMap.has(row.animal_id) ||
+          new Date(row.snapshot_date) > new Date(animalGroupMap.get(row.animal_id).snapshot_date)) {
+        animalGroupMap.set(row.animal_id, row);
+      }
+    });
+    setGeaGroupData(Array.from(animalGroupMap.values()));
+  };
+
+  const loadDataWithDateFilter = async (startDateStr: string, endDateStr: string) => {
+    // TODO: Implement custom date range calculation
+    // For now, fall back to default view behavior
+    console.log('Custom date filtering - using view data as approximation');
+    await loadDataFromViews();
   };
 
   const loadSettings = async () => {
@@ -535,8 +561,8 @@ export function ProfitabilityDashboard() {
           {/* Pelningumas Tab */}
           {activeTab === 'pelningumas' && (
             <div className="space-y-4">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex-1 relative">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div className="md:col-span-2 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
@@ -546,6 +572,35 @@ export function ProfitabilityDashboard() {
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">Nuo:</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">Iki:</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+                >
+                  Išvalyti
+                </button>
                 <button
                   onClick={loadData}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
