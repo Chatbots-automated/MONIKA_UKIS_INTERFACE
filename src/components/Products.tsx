@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Pill, AlertTriangle } from 'lucide-react';
 import { getSubcategories, getNestedSubcategories, hasSubcategories, hasNestedSubcategories } from '../lib/categoryHierarchy';
+import { showNotification } from './NotificationToast';
 
 export function Products() {
   const { logAction } = useAuth();
@@ -121,8 +122,9 @@ export function Products() {
 
       setFormData(emptyProduct);
       await loadProducts();
+      showNotification('Produktas sėkmingai išsaugotas', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     }
   };
 

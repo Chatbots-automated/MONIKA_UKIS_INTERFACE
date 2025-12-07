@@ -5,6 +5,7 @@ import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { showNotification } from './NotificationToast';
 
 interface VaccinationGroup {
   date: string;
@@ -153,12 +154,12 @@ export function Vaccinations() {
     const validVaccines = massVaccines.filter(v => v.product_id && v.dose_amount);
 
     if (validVaccines.length === 0) {
-      alert('Pasirinkite bent vieną vakciną/prevenciją ir įveskite dozę');
+      showNotification('Pasirinkite bent vieną vakciną/prevenciją ir įveskite dozę', 'error');
       return;
     }
 
     if (selectedAnimals.size === 0) {
-      alert('Pasirinkite bent vieną gyvūną');
+      showNotification('Pasirinkite bent vieną gyvūną', 'error');
       return;
     }
 
@@ -233,8 +234,6 @@ export function Vaccinations() {
         }
       }
 
-      alert(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų su ${validVaccines.length} vakcina(-omis)!`);
-
       setSelectedAnimals(new Set());
       setShowMassVaccination(false);
       setMassVaccines([{
@@ -252,8 +251,9 @@ export function Vaccinations() {
       });
 
       await loadData();
+      showNotification(`Sėkmingai vakcinuota ${selectedAnimals.size} gyvūnų su ${validVaccines.length} vakcina(-omis)!`, 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setSaving(false);
     }

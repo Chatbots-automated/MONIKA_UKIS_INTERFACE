@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
 import { fetchAllRows, formatAnimalDisplay, sortByLithuanian } from '../lib/helpers';
+import { showNotification } from './NotificationToast';
 
 interface ClawExamination {
   leg: HoofLeg;
@@ -178,7 +179,7 @@ export function Hoofs() {
 
   const saveAllExaminations = async () => {
     if (!selectedAnimalId || currentExaminations.length === 0) {
-      alert('Pasirinkite gyvulį ir įveskite bent vieną nago būklę');
+      showNotification('Pasirinkite gyvulį ir įveskite bent vieną nago būklę', 'error');
       return;
     }
 
@@ -213,17 +214,16 @@ export function Hoofs() {
       await logAction('create', 'hoof_records', null,
         `Įrašyta ${currentExaminations.length} nagų apžiūrų gyvuliui ${selectedAnimalId}`);
 
-      alert(`Sėkmingai išsaugota ${currentExaminations.length} nagų apžiūrų!`);
-
       setCurrentExaminations([]);
       setSelectedAnimalId('');
       setGeneralNotes('');
       setShowExaminationForm(false);
 
       await loadData();
+      showNotification(`Sėkmingai išsaugota ${currentExaminations.length} nagų apžiūrų!`, 'success');
     } catch (error) {
       console.error('Error saving examinations:', error);
-      alert('Klaida išsaugant apžiūras');
+      showNotification('Klaida išsaugant apžiūras', 'error');
     }
   };
 

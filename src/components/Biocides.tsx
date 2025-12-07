@@ -4,6 +4,7 @@ import { Product, Unit } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Droplet, Check } from 'lucide-react';
+import { showNotification } from './NotificationToast';
 
 export function Biocides() {
   const { user, logAction } = useAuth();
@@ -11,7 +12,6 @@ export function Biocides() {
   const [batches, setBatches] = useState<any[]>([]);
   const [usageRecords, setUsageRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -97,10 +97,10 @@ export function Biocides() {
         used_by_name: user?.full_name || user?.email || '',
       });
 
-      setTimeout(() => setSuccess(false), 3000);
       await loadData();
+      showNotification('Biocidai sėkmingai naudoti', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }

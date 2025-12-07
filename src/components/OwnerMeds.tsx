@@ -5,13 +5,13 @@ import { AlertTriangle, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { sortByLithuanian } from '../lib/helpers';
+import { showNotification } from './NotificationToast';
 
 export function OwnerMeds() {
   const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
     first_admin_date: new Date().toISOString().split('T')[0],
@@ -109,10 +109,10 @@ export function OwnerMeds() {
         notes: '',
       });
 
-      setTimeout(() => setSuccess(false), 3000);
       await loadData();
+      showNotification('Ūkininkui išduoti vaistai sėkmingai įrašyti', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }

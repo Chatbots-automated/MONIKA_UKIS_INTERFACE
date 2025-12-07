@@ -4,6 +4,7 @@ import { Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { Plus, Edit2, Save, X, Building2 } from 'lucide-react';
+import { showNotification } from './NotificationToast';
 
 export function Suppliers() {
   const { logAction } = useAuth();
@@ -105,8 +106,9 @@ export function Suppliers() {
 
       setFormData(emptySupplier);
       await loadSuppliers();
+      showNotification('Tiekėjas sėkmingai išsaugotas', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     }
   };
 

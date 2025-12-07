@@ -7,6 +7,7 @@ import { formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import { SearchableSelect } from './SearchableSelect';
+import { showNotification } from './NotificationToast';
 
 interface WithdrawalStatus {
   animal_id: string;
@@ -199,14 +200,14 @@ export function TreatmentCompact() {
 
   const handleSave = async () => {
     if (!animalId) {
-      alert('Pasirinkite gyvūną');
+      showNotification('Pasirinkite gyvūną', 'error');
       return;
     }
 
     const completeLines = usageLines.filter(line => line.product_id && line.batch_id && line.qty);
 
     if (completeLines.length === 0) {
-      alert('Pridėkite ir užpildykite bent vieną vaistą (produktas, serija ir kiekis)');
+      showNotification('Pridėkite ir užpildykite bent vieną vaistą (produktas, serija ir kiekis)', 'error');
       return;
     }
 
@@ -309,8 +310,6 @@ export function TreatmentCompact() {
 
       console.log('✅ Usage items logged');
 
-      alert('Gydymas sėkmingai užregistruotas!');
-
       setAnimalId('');
       setDiseaseId('');
       setRegDate(new Date().toISOString().split('T')[0]);
@@ -320,8 +319,9 @@ export function TreatmentCompact() {
       setNotes('');
       setUsageLines([]);
       setWithdrawalStatus(null);
+      showNotification('Gydymas sėkmingai užregistruotas!', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     }
   };
 

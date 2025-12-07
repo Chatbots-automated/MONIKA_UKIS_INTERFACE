@@ -15,7 +15,7 @@ interface NotificationToastProps {
   duration?: number;
 }
 
-export function NotificationToast({ notification, onDismiss, duration = 5000 }: NotificationToastProps) {
+export function NotificationToast({ notification, onDismiss, duration = 2000 }: NotificationToastProps) {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {

@@ -2235,7 +2235,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const handleCreateDisease = async () => {
     if (!newDiseaseName.trim()) {
-      alert('Įveskite ligos pavadinimą');
+      showNotification('Įveskite ligos pavadinimą', 'error');
       return;
     }
 
@@ -2254,8 +2254,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       setShowNewDiseaseModal(false);
 
       await logAction('create_disease', 'diseases', data.id, null, { name: data.name });
+      showNotification('Liga sėkmingai sukurta', 'success');
     } catch (error: any) {
-      alert('Klaida kuriant ligą: ' + error.message);
+      showNotification('Klaida kuriant ligą: ' + error.message, 'error');
     }
   };
 
@@ -2336,7 +2337,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.procedures.length === 0) {
-      alert('Pasirinkite bent vieną procedūrą');
+      showNotification('Pasirinkite bent vieną procedūrą', 'error');
       return;
     }
 
@@ -2344,22 +2345,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     if (formData.procedures.includes('Gydymas') &&
         treatmentData.medications.length === 0 &&
         !treatmentData.courseMedicationSchedule) {
-      alert('Gydymui reikia pasirinkti bent vieną vaistą arba suplanuoti kursą');
+      showNotification('Gydymui reikia pasirinkti bent vieną vaistą arba suplanuoti kursą', 'error');
       return;
     }
 
     if (formData.procedures.includes('Vakcina') && vaccinationData.vaccines.length === 0) {
-      alert('Vakcinai reikia pasirinkti bent vieną produktą');
+      showNotification('Vakcinai reikia pasirinkti bent vieną produktą', 'error');
       return;
     }
 
     if (formData.procedures.includes('Nagai') && hoofData.examinations.length === 0) {
-      alert('Nagų apžiūrai reikia apžiūrėti bent vieną nagą');
+      showNotification('Nagų apžiūrai reikia apžiūrėti bent vieną nagą', 'error');
       return;
     }
 
     if (formData.procedures.includes('Profilaktika') && preventionData.products.length === 0) {
-      alert('Profilaktikai reikia pasirinkti bent vieną produktą');
+      showNotification('Profilaktikai reikia pasirinkti bent vieną produktą', 'error');
       return;
     }
 
@@ -2626,7 +2627,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         if (rpcError) {
           console.error('❌ RPC Error calculating withdrawal dates:', rpcError);
-          alert('Įspėjimas: Karencinių dienų skaičiavimas nepavyko. Klaida: ' + rpcError.message);
+          showNotification('Įspėjimas: Karencinių dienų skaičiavimas nepavyko. Klaida: ' + rpcError.message, 'warning');
         } else {
           console.log('✅ Withdrawal dates calculated successfully');
         }
@@ -2743,7 +2744,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
           if (futureVisitsError) {
             console.error('Error creating future treatment visits:', futureVisitsError);
-            alert('Įspėjimas: Būsimų vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message);
+            showNotification('Įspėjimas: Būsimų vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message, 'warning');
           } else {
             console.log(`✅ Created ${futureVisits.length} future treatment visits with planned medications`);
           }
@@ -2986,7 +2987,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
             if (futureVisitsError) {
               console.error('Error creating future prevention visits:', futureVisitsError);
-              alert('Įspėjimas: Būsimų profilaktikos vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message);
+              showNotification('Įspėjimas: Būsimų profilaktikos vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message, 'warning');
             } else {
               console.log(`✅ Created ${futureVisits.length} future prevention visits with planned medications`);
             }
@@ -3100,7 +3101,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         if (nextVisitError) {
           console.error('Error creating next visit:', nextVisitError);
-          alert('Vizitas sukurtas, bet klaida kuriant sekantį vizitą: ' + nextVisitError.message);
+          showNotification('Vizitas sukurtas, bet klaida kuriant sekantį vizitą: ' + nextVisitError.message, 'warning');
         } else {
           await logAction('create_future_visit', 'animal_visits', nextVisitData.id, null, {
             from_visit_id: visitData.id,
@@ -3109,10 +3110,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
       }
 
-      alert('Vizitas ir visi susiję įrašai sėkmingai sukurti!');
       onSuccess();
+      showNotification('Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -4345,7 +4346,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
   const handleCompleteVisit = async () => {
     if (status === 'Baigtas') {
-      alert('Šis vizitas jau užbaigtas');
+      showNotification('Šis vizitas jau užbaigtas', 'warning');
       return;
     }
 
@@ -4357,7 +4358,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       });
 
       if (!allEntered) {
-        alert('Prašome įvesti visų vaistų kiekius ir pasirinkti serijas prieš užbaigiant vizitą');
+        showNotification('Prašome įvesti visų vaistų kiekius ir pasirinkti serijas prieš užbaigiant vizitą', 'error');
         return;
       }
 
@@ -4375,7 +4376,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         .eq('id', visit.id);
 
       if (updateError) {
-        alert('Klaida atnaujinant vaistų kiekius: ' + updateError.message);
+        showNotification('Klaida atnaujinant vaistų kiekius: ' + updateError.message, 'error');
         return;
       }
     }
@@ -4407,10 +4408,10 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       }
 
       await logAction('complete_visit', 'animal_visits', visit.id);
-      showNotification('Vizitas sėkmingai užbaigtas! Vaistai nurašyti iš atsargų.', 'success');
       onSuccess();
+      showNotification('Vizitas sėkmingai užbaigtas! Vaistai nurašyti iš atsargų.', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -4441,10 +4442,10 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       }
 
       await logAction('update_visit', 'animal_visits', visit.id);
-      alert('Vizitas atnaujintas!');
       onSuccess();
+      showNotification('Vizitas atnaujintas!', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -4452,7 +4453,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
   const handleCreateFutureVisit = async () => {
     if (!futureVisitDate) {
-      alert('Prašome pasirinkti datą');
+      showNotification('Prašome pasirinkti datą', 'error');
       return;
     }
 
@@ -4478,13 +4479,13 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         scheduled_date: futureVisitDate
       });
 
-      alert('Būsimas vizitas sėkmingai sukurtas!');
       setShowFutureVisitForm(false);
       setFutureVisitDate('');
       setFutureVisitNotes('');
       onSuccess();
+      showNotification('Būsimas vizitas sėkmingai sukurtas!', 'success');
     } catch (error: any) {
-      alert('Klaida: ' + error.message);
+      showNotification('Klaida: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -4667,9 +4668,10 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                                 .update({ planned_medications: updatedMeds })
                                 .eq('id', visit.id);
                               if (error) {
-                                alert('Klaida: ' + error.message);
+                                showNotification('Klaida: ' + error.message, 'error');
                               } else {
                                 onSuccess();
+                                showNotification('Vaistas pašalintas', 'success');
                               }
                             }
                           }}
