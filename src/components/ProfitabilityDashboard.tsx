@@ -104,6 +104,7 @@ export function ProfitabilityDashboard() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'VERŠ' | 'APSĖK' | 'BUL' | 'producing'>('all');
 
   // Treatment decision calculator state
   const [selectedAnimal, setSelectedAnimal] = useState<string>('');
@@ -225,7 +226,7 @@ export function ProfitabilityDashboard() {
     while (hasMore) {
       const { data: geaData, error: geaError } = await supabase
         .from('gea_daily')
-        .select('animal_id, grupe, snapshot_date')
+        .select('animal_id, grupe, snapshot_date, statusas')
         .order('snapshot_date', { ascending: false })
         .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
 
@@ -456,7 +457,7 @@ export function ProfitabilityDashboard() {
     while (hasMore) {
       const { data: geaGroupData, error: geaGroupError } = await supabase
         .from('gea_daily')
-        .select('animal_id, grupe, snapshot_date')
+        .select('animal_id, grupe, snapshot_date, statusas')
         .order('snapshot_date', { ascending: false })
         .range(geaGroupPage * pageSize, (geaGroupPage + 1) * pageSize - 1);
 
@@ -665,6 +666,31 @@ export function ProfitabilityDashboard() {
     return roiAnalysis
       .filter(a => a.recommendation === recommendation)
       .sort((a, b) => a.net_profit - b.net_profit);
+  };
+
+  const filterByStatus = <T extends { animal_id: string }>(animals: T[]): T[] => {
+    if (statusFilter === 'all') {
+      return animals;
+    }
+
+    // Create a map of animal_id to their current status from geaGroupData
+    const statusMap = new Map<string, string | null>();
+    geaGroupData.forEach(geaAnimal => {
+      if (!statusMap.has(geaAnimal.animal_id)) {
+        statusMap.set(geaAnimal.animal_id, geaAnimal.statusas || null);
+      }
+    });
+
+    return animals.filter(animal => {
+      const animalStatus = statusMap.get(animal.animal_id);
+
+      if (statusFilter === 'producing') {
+        // Producing animals are those that are NOT VERŠ, APSĖK, or BUL
+        return animalStatus && !['VERŠ', 'APSĖK', 'BUL'].includes(animalStatus);
+      }
+
+      return animalStatus === statusFilter;
+    });
   };
 
   if (loading) {
@@ -1205,6 +1231,63 @@ export function ProfitabilityDashboard() {
           {/* Bandos Analizė Tab */}
           {activeTab === 'banda' && (
             <div className="space-y-6">
+              {/* Status Filter */}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Filtruoti pagal statusą (GEA Duomenys):</h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      statusFilter === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Visos
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('producing')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      statusFilter === 'producing'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Melžiamos
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('VERŠ')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      statusFilter === 'VERŠ'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Veršeliai (VERŠ)
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('APSĖK')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      statusFilter === 'APSĖK'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Apsiveršiavusios (APSĖK)
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('BUL')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      statusFilter === 'BUL'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Buliai (BUL)
+                  </button>
+                </div>
+              </div>
+
               {/* Top/Bottom Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Top 100 Performers */}
@@ -1217,7 +1300,7 @@ export function ProfitabilityDashboard() {
                   </div>
                   <div className="p-4 max-h-96 overflow-y-auto">
                     <div className="space-y-1">
-                      {profitabilityData
+                      {filterByStatus(profitabilityData)
                         .filter(a => a.net_profit > 0)
                         .sort((a, b) => b.net_profit - a.net_profit)
                         .slice(0, 100)
@@ -1258,7 +1341,7 @@ export function ProfitabilityDashboard() {
                   </div>
                   <div className="p-4 max-h-96 overflow-y-auto">
                     <div className="space-y-1">
-                      {profitabilityData
+                      {filterByStatus(profitabilityData)
                         .filter(a => a.net_profit < 0)
                         .sort((a, b) => a.net_profit - b.net_profit)
                         .slice(0, 20)
@@ -1293,15 +1376,19 @@ export function ProfitabilityDashboard() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                   {(() => {
-                    // Create profitability lookup by animal_id
+                    // Create profitability lookup by animal_id (filtered by status)
+                    const filteredProfitabilityData = filterByStatus(profitabilityData);
                     const profitabilityMap = new Map();
-                    profitabilityData.forEach(animal => {
+                    filteredProfitabilityData.forEach(animal => {
                       profitabilityMap.set(animal.animal_id, animal);
                     });
 
+                    // Filter geaGroupData by status
+                    const filteredGeaGroupData = filterByStatus(geaGroupData);
+
                     // Group by GEA group data (more complete)
                     const groups = {};
-                    geaGroupData.forEach(geaAnimal => {
+                    filteredGeaGroupData.forEach(geaAnimal => {
                       const group = geaAnimal.grupe ?? 'Nežinoma';
                       if (!groups[group]) {
                         groups[group] = {
@@ -1391,10 +1478,11 @@ export function ProfitabilityDashboard() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Rekomendacijų Santrauka</h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {['profitable', 'monitor', 'at_risk', 'chronic_case', 'cull_recommended'].map(rec => {
-                    const count = roiAnalysis.filter(a => a.recommendation === rec).length;
+                    const filteredRoiAnalysis = filterByStatus(roiAnalysis);
+                    const count = filteredRoiAnalysis.filter(a => a.recommendation === rec).length;
                     const isExpandable = ['at_risk', 'chronic_case', 'cull_recommended'].includes(rec);
                     const isExpanded = expandedRecommendations.has(rec);
-                    const animals = isExpandable ? getAnimalsForRecommendation(rec) : [];
+                    const animals = isExpandable ? filterByStatus(getAnimalsForRecommendation(rec)) : [];
 
                     return (
                       <div key={rec} className="text-center bg-gray-50 rounded-lg overflow-hidden">
