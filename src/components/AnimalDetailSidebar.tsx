@@ -2637,18 +2637,54 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           console.log('Course schedule:', treatmentData.courseMedicationSchedule);
 
           let futureVisits: any[] = [];
+          const todayDate = formData.visit_datetime.split('T')[0];
 
           // If we have a full course schedule (from CourseMedicationScheduler)
           if (treatmentData.courseMedicationSchedule && treatmentData.courseMedicationSchedule.length > 0) {
             console.log('✅ Using detailed course schedule');
 
-            futureVisits = treatmentData.courseMedicationSchedule.map((daySchedule: any) => {
-              const medicationNames = daySchedule.medications
-                .map((med: any) => products.find(p => p.id === med.product_id)?.name)
-                .filter(Boolean)
-                .join(', ');
+            // Filter out today's date to avoid creating a duplicate visit
+            futureVisits = treatmentData.courseMedicationSchedule
+              .filter((daySchedule: any) => daySchedule.date !== todayDate)
+              .map((daySchedule: any) => {
+                const medicationNames = daySchedule.medications
+                  .map((med: any) => products.find(p => p.id === med.product_id)?.name)
+                  .filter(Boolean)
+                  .join(', ');
 
-              const dailyMedications = daySchedule.medications.map((med: any) => ({
+                const dailyMedications = daySchedule.medications.map((med: any) => ({
+                  product_id: med.product_id,
+                  batch_id: med.batch_id || null,
+                  qty: null,
+                  unit: med.unit,
+                  purpose: med.purpose || 'Gydymas',
+                  teat: med.teat || null,
+                }));
+
+                return {
+                  animal_id: animalId,
+                  visit_datetime: `${daySchedule.date}T10:00:00`,
+                  procedures: ['Gydymas'],
+                  status: 'Planuojamas',
+                  notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
+                  vet_name: formData.vet_name || null,
+                  next_visit_required: false,
+                  treatment_required: true,
+                  related_treatment_id: treatmentRecord.id,
+                  related_visit_id: visitData.id,
+                  planned_medications: dailyMedications,
+                  medications_processed: false,
+                };
+              });
+
+            // Also add today's medications to the current visit being created
+            const todaySchedule = treatmentData.courseMedicationSchedule.find(
+              (daySchedule: any) => daySchedule.date === todayDate
+            );
+
+            if (todaySchedule) {
+              console.log('✅ Found today\'s medications in course schedule, adding to current visit');
+              const todayMedications = todaySchedule.medications.map((med: any) => ({
                 product_id: med.product_id,
                 batch_id: med.batch_id || null,
                 qty: null,
@@ -2657,21 +2693,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 teat: med.teat || null,
               }));
 
-              return {
-                animal_id: animalId,
-                visit_datetime: `${daySchedule.date}T10:00:00`,
-                procedures: ['Gydymas'],
-                status: 'Planuojamas',
-                notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
-                vet_name: formData.vet_name || null,
-                next_visit_required: false,
-                treatment_required: true,
-                related_treatment_id: treatmentRecord.id,
-                related_visit_id: visitData.id,
-                planned_medications: dailyMedications,
-                medications_processed: false,
-              };
-            });
+              await supabase
+                .from('animal_visits')
+                .update({
+                  planned_medications: todayMedications,
+                  medications_processed: false
+                })
+                .eq('id', visitData.id);
+            }
           } else {
             // Fallback: Old system with same medications for all days
             console.log('⚠️ Using fallback: same medications for all days');
@@ -4280,21 +4309,23 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   };
 
   const checkMedicationEntry = () => {
-    if (visit.planned_medications && Array.isArray(visit.planned_medications)) {
-      const needsEntry = visit.planned_medications.some((med: any) =>
-        !med.qty || med.qty === null || med.qty === '' || med.qty === '0'
-      );
-      if (needsEntry && visit.status !== 'Baigtas') {
-        setShowMedicationEntry(true);
-        const initialQtys: Record<string, string> = {};
-        const initialBatches: Record<string, string> = {};
-        visit.planned_medications.forEach((med: any, idx: number) => {
-          initialQtys[`${idx}`] = med.qty || '';
-          initialBatches[`${idx}`] = med.batch_id || '';
-        });
-        setMedicationQuantities(initialQtys);
-        setMedicationBatches(initialBatches);
-      }
+    if (visit.planned_medications && Array.isArray(visit.planned_medications) && visit.status !== 'Baigtas') {
+      // Always show medication entry form for planned medications
+      setShowMedicationEntry(true);
+
+      const initialQtys: Record<string, string> = {};
+      const initialBatches: Record<string, string> = {};
+
+      visit.planned_medications.forEach((med: any, idx: number) => {
+        // Pre-fill with existing quantities if they exist
+        initialQtys[`${idx}`] = med.qty != null && med.qty !== '' && med.qty !== 0 ? String(med.qty) : '';
+        initialBatches[`${idx}`] = med.batch_id || '';
+      });
+
+      setMedicationQuantities(initialQtys);
+      setMedicationBatches(initialBatches);
+      console.log('🔍 Pre-filled medication quantities:', initialQtys);
+      console.log('🔍 Visit planned_medications:', visit.planned_medications);
     }
   };
 
