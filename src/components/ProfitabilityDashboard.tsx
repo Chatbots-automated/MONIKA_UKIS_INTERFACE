@@ -1498,7 +1498,7 @@ export function ProfitabilityDashboard() {
                           Veršeliai
                         </span>
                       </div>
-                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['VERŠ'] || 0}</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['VERŠ.'] || 0}</p>
                       <p className="text-xs text-gray-600">gyvulių</p>
                     </div>
                   </div>
@@ -1524,7 +1524,7 @@ export function ProfitabilityDashboard() {
                           Buliai
                         </span>
                       </div>
-                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['BUL'] || 0}</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['BUL.'] || 0}</p>
                       <p className="text-xs text-gray-600">gyvulių</p>
                     </div>
                   </div>
