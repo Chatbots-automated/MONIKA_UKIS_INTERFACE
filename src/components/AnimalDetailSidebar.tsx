@@ -3119,7 +3119,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         if (completeError) {
           console.error('Error auto-completing visit:', completeError);
-          showNotification('Vizitas sukurtas, bet nepavyko užbaigti automatiškai', 'warning');
+
+          // Check if it's an expired batch error
+          if (completeError.message && completeError.message.includes('expired batch')) {
+            showNotification('Vizitas sukurtas, bet negali būti užbaigtas - pasirinkta pasibaigusi serija. Prašome pasirinkti aktyvią seriją.', 'error');
+          } else {
+            showNotification('Vizitas sukurtas, bet nepavyko užbaigti automatiškai: ' + completeError.message, 'warning');
+          }
         } else {
           await logAction('complete_visit', 'animal_visits', visitData.id);
           showNotification('Vizitas sukurtas ir užbaigtas!', 'success');
@@ -3342,7 +3348,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   {treatmentData.medications.map((med, idx) => {
                     const selectedProduct = products.find(p => p.id === med.product_id);
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
-                    const availableBatches = batches.filter(b => b.product_id === med.product_id);
+                    const availableBatches = batches.filter(b =>
+                      b.product_id === med.product_id &&
+                      (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                    );
 
                     return (
                       <div key={idx} className="bg-white p-3 rounded-lg border-2 border-gray-300 space-y-2">
@@ -3690,7 +3699,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite seriją</option>
-                        {batches.filter(b => b.product_id === vaccine.product_id).map(b => (
+                        {batches.filter(b =>
+                          b.product_id === vaccine.product_id &&
+                          (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                        ).map(b => (
                           <option key={b.id} value={b.id}>
                             {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
                           </option>
@@ -3881,7 +3893,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite seriją</option>
-                        {batches.filter(b => b.product_id === product.product_id).map(b => (
+                        {batches.filter(b =>
+                          b.product_id === product.product_id &&
+                          (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                        ).map(b => (
                           <option key={b.id} value={b.id}>
                             {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
                           </option>
@@ -4677,7 +4692,10 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                   const product = products.find(p => p.id === med.product_id);
                   const selectedBatchId = medicationBatches[`${idx}`] || med.batch_id;
                   const selectedBatch = batches.find(b => b.id === selectedBatchId);
-                  const availableBatches = batches.filter(b => b.product_id === med.product_id);
+                  const availableBatches = batches.filter(b =>
+                    b.product_id === med.product_id &&
+                    (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                  );
 
                   return (
                     <div key={idx} className="bg-white rounded-lg border-2 border-orange-200 p-3">
