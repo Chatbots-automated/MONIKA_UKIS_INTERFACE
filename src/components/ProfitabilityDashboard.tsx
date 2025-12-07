@@ -98,6 +98,7 @@ export function ProfitabilityDashboard() {
   const [roiAnalysis, setRoiAnalysis] = useState<TreatmentROIAnalysis[]>([]);
   const [herdSummary, setHerdSummary] = useState<HerdSummary | null>(null);
   const [geaGroupData, setGeaGroupData] = useState<any[]>([]);
+  const [geaStatusCounts, setGeaStatusCounts] = useState<{[key: string]: number}>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'net_profit' | 'milk_revenue' | 'total_costs' | 'tag_no'>('net_profit');
@@ -225,7 +226,7 @@ export function ProfitabilityDashboard() {
     while (hasMore) {
       const { data: geaData, error: geaError } = await supabase
         .from('gea_daily')
-        .select('animal_id, grupe, snapshot_date')
+        .select('animal_id, grupe, statusas, snapshot_date')
         .order('snapshot_date', { ascending: false })
         .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
 
@@ -239,7 +240,7 @@ export function ProfitabilityDashboard() {
       }
     }
 
-    // Get only the most recent group for each animal
+    // Get only the most recent group/status for each animal
     const animalGroupMap = new Map();
     allGeaData.forEach(row => {
       if (!animalGroupMap.has(row.animal_id) ||
@@ -247,7 +248,16 @@ export function ProfitabilityDashboard() {
         animalGroupMap.set(row.animal_id, row);
       }
     });
-    setGeaGroupData(Array.from(animalGroupMap.values()));
+    const latestAnimalData = Array.from(animalGroupMap.values());
+    setGeaGroupData(latestAnimalData);
+
+    // Count animals by status
+    const statusCounts: {[key: string]: number} = {};
+    latestAnimalData.forEach(row => {
+      const status = row.statusas || 'UNKNOWN';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    setGeaStatusCounts(statusCounts);
   };
 
   const calculateHerdSummary = (data: ProfitabilityData[]): HerdSummary => {
@@ -456,7 +466,7 @@ export function ProfitabilityDashboard() {
     while (hasMore) {
       const { data: geaGroupData, error: geaGroupError } = await supabase
         .from('gea_daily')
-        .select('animal_id, grupe, snapshot_date')
+        .select('animal_id, grupe, statusas, snapshot_date')
         .order('snapshot_date', { ascending: false })
         .range(geaGroupPage * pageSize, (geaGroupPage + 1) * pageSize - 1);
 
@@ -477,7 +487,16 @@ export function ProfitabilityDashboard() {
         animalGroupMap.set(row.animal_id, row);
       }
     });
-    setGeaGroupData(Array.from(animalGroupMap.values()));
+    const latestAnimalData = Array.from(animalGroupMap.values());
+    setGeaGroupData(latestAnimalData);
+
+    // Count animals by status
+    const statusCounts: {[key: string]: number} = {};
+    latestAnimalData.forEach(row => {
+      const status = row.statusas || 'UNKNOWN';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    setGeaStatusCounts(statusCounts);
   };
 
   const loadSettings = async () => {
@@ -1389,7 +1408,7 @@ export function ProfitabilityDashboard() {
               {/* Recommendations Summary */}
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Rekomendacijų Santrauka</h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                   {['profitable', 'monitor', 'at_risk', 'chronic_case', 'cull_recommended'].map(rec => {
                     const count = roiAnalysis.filter(a => a.recommendation === rec).length;
                     const isExpandable = ['at_risk', 'chronic_case', 'cull_recommended'].includes(rec);
@@ -1470,6 +1489,45 @@ export function ProfitabilityDashboard() {
                       </div>
                     );
                   })}
+
+                  {/* Veršeliai - Calves */}
+                  <div className="text-center bg-amber-50 rounded-lg overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          Veršeliai
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['VERŠ'] || 0}</p>
+                      <p className="text-xs text-gray-600">gyvulių</p>
+                    </div>
+                  </div>
+
+                  {/* Apsiveršiavusios - Pregnant cows */}
+                  <div className="text-center bg-pink-50 rounded-lg overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                          Apsėk
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['APSĖK'] || 0}</p>
+                      <p className="text-xs text-gray-600">gyvulių</p>
+                    </div>
+                  </div>
+
+                  {/* Buliai - Bulls */}
+                  <div className="text-center bg-slate-50 rounded-lg overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                          Buliai
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mt-2">{geaStatusCounts['BUL'] || 0}</p>
+                      <p className="text-xs text-gray-600">gyvulių</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
