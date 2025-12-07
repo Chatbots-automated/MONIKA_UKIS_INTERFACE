@@ -26,9 +26,9 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
     if (!user) return;
 
     const { data, error } = await supabase
-      .from('user_notes')
+      .from('shared_notepad')
       .select('*')
-      .eq('user_id', user.id)
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -51,15 +51,21 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
     try {
       if (noteId) {
         const { error } = await supabase
-          .from('user_notes')
-          .update({ content: newContent })
+          .from('shared_notepad')
+          .update({
+            content: newContent,
+            last_edited_by: user.id
+          })
           .eq('id', noteId);
 
         if (error) throw error;
       } else {
         const { data, error } = await supabase
-          .from('user_notes')
-          .insert({ user_id: user.id, content: newContent })
+          .from('shared_notepad')
+          .insert({
+            content: newContent,
+            last_edited_by: user.id
+          })
           .select()
           .single();
 
@@ -101,7 +107,10 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-yellow-50">
           <div className="flex items-center gap-2">
             <StickyNote className="w-5 h-5 text-amber-600" />
-            <h2 className="text-lg font-semibold text-gray-800">Užrašinė</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Bendros užrašinės</h2>
+              <p className="text-xs text-gray-600">Matoma visiems vartotojams</p>
+            </div>
           </div>
           <button
             onClick={onClose}

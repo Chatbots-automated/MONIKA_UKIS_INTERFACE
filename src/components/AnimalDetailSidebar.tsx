@@ -1936,6 +1936,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       course_days: string;
       teat: string;
     }>,
+    courseMedicationSchedule: null as any,
   });
 
   const [sickTeats, setSickTeats] = useState<string[]>([]);
@@ -2340,8 +2341,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }
 
     // Validate procedure-specific data
-    if (formData.procedures.includes('Gydymas') && treatmentData.medications.length === 0) {
-      alert('Gydymui reikia pasirinkti bent vieną vaistą');
+    if (formData.procedures.includes('Gydymas') &&
+        treatmentData.medications.length === 0 &&
+        !treatmentData.courseMedicationSchedule) {
+      alert('Gydymui reikia pasirinkti bent vieną vaistą arba suplanuoti kursą');
       return;
     }
 
@@ -2630,25 +2633,64 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         // Create future visits for recurring treatments with planned medications
         if (hasRecurringDays) {
-          const medicationNames = treatmentData.medications
-            .map(med => products.find(p => p.id === med.product_id)?.name)
-            .filter(Boolean)
-            .join(', ');
+          console.log('📅 Creating future visits for course...');
+          console.log('Course schedule:', treatmentData.courseMedicationSchedule);
 
-          // Store medication metadata without quantities (manual entry per visit)
-          const dailyMedications = treatmentData.medications.map(med => {
-            return {
+          let futureVisits: any[] = [];
+
+          // If we have a full course schedule (from CourseMedicationScheduler)
+          if (treatmentData.courseMedicationSchedule && treatmentData.courseMedicationSchedule.length > 0) {
+            console.log('✅ Using detailed course schedule');
+
+            futureVisits = treatmentData.courseMedicationSchedule.map((daySchedule: any) => {
+              const medicationNames = daySchedule.medications
+                .map((med: any) => products.find(p => p.id === med.product_id)?.name)
+                .filter(Boolean)
+                .join(', ');
+
+              const dailyMedications = daySchedule.medications.map((med: any) => ({
+                product_id: med.product_id,
+                batch_id: med.batch_id || null,
+                qty: null,
+                unit: med.unit,
+                purpose: med.purpose || 'Gydymas',
+                teat: med.teat || null,
+              }));
+
+              return {
+                animal_id: animalId,
+                visit_datetime: `${daySchedule.date}T10:00:00`,
+                procedures: ['Gydymas'],
+                status: 'Planuojamas',
+                notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
+                vet_name: formData.vet_name || null,
+                next_visit_required: false,
+                treatment_required: true,
+                related_treatment_id: treatmentRecord.id,
+                related_visit_id: visitData.id,
+                planned_medications: dailyMedications,
+                medications_processed: false,
+              };
+            });
+          } else {
+            // Fallback: Old system with same medications for all days
+            console.log('⚠️ Using fallback: same medications for all days');
+
+            const medicationNames = treatmentData.medications
+              .map(med => products.find(p => p.id === med.product_id)?.name)
+              .filter(Boolean)
+              .join(', ');
+
+            const dailyMedications = treatmentData.medications.map(med => ({
               product_id: med.product_id,
               batch_id: med.batch_id,
               qty: null,
               unit: med.unit,
               purpose: med.purpose || 'Gydymas',
               teat: med.teat || null,
-            };
-          });
+            }));
 
-          const futureVisits = treatmentData.recurring_days.map(dateStr => {
-            return {
+            futureVisits = treatmentData.recurring_days.map(dateStr => ({
               animal_id: animalId,
               visit_datetime: `${dateStr}T10:00:00`,
               procedures: ['Gydymas'],
@@ -2661,8 +2703,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               related_visit_id: visitData.id,
               planned_medications: dailyMedications,
               medications_processed: false,
-            };
-          });
+            }));
+          }
+
+          console.log(`📦 Creating ${futureVisits.length} future visits`);
 
           const { error: futureVisitsError } = await supabase
             .from('animal_visits')
@@ -3239,77 +3283,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kartoti gydymą būsimomis dienomis (pasirinkite datas)
-                </label>
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 space-y-2">
-                  {treatmentData.recurring_days.map((dateStr, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="date"
-                        value={dateStr}
-                        min={formData.visit_datetime.split('T')[0]}
-                        onChange={(e) => {
-                          const newDays = [...treatmentData.recurring_days];
-                          newDays[idx] = e.target.value;
-                          setTreatmentData({
-                            ...treatmentData,
-                            recurring_days: newDays.sort()
-                          });
-                        }}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newDays = treatmentData.recurring_days.filter((_, i) => i !== idx);
-                          setTreatmentData({
-                            ...treatmentData,
-                            recurring_days: newDays
-                          });
-                        }}
-                        className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const baseDate = new Date(formData.visit_datetime.split('T')[0]);
-                      baseDate.setDate(baseDate.getDate() + 1);
-                      const nextDate = baseDate.toISOString().split('T')[0];
-                      setTreatmentData({
-                        ...treatmentData,
-                        recurring_days: [...treatmentData.recurring_days, nextDate].sort()
-                      });
-                    }}
-                    className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Pridėti datą
-                  </button>
-                  {treatmentData.recurring_days.length > 0 && (
-                    <div className="mt-2 text-xs text-blue-600 font-medium">
-                      Pasirinkta datų: {treatmentData.recurring_days.length}
-                    </div>
-                  )}
+              {/* SECTION 1: SINGLE-USE TREATMENT (TODAY ONLY) */}
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Pill className="w-5 h-5 text-blue-600" />
+                  <h5 className="font-bold text-gray-900">Vienkartinis gydymas (tik šiandien)</h5>
                 </div>
-              </div>
+                <p className="text-xs text-gray-600 mb-3">Pasirinkite vaistus, kurie bus panaudoti tik šiandien</p>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Vaistai *</label>
                 <div className="space-y-3">
                   {treatmentData.medications.map((med, idx) => {
                     const selectedProduct = products.find(p => p.id === med.product_id);
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
-
                     const availableBatches = batches.filter(b => b.product_id === med.product_id);
 
                     return (
-                      <div key={idx} className="bg-white p-3 rounded border-2 border-gray-300 space-y-2">
+                      <div key={idx} className="bg-white p-3 rounded-lg border-2 border-gray-300 space-y-2">
                         <div className="grid grid-cols-12 gap-2">
                           <div className="col-span-4">
                             <select
@@ -3362,24 +3351,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                               </option>
                             ))}
                           </select>
-                          {!med.is_course || parseInt(med.course_days) <= 1 ? (
-                            <input
-                              type="number"
-                              step="0.01"
-                              placeholder="Kiekis"
-                              value={med.qty}
-                              onChange={(e) => {
-                                const newMeds = [...treatmentData.medications];
-                                newMeds[idx].qty = normalizeNumberInput(e.target.value);
-                                setTreatmentData({ ...treatmentData, medications: newMeds });
-                              }}
-                              className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                          ) : (
-                            <div className="col-span-2 px-2 py-1 border border-blue-300 bg-blue-50 rounded text-xs flex items-center text-blue-700 font-medium">
-                              Vizite
-                            </div>
-                          )}
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Kiekis"
+                            value={med.qty}
+                            onChange={(e) => {
+                              const newMeds = [...treatmentData.medications];
+                              newMeds[idx].qty = normalizeNumberInput(e.target.value);
+                              setTreatmentData({ ...treatmentData, medications: newMeds });
+                            }}
+                            className="col-span-2 px-2 py-1 border border-gray-300 rounded text-sm"
+                          />
                           <div className="col-span-2 px-2 py-1 border border-gray-200 bg-gray-50 rounded text-sm flex items-center text-gray-700 font-medium">
                             {selectedProduct?.primary_pack_unit || med.unit || 'ml'}
                           </div>
@@ -3393,25 +3376,6 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                           >
                             <X className="w-4 h-4" />
                           </button>
-                        </div>
-                        {/* Course planning button */}
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCourseSchedulerMedIndex(idx);
-                              setShowCourseScheduler(true);
-                            }}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 border-2 border-purple-300 rounded-lg hover:bg-purple-100 text-sm font-medium"
-                          >
-                            <Calendar className="w-4 h-4" />
-                            {med.is_course ? 'Redaguoti kursą' : 'Planuoti kursą'}
-                          </button>
-                          {med.is_course && med.course_days && (
-                            <span className="text-xs text-purple-700 font-medium bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
-                              ✓ Kursas: {med.course_days} dienų - Kiekis įvedamas per kiekvieną vizitą
-                            </span>
-                          )}
                         </div>
                         {selectedProduct && (selectedProduct.withdrawal_days_milk || selectedProduct.withdrawal_days_meat) && (
                           <div className="text-xs bg-amber-50 border-2 border-amber-300 rounded px-3 py-2">
@@ -3444,12 +3408,78 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         medications: [...treatmentData.medications, { product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'Gydymas', is_course: false, course_days: '1', teat: '' }]
                       });
                     }}
-                    className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
+                    className="w-full px-3 py-2 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 font-medium"
                   >
                     <Plus className="w-4 h-4" />
                     Pridėti vaistą
                   </button>
                 </div>
+              </div>
+
+              {/* SECTION 2: COURSE PLANNING (MULTI-DAY) */}
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="w-5 h-5 text-purple-600" />
+                  <h5 className="font-bold text-gray-900">Kurso planavimas (kelių dienų gydymas)</h5>
+                </div>
+                <p className="text-xs text-gray-600 mb-3">Suplanuokite gydymo kursą kelioms dienoms su skirtingais vaistais kiekvienai dienai</p>
+
+                {!treatmentData.courseMedicationSchedule ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCourseSchedulerMedIndex(0);
+                      setShowCourseScheduler(true);
+                    }}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 flex items-center justify-center gap-2 font-semibold shadow-md"
+                  >
+                    <Calendar className="w-5 h-5" />
+                    Planuoti gydymo kursą
+                  </button>
+                ) : (
+                  <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <span className="font-bold text-gray-900">Kursas suplanuotas</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTreatmentData({
+                            ...treatmentData,
+                            courseMedicationSchedule: null,
+                            recurring_days: []
+                          });
+                        }}
+                        className="text-red-600 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium"
+                      >
+                        Pašalinti kursą
+                      </button>
+                    </div>
+                    <div className="text-sm text-gray-700 space-y-2">
+                      <p className="font-semibold">📅 {treatmentData.courseMedicationSchedule.length} dienų gydymas</p>
+                      <div className="space-y-1">
+                        {treatmentData.courseMedicationSchedule.map((day: any, idx: number) => (
+                          <div key={idx} className="text-xs bg-purple-50 px-3 py-2 rounded border border-purple-200">
+                            <span className="font-semibold">Diena {idx + 1} ({new Date(day.date).toLocaleDateString('lt')})</span>
+                            <span className="text-gray-600"> - {day.medications.length} vaistų</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCourseSchedulerMedIndex(0);
+                        setShowCourseScheduler(true);
+                      }}
+                      className="w-full mt-3 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center justify-center gap-2 text-sm font-medium"
+                    >
+                      Redaguoti kursą
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* TEAT SELECTOR */}
@@ -3466,18 +3496,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               <div>
                 <div className="space-y-3">
                   {/* WITHDRAWAL CALCULATION PREVIEW */}
-                  {treatmentData.medications.length > 0 && treatmentData.medications.some(m => m.product_id) && (
+                  {((treatmentData.medications.length > 0 && treatmentData.medications.some(m => m.product_id)) || treatmentData.courseMedicationSchedule) && (
                     <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 space-y-3">
                       <h5 className="font-bold text-amber-900 flex items-center gap-2">
                         <AlertCircle className="w-5 h-5" />
                         Karencijos skaičiavimas (po išsaugojimo)
                       </h5>
                       <div className="text-sm space-y-2">
+                        {/* Single-use medications */}
                         {treatmentData.medications
                           .filter(m => m.product_id)
                           .map((med, idx) => {
                             const product = products.find(p => p.id === med.product_id);
-                            const courseDays = med.is_course ? parseInt(med.course_days) || 1 : 0;
                             const milkDays = product?.withdrawal_days_milk || 0;
                             const meatDays = product?.withdrawal_days_meat || 0;
 
@@ -3485,23 +3515,32 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                               <div key={idx} className="bg-white rounded border border-amber-300 p-2">
                                 <div className="font-semibold text-gray-900 mb-1">{product?.name}</div>
                                 <div className="text-xs text-gray-700 space-y-0.5">
-                                  {courseDays > 0 && (
-                                    <div>• Kursas: {courseDays} dienų</div>
-                                  )}
                                   {milkDays > 0 && (
                                     <div className="text-blue-700">
-                                      • 🥛 Pienas: {courseDays} + {milkDays} + 1 = <strong>{courseDays + milkDays + 1} dienų</strong>
+                                      • 🥛 Pienas: {milkDays} dienų
                                     </div>
                                   )}
                                   {meatDays > 0 && (
                                     <div className="text-red-700">
-                                      • 🥩 Mėsa: {courseDays} + {meatDays} + 1 = <strong>{courseDays + meatDays + 1} dienų</strong>
+                                      • 🥩 Mėsa: {meatDays} dienų
                                     </div>
                                   )}
                                 </div>
                               </div>
                             );
                           })}
+
+                        {/* Course medications */}
+                        {treatmentData.courseMedicationSchedule && (
+                          <div className="bg-white rounded border border-amber-300 p-2">
+                            <div className="font-semibold text-gray-900 mb-1">Gydymo kursas</div>
+                            <div className="text-xs text-gray-700">
+                              • Kursas trunka {treatmentData.courseMedicationSchedule.length} dienas
+                              <br />• Karencija bus apskaičiuota automatiškai nuo paskutinės dienos
+                            </div>
+                          </div>
+                        )}
+
                         <div className="pt-2 mt-2 border-t-2 border-amber-400 text-xs text-gray-600">
                           ℹ️ Tikslios datos bus apskaičiuotos automatiškai po išsaugojimo ir bus matomos gyvūno apžvalgoje.
                         </div>
@@ -4183,31 +4222,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         </div>
       )}
 
-      {showCourseScheduler && courseSchedulerMedIndex !== null && (
+      {showCourseScheduler && (
         <CourseMedicationScheduler
           animalId={animalId}
           initialStartDate={formData.visit_datetime.split('T')[0]}
           onConfirm={(schedule) => {
-            const medIndex = courseSchedulerMedIndex;
-            const newMeds = [...treatmentData.medications];
-
-            // Get the first day's first medication to populate the form
-            const firstDayMeds = schedule[0]?.medications[0];
-            if (firstDayMeds) {
-              newMeds[medIndex].product_id = firstDayMeds.product_id;
-              newMeds[medIndex].batch_id = firstDayMeds.batch_id || '';
-              newMeds[medIndex].unit = firstDayMeds.unit as any;
-              newMeds[medIndex].purpose = firstDayMeds.purpose;
-              newMeds[medIndex].teat = firstDayMeds.teat || '';
-            }
-
-            newMeds[medIndex].is_course = true;
-            newMeds[medIndex].course_days = schedule.length.toString();
+            console.log('📅 Course schedule confirmed:', schedule);
 
             setTreatmentData({
               ...treatmentData,
-              medications: newMeds,
-              recurring_days: schedule.map(s => s.date)
+              courseMedicationSchedule: schedule,
+              recurring_days: schedule.map(s => s.date),
+              medications: []
             });
 
             setShowCourseScheduler(false);
