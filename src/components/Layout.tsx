@@ -20,9 +20,11 @@ import {
   Calendar,
   Repeat,
   Euro,
-  Heart
+  Heart,
+  StickyNote
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import Notepad from './Notepad';
 
 interface LayoutProps {
   children: ReactNode;
@@ -49,6 +51,7 @@ const menuItems = [
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notepadOpen, setNotepadOpen] = useState(false);
   const { user, hasPermission, signOut, isFrozen, logAction } = useAuth();
 
   const handleSignOut = async () => {
@@ -160,6 +163,14 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                   <Grid3x3 className="w-4 h-4" />
                   <span>Moduliai</span>
                 </button>
+                <button
+                  onClick={() => setNotepadOpen(true)}
+                  className="flex items-center gap-2 px-2 xl:px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200 hover:border-amber-300"
+                  title="Užrašinė"
+                >
+                  <StickyNote className="w-4 h-4" />
+                  <span className="hidden xl:inline">Užrašinė</span>
+                </button>
                 <div className="flex items-center gap-2 px-2 xl:px-4 py-1.5 xl:py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200 min-h-[36px]">
                   <User className="w-4 h-4 text-emerald-700 flex-shrink-0" />
                   <div className="flex flex-col">
@@ -225,6 +236,8 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
           </div>
         </footer>
       </div>
+
+      <Notepad isOpen={notepadOpen} onClose={() => setNotepadOpen(false)} />
     </div>
   );
 }
