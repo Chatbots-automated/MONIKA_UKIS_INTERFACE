@@ -2334,7 +2334,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, autoComplete = false) => {
     e.preventDefault();
     if (formData.procedures.length === 0) {
       showNotification('Pasirinkite bent vieną procedūrą', 'error');
@@ -3110,8 +3110,25 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
       }
 
+      // Auto-complete the visit if requested (only for today's visit, not future ones)
+      if (autoComplete && !isEditMode) {
+        const { error: completeError } = await supabase
+          .from('animal_visits')
+          .update({ status: 'Baigtas' })
+          .eq('id', visitData.id);
+
+        if (completeError) {
+          console.error('Error auto-completing visit:', completeError);
+          showNotification('Vizitas sukurtas, bet nepavyko užbaigti automatiškai', 'warning');
+        } else {
+          await logAction('complete_visit', 'animal_visits', visitData.id);
+          showNotification('Vizitas sukurtas ir užbaigtas!', 'success');
+        }
+      } else {
+        showNotification('Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
+      }
+
       onSuccess();
-      showNotification('Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
     } catch (error: any) {
       showNotification('Klaida: ' + error.message, 'error');
     } finally {
@@ -4200,6 +4217,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             >
               {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti pakeitimus' : 'Sukurti vizitą')}
             </button>
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={loading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Kuriama...' : 'Sukurti ir užbaigti'}
+              </button>
+            )}
           </div>
         </form>
       </div>
