@@ -15,7 +15,9 @@ import {
   Search,
   ArrowUpRight,
   ArrowDownRight,
-  Minus
+  Minus,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface ProfitabilityData {
@@ -111,6 +113,9 @@ export function ProfitabilityDashboard() {
 
   // Animal detail modal state
   const [selectedAnimalDetail, setSelectedAnimalDetail] = useState<ProfitabilityData | null>(null);
+
+  // Recommendation cards expansion state
+  const [expandedRecommendations, setExpandedRecommendations] = useState<Set<string>>(new Set());
 
   // System settings
   const [milkPrice, setMilkPrice] = useState<number>(0.50);
@@ -642,6 +647,24 @@ export function ProfitabilityDashboard() {
       default:
         return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">—</span>;
     }
+  };
+
+  const toggleRecommendation = (recommendation: string) => {
+    setExpandedRecommendations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(recommendation)) {
+        newSet.delete(recommendation);
+      } else {
+        newSet.add(recommendation);
+      }
+      return newSet;
+    });
+  };
+
+  const getAnimalsForRecommendation = (recommendation: string) => {
+    return roiAnalysis
+      .filter(a => a.recommendation === recommendation)
+      .sort((a, b) => a.net_profit - b.net_profit);
   };
 
   if (loading) {
@@ -1369,11 +1392,81 @@ export function ProfitabilityDashboard() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {['profitable', 'monitor', 'at_risk', 'chronic_case', 'cull_recommended'].map(rec => {
                     const count = roiAnalysis.filter(a => a.recommendation === rec).length;
+                    const isExpandable = ['at_risk', 'chronic_case', 'cull_recommended'].includes(rec);
+                    const isExpanded = expandedRecommendations.has(rec);
+                    const animals = isExpandable ? getAnimalsForRecommendation(rec) : [];
+
                     return (
-                      <div key={rec} className="text-center p-4 bg-gray-50 rounded-lg">
-                        {getRecommendationBadge(rec)}
-                        <p className="text-2xl font-bold text-gray-900 mt-2">{count}</p>
-                        <p className="text-xs text-gray-600">gyvulių</p>
+                      <div key={rec} className="text-center bg-gray-50 rounded-lg overflow-hidden">
+                        <div
+                          className={`p-4 ${isExpandable ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
+                          onClick={() => isExpandable && toggleRecommendation(rec)}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            {getRecommendationBadge(rec)}
+                            {isExpandable && (
+                              isExpanded ?
+                                <ChevronUp className="w-4 h-4 text-gray-600" /> :
+                                <ChevronDown className="w-4 h-4 text-gray-600" />
+                            )}
+                          </div>
+                          <p className="text-2xl font-bold text-gray-900 mt-2">{count}</p>
+                          <p className="text-xs text-gray-600">gyvulių</p>
+                        </div>
+
+                        {isExpandable && isExpanded && (
+                          <div className="border-t border-gray-200 bg-white max-h-80 overflow-y-auto">
+                            {animals.length > 0 ? (
+                              <div className="divide-y divide-gray-100">
+                                {animals.map((animal) => {
+                                  const profData = profitabilityData.find(p => p.animal_id === animal.animal_id);
+                                  return (
+                                    <div
+                                      key={animal.animal_id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (profData) {
+                                          setSelectedAnimalDetail(profData);
+                                        }
+                                      }}
+                                      className="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors text-left"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-900">
+                                            {animal.tag_no || 'Nežinomas'}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            Kakl: {animal.collar_no || '—'}
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className={`text-sm font-bold ${animal.net_profit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {formatCurrencyLT(animal.net_profit)}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            {formatNumberLT(animal.avg_daily_milk)} L/d
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {animal.current_status && (
+                                        <div className="mt-1">
+                                          <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
+                                            {animal.current_status}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="px-4 py-6 text-sm text-gray-500">
+                                Nėra gyvulių šioje kategorijoje
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
