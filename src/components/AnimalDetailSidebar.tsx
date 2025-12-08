@@ -2377,7 +2377,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             procedures: formData.procedures,
             temperature: formData.temperature ? parseFloat(formData.temperature) : null,
             temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
-            status: formData.status,
+            status: autoComplete ? 'Baigtas' : formData.status,
             notes: formData.notes ? formData.notes : null,
             vet_name: formData.vet_name ? formData.vet_name : null,
             next_visit_required: formData.next_visit_required,
@@ -3130,8 +3130,12 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           await logAction('complete_visit', 'animal_visits', visitData.id);
           showNotification('Vizitas sukurtas ir užbaigtas!', 'success');
         }
+      } else if (autoComplete && isEditMode) {
+        // Edit mode with auto-complete
+        await logAction('complete_visit', 'animal_visits', visitData.id);
+        showNotification('Vizitas išsaugotas ir užbaigtas!', 'success');
       } else {
-        showNotification('Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
+        showNotification(isEditMode ? 'Vizitas sėkmingai atnaujintas!' : 'Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
       }
 
       onSuccess();
