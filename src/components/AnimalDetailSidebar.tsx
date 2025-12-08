@@ -4232,16 +4232,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             >
               {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti pakeitimus' : 'Sukurti vizitą')}
             </button>
-            {!isEditMode && (
-              <button
-                type="button"
-                onClick={(e) => handleSubmit(e, true)}
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Kuriama...' : 'Sukurti ir užbaigti'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e, true)}
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti ir užbaigti' : 'Sukurti ir užbaigti')}
+            </button>
           </div>
         </form>
       </div>
