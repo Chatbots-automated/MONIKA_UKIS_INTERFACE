@@ -62,6 +62,20 @@ export function ReceiveStock() {
     received_qty: '',
   });
 
+  const [manualCreateMode, setManualCreateMode] = useState(false);
+  const [manualProductForm, setManualProductForm] = useState({
+    name: '',
+    category: 'medicines' as const,
+    subcategory: '',
+    subcategory_2: '',
+    primary_pack_unit: 'ml' as const,
+    primary_pack_size: '',
+    active_substance: '',
+    withdrawal_days_meat: '',
+    withdrawal_days_milk: '',
+    dosage_notes: '',
+  });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -575,10 +589,66 @@ export function ReceiveStock() {
     setSuccess(false);
 
     try {
-      const isInseminationProduct = formData.product_id.startsWith('insem-');
+      let productId = formData.product_id;
+
+      // If in manual create mode, create the product first
+      if (manualCreateMode) {
+        const productData: any = {
+          name: manualProductForm.name,
+          category: manualProductForm.category,
+          subcategory: manualProductForm.subcategory || null,
+          subcategory_2: manualProductForm.subcategory_2 || null,
+          primary_pack_unit: manualProductForm.primary_pack_unit,
+          primary_pack_size: parseFloat(manualProductForm.primary_pack_size),
+          active_substance: manualProductForm.active_substance || null,
+          dosage_notes: manualProductForm.dosage_notes || null,
+          is_active: true,
+        };
+
+        if (manualProductForm.withdrawal_days_meat) {
+          productData.withdrawal_days_meat = parseInt(manualProductForm.withdrawal_days_meat);
+        }
+        if (manualProductForm.withdrawal_days_milk) {
+          productData.withdrawal_days_milk = parseInt(manualProductForm.withdrawal_days_milk);
+        }
+
+        const { data: newProduct, error: productError } = await supabase
+          .from('products')
+          .insert(productData)
+          .select()
+          .single();
+
+        if (productError) throw productError;
+        productId = newProduct.id;
+
+        await logAction(
+          'create',
+          'products',
+          newProduct.id,
+          null,
+          { name: newProduct.name, category: newProduct.category }
+        );
+
+        // Reset manual create mode
+        setManualCreateMode(false);
+        setManualProductForm({
+          name: '',
+          category: 'medicines' as const,
+          subcategory: '',
+          subcategory_2: '',
+          primary_pack_unit: 'ml' as const,
+          primary_pack_size: '',
+          active_substance: '',
+          withdrawal_days_meat: '',
+          withdrawal_days_milk: '',
+          dosage_notes: '',
+        });
+      }
+
+      const isInseminationProduct = productId.startsWith('insem-');
 
       if (isInseminationProduct) {
-        const actualProductId = formData.product_id.replace('insem-', '');
+        const actualProductId = productId.replace('insem-', '');
         let receivedQty = 0;
 
         if (formData.package_size && formData.package_count) {
@@ -612,7 +682,7 @@ export function ReceiveStock() {
         );
       } else {
         const batchData: any = {
-          product_id: formData.product_id,
+          product_id: productId,
           lot: formData.lot || null,
           mfg_date: formData.mfg_date || null,
           expiry_date: formData.expiry_date || null,
@@ -641,7 +711,7 @@ export function ReceiveStock() {
           null,
           null,
           {
-            product_id: formData.product_id,
+            product_id: productId,
             lot: formData.lot,
             received_qty: formData.received_qty,
             doc_number: formData.doc_number,
@@ -1618,41 +1688,236 @@ export function ReceiveStock() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Produktas *
-              </label>
-              <select
-                value={formData.product_id}
-                onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                required
-              >
-                <option value="">Pasirinkite produktą...</option>
-                <optgroup label="Vaistai ir produktai">
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {product.primary_pack_size}{product.primary_pack_unit} ({product.category})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Sėklinimo produktai">
-                  {inseminationProducts.map((product) => (
-                    <option key={`insem-${product.id}`} value={`insem-${product.id}`}>
-                      {product.name} - {product.unit} ({product.product_type === 'SPERM' ? 'Sperma' : 'Pirštinės'})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-              {formData.product_id && (() => {
-                const selectedProduct = products.find(p => p.id === formData.product_id);
-                const selectedInsemProduct = inseminationProducts.find(p => `insem-${p.id}` === formData.product_id);
-                const unit = selectedProduct?.primary_pack_unit || selectedInsemProduct?.unit || 'vnt';
-                return (selectedProduct || selectedInsemProduct) ? (
-                  <p className="text-xs text-blue-600 mt-1 font-medium">
-                    📦 Matavimo vienetas: {unit}
-                  </p>
-                ) : null;
-              })()}
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Produktas *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualCreateMode(!manualCreateMode);
+                    setFormData({ ...formData, product_id: '' });
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {manualCreateMode ? (
+                    <>
+                      <X className="w-4 h-4" />
+                      Atšaukti kūrimą
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="w-4 h-4" />
+                      Sukurti naują produktą
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {!manualCreateMode ? (
+                <>
+                  <select
+                    value={formData.product_id}
+                    onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Pasirinkite produktą...</option>
+                    <optgroup label="Vaistai ir produktai">
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name} - {product.primary_pack_size}{product.primary_pack_unit} ({product.category})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Sėklinimo produktai">
+                      {inseminationProducts.map((product) => (
+                        <option key={`insem-${product.id}`} value={`insem-${product.id}`}>
+                          {product.name} - {product.unit} ({product.product_type === 'SPERM' ? 'Sperma' : 'Pirštinės'})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  {formData.product_id && (() => {
+                    const selectedProduct = products.find(p => p.id === formData.product_id);
+                    const selectedInsemProduct = inseminationProducts.find(p => `insem-${p.id}` === formData.product_id);
+                    const unit = selectedProduct?.primary_pack_unit || selectedInsemProduct?.unit || 'vnt';
+                    return (selectedProduct || selectedInsemProduct) ? (
+                      <p className="text-xs text-blue-600 mt-1 font-medium">
+                        📦 Matavimo vienetas: {unit}
+                      </p>
+                    ) : null;
+                  })()}
+                </>
+              ) : (
+                <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pavadinimas *
+                      </label>
+                      <input
+                        type="text"
+                        value={manualProductForm.name}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, name: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Produkto pavadinimas"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Kategorija *
+                      </label>
+                      <select
+                        value={manualProductForm.category}
+                        onChange={(e) => {
+                          const newCategory = e.target.value as any;
+                          setManualProductForm({
+                            ...manualProductForm,
+                            category: newCategory,
+                            subcategory: '',
+                            subcategory_2: '',
+                            primary_pack_unit: newCategory === 'svirkstukai' ? 'vnt' : manualProductForm.primary_pack_unit,
+                            withdrawal_days_meat: newCategory === 'medicines' ? '0' : manualProductForm.withdrawal_days_meat,
+                            withdrawal_days_milk: newCategory === 'medicines' ? '0' : manualProductForm.withdrawal_days_milk,
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="medicines">Vaistai</option>
+                        <option value="prevention">Prevencija</option>
+                        <option value="vakcina">Vakcina</option>
+                        <option value="bolusas">Bolusas</option>
+                        <option value="svirkstukai">Švirkštukai</option>
+                        <option value="hygiene">Higiena</option>
+                        <option value="biocide">Biocidas</option>
+                        <option value="technical">Techniniai</option>
+                        <option value="treatment_materials">Gydymo medžiagos</option>
+                        <option value="reproduction">Reprodukcija</option>
+                      </select>
+                    </div>
+
+                    {hasSubcategories(manualProductForm.category) && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Subkategorija
+                        </label>
+                        <select
+                          value={manualProductForm.subcategory}
+                          onChange={(e) => {
+                            setManualProductForm({
+                              ...manualProductForm,
+                              subcategory: e.target.value,
+                              subcategory_2: '',
+                            });
+                          }}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Pasirinkite subkategoriją</option>
+                          {getSubcategories(manualProductForm.category).map(sub => (
+                            <option key={sub} value={sub}>{sub}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {manualProductForm.subcategory && hasNestedSubcategories(manualProductForm.category, manualProductForm.subcategory) && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Detali subkategorija
+                        </label>
+                        <select
+                          value={manualProductForm.subcategory_2}
+                          onChange={(e) => setManualProductForm({ ...manualProductForm, subcategory_2: e.target.value })}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Pasirinkite detalią subkategoriją</option>
+                          {getNestedSubcategories(manualProductForm.category, manualProductForm.subcategory).map(sub2 => (
+                            <option key={sub2} value={sub2}>{sub2}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pakuotės dydis *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={manualProductForm.primary_pack_size}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, primary_pack_size: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="100"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Vienetas *
+                      </label>
+                      <select
+                        value={manualProductForm.primary_pack_unit}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, primary_pack_unit: e.target.value as any })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={manualProductForm.category === 'svirkstukai'}
+                      >
+                        <option value="ml">ml</option>
+                        <option value="l">L</option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                        <option value="vnt">vnt</option>
+                        <option value="tabletkė">tabletkė</option>
+                        <option value="bolus">bolus</option>
+                        <option value="syringe">syringe</option>
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Veiklioji medžiaga
+                      </label>
+                      <input
+                        type="text"
+                        value={manualProductForm.active_substance}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, active_substance: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Pvz: Amoxicillin"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Išlaukos mėsai (dienos)
+                      </label>
+                      <input
+                        type="number"
+                        value={manualProductForm.withdrawal_days_meat}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, withdrawal_days_meat: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Išlaukos pienui (dienos)
+                      </label>
+                      <input
+                        type="number"
+                        value={manualProductForm.withdrawal_days_milk}
+                        onChange={(e) => setManualProductForm({ ...manualProductForm, withdrawal_days_milk: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
