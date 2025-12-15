@@ -50,59 +50,23 @@ export function Animals() {
         supabase.from('vw_latest_animal_collars').select('*'),
       ]);
 
-      // Create a map of existing animals by ID
-      const existingAnimalsMap = new Map<string, Animal>();
-      allAnimals.forEach((animal: Animal) => {
-        existingAnimalsMap.set(animal.id, animal);
-      });
-
-      // Process collar data and merge with animals
       const collarMap = new Map<string, string>();
-      const mergedAnimals: Animal[] = [];
-
       (collarData.data || []).forEach((collar: any) => {
         if (collar.collar_no) {
           collarMap.set(collar.animal_id, collar.collar_no.toString());
         }
-
-        // If this animal_id exists in the animals table, skip it here
-        // (we'll process it below)
-        if (!existingAnimalsMap.has(collar.animal_id)) {
-          // This animal only exists in GEA, create a synthetic animal record
-          const syntheticAnimal: Animal = {
-            id: collar.animal_id,
-            tag_no: `Collar ${collar.collar_no}`,
-            species: 'bovine',
-            sex: '',
-            age_months: null,
-            holder_name: '',
-            holder_address: '',
-            collar_no: collar.collar_no.toString(),
-            neck_no: collar.collar_no.toString(),
-            created_at: collar.snapshot_date,
-          };
-          mergedAnimals.push(syntheticAnimal);
-        }
       });
 
-      // Add all existing animals with their collar numbers
-      allAnimals.forEach((animal: Animal) => {
+      const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.get(animal.id) || null;
-        mergedAnimals.push({
+        return {
           ...animal,
           collar_no: collarNo,
           neck_no: collarNo,
-        });
+        };
       });
 
-      // Sort by tag_no
-      mergedAnimals.sort((a, b) => {
-        const aValue = a.tag_no || '';
-        const bValue = b.tag_no || '';
-        return aValue.localeCompare(bValue);
-      });
-
-      setAnimals(mergedAnimals);
+      setAnimals(enrichedAnimals);
       setProducts(productsRes.data || []);
       setDiseases(diseasesRes.data || []);
     } catch (error) {

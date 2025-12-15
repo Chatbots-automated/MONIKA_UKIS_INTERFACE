@@ -78,62 +78,28 @@ export function AnimalsCompact() {
       console.log('🐄 Animals loaded:', allAnimals.length);
       console.log('📊 Collar data loaded:', collarData?.length);
 
-      // Create a map of existing animals by ID
-      const existingAnimalsMap = new Map<string, Animal>();
-      allAnimals.forEach((animal: Animal) => {
-        existingAnimalsMap.set(animal.id, animal);
-      });
-
-      // Process collar data and merge with animals
       const collarMap = new Map<string, number>();
-      const mergedAnimals: Animal[] = [];
-
       if (collarData) {
         collarData.forEach((record: any) => {
           if (record.collar_no) {
             collarMap.set(record.animal_id, record.collar_no);
-          }
-
-          // If this animal_id exists in the animals table, skip it here
-          if (!existingAnimalsMap.has(record.animal_id)) {
-            // This animal only exists in GEA, create a synthetic animal record
-            const syntheticAnimal: Animal = {
-              id: record.animal_id,
-              tag_no: `Collar ${record.collar_no}`,
-              species: 'bovine',
-              sex: '',
-              age_months: null,
-              holder_name: '',
-              holder_address: '',
-              collar_no: record.collar_no.toString(),
-              neck_no: record.collar_no.toString(),
-              created_at: record.snapshot_date,
-            };
-            mergedAnimals.push(syntheticAnimal);
           }
         });
       }
       console.log('🏷️ Animals with collar numbers:', collarMap.size);
       setGeaCollars(collarMap);
 
-      // Add all existing animals with their collar numbers
-      allAnimals.forEach((animal: Animal) => {
+      // Enrich animals with collar numbers
+      const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.has(animal.id) ? collarMap.get(animal.id)?.toString() : null;
-        mergedAnimals.push({
+        return {
           ...animal,
           collar_no: collarNo,
           neck_no: collarNo,
-        });
+        };
       });
 
-      // Sort by tag_no
-      mergedAnimals.sort((a, b) => {
-        const aValue = a.tag_no || '';
-        const bValue = b.tag_no || '';
-        return aValue.localeCompare(bValue);
-      });
-
-      setAnimals(mergedAnimals);
+      setAnimals(enrichedAnimals);
 
       const summaryMap = new Map<string, AnimalVisitSummary>();
       (summariesData || []).forEach((summary: AnimalVisitSummary) => {
