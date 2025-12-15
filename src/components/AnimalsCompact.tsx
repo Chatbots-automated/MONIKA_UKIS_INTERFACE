@@ -71,21 +71,16 @@ export function AnimalsCompact() {
       // Fetch ALL animals using pagination helper
       const allAnimals = await fetchAllRows<Animal>('animals', '*', 'tag_no');
 
-      // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
-      // Fetch latest collar numbers from gea_daily (use fetchAllRows to get all records)
-      const geaData = await fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date');
+      const { data: collarData } = await supabase.from('vw_latest_animal_collars').select('*');
 
       console.log('🐄 Animals loaded:', allAnimals.length);
-      console.log('📊 GEA records loaded:', geaData.length);
+      console.log('📊 Collar data loaded:', collarData?.length);
 
-      // Create a map of animal_id to latest collar_no
-      // Since data is sorted by snapshot_date ascending, we iterate and OVERWRITE
-      // so the last (most recent) value for each animal is kept
       const collarMap = new Map<string, number>();
-      if (geaData) {
-        geaData.forEach((record: any) => {
+      if (collarData) {
+        collarData.forEach((record: any) => {
           if (record.collar_no) {
             collarMap.set(record.animal_id, record.collar_no);
           }

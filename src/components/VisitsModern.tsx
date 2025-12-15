@@ -23,9 +23,12 @@ interface WithdrawalStatus {
 export function VisitsModern() {
   const { logAction } = useAuth();
   const [visits, setVisits] = useState<VisitWithAnimal[]>([]);
+  const [pastCompletedVisits, setPastCompletedVisits] = useState<VisitWithAnimal[]>([]);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [withdrawalStatuses, setWithdrawalStatuses] = useState<Map<string, WithdrawalStatus>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadingPastVisits, setLoadingPastVisits] = useState(false);
+  const [pastVisitsLoaded, setPastVisitsLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [neckNumberSearch, setNeckNumberSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<VisitStatus | 'all'>('all');
@@ -86,38 +89,39 @@ export function VisitsModern() {
 
   const loadData = async () => {
     try {
-      const [visitsRes, animalsData, geaData, withdrawalData] = await Promise.all([
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+      const [visitsRes, animalsData, collarData, withdrawalData] = await Promise.all([
         supabase
           .from('animal_visits')
           .select('*')
+          .or(`visit_datetime.gte.${sevenDaysAgo.toISOString()},status.neq.Baigtas`)
           .order('visit_datetime', { ascending: false }),
         fetchAllRows<Animal>('animals'),
-        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
+        supabase.from('vw_latest_animal_collars').select('*'),
         supabase.from('vw_withdrawal_status').select('*'),
       ]);
 
-      console.log('📊 Loaded visits:', visitsRes.data?.length);
+      console.log('📊 Loaded recent visits:', visitsRes.data?.length);
       console.log('📊 Loaded animals:', animalsData.length);
-      console.log('📊 Loaded GEA data:', geaData.length);
+      console.log('📊 Loaded collar data:', collarData.data?.length);
 
-      // Create withdrawal status map
       const withdrawalMap = new Map<string, WithdrawalStatus>();
       (withdrawalData.data || []).forEach((status: any) => {
         withdrawalMap.set(status.animal_id, status);
       });
       setWithdrawalStatuses(withdrawalMap);
 
-      // Create a map of animal_id to latest collar_no
-      // Data is sorted ascending, so we overwrite to keep the most recent value
       const collarMap = new Map<string, string>();
-      (geaData || []).forEach((gea: any) => {
-        if (gea.collar_no) {
-          collarMap.set(gea.animal_id, gea.collar_no.toString());
+      (collarData.data || []).forEach((collar: any) => {
+        if (collar.collar_no) {
+          collarMap.set(collar.animal_id, collar.collar_no.toString());
         }
       });
 
-      // Enrich animals with collar numbers from GEA data
-      // Neck number is the same as collar number
       const enrichedAnimals = animalsData.map((animal: Animal) => {
         const collarNo = collarMap.get(animal.id) || null;
         return {
@@ -129,7 +133,6 @@ export function VisitsModern() {
 
       const visitsWithAnimals = (visitsRes.data || []).map(visit => {
         const animal = enrichedAnimals.find((a: Animal) => a.id === visit.animal_id);
-        console.log(`Visit ${visit.id} with animal_id ${visit.animal_id} -> Found animal:`, animal?.tag_no, 'Collar:', animal?.collar_no);
         return {
           ...visit,
           animal,
@@ -252,6 +255,47 @@ export function VisitsModern() {
     document.body.removeChild(link);
   };
 
+  const loadPastCompletedVisits = async () => {
+    if (pastVisitsLoaded) {
+      setShowPastVisits(!showPastVisits);
+      return;
+    }
+
+    setLoadingPastVisits(true);
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const { data: pastVisitsData, error } = await supabase
+        .from('animal_visits')
+        .select('*')
+        .eq('status', 'Baigtas')
+        .lt('visit_datetime', sevenDaysAgo.toISOString())
+        .order('visit_datetime', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+
+      const visitsWithAnimals = (pastVisitsData || []).map(visit => {
+        const animal = animals.find((a: Animal) => a.id === visit.animal_id);
+        return {
+          ...visit,
+          animal,
+        };
+      });
+
+      setPastCompletedVisits(visitsWithAnimals);
+      setPastVisitsLoaded(true);
+      setShowPastVisits(true);
+      console.log('📊 Loaded past completed visits:', visitsWithAnimals.length);
+    } catch (error) {
+      console.error('Error loading past completed visits:', error);
+      alert('Klaida užkraunant ankstesnius vizitus');
+    } finally {
+      setLoadingPastVisits(false);
+    }
+  };
+
   const isToday = (dateStr: string) => {
     const date = new Date(dateStr);
     const today = new Date();
@@ -339,7 +383,49 @@ export function VisitsModern() {
   const laterVisits = futureIncomplete.filter(v => !isTomorrow(v.visit_datetime) && !isThisWeek(v.visit_datetime));
 
   const pastIncomplete = pastVisits.filter(v => v.status !== 'Baigtas');
-  const pastCompleted = pastVisits.filter(v => v.status === 'Baigtas');
+  const recentPastCompleted = pastVisits.filter(v => v.status === 'Baigtas');
+
+  const allPastCompleted = [...recentPastCompleted, ...pastCompletedVisits];
+
+  const filteredPastCompleted = allPastCompleted.filter(visit => {
+    if (filterStatus !== 'all' && visit.status !== filterStatus) return false;
+    if (filterProcedure !== 'all' && !visit.procedures.includes(filterProcedure)) return false;
+    if (filterVet !== 'all' && visit.vet_name !== filterVet) return false;
+
+    if (dateFrom) {
+      const visitDate = new Date(visit.visit_datetime);
+      const fromDate = new Date(dateFrom);
+      if (visitDate < fromDate) return false;
+    }
+
+    if (dateTo) {
+      const visitDate = new Date(visit.visit_datetime);
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59);
+      if (visitDate > toDate) return false;
+    }
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchesAnimal =
+        visit.animal?.tag_no?.toLowerCase().includes(term) ||
+        visit.animal?.species.toLowerCase().includes(term) ||
+        visit.animal?.holder_name?.toLowerCase().includes(term);
+      const matchesNotes = visit.notes?.toLowerCase().includes(term);
+      const matchesVet = visit.vet_name?.toLowerCase().includes(term);
+      if (!matchesAnimal && !matchesNotes && !matchesVet) return false;
+    }
+
+    if (neckNumberSearch) {
+      const neckTerm = neckNumberSearch.toLowerCase().trim();
+      const collarNo = (visit.animal as any)?.collar_no?.toLowerCase() || (visit.animal as any)?.neck_no?.toLowerCase() || '';
+      if (!collarNo.includes(neckTerm)) return false;
+    }
+
+    return true;
+  });
+
+  const pastCompleted = filteredPastCompleted;
 
   const getStatusColor = (status: VisitStatus) => {
     switch (status) {
@@ -691,10 +777,16 @@ export function VisitsModern() {
             </div>
             {!searchTerm && !neckNumberSearch && !dateFrom && !dateTo && filterStatus === 'all' && filterProcedure === 'all' && filterVet === 'all' && (
               <button
-                onClick={() => setShowPastVisits(!showPastVisits)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={loadPastCompletedVisits}
+                disabled={loadingPastVisits}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
               >
-                {showPastVisits ? (
+                {loadingPastVisits ? (
+                  <>
+                    <Clock className="w-4 h-4 animate-spin" />
+                    <span className="hidden sm:inline">Kraunama...</span>
+                  </>
+                ) : showPastVisits ? (
                   <>
                     <ChevronUp className="w-4 h-4" />
                     <span className="hidden sm:inline">Paslėpti</span>
