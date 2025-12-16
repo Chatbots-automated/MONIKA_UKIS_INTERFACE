@@ -54,19 +54,35 @@ export function Visits() {
 
   const loadData = async () => {
     try {
-      const [visitsRes, animalsRes] = await Promise.all([
+      const [visitsRes, animalsRes, collarData] = await Promise.all([
         supabase.from('animal_visits').select('*').order('visit_date', { ascending: false }),
         fetchAllRows('animals', '*', 'tag_no'),
+        supabase.from('vw_latest_animal_collars').select('*'),
       ]);
 
-      const animalsData = animalsRes || [];
+      const collarMap = new Map<string, string>();
+      (collarData.data || []).forEach((collar: any) => {
+        if (collar.collar_no) {
+          collarMap.set(collar.animal_id, collar.collar_no.toString());
+        }
+      });
+
+      const enrichedAnimals = (animalsRes || []).map((animal: Animal) => {
+        const collarNo = collarMap.get(animal.id) || null;
+        return {
+          ...animal,
+          collar_no: collarNo,
+          neck_no: collarNo,
+        };
+      });
+
       const visitsData = (visitsRes.data || []).map((visit: Visit) => ({
         ...visit,
-        animal: animalsData.find(a => a.id === visit.animal_id),
+        animal: enrichedAnimals.find(a => a.id === visit.animal_id),
       }));
 
       setVisits(visitsData);
-      setAnimals(animalsData);
+      setAnimals(enrichedAnimals);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -443,7 +459,13 @@ export function Visits() {
                         </span>
                       </div>
                       <p className="text-sm font-medium text-gray-900 mb-1">
-                        Gyvūnas: {visit.animal?.tag_no || 'N/A'} - {visit.animal?.holder_name || 'N/A'}
+                        Gyvūnas: {visit.animal?.tag_no || 'N/A'}
+                        {(visit.animal as any)?.neck_no && (
+                          <span className="ml-2 text-emerald-600 font-semibold">
+                            (Kaklo #{(visit.animal as any).neck_no})
+                          </span>
+                        )}
+                        {visit.animal?.holder_name && ` - ${visit.animal.holder_name}`}
                       </p>
                       {visit.purpose && (
                         <p className="text-sm text-gray-700 mb-1">{visit.purpose}</p>
@@ -510,7 +532,13 @@ export function Visits() {
                         </span>
                       </div>
                       <p className="text-sm font-medium text-gray-900 mb-1">
-                        Gyvūnas: {visit.animal?.tag_no || 'N/A'} - {visit.animal?.holder_name || 'N/A'}
+                        Gyvūnas: {visit.animal?.tag_no || 'N/A'}
+                        {(visit.animal as any)?.neck_no && (
+                          <span className="ml-2 text-emerald-600 font-semibold">
+                            (Kaklo #{(visit.animal as any).neck_no})
+                          </span>
+                        )}
+                        {visit.animal?.holder_name && ` - ${visit.animal.holder_name}`}
                       </p>
                       {visit.purpose && (
                         <p className="text-sm text-gray-700 mb-1">{visit.purpose}</p>

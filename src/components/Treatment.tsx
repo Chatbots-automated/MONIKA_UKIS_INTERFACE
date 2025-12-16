@@ -52,7 +52,7 @@ export function Treatment() {
   }, []);
 
   const loadData = async () => {
-    const [animalsRes, diseasesRes, productsRes, batchesRes] = await Promise.all([
+    const [animalsRes, diseasesRes, productsRes, batchesRes, collarData] = await Promise.all([
       fetchAllRows('animals', '*', 'tag_no'),
       supabase.from('diseases').select('*').order('name'),
       supabase.from('products').select('*').eq('is_active', true),
@@ -60,9 +60,26 @@ export function Treatment() {
         *,
         products!inner(name)
       `).gt('on_hand', 0),
+      supabase.from('vw_latest_animal_collars').select('*'),
     ]);
 
-    if (animalsRes) setAnimals(animalsRes);
+    const collarMap = new Map<string, string>();
+    (collarData.data || []).forEach((collar: any) => {
+      if (collar.collar_no) {
+        collarMap.set(collar.animal_id, collar.collar_no.toString());
+      }
+    });
+
+    const enrichedAnimals = (animalsRes || []).map((animal: Animal) => {
+      const collarNo = collarMap.get(animal.id) || null;
+      return {
+        ...animal,
+        collar_no: collarNo,
+        neck_no: collarNo,
+      };
+    });
+
+    if (animalsRes) setAnimals(enrichedAnimals);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
     if (productsRes.data) {
       const sortedProducts = sortByLithuanian(productsRes.data, 'name');
