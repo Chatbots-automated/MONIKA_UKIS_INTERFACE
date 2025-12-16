@@ -48,22 +48,31 @@ export function VisitsModern() {
     table: 'animal_visits',
     onInsert: useCallback(async (payload) => {
       const newVisit = payload.new as AnimalVisit;
-      // Fetch the animal data to ensure it's loaded
-      const { data: animalData } = await supabase
-        .from('animals')
-        .select('*')
-        .eq('id', newVisit.animal_id)
-        .maybeSingle();
+      // Fetch the animal data and collar number
+      const [animalRes, collarRes] = await Promise.all([
+        supabase.from('animals').select('*').eq('id', newVisit.animal_id).maybeSingle(),
+        supabase.from('vw_latest_animal_collars').select('*').eq('animal_id', newVisit.animal_id).maybeSingle()
+      ]);
 
-      setVisits(prev => [{ ...newVisit, animal: animalData || undefined }, ...prev].sort((a, b) =>
+      const animalData = animalRes.data;
+      const collarData = collarRes.data;
+
+      // Enrich animal with collar number
+      const enrichedAnimal = animalData ? {
+        ...animalData,
+        collar_no: collarData?.collar_no?.toString() || null,
+        neck_no: collarData?.collar_no?.toString() || null,
+      } : undefined;
+
+      setVisits(prev => [{ ...newVisit, animal: enrichedAnimal }, ...prev].sort((a, b) =>
         new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime()
       ));
 
       // Update animals list if this is a new animal
-      if (animalData) {
+      if (enrichedAnimal) {
         setAnimals(prev => {
-          if (!prev.find(a => a.id === animalData.id)) {
-            return [...prev, animalData];
+          if (!prev.find(a => a.id === enrichedAnimal.id)) {
+            return [...prev, enrichedAnimal];
           }
           return prev;
         });
@@ -71,15 +80,24 @@ export function VisitsModern() {
     }, []),
     onUpdate: useCallback(async (payload) => {
       const updatedVisit = payload.new as AnimalVisit;
-      // Fetch the animal data to ensure it's loaded
-      const { data: animalData } = await supabase
-        .from('animals')
-        .select('*')
-        .eq('id', updatedVisit.animal_id)
-        .maybeSingle();
+      // Fetch the animal data and collar number
+      const [animalRes, collarRes] = await Promise.all([
+        supabase.from('animals').select('*').eq('id', updatedVisit.animal_id).maybeSingle(),
+        supabase.from('vw_latest_animal_collars').select('*').eq('animal_id', updatedVisit.animal_id).maybeSingle()
+      ]);
+
+      const animalData = animalRes.data;
+      const collarData = collarRes.data;
+
+      // Enrich animal with collar number
+      const enrichedAnimal = animalData ? {
+        ...animalData,
+        collar_no: collarData?.collar_no?.toString() || null,
+        neck_no: collarData?.collar_no?.toString() || null,
+      } : undefined;
 
       setVisits(prev => prev.map(visit =>
-        visit.id === updatedVisit.id ? { ...updatedVisit, animal: animalData || undefined } : visit
+        visit.id === updatedVisit.id ? { ...updatedVisit, animal: enrichedAnimal } : visit
       ));
     }, []),
     onDelete: useCallback((payload) => {
