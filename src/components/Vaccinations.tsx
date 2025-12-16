@@ -77,24 +77,18 @@ export function Vaccinations() {
 
   const loadData = async () => {
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const [vacsRes, prodsRes, animalsRes, batchesRes, collarData] = await Promise.all([
-        supabase
-          .from('vaccinations')
-          .select('*')
-          .gte('vaccination_date', thirtyDaysAgo.toISOString())
-          .order('vaccination_date', { ascending: false }),
+      const [vacsRes, prodsRes, animalsRes, batchesRes, geaData] = await Promise.all([
+        supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
         fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
-        supabase.from('vw_latest_animal_collars').select('*'),
+        fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date'),
       ]);
 
+      // Create collar map
       const collarMap = new Map<string, number>();
-      if (collarData.data) {
-        collarData.data.forEach((record: any) => {
+      if (geaData) {
+        geaData.forEach((record: any) => {
           if (record.collar_no) {
             collarMap.set(record.animal_id, record.collar_no);
           }
@@ -106,9 +100,6 @@ export function Vaccinations() {
       setProducts(prodsRes.data || []);
       setAnimals(animalsRes || []);
       setBatches(batchesRes.data || []);
-
-      console.log('📊 Loaded vaccinations (last 30 days):', vacsRes.data?.length);
-      console.log('📊 Loaded collar data:', collarData.data?.length);
     } catch (error) {
       console.error('Error:', error);
     } finally {

@@ -91,31 +91,14 @@ export function TreatmentCompact() {
 
   const loadData = async () => {
     try {
-      const [animalsData, productsRes, diseasesRes, batchesRes, collarData] = await Promise.all([
+      const [animalsData, productsRes, diseasesRes, batchesRes] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true).order('name'),
         supabase.from('diseases').select('*').order('name'),
         supabase.from('batches').select('*').order('expiry_date'),
-        supabase.from('vw_latest_animal_collars').select('*'),
       ]);
 
-      const collarMap = new Map<string, string>();
-      (collarData.data || []).forEach((collar: any) => {
-        if (collar.collar_no) {
-          collarMap.set(collar.animal_id, collar.collar_no.toString());
-        }
-      });
-
-      const enrichedAnimals = (animalsData || []).map((animal: Animal) => {
-        const collarNo = collarMap.get(animal.id) || null;
-        return {
-          ...animal,
-          collar_no: collarNo,
-          neck_no: collarNo,
-        };
-      });
-
-      setAnimals(enrichedAnimals);
+      setAnimals(animalsData || []);
       setProducts(productsRes.data || []);
       setDiseases(diseasesRes.data || []);
       setBatches(batchesRes.data || []);

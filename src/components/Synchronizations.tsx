@@ -36,27 +36,27 @@ export function Synchronizations() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [allAnimals, collarData] = await Promise.all([
+      // Load animals and GEA data in parallel
+      const [allAnimals, geaData] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
-        supabase.from('vw_latest_animal_collars').select('*')
+        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'animal_id')
       ]);
 
+      // Create a map of animal_id to collar_no (get the latest collar_no for each animal)
       const collarMap = new Map<string, number>();
-      (collarData.data || []).forEach((collar: any) => {
-        if (collar.collar_no) {
-          collarMap.set(collar.animal_id, collar.collar_no);
+      geaData.forEach(gea => {
+        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
+          collarMap.set(gea.animal_id, gea.collar_no);
         }
       });
 
+      // Enrich animals with collar numbers
       const enrichedAnimals = allAnimals.map(animal => ({
         ...animal,
         collar_no: collarMap.get(animal.id)
       }));
 
       setAnimals(enrichedAnimals);
-
-      console.log('📊 Loaded animals:', allAnimals.length);
-      console.log('📊 Loaded collar data:', collarData.data?.length);
 
       const today = new Date().toISOString().split('T')[0];
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];

@@ -43,20 +43,24 @@ export function Animals() {
 
   const loadData = async () => {
     try {
-      const [allAnimals, productsRes, diseasesRes, collarData] = await Promise.all([
+      const [allAnimals, productsRes, diseasesRes, geaData] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
-        supabase.from('vw_latest_animal_collars').select('*'),
+        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
       ]);
 
+      // Create a map of animal_id to latest collar_no
+      // Data is sorted ascending, so we overwrite to keep the most recent value
       const collarMap = new Map<string, string>();
-      (collarData.data || []).forEach((collar: any) => {
-        if (collar.collar_no) {
-          collarMap.set(collar.animal_id, collar.collar_no.toString());
+      (geaData || []).forEach((gea: any) => {
+        if (gea.collar_no) {
+          collarMap.set(gea.animal_id, gea.collar_no.toString());
         }
       });
 
+      // Enrich animals with collar numbers from GEA data
+      // Neck number is the same as collar number
       const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.get(animal.id) || null;
         return {
