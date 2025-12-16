@@ -131,23 +131,26 @@ export function parseNumberInput(value: string): number {
  * Fetch latest collar numbers for all animals
  * Uses optimized view instead of full gea_daily table scan
  * Returns a Map of animal_id -> collar_no for fast lookups
+ * Uses pagination to handle more than 1000 animals
  */
 export async function fetchLatestCollarNumbers(): Promise<Map<string, number>> {
-  const { data, error } = await supabase
-    .from('vw_animal_latest_collar')
-    .select('animal_id, collar_no');
+  try {
+    // Use fetchAllRows to handle pagination automatically
+    const data = await fetchAllRows<{ animal_id: string; collar_no: number }>(
+      'vw_animal_latest_collar',
+      'animal_id, collar_no'
+    );
 
-  if (error) {
+    const collarMap = new Map<string, number>();
+    data.forEach((record) => {
+      if (record.collar_no) {
+        collarMap.set(record.animal_id, record.collar_no);
+      }
+    });
+
+    return collarMap;
+  } catch (error) {
     console.error('Error fetching collar numbers:', error);
     return new Map();
   }
-
-  const collarMap = new Map<string, number>();
-  (data || []).forEach((record: any) => {
-    if (record.collar_no) {
-      collarMap.set(record.animal_id, record.collar_no);
-    }
-  });
-
-  return collarMap;
 }
