@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchAllRows, normalizeNumberInput } from '../lib/helpers';
+import { fetchAllRows, normalizeNumberInput, fetchLatestCollarNumbers } from '../lib/helpers';
 import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -77,25 +77,15 @@ export function Vaccinations() {
 
   const loadData = async () => {
     try {
-      const [vacsRes, prodsRes, animalsRes, batchesRes, geaData] = await Promise.all([
+      const [vacsRes, prodsRes, animalsRes, batchesRes, collarMap] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
         fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
-        fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date'),
+        fetchLatestCollarNumbers(),
       ]);
 
-      // Create collar map
-      const collarMap = new Map<string, number>();
-      if (geaData) {
-        geaData.forEach((record: any) => {
-          if (record.collar_no) {
-            collarMap.set(record.animal_id, record.collar_no);
-          }
-        });
-      }
       setGeaCollars(collarMap);
-
       setVaccinations(vacsRes.data || []);
       setProducts(prodsRes.data || []);
       setAnimals(animalsRes || []);

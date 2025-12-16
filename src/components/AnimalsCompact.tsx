@@ -6,7 +6,7 @@ import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers } from '../lib/helpers';
 
 interface GeaCollarData {
   animal_id: string;
@@ -74,24 +74,12 @@ export function AnimalsCompact() {
       // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
-      // Fetch latest collar numbers from gea_daily (use fetchAllRows to get all records)
-      const geaData = await fetchAllRows<GeaCollarData>('gea_daily', 'animal_id, collar_no, snapshot_date', 'snapshot_date');
+      // Fetch latest collar numbers from optimized view
+      const collarMap = await fetchLatestCollarNumbers();
 
       console.log('🐄 Animals loaded:', allAnimals.length);
-      console.log('📊 GEA records loaded:', geaData.length);
-
-      // Create a map of animal_id to latest collar_no
-      // Since data is sorted by snapshot_date ascending, we iterate and OVERWRITE
-      // so the last (most recent) value for each animal is kept
-      const collarMap = new Map<string, number>();
-      if (geaData) {
-        geaData.forEach((record: any) => {
-          if (record.collar_no) {
-            collarMap.set(record.animal_id, record.collar_no);
-          }
-        });
-      }
       console.log('🏷️ Animals with collar numbers:', collarMap.size);
+
       setGeaCollars(collarMap);
 
       // Enrich animals with collar numbers

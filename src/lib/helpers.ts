@@ -126,3 +126,28 @@ export function parseNumberInput(value: string): number {
   const normalized = normalizeNumberInput(value);
   return parseFloat(normalized);
 }
+
+/**
+ * Fetch latest collar numbers for all animals
+ * Uses optimized view instead of full gea_daily table scan
+ * Returns a Map of animal_id -> collar_no for fast lookups
+ */
+export async function fetchLatestCollarNumbers(): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from('vw_animal_latest_collar')
+    .select('animal_id, collar_no');
+
+  if (error) {
+    console.error('Error fetching collar numbers:', error);
+    return new Map();
+  }
+
+  const collarMap = new Map<string, number>();
+  (data || []).forEach((record: any) => {
+    if (record.collar_no) {
+      collarMap.set(record.animal_id, record.collar_no);
+    }
+  });
+
+  return collarMap;
+}

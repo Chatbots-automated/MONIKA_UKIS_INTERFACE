@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers } from '../lib/helpers';
 import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
@@ -43,30 +43,21 @@ export function Animals() {
 
   const loadData = async () => {
     try {
-      const [allAnimals, productsRes, diseasesRes, geaData] = await Promise.all([
+      const [allAnimals, productsRes, diseasesRes, collarMap] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
-        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'snapshot_date'),
+        fetchLatestCollarNumbers(),
       ]);
 
-      // Create a map of animal_id to latest collar_no
-      // Data is sorted ascending, so we overwrite to keep the most recent value
-      const collarMap = new Map<string, string>();
-      (geaData || []).forEach((gea: any) => {
-        if (gea.collar_no) {
-          collarMap.set(gea.animal_id, gea.collar_no.toString());
-        }
-      });
-
-      // Enrich animals with collar numbers from GEA data
+      // Enrich animals with collar numbers from optimized view
       // Neck number is the same as collar number
       const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.get(animal.id) || null;
         return {
           ...animal,
-          collar_no: collarNo,
-          neck_no: collarNo,
+          collar_no: collarNo?.toString() || null,
+          neck_no: collarNo?.toString() || null,
         };
       });
 

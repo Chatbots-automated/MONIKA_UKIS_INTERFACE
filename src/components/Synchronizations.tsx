@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { SynchronizationStepWithDetails, Animal } from '../lib/types';
 import { formatDateLT, formatDateTimeLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAllRows, formatAnimalDisplay } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers } from '../lib/helpers';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { InseminationModal } from './InseminationModal';
 
@@ -36,21 +36,13 @@ export function Synchronizations() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load animals and GEA data in parallel
-      const [allAnimals, geaData] = await Promise.all([
+      // Load animals and collar data in parallel
+      const [allAnimals, collarMap] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
-        fetchAllRows<any>('gea_daily', 'animal_id, collar_no', 'animal_id')
+        fetchLatestCollarNumbers()
       ]);
 
-      // Create a map of animal_id to collar_no (get the latest collar_no for each animal)
-      const collarMap = new Map<string, number>();
-      geaData.forEach(gea => {
-        if (gea.collar_no && !collarMap.has(gea.animal_id)) {
-          collarMap.set(gea.animal_id, gea.collar_no);
-        }
-      });
-
-      // Enrich animals with collar numbers
+      // Enrich animals with collar numbers from optimized view
       const enrichedAnimals = allAnimals.map(animal => ({
         ...animal,
         collar_no: collarMap.get(animal.id)
