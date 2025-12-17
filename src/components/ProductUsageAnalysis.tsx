@@ -62,23 +62,30 @@ export function ProductUsageAnalysis() {
       setLoading(true);
       console.log('🔄 Loading product usage data...');
 
-      // 1. Get all usage_items with product details
-      const usageItems = await fetchAllRows<any>(
-        'usage_items',
-        'id, qty, created_at, treatment_id, product_id, batch_id'
-      );
+      // Calculate 90 days ago for time filtering (to match cost analysis view)
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
 
-      console.log('✅ Usage items loaded:', usageItems.length);
+      // 1. Get usage_items from last 90 days
+      const { data: usageItems, error: usageError } = await supabase
+        .from('usage_items')
+        .select('id, qty, created_at, treatment_id, product_id, batch_id')
+        .gte('created_at', ninetyDaysAgoStr);
 
-      // 2. Get all vaccinations
-      const vaccinations = await fetchAllRows<any>(
-        'vaccinations',
-        'id, dose_amount, unit, vaccination_date, animal_id, product_id, batch_id'
-      );
+      if (usageError) throw usageError;
+      console.log('✅ Usage items loaded (last 90 days):', usageItems?.length || 0);
 
-      console.log('✅ Vaccinations loaded:', vaccinations.length);
+      // 2. Get vaccinations from last 90 days
+      const { data: vaccinations, error: vaccError } = await supabase
+        .from('vaccinations')
+        .select('id, dose_amount, unit, vaccination_date, animal_id, product_id, batch_id')
+        .gte('vaccination_date', ninetyDaysAgoStr);
 
-      // 3. Get synchronization steps (sync medications)
+      if (vaccError) throw vaccError;
+      console.log('✅ Vaccinations loaded (last 90 days):', vaccinations?.length || 0);
+
+      // 3. Get synchronization steps from last 90 days
       const { data: syncSteps, error: syncStepsError } = await supabase
         .from('synchronization_steps')
         .select(`
@@ -91,14 +98,15 @@ export function ProductUsageAnalysis() {
           batches(id, product_id, purchase_price, received_qty)
         `)
         .eq('completed', true)
-        .not('batch_id', 'is', null);
+        .not('batch_id', 'is', null)
+        .gte('completed_at', ninetyDaysAgoStr);
 
       if (syncStepsError) {
         console.error('Sync steps error:', syncStepsError);
         throw syncStepsError;
       }
 
-      console.log('✅ Sync steps loaded:', syncSteps?.length || 0);
+      console.log('✅ Sync steps loaded (last 90 days):', syncSteps?.length || 0);
 
       // Get synchronizations for animal lookup
       const synchronizations = await fetchAllRows<any>('animal_synchronizations', 'id, animal_id');
@@ -389,19 +397,40 @@ export function ProductUsageAnalysis() {
     return sortOrder === 'desc' ? -compareValue : compareValue;
   });
 
-  const totalStats = usageData.reduce(
-    (acc, product) => ({
-      totalProducts: acc.totalProducts + 1,
-      totalCost: acc.totalCost + product.total_cost,
-      totalUsages: acc.totalUsages + product.usage_count,
-      totalAnimals: acc.totalAnimals + product.animals_treated,
-    }),
+  // Helper function to filter usages by date range
+  const getFilteredUsages = (product: ProductUsageRecord) => {
+    if (!startDate && !endDate) {
+      return product.usages;
+    }
+    return product.usages.filter(usage => {
+      const usageDate = new Date(usage.date);
+      if (startDate && usageDate < new Date(startDate)) return false;
+      if (endDate && usageDate > new Date(endDate + 'T23:59:59')) return false;
+      return true;
+    });
+  };
+
+  // Calculate totals based on filtered data and date range
+  const totalStats = filteredData.reduce(
+    (acc, product) => {
+      const filteredUsages = getFilteredUsages(product);
+      const productCost = filteredUsages.reduce((sum, u) => sum + u.total_cost, 0);
+      const uniqueAnimals = new Set(filteredUsages.map(u => u.animal_id));
+
+      return {
+        totalProducts: acc.totalProducts + (filteredUsages.length > 0 ? 1 : 0),
+        totalCost: acc.totalCost + productCost,
+        totalUsages: acc.totalUsages + filteredUsages.length,
+        totalAnimals: acc.totalAnimals + uniqueAnimals.size,
+      };
+    },
     { totalProducts: 0, totalCost: 0, totalUsages: 0, totalAnimals: 0 }
   );
 
-  // Calculate breakdown by source
-  const sourceBreakdown = usageData.reduce((acc, product) => {
-    product.usages.forEach(usage => {
+  // Calculate breakdown by source based on filtered data and date range
+  const sourceBreakdown = filteredData.reduce((acc, product) => {
+    const filteredUsages = getFilteredUsages(product);
+    filteredUsages.forEach(usage => {
       if (usage.source === 'usage_items') {
         acc.usageItems += usage.total_cost;
       } else if (usage.source === 'vaccinations') {
@@ -617,6 +646,13 @@ export function ProductUsageAnalysis() {
                 {sortedData.map((product) => {
                   const isExpanded = expandedProduct === product.product_id;
 
+                  // Calculate filtered values based on date range
+                  const filteredUsages = getFilteredUsages(product);
+                  const filteredQuantity = filteredUsages.reduce((sum, u) => sum + u.quantity, 0);
+                  const filteredCost = filteredUsages.reduce((sum, u) => sum + u.total_cost, 0);
+                  const filteredCount = filteredUsages.length;
+                  const filteredAnimals = new Set(filteredUsages.map(u => u.animal_id)).size;
+
                   return (
                     <React.Fragment key={product.product_id}>
                       <tr
@@ -643,18 +679,18 @@ export function ProductUsageAnalysis() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="font-semibold text-gray-900">
-                            {formatNumberLT(product.total_quantity)} {product.unit}
+                            {formatNumberLT(filteredQuantity)} {product.unit}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <div className="text-gray-900">{product.usage_count}</div>
+                          <div className="text-gray-900">{filteredCount}</div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <div className="text-gray-900">{product.animals_treated}</div>
+                          <div className="text-gray-900">{filteredAnimals}</div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="text-lg font-bold text-blue-600">
-                            {formatCost(product.total_cost)}
+                            {formatCost(filteredCost)}
                           </div>
                         </td>
                       </tr>
@@ -679,15 +715,15 @@ export function ProductUsageAnalysis() {
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-600">Panaudota:</span>
+                                    <span className="text-sm text-gray-600">Panaudota{(startDate || endDate) ? ' (filtruota)' : ''}:</span>
                                     <span className="text-sm font-bold text-orange-700">
-                                      {formatNumberLT(product.total_used)} {product.unit}
+                                      {formatNumberLT(filteredQuantity)} {product.unit}
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center pt-2 border-t border-gray-300">
                                     <span className="text-sm font-semibold text-gray-700">Likutis:</span>
-                                    <span className={`text-sm font-bold ${product.remaining_stock > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                      {formatNumberLT(product.remaining_stock)} {product.unit}
+                                    <span className={`text-sm font-bold ${(product.total_received - filteredQuantity) > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                      {formatNumberLT(product.total_received - filteredQuantity)} {product.unit}
                                     </span>
                                   </div>
                                 </div>
@@ -720,14 +756,14 @@ export function ProductUsageAnalysis() {
                                   <div className="flex items-center gap-2">
                                     <Activity className="w-5 h-5 text-orange-600" />
                                     <h4 className="text-sm font-bold text-gray-900">
-                                      Panaudojimo Istorija ({product.usages.length})
+                                      Panaudojimo Istorija ({filteredUsages.length})
                                     </h4>
                                   </div>
-                                  <span className="text-xs text-gray-500">Rodyti visi {product.usages.length} įrašai</span>
+                                  <span className="text-xs text-gray-500">Rodyti visi {filteredUsages.length} įrašai</span>
                                 </div>
 
                                 <div className="space-y-2" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                  {product.usages
+                                  {filteredUsages
                                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                     .map((usage, idx) => (
                                       <div
