@@ -62,30 +62,23 @@ export function ProductUsageAnalysis() {
       setLoading(true);
       console.log('🔄 Loading product usage data...');
 
-      // Calculate 90 days ago for time filtering (to match cost analysis view)
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
+      // 1. Get all usage_items
+      const usageItems = await fetchAllRows<any>(
+        'usage_items',
+        'id, qty, created_at, treatment_id, product_id, batch_id'
+      );
 
-      // 1. Get usage_items from last 90 days
-      const { data: usageItems, error: usageError } = await supabase
-        .from('usage_items')
-        .select('id, qty, created_at, treatment_id, product_id, batch_id')
-        .gte('created_at', ninetyDaysAgoStr);
+      console.log('✅ Usage items loaded:', usageItems.length);
 
-      if (usageError) throw usageError;
-      console.log('✅ Usage items loaded (last 90 days):', usageItems?.length || 0);
+      // 2. Get all vaccinations
+      const vaccinations = await fetchAllRows<any>(
+        'vaccinations',
+        'id, dose_amount, unit, vaccination_date, animal_id, product_id, batch_id'
+      );
 
-      // 2. Get vaccinations from last 90 days
-      const { data: vaccinations, error: vaccError } = await supabase
-        .from('vaccinations')
-        .select('id, dose_amount, unit, vaccination_date, animal_id, product_id, batch_id')
-        .gte('vaccination_date', ninetyDaysAgoStr);
+      console.log('✅ Vaccinations loaded:', vaccinations.length);
 
-      if (vaccError) throw vaccError;
-      console.log('✅ Vaccinations loaded (last 90 days):', vaccinations?.length || 0);
-
-      // 3. Get synchronization steps from last 90 days
+      // 3. Get all synchronization steps
       const { data: syncSteps, error: syncStepsError } = await supabase
         .from('synchronization_steps')
         .select(`
@@ -98,15 +91,14 @@ export function ProductUsageAnalysis() {
           batches(id, product_id, purchase_price, received_qty)
         `)
         .eq('completed', true)
-        .not('batch_id', 'is', null)
-        .gte('completed_at', ninetyDaysAgoStr);
+        .not('batch_id', 'is', null);
 
       if (syncStepsError) {
         console.error('Sync steps error:', syncStepsError);
         throw syncStepsError;
       }
 
-      console.log('✅ Sync steps loaded (last 90 days):', syncSteps?.length || 0);
+      console.log('✅ Sync steps loaded:', syncSteps?.length || 0);
 
       // Get synchronizations for animal lookup
       const synchronizations = await fetchAllRows<any>('animal_synchronizations', 'id, animal_id');

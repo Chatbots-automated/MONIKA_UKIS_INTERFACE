@@ -78,35 +78,22 @@ export function TreatmentCostAnalysis() {
     try {
       setLoading(true);
 
-      // Calculate 90 days ago for time filtering (to match profitability view)
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
-
       // Get all animals using pagination helper
       const animals = await fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no', 'tag_no');
 
       console.log('Animals loaded:', animals?.length);
 
-      // Get all treatments from last 90 days (to match profitability view)
-      const { data: treatments, error: treatmentsError } = await supabase
-        .from('treatments')
-        .select(`
-          id,
-          animal_id,
-          disease_id,
-          reg_date,
-          outcome,
-          diseases(name)
-        `)
-        .gte('reg_date', ninetyDaysAgoStr);
+      // Get all treatments (all time)
+      const treatments = await fetchAllRows<any>('treatments', `
+        id,
+        animal_id,
+        disease_id,
+        reg_date,
+        outcome,
+        diseases(name)
+      `);
 
-      if (treatmentsError) {
-        console.error('Treatments error:', treatmentsError);
-        throw treatmentsError;
-      }
-
-      console.log('Treatments loaded (last 90 days):', treatments?.length);
+      console.log('Treatments loaded:', treatments?.length);
 
       // Get all usage items with batch info
       const { data: usageItems, error: usageError } = await supabase
@@ -127,7 +114,7 @@ export function TreatmentCostAnalysis() {
 
       console.log('Usage items loaded:', usageItems?.length);
 
-      // Get vaccinations from last 90 days with batch info (to match profitability view)
+      // Get all vaccinations with batch info (all time)
       const { data: vaccinations, error: vaccinationsError } = await supabase
         .from('vaccinations')
         .select(`
@@ -137,31 +124,24 @@ export function TreatmentCostAnalysis() {
           batch_id,
           vaccination_date,
           batches(purchase_price, received_qty)
-        `)
-        .gte('vaccination_date', ninetyDaysAgoStr);
+        `);
 
       if (vaccinationsError) {
         console.error('Vaccinations error:', vaccinationsError);
         throw vaccinationsError;
       }
 
-      console.log('Vaccinations loaded (last 90 days):', vaccinations?.length);
+      console.log('Vaccinations loaded:', vaccinations?.length);
 
-      // Get all visits from last 90 days (for counting only)
+      // Get all visits (for counting only)
       const { data: visits, error: visitsError } = await supabase
         .from('animal_visits')
-        .select('id, animal_id, visit_datetime, status')
-        .gte('visit_datetime', ninetyDaysAgoStr);
+        .select('id, animal_id, visit_datetime, status');
 
       if (visitsError) throw visitsError;
 
       // Get all synchronization data for sync medication costs
-      const { data: syncs, error: syncsError } = await supabase
-        .from('animal_synchronizations')
-        .select('id, animal_id, start_date')
-        .gte('start_date', ninetyDaysAgoStr);
-
-      if (syncsError) throw syncsError;
+      const syncs = await fetchAllRows<any>('animal_synchronizations', 'id, animal_id, start_date');
 
       // Get completed synchronization steps with batch info
       const { data: syncSteps, error: syncStepsError } = await supabase
@@ -176,8 +156,7 @@ export function TreatmentCostAnalysis() {
           batches(purchase_price, received_qty)
         `)
         .eq('completed', true)
-        .not('batch_id', 'is', null)
-        .gte('completed_at', ninetyDaysAgoStr);
+        .not('batch_id', 'is', null);
 
       if (syncStepsError) throw syncStepsError;
 
