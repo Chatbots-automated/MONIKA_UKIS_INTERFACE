@@ -227,8 +227,8 @@ export function TreatmentCostAnalysis() {
 
         const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
 
-        // Include animals with any treatment activity
-        if (animalTreatments.length > 0 || animalVaccinations.length > 0 || visitCount > 0) {
+        // Include animals with any treatment activity OR synchronizations
+        if (animalTreatments.length > 0 || animalVaccinations.length > 0 || visitCount > 0 || animalSyncs.length > 0) {
           animalCosts.push({
             animal_id: animal.id,
             tag_no: animal.tag_no,
