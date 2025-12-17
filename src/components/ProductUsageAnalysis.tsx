@@ -39,7 +39,7 @@ interface UsageDetail {
   total_cost: number;
   visit_id: string | null;
   treatment_id: string | null;
-  source: 'usage_items' | 'vaccinations';
+  source: 'usage_items' | 'vaccinations' | 'sync';
 }
 
 export function ProductUsageAnalysis() {
@@ -215,6 +215,10 @@ export function ProductUsageAnalysis() {
             usage_count: 0,
             animals_treated: 0,
             usages: [],
+            inventory_additions: [],
+            total_received: 0,
+            total_used: 0,
+            remaining_stock: 0
           });
         }
 
@@ -291,7 +295,7 @@ export function ProductUsageAnalysis() {
           total_cost: totalCost,
           visit_id: null,
           treatment_id: null,
-          source: 'usage_items', // sync medications are tracked similarly to usage_items
+          source: 'sync', // sync medications are tracked separately
         });
       }
       console.log('✅ Sync medications processed');
@@ -402,10 +406,12 @@ export function ProductUsageAnalysis() {
         acc.usageItems += usage.total_cost;
       } else if (usage.source === 'vaccinations') {
         acc.vaccinations += usage.total_cost;
+      } else if (usage.source === 'sync') {
+        acc.sync += usage.total_cost;
       }
     });
     return acc;
-  }, { usageItems: 0, vaccinations: 0 });
+  }, { usageItems: 0, vaccinations: 0, sync: 0 });
 
   if (loading) {
     return (
@@ -476,10 +482,14 @@ export function ProductUsageAnalysis() {
         {/* Source Breakdown */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="text-xs font-semibold text-gray-600 uppercase mb-2">Išlaidų paskirstymas pagal šaltinį:</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
               <span className="text-sm text-gray-600">Gydymo vaistai:</span>
               <span className="text-sm font-semibold text-gray-900">{formatCost(sourceBreakdown.usageItems)}</span>
+            </div>
+            <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <span className="text-sm text-gray-600">Sinchronizacijos vaistai:</span>
+              <span className="text-sm font-semibold text-gray-900">{formatCost(sourceBreakdown.sync)}</span>
             </div>
             <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
               <span className="text-sm text-gray-600">Vakcinacijos:</span>
@@ -734,6 +744,7 @@ export function ProductUsageAnalysis() {
                                               <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
                                                 {usage.source === 'usage_items' ? 'Gydymas' :
                                                  usage.source === 'vaccinations' ? 'Vakcina' :
+                                                 usage.source === 'sync' ? 'Sinchronizacija' :
                                                  'Planuotas'}
                                               </span>
                                             </div>
