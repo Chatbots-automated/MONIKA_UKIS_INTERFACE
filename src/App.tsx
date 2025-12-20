@@ -26,9 +26,9 @@ import { InvoiceViewer } from './components/InvoiceViewer';
 import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
-import { Euro } from 'lucide-react';
+import { Euro, Droplets } from 'lucide-react';
 
-type Module = 'veterinarija' | 'islaidos' | 'admin' | null;
+type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | null;
 
 interface Notification {
   id: string;
@@ -100,6 +100,38 @@ function App() {
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
               <InvoiceViewer />
+            </div>
+          </div>
+        </div>
+      </RealtimeProvider>
+    );
+  }
+
+  if (selectedModule === 'pienas') {
+    return (
+      <RealtimeProvider>
+        <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-cyan-50">
+          <div className="max-w-7xl mx-auto p-8">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Droplets className="w-10 h-10 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">Pieno Apskaita</h1>
+                  <p className="text-gray-600">Gamyba ir kokybės valdymas</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedModule(null)}
+                className="px-4 py-2 bg-white text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors border border-gray-300 shadow-sm"
+              >
+                Grįžti
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <Pienas />
             </div>
           </div>
         </div>

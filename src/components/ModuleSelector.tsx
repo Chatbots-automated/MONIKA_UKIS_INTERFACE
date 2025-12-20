@@ -1,8 +1,8 @@
-import { Stethoscope, Euro, ArrowRight, Package, Shield, Users } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ModuleSelectorProps {
-  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin') => void;
+  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas') => void;
 }
 
 export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
@@ -35,7 +35,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           </p>
         </div>
 
-        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-3 max-w-6xl' : 'md:grid-cols-2 max-w-4xl'} gap-8 mx-auto`}>
+        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-4 max-w-7xl' : 'md:grid-cols-2 lg:grid-cols-3 max-w-6xl'} gap-8 mx-auto`}>
           <button
             onClick={() => onSelectModule('veterinarija')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
@@ -148,6 +148,64 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
               </div>
 
               <div className="flex items-center justify-center gap-2 text-amber-600 font-semibold group-hover:gap-4 transition-all">
+                <span>Atidaryti sistemą</span>
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onSelectModule('pienas')}
+            className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
+          >
+            <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-8 text-center">
+              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Droplets className="w-12 h-12 text-cyan-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-white mb-2">
+                Pienas
+              </h2>
+              <p className="text-cyan-100">
+                Pieno Apskaita
+              </p>
+            </div>
+
+            <div className="p-8">
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-cyan-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Activity className="w-4 h-4 text-cyan-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Gamybos įrašai</p>
+                    <p className="text-sm text-gray-600">Realaus laiko melžimo duomenys</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-cyan-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Beaker className="w-4 h-4 text-cyan-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Pieno tyrimai</p>
+                    <p className="text-sm text-gray-600">Kokybės analizė ir SCC</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-cyan-100 rounded-full flex items-center justify-center mt-0.5">
+                    <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Analitika</p>
+                    <p className="text-sm text-gray-600">Gamybos ir kokybės ataskaitos</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-cyan-600 font-semibold group-hover:gap-4 transition-all">
                 <span>Atidaryti sistemą</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </div>
