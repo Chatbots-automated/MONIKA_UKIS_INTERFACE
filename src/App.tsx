@@ -8,6 +8,7 @@ import { AnimalsCompact as Animals } from './components/AnimalsCompact';
 import { VisitsModern as Visits } from './components/VisitsModern';
 import { Synchronizations } from './components/Synchronizations';
 import { Seklinimas } from './components/Seklinimas';
+import { Pienas } from './components/Pienas';
 import { Hoofs } from './components/Hoofs';
 import { Suppliers } from './components/Suppliers';
 import { Biocides } from './components/Biocides';
@@ -154,6 +155,8 @@ function App() {
         return <Synchronizations />;
       case 'insemination':
         return <Seklinimas />;
+      case 'pienas':
+        return <Pienas />;
       case 'suppliers':
         return <Suppliers />;
       case 'biocides':
