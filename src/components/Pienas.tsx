@@ -66,7 +66,51 @@ interface MilkAnalytics {
   latest_milking_time?: string;
 }
 
-type TabType = 'overview' | 'production' | 'tests' | 'analytics';
+interface MilkProducer {
+  id: string;
+  gamintojo_id: string;
+  gamintojas_code: string;
+  label: string;
+  imone: string;
+  rajonas: string;
+  punktas: string;
+  updated_at: string;
+}
+
+interface MilkCompositionTest {
+  id: string;
+  producer_id: string;
+  paemimo_data: string;
+  tyrimo_data: string;
+  riebalu_kiekis?: number;
+  baltymu_kiekis?: number;
+  laktozes_kiekis?: number;
+  ureja_mg_100ml?: number;
+  ph?: number;
+  pastaba?: string;
+  konteineris: string;
+  prot_nr: string;
+}
+
+interface MilkQualityTest {
+  id: string;
+  producer_id: string;
+  paemimo_data: string;
+  tyrimo_data: string;
+  somatiniu_lasteliu_skaicius?: number;
+  bendras_bakteriju_skaicius?: number;
+  neatit_pst?: string;
+  konteineris: string;
+  prot_nr: string;
+}
+
+interface ProducerWithTests {
+  producer: MilkProducer;
+  compositionTests: MilkCompositionTest[];
+  qualityTests: MilkQualityTest[];
+}
+
+type TabType = 'overview' | 'production' | 'tests' | 'analytics' | 'labTests';
 
 export function Pienas() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -74,6 +118,7 @@ export function Pienas() {
   const [productions, setProductions] = useState<MilkProduction[]>([]);
   const [tests, setTests] = useState<MilkTest[]>([]);
   const [analytics, setAnalytics] = useState<MilkAnalytics[]>([]);
+  const [labTestData, setLabTestData] = useState<ProducerWithTests[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showProductionModal, setShowProductionModal] = useState(false);
@@ -115,6 +160,9 @@ export function Pienas() {
 
   useRealtimeSubscription('milk_production', loadProductions);
   useRealtimeSubscription('milk_tests', loadTests);
+  useRealtimeSubscription('milk_producers', loadLabTests);
+  useRealtimeSubscription('milk_composition_tests', loadLabTests);
+  useRealtimeSubscription('milk_quality_tests', loadLabTests);
 
   useEffect(() => {
     loadData();
@@ -128,6 +176,7 @@ export function Pienas() {
         activeTab === 'production' || activeTab === 'overview' ? loadProductions() : Promise.resolve(),
         activeTab === 'tests' || activeTab === 'overview' ? loadTests() : Promise.resolve(),
         activeTab === 'analytics' ? loadAnalytics() : Promise.resolve(),
+        activeTab === 'labTests' ? loadLabTests() : Promise.resolve(),
       ]);
     } finally {
       setLoading(false);
@@ -179,6 +228,41 @@ export function Pienas() {
       .order('tag_no');
 
     if (!error && data) setAnalytics(data);
+  };
+
+  const loadLabTests = async () => {
+    const { data: producers, error: producersError } = await supabase
+      .from('milk_producers')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (producersError || !producers) return;
+
+    const producersWithTests: ProducerWithTests[] = await Promise.all(
+      producers.map(async (producer) => {
+        const { data: compositionTests } = await supabase
+          .from('milk_composition_tests')
+          .select('*')
+          .eq('producer_id', producer.id)
+          .order('tyrimo_data', { ascending: false })
+          .limit(10);
+
+        const { data: qualityTests } = await supabase
+          .from('milk_quality_tests')
+          .select('*')
+          .eq('producer_id', producer.id)
+          .order('tyrimo_data', { ascending: false })
+          .limit(10);
+
+        return {
+          producer,
+          compositionTests: compositionTests || [],
+          qualityTests: qualityTests || []
+        };
+      })
+    );
+
+    setLabTestData(producersWithTests);
   };
 
   const handleAddProduction = async (e: React.FormEvent) => {
@@ -722,6 +806,218 @@ export function Pienas() {
     </div>
   );
 
+  const renderLabTests = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Laboratorijos tyrimai</h2>
+        <div className="text-sm text-gray-500">
+          Importuoti duomenys iš n8n
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {labTestData.map(({ producer, compositionTests, qualityTests }) => {
+          const latestComposition = compositionTests[0];
+          const latestQuality = qualityTests[0];
+          const sccStatus = getSCCStatus(latestQuality?.somatiniu_lasteliu_skaicius);
+
+          return (
+            <div key={producer.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{producer.imone}</h3>
+                    <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                      <span>Gamintojas: {producer.gamintojas_code}</span>
+                      <span>Punktas: {producer.punktas}</span>
+                      <span>Rajonas: {producer.rajonas}</span>
+                      <span className="capitalize">{producer.label}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleRow(producer.id)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    {expandedRows.has(producer.id) ? (
+                      <ChevronUp className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Riebalai</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {latestComposition?.riebalu_kiekis?.toFixed(2) || '-'}%
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Baltymai</p>
+                    <p className="text-lg font-bold text-blue-600">
+                      {latestComposition?.baltymu_kiekis?.toFixed(2) || '-'}%
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Laktozė</p>
+                    <p className="text-lg font-bold text-purple-600">
+                      {latestComposition?.laktozes_kiekis?.toFixed(2) || '-'}%
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500">SCC</p>
+                    <p className={`text-lg font-bold ${sccStatus.color}`}>
+                      {latestQuality?.somatiniu_lasteliu_skaicius
+                        ? (latestQuality.somatiniu_lasteliu_skaicius / 1000).toFixed(0) + 'k'
+                        : '-'}
+                    </p>
+                    <p className={`text-xs ${sccStatus.color}`}>{sccStatus.label}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Bakterijos</p>
+                    <p className="text-lg font-bold text-orange-600">
+                      {latestQuality?.bendras_bakteriju_skaicius
+                        ? (latestQuality.bendras_bakteriju_skaicius / 1000).toFixed(0) + 'k'
+                        : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {expandedRows.has(producer.id) && (
+                <div className="p-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <Beaker className="w-4 h-4" />
+                        Sudėties tyrimai
+                      </h4>
+                      <div className="space-y-2">
+                        {compositionTests.length === 0 ? (
+                          <p className="text-sm text-gray-500">Nėra duomenų</p>
+                        ) : (
+                          compositionTests.map(test => (
+                            <div key={test.id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="font-semibold text-gray-700">
+                                    {new Date(test.paemimo_data).toLocaleDateString('lt-LT')}
+                                  </p>
+                                  <p className="text-xs text-gray-500">Tyrimas: {new Date(test.tyrimo_data).toLocaleDateString('lt-LT')}</p>
+                                </div>
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                  {test.konteineris}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Riebalai:</span>
+                                  <span className="ml-1 font-semibold">{test.riebalu_kiekis?.toFixed(2)}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Baltymai:</span>
+                                  <span className="ml-1 font-semibold">{test.baltymu_kiekis?.toFixed(2)}%</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Laktozė:</span>
+                                  <span className="ml-1 font-semibold">{test.laktozes_kiekis?.toFixed(2)}%</span>
+                                </div>
+                              </div>
+                              {test.ureja_mg_100ml && (
+                                <div className="mt-2 text-xs">
+                                  <span className="text-gray-500">Ureja:</span>
+                                  <span className="ml-1 font-semibold">{test.ureja_mg_100ml} mg/100ml</span>
+                                </div>
+                              )}
+                              {test.ph && (
+                                <div className="mt-1 text-xs">
+                                  <span className="text-gray-500">pH:</span>
+                                  <span className="ml-1 font-semibold">{test.ph}</span>
+                                </div>
+                              )}
+                              {test.pastaba && (
+                                <div className="mt-2 text-xs text-gray-600">
+                                  {test.pastaba}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Kokybės tyrimai
+                      </h4>
+                      <div className="space-y-2">
+                        {qualityTests.length === 0 ? (
+                          <p className="text-sm text-gray-500">Nėra duomenų</p>
+                        ) : (
+                          qualityTests.map(test => {
+                            const testSccStatus = getSCCStatus(test.somatiniu_lasteliu_skaicius);
+                            return (
+                              <div key={test.id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="font-semibold text-gray-700">
+                                      {new Date(test.paemimo_data).toLocaleDateString('lt-LT')}
+                                    </p>
+                                    <p className="text-xs text-gray-500">Tyrimas: {new Date(test.tyrimo_data).toLocaleDateString('lt-LT')}</p>
+                                  </div>
+                                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                    {test.konteineris}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="text-gray-500">SCC:</span>
+                                    <span className={`ml-1 font-semibold ${testSccStatus.color}`}>
+                                      {test.somatiniu_lasteliu_skaicius
+                                        ? (test.somatiniu_lasteliu_skaicius / 1000).toFixed(0) + 'k'
+                                        : '-'} ({testSccStatus.label})
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500">Bakterijos:</span>
+                                    <span className="ml-1 font-semibold">
+                                      {test.bendras_bakteriju_skaicius
+                                        ? (test.bendras_bakteriju_skaicius / 1000).toFixed(0) + 'k'
+                                        : '-'}
+                                    </span>
+                                  </div>
+                                </div>
+                                {test.neatit_pst && (
+                                  <div className="mt-2 text-xs text-red-600 font-medium">
+                                    {test.neatit_pst}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {labTestData.length === 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <Droplets className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra importuotų duomenų</h3>
+            <p className="text-gray-500">Duomenys bus rodomi kai bus importuoti per n8n sistemą</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -781,12 +1077,23 @@ export function Pienas() {
         >
           Analitika
         </button>
+        <button
+          onClick={() => setActiveTab('labTests')}
+          className={`px-6 py-3 font-medium transition-colors ${
+            activeTab === 'labTests'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Laboratorijos tyrimai
+        </button>
       </div>
 
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'production' && renderProduction()}
       {activeTab === 'tests' && renderTests()}
       {activeTab === 'analytics' && renderAnalytics()}
+      {activeTab === 'labTests' && renderLabTests()}
 
       {showProductionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
