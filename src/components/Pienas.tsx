@@ -158,31 +158,6 @@ export function Pienas() {
     notes: ''
   });
 
-  useRealtimeSubscription('milk_production', loadProductions);
-  useRealtimeSubscription('milk_tests', loadTests);
-  useRealtimeSubscription('milk_producers', loadLabTests);
-  useRealtimeSubscription('milk_composition_tests', loadLabTests);
-  useRealtimeSubscription('milk_quality_tests', loadLabTests);
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        loadAnimals(),
-        activeTab === 'production' || activeTab === 'overview' ? loadProductions() : Promise.resolve(),
-        activeTab === 'tests' || activeTab === 'overview' ? loadTests() : Promise.resolve(),
-        activeTab === 'analytics' ? loadAnalytics() : Promise.resolve(),
-        activeTab === 'labTests' ? loadLabTests() : Promise.resolve(),
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadAnimals = async () => {
     const { data, error } = await supabase
       .from('animals')
@@ -264,6 +239,30 @@ export function Pienas() {
 
     setLabTestData(producersWithTests);
   };
+
+  useRealtimeSubscription('milk_production', loadProductions);
+  useRealtimeSubscription('milk_tests', loadTests);
+  useRealtimeSubscription('milk_producers', loadLabTests);
+  useRealtimeSubscription('milk_composition_tests', loadLabTests);
+  useRealtimeSubscription('milk_quality_tests', loadLabTests);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          loadAnimals(),
+          activeTab === 'production' || activeTab === 'overview' ? loadProductions() : Promise.resolve(),
+          activeTab === 'tests' || activeTab === 'overview' ? loadTests() : Promise.resolve(),
+          activeTab === 'analytics' ? loadAnalytics() : Promise.resolve(),
+          activeTab === 'labTests' ? loadLabTests() : Promise.resolve(),
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [activeTab]);
 
   const handleAddProduction = async (e: React.FormEvent) => {
     e.preventDefault();
