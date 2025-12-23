@@ -74,12 +74,21 @@ interface ScrapedQualityRow {
 }
 
 function parseDate(dateStr: string): string {
+  if (!dateStr) return dateStr;
+
+  // YYYYMMDD -> YYYY-MM-DD
+  if (/^\d{8}$/.test(dateStr)) {
+    return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+  }
+
+  // YY.MM.DD or YYYY.MM.DD -> YYYY-MM-DD
   const parts = dateStr.split('.');
   if (parts.length === 3) {
     const [year, month, day] = parts;
     const fullYear = year.length === 2 ? `20${year}` : year;
     return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
+
   return dateStr;
 }
 
