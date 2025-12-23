@@ -53,31 +53,52 @@ export function Pienas() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const loadLabTests = async () => {
+    console.log('[Pienas] loadLabTests called');
     const { data: producers, error: producersError } = await supabase
       .from('milk_producers')
       .select('*')
       .order('updated_at', { ascending: false });
 
+    console.log('[Pienas] Producers response:', {
+      producersCount: producers?.length || 0,
+      error: producersError,
+      producers
+    });
+
     if (producersError || !producers) {
-      console.error('Error loading producers:', producersError);
+      console.error('[Pienas] Error loading producers:', producersError);
       return;
     }
 
     const producersWithTests: ProducerWithTests[] = await Promise.all(
       producers.map(async (producer) => {
-        const { data: compositionTests } = await supabase
+        console.log(`[Pienas] Loading tests for producer ${producer.gamintojo_id}`);
+
+        const { data: compositionTests, error: compError } = await supabase
           .from('milk_composition_tests')
           .select('*')
           .eq('producer_id', producer.id)
           .order('tyrimo_data', { ascending: false })
           .limit(10);
 
-        const { data: qualityTests } = await supabase
+        console.log(`[Pienas] Composition tests for ${producer.gamintojo_id}:`, {
+          count: compositionTests?.length || 0,
+          error: compError,
+          tests: compositionTests
+        });
+
+        const { data: qualityTests, error: qualError } = await supabase
           .from('milk_quality_tests')
           .select('*')
           .eq('producer_id', producer.id)
           .order('tyrimo_data', { ascending: false })
           .limit(10);
+
+        console.log(`[Pienas] Quality tests for ${producer.gamintojo_id}:`, {
+          count: qualityTests?.length || 0,
+          error: qualError,
+          tests: qualityTests
+        });
 
         return {
           producer,
@@ -87,6 +108,10 @@ export function Pienas() {
       })
     );
 
+    console.log('[Pienas] Final data:', {
+      producersWithTests,
+      totalProducers: producersWithTests.length
+    });
     setLabTestData(producersWithTests);
   };
 
@@ -95,11 +120,13 @@ export function Pienas() {
   useRealtimeSubscription('milk_quality_tests', loadLabTests);
 
   useEffect(() => {
+    console.log('[Pienas] useEffect mounting - starting initial load');
     const loadData = async () => {
       setLoading(true);
       try {
         await loadLabTests();
       } finally {
+        console.log('[Pienas] Initial load complete');
         setLoading(false);
       }
     };
@@ -123,6 +150,12 @@ export function Pienas() {
     if (scc < 600000) return { label: 'Vidutinė', color: 'text-yellow-600' };
     return { label: 'Blogai', color: 'text-red-600' };
   };
+
+  console.log('[Pienas] Render state:', {
+    loading,
+    labTestDataLength: labTestData.length,
+    labTestData
+  });
 
   if (loading) {
     return (
