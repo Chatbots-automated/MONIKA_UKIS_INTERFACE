@@ -145,9 +145,10 @@ export function Pienas() {
 
   const getSCCStatus = (scc?: number) => {
     if (!scc) return { label: 'N/A', color: 'text-gray-400' };
-    if (scc < 200000) return { label: 'Puiki', color: 'text-green-600' };
-    if (scc < 400000) return { label: 'Gera', color: 'text-blue-600' };
-    if (scc < 600000) return { label: 'Vidutinė', color: 'text-yellow-600' };
+    // Values are already in thousands (141 = 141k cells/ml)
+    if (scc < 200) return { label: 'Puiki', color: 'text-green-600' };
+    if (scc < 400) return { label: 'Gera', color: 'text-blue-600' };
+    if (scc < 600) return { label: 'Vidutinė', color: 'text-yellow-600' };
     return { label: 'Blogai', color: 'text-red-600' };
   };
 
@@ -236,7 +237,7 @@ export function Pienas() {
                           <div className="text-xs text-gray-500 mb-1">Kokybė</div>
                           <div className={`text-sm font-semibold ${sccStatus.color}`}>
                             SCC: {latestQuality.somatiniu_lasteliu_skaicius
-                              ? (latestQuality.somatiniu_lasteliu_skaicius / 1000).toFixed(0) + 'k'
+                              ? latestQuality.somatiniu_lasteliu_skaicius.toFixed(0) + 'k'
                               : '-'}
                           </div>
                           <div className="text-xs text-gray-500">
@@ -367,7 +368,7 @@ export function Pienas() {
                                       <div className="text-right">
                                         <span className={`text-lg font-bold ${status.color}`}>
                                           {test.somatiniu_lasteliu_skaicius
-                                            ? (test.somatiniu_lasteliu_skaicius / 1000).toFixed(0) + 'k'
+                                            ? test.somatiniu_lasteliu_skaicius.toFixed(0) + 'k'
                                             : '-'}
                                         </span>
                                         <div className={`text-xs ${status.color}`}>{status.label}</div>
@@ -377,7 +378,7 @@ export function Pienas() {
                                       <span className="text-sm text-gray-600">Bendras bakterijų skaičius:</span>
                                       <span className="text-sm font-semibold text-gray-900">
                                         {test.bendras_bakteriju_skaicius
-                                          ? (test.bendras_bakteriju_skaicius / 1000).toFixed(0) + 'k'
+                                          ? test.bendras_bakteriju_skaicius.toFixed(0) + 'k'
                                           : '-'}
                                       </span>
                                     </div>
