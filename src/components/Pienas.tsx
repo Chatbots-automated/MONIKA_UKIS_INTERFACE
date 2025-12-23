@@ -110,100 +110,14 @@ interface ProducerWithTests {
   qualityTests: MilkQualityTest[];
 }
 
-type TabType = 'overview' | 'production' | 'tests' | 'analytics' | 'labTests';
+type TabType = 'labTests';
 
 export function Pienas() {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [animals, setAnimals] = useState<Animal[]>([]);
-  const [productions, setProductions] = useState<MilkProduction[]>([]);
-  const [tests, setTests] = useState<MilkTest[]>([]);
-  const [analytics, setAnalytics] = useState<MilkAnalytics[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('labTests');
   const [labTestData, setLabTestData] = useState<ProducerWithTests[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [showProductionModal, setShowProductionModal] = useState(false);
-  const [showTestModal, setShowTestModal] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  const [productionForm, setProductionForm] = useState({
-    animal_id: '',
-    measurement_date: new Date().toISOString().split('T')[0],
-    measurement_time: new Date().toTimeString().slice(0, 5),
-    milk_quantity: '',
-    milk_temperature: '',
-    session_type: 'morning',
-    milking_duration: '',
-    flow_rate: '',
-    conductivity: '',
-    notes: ''
-  });
-
-  const [testForm, setTestForm] = useState({
-    animal_id: '',
-    test_date: new Date().toISOString().split('T')[0],
-    sample_date: new Date().toISOString().split('T')[0],
-    sample_session: 'morning',
-    fat_percentage: '',
-    protein_percentage: '',
-    lactose_percentage: '',
-    somatic_cell_count: '',
-    bacteria_count: '',
-    urea_level: '',
-    ph_level: '',
-    freezing_point: '',
-    total_solids: '',
-    test_status: 'completed',
-    lab_name: '',
-    lab_reference: '',
-    notes: ''
-  });
-
-  const loadAnimals = async () => {
-    const { data, error } = await supabase
-      .from('animals')
-      .select('id, tag_no, species, holder_name')
-      .or('species.ilike.%karv%,species.ilike.%cow%')
-      .eq('active', true)
-      .order('tag_no');
-
-    if (!error && data) setAnimals(data);
-  };
-
-  const loadProductions = async () => {
-    const { data, error } = await supabase
-      .from('milk_production')
-      .select(`
-        *,
-        animal:animals(id, tag_no, species, holder_name)
-      `)
-      .order('measurement_date', { ascending: false })
-      .order('measurement_time', { ascending: false })
-      .limit(100);
-
-    if (!error && data) setProductions(data);
-  };
-
-  const loadTests = async () => {
-    const { data, error } = await supabase
-      .from('milk_tests')
-      .select(`
-        *,
-        animal:animals(id, tag_no, species, holder_name)
-      `)
-      .order('test_date', { ascending: false })
-      .limit(100);
-
-    if (!error && data) setTests(data);
-  };
-
-  const loadAnalytics = async () => {
-    const { data, error } = await supabase
-      .from('vw_milk_analytics')
-      .select('*')
-      .order('tag_no');
-
-    if (!error && data) setAnalytics(data);
-  };
 
   const loadLabTests = async () => {
     const { data: producers, error: producersError } = await supabase
@@ -240,8 +154,6 @@ export function Pienas() {
     setLabTestData(producersWithTests);
   };
 
-  useRealtimeSubscription('milk_production', loadProductions);
-  useRealtimeSubscription('milk_tests', loadTests);
   useRealtimeSubscription('milk_producers', loadLabTests);
   useRealtimeSubscription('milk_composition_tests', loadLabTests);
   useRealtimeSubscription('milk_quality_tests', loadLabTests);
@@ -250,107 +162,13 @@ export function Pienas() {
     const loadData = async () => {
       setLoading(true);
       try {
-        await Promise.all([
-          loadAnimals(),
-          activeTab === 'production' || activeTab === 'overview' ? loadProductions() : Promise.resolve(),
-          activeTab === 'tests' || activeTab === 'overview' ? loadTests() : Promise.resolve(),
-          activeTab === 'analytics' ? loadAnalytics() : Promise.resolve(),
-          activeTab === 'labTests' ? loadLabTests() : Promise.resolve(),
-        ]);
+        await loadLabTests();
       } finally {
         setLoading(false);
       }
     };
     loadData();
-  }, [activeTab]);
-
-  const handleAddProduction = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const { error } = await supabase.from('milk_production').insert({
-      animal_id: productionForm.animal_id,
-      measurement_date: productionForm.measurement_date,
-      measurement_time: productionForm.measurement_time,
-      milk_quantity: parseFloat(productionForm.milk_quantity),
-      milk_temperature: productionForm.milk_temperature ? parseFloat(productionForm.milk_temperature) : null,
-      session_type: productionForm.session_type,
-      milking_duration: productionForm.milking_duration ? parseInt(productionForm.milking_duration) : null,
-      flow_rate: productionForm.flow_rate ? parseFloat(productionForm.flow_rate) : null,
-      conductivity: productionForm.conductivity ? parseFloat(productionForm.conductivity) : null,
-      notes: productionForm.notes || null
-    });
-
-    if (error) {
-      alert('Klaida pridedant įrašą: ' + error.message);
-      return;
-    }
-
-    setShowProductionModal(false);
-    setProductionForm({
-      animal_id: '',
-      measurement_date: new Date().toISOString().split('T')[0],
-      measurement_time: new Date().toTimeString().slice(0, 5),
-      milk_quantity: '',
-      milk_temperature: '',
-      session_type: 'morning',
-      milking_duration: '',
-      flow_rate: '',
-      conductivity: '',
-      notes: ''
-    });
-    loadProductions();
-  };
-
-  const handleAddTest = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const { error } = await supabase.from('milk_tests').insert({
-      animal_id: testForm.animal_id,
-      test_date: testForm.test_date,
-      sample_date: testForm.sample_date,
-      sample_session: testForm.sample_session || null,
-      fat_percentage: testForm.fat_percentage ? parseFloat(testForm.fat_percentage) : null,
-      protein_percentage: testForm.protein_percentage ? parseFloat(testForm.protein_percentage) : null,
-      lactose_percentage: testForm.lactose_percentage ? parseFloat(testForm.lactose_percentage) : null,
-      somatic_cell_count: testForm.somatic_cell_count ? parseInt(testForm.somatic_cell_count) : null,
-      bacteria_count: testForm.bacteria_count ? parseInt(testForm.bacteria_count) : null,
-      urea_level: testForm.urea_level ? parseFloat(testForm.urea_level) : null,
-      ph_level: testForm.ph_level ? parseFloat(testForm.ph_level) : null,
-      freezing_point: testForm.freezing_point ? parseFloat(testForm.freezing_point) : null,
-      total_solids: testForm.total_solids ? parseFloat(testForm.total_solids) : null,
-      test_status: testForm.test_status,
-      lab_name: testForm.lab_name || null,
-      lab_reference: testForm.lab_reference || null,
-      notes: testForm.notes || null
-    });
-
-    if (error) {
-      alert('Klaida pridedant tyrimą: ' + error.message);
-      return;
-    }
-
-    setShowTestModal(false);
-    setTestForm({
-      animal_id: '',
-      test_date: new Date().toISOString().split('T')[0],
-      sample_date: new Date().toISOString().split('T')[0],
-      sample_session: 'morning',
-      fat_percentage: '',
-      protein_percentage: '',
-      lactose_percentage: '',
-      somatic_cell_count: '',
-      bacteria_count: '',
-      urea_level: '',
-      ph_level: '',
-      freezing_point: '',
-      total_solids: '',
-      test_status: 'completed',
-      lab_name: '',
-      lab_reference: '',
-      notes: ''
-    });
-    loadTests();
-  };
+  }, []);
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -370,7 +188,7 @@ export function Pienas() {
     return { label: 'Blogai', color: 'text-red-600' };
   };
 
-  const renderOverview = () => {
+  const renderLabTests = () => (
     const todayProduction = productions.filter(p =>
       p.measurement_date === new Date().toISOString().split('T')[0]
     );
