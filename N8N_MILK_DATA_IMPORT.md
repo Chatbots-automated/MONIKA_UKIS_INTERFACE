@@ -2,28 +2,31 @@
 
 This guide explains how to set up n8n to automatically import scraped milk testing data into Supabase.
 
-## Edge Function Endpoint
+## RPC Function Endpoint
 
-The edge function is deployed at:
+The import function is available as a Supabase RPC function called `import_milk_data`. You can call it via the REST API:
+
 ```
-https://[your-supabase-project-ref].supabase.co/functions/v1/import-milk-data
+https://[your-supabase-project-ref].supabase.co/rest/v1/rpc/import_milk_data
 ```
 
 ## How to Use with n8n
 
-### Step 1: Get Your Authentication Token
+### Step 1: Get Your Authentication Credentials
 
-You'll need a valid Supabase user authentication token. This can be:
-- A session token from a logged-in user
-- OR use your Supabase Service Role Key (for automated imports)
+You'll need either:
+- **Supabase Anon Key** (from your Supabase project settings) + User JWT token
+- **OR Service Role Key** (for automated imports)
 
-**For Service Role Key (recommended for automation):**
+**For User Authentication (recommended):**
+- Use the `SUPABASE_ANON_KEY` from your Supabase project settings
+- Include the user's JWT token in the Authorization header
+- The function will automatically associate data with the authenticated user
+
+**For Service Role Key:**
 - Use your `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project settings
-- Note: This bypasses RLS, so the function will need to be modified slightly to accept a user_id parameter
-
-**For User Token:**
-- Generate a user session token by logging in through your app
-- The token is available in the Authorization header
+- Include a user's JWT token to identify which user to import data for
+- This bypasses RLS but still uses the authenticated user's ID
 
 ### Step 2: Configure n8n Workflow
 
@@ -31,26 +34,28 @@ You'll need a valid Supabase user authentication token. This can be:
 - Use HTTP Request node or Read Binary File node
 - Get your scraped milk data JSON
 
-#### Node 2: HTTP Request to Supabase Edge Function
+#### Node 2: HTTP Request to Supabase RPC Function
 Configure the HTTP Request node:
 
 **Method:** `POST`
 
-**URL:** `https://[your-project-ref].supabase.co/functions/v1/import-milk-data`
+**URL:** `https://[your-project-ref].supabase.co/rest/v1/rpc/import_milk_data`
 
 **Authentication:** None (we'll add headers manually)
 
 **Headers:**
 ```json
 {
-  "Authorization": "Bearer YOUR_USER_TOKEN_HERE",
+  "Authorization": "Bearer YOUR_USER_JWT_TOKEN_HERE",
+  "apikey": "YOUR_SUPABASE_ANON_KEY_HERE",
   "Content-Type": "application/json"
 }
 ```
 
 **Body:**
 - Content Type: JSON
-- Body: `{{ $json }}`  (or your scraped data variable)
+- Body format: `{ "p_scraped_data": {{ $json }} }`
+- The scraped data should be nested under the `p_scraped_data` parameter
 
 **Expected JSON Format:**
 ```json
@@ -118,40 +123,45 @@ Configure the HTTP Request node:
                                 ▼
                         ┌─────────────────┐
                         │  HTTP Request   │
-                        │  (Supabase      │
-                        │   Edge Func)    │
+                        │  (Supabase RPC  │
+                        │   Function)     │
                         └─────────────────┘
 ```
 
-## Alternative: Using Service Role Key
-
-If you want to import data as a specific user using the Service Role Key, modify the n8n workflow to include a `user_id` in the request body, and update the edge function to accept and use this parameter.
-
-**Modified Request Body:**
-```json
-{
-  "user_id": "uuid-of-the-user",
-  "data": {
-    "scraped_at": "...",
-    "url": "...",
-    "range": { ... },
-    "results": { ... }
-  }
-}
-```
-
-Then update the edge function to extract `user_id` from the request body instead of getting it from the auth token.
-
 ## Testing the Function
 
-You can test the edge function with curl:
+You can test the RPC function with curl:
 
 ```bash
 curl -X POST \
-  https://[your-project-ref].supabase.co/functions/v1/import-milk-data \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  https://[your-project-ref].supabase.co/rest/v1/rpc/import_milk_data \
+  -H "Authorization: Bearer YOUR_USER_JWT_TOKEN" \
+  -H "apikey: YOUR_SUPABASE_ANON_KEY" \
   -H "Content-Type: application/json" \
-  -d @scraped_data.json
+  -d '{"p_scraped_data": '"$(cat scraped_data.json)"'}'
+```
+
+Or call it directly from your frontend application:
+
+```typescript
+import { supabase } from './lib/supabase';
+
+const scrapedData = {
+  scraped_at: "2025-12-23T12:55:37.698Z",
+  url: "https://tau.pieno-tyrimai.lt/...",
+  range: { from: "20251218", to: "20251223" },
+  results: { /* producer data */ }
+};
+
+const { data, error } = await supabase.rpc('import_milk_data', {
+  p_scraped_data: scrapedData
+});
+
+if (error) {
+  console.error('Import failed:', error);
+} else {
+  console.log('Import successful:', data);
+}
 ```
 
 ## Troubleshooting
@@ -175,13 +185,13 @@ curl -X POST \
 ## Data Flow
 
 1. n8n scrapes milk testing website → generates JSON
-2. n8n sends JSON to Supabase Edge Function
-3. Edge Function validates authentication
-4. Edge Function processes each producer:
+2. n8n sends JSON to Supabase RPC function via REST API
+3. RPC function validates authentication using `auth.uid()`
+4. RPC function processes each producer:
    - Creates/updates producer record
    - Imports composition test results
    - Imports quality test results
-5. Edge Function logs the import operation
+5. RPC function logs the import operation
 6. Returns success/failure response to n8n
 
 ## Notes
