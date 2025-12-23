@@ -300,7 +300,7 @@ export function Pienas() {
                                     </span>
                                   </div>
                                   <div>
-                                    <span className="text-gray-600">Laktoza:</span>
+                                    <span className="text-gray-600">Laktozė:</span>
                                     <span className="ml-2 font-semibold text-gray-900">
                                       {test.laktozes_kiekis?.toFixed(2) || '-'}%
                                     </span>
