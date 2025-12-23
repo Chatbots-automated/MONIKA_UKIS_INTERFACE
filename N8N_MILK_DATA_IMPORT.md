@@ -28,7 +28,22 @@ You'll need either:
 - Include a user's JWT token to identify which user to import data for
 - This bypasses RLS but still uses the authenticated user's ID
 
-### Step 2: Configure n8n Workflow
+### Step 2: Get Your User ID (for Service Role Key only)
+
+If using the service role key, you need the UUID of the user who should own the imported data.
+
+To find your user ID:
+1. Go to your Supabase Dashboard
+2. Navigate to **Authentication** > **Users**
+3. Click on the user (e.g., admin@vetstock.lt)
+4. Copy the **UUID** from the user details
+
+Or query it directly:
+```sql
+SELECT id FROM users WHERE email = 'admin@vetstock.lt';
+```
+
+### Step 3: Configure n8n Workflow
 
 #### Node 1: Read/Fetch Scraped JSON Data
 - Use HTTP Request node or Read Binary File node
@@ -54,8 +69,19 @@ Configure the HTTP Request node:
 
 **Body:**
 - Content Type: JSON
-- Body format: `{ "p_scraped_data": {{ $json }} }`
-- The scraped data should be nested under the `p_scraped_data` parameter
+- Body format (with service role key):
+```json
+{
+  "p_scraped_data": {{ $json }},
+  "p_user_id": "your-user-uuid-here"
+}
+```
+- Body format (with user JWT):
+```json
+{
+  "p_scraped_data": {{ $json }}
+}
+```
 
 **Expected JSON Format:**
 ```json
@@ -130,7 +156,22 @@ Configure the HTTP Request node:
 
 ## Testing the Function
 
-You can test the RPC function with curl:
+### With Service Role Key (for automation):
+
+```bash
+curl -X POST \
+  https://[your-project-ref].supabase.co/rest/v1/rpc/import_milk_data \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "apikey: YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: params=single-object" \
+  -d '{
+    "p_scraped_data": '"$(cat scraped_data.json)"',
+    "p_user_id": "your-user-uuid-here"
+  }'
+```
+
+### With User JWT (from frontend):
 
 ```bash
 curl -X POST \
@@ -138,10 +179,13 @@ curl -X POST \
   -H "Authorization: Bearer YOUR_USER_JWT_TOKEN" \
   -H "apikey: YOUR_SUPABASE_ANON_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"p_scraped_data": '"$(cat scraped_data.json)"'}'
+  -H "Prefer: params=single-object" \
+  -d '{
+    "p_scraped_data": '"$(cat scraped_data.json)"'
+  }'
 ```
 
-Or call it directly from your frontend application:
+### From your frontend application:
 
 ```typescript
 import { supabase } from './lib/supabase';
@@ -166,6 +210,10 @@ if (error) {
 
 ## Troubleshooting
 
+### Error: "Authentication required"
+- If using **service role key**: You must provide the `p_user_id` parameter
+- If using **user JWT**: Make sure the user is authenticated and the token is valid
+
 ### Error: "Missing Authorization header"
 - Make sure you're passing the `Authorization` header with a valid token
 
@@ -180,7 +228,7 @@ if (error) {
 ### Error: "Failed to upsert producer"
 - Check database connection
 - Verify RLS policies are correctly configured
-- Check that the user_id in the token matches your auth.users table
+- Verify the user_id exists in the users table
 
 ## Data Flow
 
