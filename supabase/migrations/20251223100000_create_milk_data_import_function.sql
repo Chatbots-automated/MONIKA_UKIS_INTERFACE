@@ -77,7 +77,6 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 CREATE OR REPLACE FUNCTION import_milk_data(p_scraped_data jsonb)
 RETURNS jsonb AS $$
 DECLARE
-  v_user_id uuid;
   v_producer_id uuid;
   v_gamintojo_id text;
   v_producer_data jsonb;
@@ -89,11 +88,8 @@ DECLARE
   v_errors text[] := ARRAY[]::text[];
   v_result jsonb;
 BEGIN
-  -- Get authenticated user ID
-  v_user_id := auth.uid();
-
   -- Validate authentication
-  IF v_user_id IS NULL THEN
+  IF auth.uid() IS NULL THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'Authentication required'
@@ -114,31 +110,29 @@ BEGIN
     BEGIN
       -- Upsert producer
       INSERT INTO milk_producers (
-        user_id,
         gamintojo_id,
+        gamintojas_code,
         label,
         imone,
         rajonas,
         punktas,
-        gamintojas,
         updated_at
       ) VALUES (
-        v_user_id,
         v_gamintojo_id,
+        v_producer_data->'meta'->>'gamintojas',
         v_producer_data->>'label',
         v_producer_data->'meta'->>'imone',
         v_producer_data->'meta'->>'rajonas',
         v_producer_data->'meta'->>'punktas',
-        v_producer_data->'meta'->>'gamintojas',
         now()
       )
-      ON CONFLICT (user_id, gamintojo_id)
+      ON CONFLICT (gamintojo_id)
       DO UPDATE SET
+        gamintojas_code = EXCLUDED.gamintojas_code,
         label = EXCLUDED.label,
         imone = EXCLUDED.imone,
         rajonas = EXCLUDED.rajonas,
         punktas = EXCLUDED.punktas,
-        gamintojas = EXCLUDED.gamintojas,
         updated_at = EXCLUDED.updated_at
       RETURNING id INTO v_producer_id;
 
@@ -149,7 +143,7 @@ BEGIN
         FOR v_composition_row IN SELECT * FROM jsonb_array_elements(v_producer_data->'tables'->'pieno_sudeties_tyrimai'->'rows')
         LOOP
           BEGIN
-            INSERT INTO pieno_sudeties_tyrimai (
+            INSERT INTO milk_composition_tests (
               producer_id,
               paemimo_data,
               atvezimo_data,
@@ -180,9 +174,10 @@ BEGIN
               COALESCE(v_composition_row->>'plomba', ''),
               COALESCE(v_composition_row->>'prot_nr', '')
             )
-            ON CONFLICT (producer_id, paemimo_data, tyrimo_data, konteineris)
+            ON CONFLICT (producer_id, paemimo_data, konteineris)
             DO UPDATE SET
               atvezimo_data = EXCLUDED.atvezimo_data,
+              tyrimo_data = EXCLUDED.tyrimo_data,
               riebalu_kiekis = EXCLUDED.riebalu_kiekis,
               baltymu_kiekis = EXCLUDED.baltymu_kiekis,
               laktozes_kiekis = EXCLUDED.laktozes_kiekis,
@@ -206,7 +201,7 @@ BEGIN
         FOR v_quality_row IN SELECT * FROM jsonb_array_elements(v_producer_data->'tables'->'pieno_kokybes_tyrimai'->'rows')
         LOOP
           BEGIN
-            INSERT INTO pieno_kokybes_tyrimai (
+            INSERT INTO milk_quality_tests (
               producer_id,
               paemimo_data,
               atvezimo_data,
@@ -229,9 +224,10 @@ BEGIN
               COALESCE(v_quality_row->>'plomba', ''),
               COALESCE(v_quality_row->>'prot_nr', '')
             )
-            ON CONFLICT (producer_id, paemimo_data, tyrimo_data, konteineris)
+            ON CONFLICT (producer_id, paemimo_data, konteineris)
             DO UPDATE SET
               atvezimo_data = EXCLUDED.atvezimo_data,
+              tyrimo_data = EXCLUDED.tyrimo_data,
               somatiniu_lasteliu_skaicius = EXCLUDED.somatiniu_lasteliu_skaicius,
               bendras_bakteriju_skaicius = EXCLUDED.bendras_bakteriju_skaicius,
               neatit_pst = EXCLUDED.neatit_pst,
@@ -254,26 +250,16 @@ BEGIN
 
   -- Log the scrape operation
   BEGIN
-    INSERT INTO milk_scrape_logs (
-      user_id,
+    INSERT INTO milk_scrape_sessions (
       scraped_at,
       url,
       date_from,
-      date_to,
-      producers_count,
-      records_imported
+      date_to
     ) VALUES (
-      v_user_id,
-      (p_scraped_data->>'scraped_at')::timestamptz,
-      p_scraped_data->>'url',
+      COALESCE((p_scraped_data->>'scraped_at')::timestamptz, now()),
+      COALESCE(p_scraped_data->>'url', 'n8n-import'),
       parse_milk_date(p_scraped_data->'range'->>'from'),
-      parse_milk_date(p_scraped_data->'range'->>'to'),
-      v_total_producers,
-      jsonb_build_object(
-        'producers', v_total_producers,
-        'composition_tests', v_total_composition,
-        'quality_tests', v_total_quality
-      )
+      parse_milk_date(p_scraped_data->'range'->>'to')
     );
   EXCEPTION
     WHEN OTHERS THEN
