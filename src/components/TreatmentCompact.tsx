@@ -205,9 +205,20 @@ export function TreatmentCompact() {
     }
 
     const completeLines = usageLines.filter(line => line.product_id && line.batch_id && line.qty);
+    const incompleteLines = usageLines.filter(line =>
+      line.product_id && (!line.batch_id || !line.qty || parseFloat(line.qty) <= 0)
+    );
 
     if (completeLines.length === 0) {
       showNotification('Pridėkite ir užpildykite bent vieną vaistą (produktas, serija ir kiekis)', 'error');
+      return;
+    }
+
+    if (incompleteLines.length > 0) {
+      showNotification(
+        `Dėmesio: ${incompleteLines.length} neužpildyti vaistai nebus išsaugoti. Visi vaistai turi turėti pasirinktą partiją ir kiekį.`,
+        'error'
+      );
       return;
     }
 

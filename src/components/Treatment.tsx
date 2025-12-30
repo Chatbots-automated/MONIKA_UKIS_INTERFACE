@@ -173,6 +173,19 @@ export function Treatment() {
     setSuccess(false);
 
     console.log('🔍 Validating usage items...');
+
+    // Check for incomplete medication entries
+    const incompleteMeds = usageItems.filter(item =>
+      item.product_id && (!item.batch_id || !item.qty || item.qty <= 0)
+    );
+
+    if (incompleteMeds.length > 0) {
+      console.log('❌ Incomplete medications detected');
+      alert('Klaida: Visi vaistai turi turėti pasirinktą partiją ir kiekį. Patikrinkite vaistų sąrašą.');
+      setLoading(false);
+      return;
+    }
+
     for (const item of usageItems) {
       if (item.product_id && item.batch_id && item.qty) {
         const batch = batches.find(b => b.batch_id === item.batch_id);
