@@ -162,21 +162,26 @@ CREATE TRIGGER usage_items_stock_check_trigger
   WHEN (NEW.batch_id IS NOT NULL)
   EXECUTE FUNCTION check_batch_stock();
 
--- Step 11: Drop and recreate view for easy stock monitoring
-DROP VIEW IF EXISTS stock_by_batch;
+-- Step 11: Drop and recreate views (must drop dependent views first)
+-- Drop stock_by_product first (it depends on stock_by_batch)
+DROP VIEW IF EXISTS stock_by_product CASCADE;
+
+-- Drop and recreate stock_by_batch with new columns
+DROP VIEW IF EXISTS stock_by_batch CASCADE;
 CREATE VIEW stock_by_batch AS
 SELECT
   b.id as batch_id,
-  b.batch_number,
-  b.lot,
-  b.status,
   p.id as product_id,
+  b.qty_left as on_hand,
+  b.expiry_date,
+  b.lot,
+  b.mfg_date,
+  b.batch_number,
+  b.status,
   p.name as product_name,
   p.category as product_category,
   b.received_qty,
-  b.qty_left,
   COALESCE(SUM(ui.qty), 0) as total_used,
-  b.expiry_date,
   b.created_at,
   CASE
     WHEN b.expiry_date < CURRENT_DATE THEN 'Expired'
@@ -188,8 +193,18 @@ FROM batches b
 JOIN products p ON b.product_id = p.id
 LEFT JOIN usage_items ui ON ui.batch_id = b.id
 GROUP BY b.id, b.batch_number, b.lot, b.status, p.id, p.name, p.category,
-         b.received_qty, b.qty_left, b.expiry_date, b.created_at
+         b.received_qty, b.qty_left, b.expiry_date, b.mfg_date, b.created_at
 ORDER BY b.created_at DESC;
+
+-- Recreate stock_by_product view
+CREATE VIEW stock_by_product AS
+SELECT
+  product_id,
+  product_name as name,
+  product_category as category,
+  SUM(on_hand) as on_hand
+FROM stock_by_batch
+GROUP BY product_id, product_name, product_category;
 
 -- Step 12: Add helpful comments
 COMMENT ON COLUMN batches.qty_left IS 'Remaining quantity in this batch, automatically updated when usage_items are inserted';
@@ -197,4 +212,5 @@ COMMENT ON COLUMN batches.batch_number IS 'Human-readable batch identifier, gene
 COMMENT ON COLUMN batches.status IS 'Batch status: active, depleted, or expired';
 COMMENT ON FUNCTION check_batch_stock IS 'Validates that sufficient stock exists before allowing usage_items insertion';
 COMMENT ON FUNCTION update_batch_qty_left IS 'Automatically updates qty_left when usage_items are inserted';
-COMMENT ON VIEW stock_by_batch IS 'Consolidated view of stock levels by batch with usage tracking';
+COMMENT ON VIEW stock_by_batch IS 'Consolidated view of stock levels by batch with usage tracking and backward-compatible on_hand column';
+COMMENT ON VIEW stock_by_product IS 'Aggregated stock levels by product';
