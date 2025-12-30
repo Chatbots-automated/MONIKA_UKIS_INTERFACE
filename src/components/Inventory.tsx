@@ -125,7 +125,7 @@ export function Inventory() {
       }) || [];
 
       const results = await Promise.all(inventoryPromises);
-      const batchesWithStock = results.filter((item): item is StockItem => item !== null && item.on_hand > 0);
+      const batchesWithStock = results.filter((item): item is StockItem => item !== null);
 
       // Group batches by product_id and sum up quantities
       const productMap = new Map<string, { item: StockItem, batchCount: number, lots: Set<string> }>();
@@ -500,8 +500,13 @@ export function Inventory() {
                         </div>
                       ) : (
                         <div>
-                          <span className={`font-medium ${item.on_hand < 10 ? 'text-orange-600' : 'text-gray-900'}`}>
+                          <span className={`font-medium ${
+                            item.on_hand < 0 ? 'text-red-600 font-bold' :
+                            item.on_hand < 10 ? 'text-orange-600' :
+                            'text-gray-900'
+                          }`}>
                             {item.on_hand} {item.unit}
+                            {item.on_hand < 0 && <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">NEIGIAMA</span>}
                           </span>
                           {item.package_size && item.package_count && (
                             <div className="text-xs text-gray-500 mt-1">
