@@ -23,13 +23,14 @@ export function Biocides() {
     unit: 'l' as Unit,
     used_by_name: user?.full_name || user?.email || '',
   });
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   useRealtimeSubscription({
-    table: 'biocide_usage',
+    table: 'usage_items',
     onInsert: useCallback(() => {
       loadData();
     }, []),
@@ -45,7 +46,7 @@ export function Biocides() {
     const [productsRes, batchesRes, usageRes] = await Promise.all([
       supabase.from('products').select('*').eq('category', 'biocide').eq('is_active', true),
       supabase.from('stock_by_batch').select(`*, products!inner(name)`).eq('products.category', 'biocide').gt('on_hand', 0),
-      supabase.from('biocide_usage').select(`*, products(name)`).order('use_date', { ascending: false }).limit(10),
+      supabase.from('usage_items').select(`*, products!inner(name, category)`).eq('products.category', 'biocide').order('use_date', { ascending: false }).limit(10),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
@@ -59,7 +60,7 @@ export function Biocides() {
     setSuccess(false);
 
     try {
-      const { error } = await supabase.from('biocide_usage').insert({
+      const { error } = await supabase.from('usage_items').insert({
         product_id: formData.product_id,
         batch_id: formData.batch_id || null,
         use_date: formData.use_date,
@@ -74,7 +75,7 @@ export function Biocides() {
 
       await logAction(
         'create_biocide_usage',
-        'biocide_usage',
+        'usage_items',
         null,
         null,
         {

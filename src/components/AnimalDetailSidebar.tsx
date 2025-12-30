@@ -2855,10 +2855,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             const days = parseInt(product.course_days);
             const dailyDose = totalQty / days;
 
-            // For TODAY'S visit: Only create biocide_usage if status is "Baigtas"
+            // For TODAY'S visit: Only create usage_items if status is "Baigtas"
             if (formData.status === 'Baigtas') {
               const { data: preventionRecord, error: preventionError } = await supabase
-                .from('biocide_usage')
+                .from('usage_items')
                 .insert({
                   product_id: product.product_id,
                   batch_id: product.batch_id,
@@ -2873,13 +2873,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 .single();
 
               if (preventionError) throw preventionError;
-              await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+              await logAction('create_prevention', 'usage_items', preventionRecord.id);
             }
           } else {
             // Single dose - only create if visit is completed
             if (formData.status === 'Baigtas') {
               const { data: preventionRecord, error: preventionError } = await supabase
-                .from('biocide_usage')
+                .from('usage_items')
                 .insert({
                   product_id: product.product_id,
                   batch_id: product.batch_id,
@@ -2894,7 +2894,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 .single();
 
               if (preventionError) throw preventionError;
-              await logAction('create_prevention', 'biocide_usage', preventionRecord.id);
+              await logAction('create_prevention', 'usage_items', preventionRecord.id);
             }
           }
         }
@@ -3036,7 +3036,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           // If treatment was applied and product/batch selected, deduct from inventory
           if (exam.was_treated && exam.treatment_product_id && exam.treatment_batch_id && exam.treatment_quantity) {
             await supabase
-              .from('biocide_usage')
+              .from('usage_items')
               .insert({
                 product_id: exam.treatment_product_id,
                 batch_id: exam.treatment_batch_id,
