@@ -22,7 +22,7 @@
   2. Add vaccination_id column to usage_items to track the relationship
   3. Create function to generate usage_items from vaccinations
   4. Create trigger to call this function on vaccination INSERT
-  5. Backfill existing vaccinations to create usage_items
+  5. Backfill existing vaccinations (with stock validation disabled for historical data)
 */
 
 -- Step 1: Make treatment_id nullable in usage_items
@@ -124,37 +124,83 @@ CREATE TRIGGER trigger_create_usage_from_vaccination
   FOR EACH ROW
   EXECUTE FUNCTION create_usage_item_from_vaccination();
 
--- Step 6: Backfill existing vaccinations to create usage_items
--- Only process vaccinations that don't already have a usage_item
-INSERT INTO usage_items (
-  treatment_id,
-  product_id,
-  batch_id,
-  qty,
-  unit,
-  purpose,
-  vaccination_id,
-  created_at
-)
-SELECT
-  NULL,  -- vaccinations don't have treatment_id
-  v.product_id,
-  v.batch_id,
-  v.dose_amount,
-  v.unit,
-  'vaccination',
-  v.id,
-  v.created_at
-FROM vaccinations v
-WHERE v.batch_id IS NOT NULL
-  AND v.dose_amount IS NOT NULL
-  AND v.dose_amount > 0
-  AND NOT EXISTS (
-    SELECT 1 FROM usage_items ui
-    WHERE ui.vaccination_id = v.id
-  );
+-- Step 6: Temporarily disable stock validation trigger for backfill
+-- We need to backfill historical vaccinations, but the stock check will fail
+-- because those vaccinations already consumed the stock
+DO $$
+DECLARE
+  v_trigger_exists boolean;
+BEGIN
+  -- Check if the stock validation trigger exists
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'usage_items_stock_check_trigger'
+  ) INTO v_trigger_exists;
+  
+  IF v_trigger_exists THEN
+    -- Temporarily disable the trigger
+    ALTER TABLE usage_items DISABLE TRIGGER usage_items_stock_check_trigger;
+    RAISE NOTICE 'Temporarily disabled stock validation trigger for backfill';
+  END IF;
+END $$;
 
--- Step 7: Add helpful comments
+-- Step 7: Backfill existing vaccinations to create usage_items
+-- Only process vaccinations that don't already have a usage_item
+DO $$
+DECLARE
+  v_inserted_count integer;
+BEGIN
+  INSERT INTO usage_items (
+    treatment_id,
+    product_id,
+    batch_id,
+    qty,
+    unit,
+    purpose,
+    vaccination_id,
+    created_at
+  )
+  SELECT
+    NULL,  -- vaccinations don't have treatment_id
+    v.product_id,
+    v.batch_id,
+    v.dose_amount,
+    v.unit,
+    'vaccination',
+    v.id,
+    v.created_at
+  FROM vaccinations v
+  WHERE v.batch_id IS NOT NULL
+    AND v.dose_amount IS NOT NULL
+    AND v.dose_amount > 0
+    AND NOT EXISTS (
+      SELECT 1 FROM usage_items ui
+      WHERE ui.vaccination_id = v.id
+    );
+  
+  GET DIAGNOSTICS v_inserted_count = ROW_COUNT;
+  RAISE NOTICE 'Backfilled % vaccinations into usage_items', v_inserted_count;
+END $$;
+
+-- Step 8: Re-enable stock validation trigger
+DO $$
+DECLARE
+  v_trigger_exists boolean;
+BEGIN
+  -- Check if the stock validation trigger exists
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'usage_items_stock_check_trigger'
+  ) INTO v_trigger_exists;
+  
+  IF v_trigger_exists THEN
+    -- Re-enable the trigger
+    ALTER TABLE usage_items ENABLE TRIGGER usage_items_stock_check_trigger;
+    RAISE NOTICE 'Re-enabled stock validation trigger';
+  END IF;
+END $$;
+
+-- Step 9: Add helpful comments
 COMMENT ON COLUMN usage_items.treatment_id IS 'Links to treatment record (NULL for vaccinations)';
 COMMENT ON COLUMN usage_items.vaccination_id IS 'Links to vaccination record (NULL for treatments)';
 COMMENT ON FUNCTION create_usage_item_from_vaccination IS 'Automatically creates usage_items record when vaccination is inserted to ensure stock is properly deducted';

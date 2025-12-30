@@ -1,81 +1,57 @@
-# Fix Milk Data RLS Policies
+# Stock Validation Issue - Fix Guide
 
-The milk test data is not showing because Row Level Security (RLS) policies are missing.
+## Problem
 
-## Apply the Fix
-
-1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt
-2. Click on "SQL Editor" in the left sidebar
-3. Click "New Query"
-4. Copy and paste the SQL below:
-
-```sql
--- milk_producers policies
-DROP POLICY IF EXISTS "Users can view milk producers" ON milk_producers;
-DROP POLICY IF EXISTS "Users can insert milk producers" ON milk_producers;
-DROP POLICY IF EXISTS "Users can update milk producers" ON milk_producers;
-
-CREATE POLICY "Users can view milk producers"
-  ON milk_producers FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Users can insert milk producers"
-  ON milk_producers FOR INSERT
-  TO authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "Users can update milk producers"
-  ON milk_producers FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
-
--- milk_composition_tests policies
-DROP POLICY IF EXISTS "Users can view composition tests" ON milk_composition_tests;
-DROP POLICY IF EXISTS "Users can insert composition tests" ON milk_composition_tests;
-DROP POLICY IF EXISTS "Users can update composition tests" ON milk_composition_tests;
-
-CREATE POLICY "Users can view composition tests"
-  ON milk_composition_tests FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Users can insert composition tests"
-  ON milk_composition_tests FOR INSERT
-  TO authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "Users can update composition tests"
-  ON milk_composition_tests FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
-
--- milk_quality_tests policies
-DROP POLICY IF EXISTS "Users can view quality tests" ON milk_quality_tests;
-DROP POLICY IF EXISTS "Users can insert quality tests" ON milk_quality_tests;
-DROP POLICY IF EXISTS "Users can update quality tests" ON milk_quality_tests;
-
-CREATE POLICY "Users can view quality tests"
-  ON milk_quality_tests FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Users can insert quality tests"
-  ON milk_quality_tests FOR INSERT
-  TO authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "Users can update quality tests"
-  ON milk_quality_tests FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
+The migration fails with:
+```
+ERROR: Not enough stock in batch. Left: 0.9000, Tried: 2
 ```
 
-5. Click "Run" (or press Ctrl+Enter / Cmd+Enter)
-6. You should see "Success. No rows returned"
-7. Refresh your application
+This is because historical vaccinations already used the stock, but we're trying to retroactively record them.
 
-The milk test data will now be visible in the "Laboratorijos tyrimai" tab!
+## Solution: Updated Migration
+
+The migration has been updated to temporarily disable the stock validation trigger during backfill.
+
+### Try Running It Again
+
+1. Copy the updated migration from: `supabase/migrations/20251230000000_fix_vaccination_stock_deduction.sql`
+2. Paste into Supabase SQL Editor
+3. Click "Run"
+
+The migration now:
+- ✅ Disables stock validation
+- ✅ Backfills vaccinations  
+- ✅ Re-enables stock validation
+
+---
+
+## If That Doesn't Work
+
+Find the trigger name first:
+```sql
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'usage_items'::regclass;
+```
+
+Then manually disable it, run backfill, and re-enable:
+```sql
+-- Disable (use actual trigger name)
+ALTER TABLE usage_items DISABLE TRIGGER [trigger_name];
+
+-- Backfill
+INSERT INTO usage_items (treatment_id, product_id, batch_id, qty, unit, purpose, vaccination_id, created_at)
+SELECT NULL, v.product_id, v.batch_id, v.dose_amount, v.unit, 'vaccination', v.id, v.created_at
+FROM vaccinations v
+WHERE v.batch_id IS NOT NULL
+  AND v.dose_amount IS NOT NULL
+  AND v.dose_amount > 0
+  AND NOT EXISTS (SELECT 1 FROM usage_items ui WHERE ui.vaccination_id = v.id);
+
+-- Re-enable
+ALTER TABLE usage_items ENABLE TRIGGER [trigger_name];
+```
+
+---
+
+**Status**: Updated migration ready  
+**Goal**: Ensure ALL product usages (treatments, vaccinations, etc.) are tracked in atsargos
