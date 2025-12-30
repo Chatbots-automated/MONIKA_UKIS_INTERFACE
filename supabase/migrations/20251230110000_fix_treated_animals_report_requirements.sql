@@ -4,7 +4,9 @@
   ## Fixed
   1. Veterinarian: Always shows "ARTŪRAS ABROMAITIS" (legal requirement)
   2. Medications: Pulls from usage_items, treatment_courses, AND animal_visits.planned_medications JSON
+     - Includes ALL product categories: medicines, hygiene, prevention, vaccines, etc.
   3. Treatment duration: Defaults to 1 day minimum
+  4. Disease: Shows clinical_diagnosis or animal_condition when disease is missing (34% of cases)
 
   ## Tables used
   - treatments (main table)
@@ -25,7 +27,14 @@ SELECT
     a.species,
     a.holder_name as owner_name,
     a.holder_address as owner_address,
-    d.name as disease_name,
+
+    -- Disease: Use database disease, or fallback to clinical_diagnosis or animal_condition
+    COALESCE(
+        d.name,
+        NULLIF(TRIM(t.clinical_diagnosis), ''),
+        NULLIF(TRIM(t.animal_condition), '')
+    ) as disease_name,
+
     d.code as disease_code,
     t.clinical_diagnosis,
     t.animal_condition,
