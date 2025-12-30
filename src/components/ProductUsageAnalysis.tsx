@@ -188,9 +188,35 @@ export function ProductUsageAnalysis() {
       }
       console.log('✅ Usage items processed:', usageByProduct.size, 'products');
 
-      // Process vaccinations
-      console.log('💉 Processing vaccinations...');
+      // Process vaccinations (DEPRECATED: new vaccinations are automatically converted to usage_items)
+      // This code is kept for backward compatibility with old vaccinations that weren't converted yet
+      // Skip vaccinations that already have usage_items (to prevent double-counting)
+      console.log('💉 Processing vaccinations (legacy only)...');
+
+      // Get all vaccination_ids that already have usage_items
+      const { data: existingVaccinationItems, error: vacItemsError } = await supabase
+        .from('usage_items')
+        .select('vaccination_id')
+        .not('vaccination_id', 'is', null);
+
+      if (vacItemsError) {
+        console.error('Error fetching vaccination items:', vacItemsError);
+      }
+
+      const existingVaccinationIds = new Set(
+        (existingVaccinationItems || []).map(item => item.vaccination_id).filter(Boolean)
+      );
+
+      let skippedCount = 0;
+      let processedCount = 0;
+
       for (const vacc of vaccinations || []) {
+        // Skip if this vaccination already has a usage_item
+        if (existingVaccinationIds.has(vacc.id)) {
+          skippedCount++;
+          continue;
+        }
+
         if (!vacc.product_id || !vacc.batch_id || !vacc.dose_amount) continue;
 
         const product = productMap.get(vacc.product_id);
@@ -237,8 +263,9 @@ export function ProductUsageAnalysis() {
           treatment_id: null,
           source: 'vaccinations',
         });
+        processedCount++;
       }
-      console.log('✅ Vaccinations processed');
+      console.log(`✅ Vaccinations processed: ${processedCount} legacy, ${skippedCount} skipped (already in usage_items)`);
 
       // Process synchronization steps (sync medications)
       console.log('🔄 Processing sync medications...');
