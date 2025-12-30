@@ -1,3 +1,18 @@
+/*
+  # Fix Treated Animals Report - Complete Requirements
+
+  ## Fixed
+  1. Veterinarian: Always shows "ARTŪRAS ABROMAITIS" (legal requirement)
+  2. Medications: Pulls from usage_items, treatment_courses, AND animal_visits.planned_medications JSON
+  3. Treatment duration: Defaults to 1 day minimum
+
+  ## Tables used
+  - treatments (main table)
+  - usage_items (direct medication entries)
+  - treatment_courses (multi-day courses)
+  - animal_visits (planned_medications JSON array)
+*/
+
 DROP VIEW IF EXISTS vw_treated_animals CASCADE;
 
 CREATE VIEW vw_treated_animals AS
@@ -16,7 +31,7 @@ SELECT
     t.animal_condition,
     t.first_symptoms_date,
 
-    -- Combine medications from usage_items, treatment_courses AND visits
+    -- Combine medications from usage_items, treatment_courses AND animal_visits
     COALESCE(
         NULLIF(
             TRIM(
@@ -33,10 +48,12 @@ SELECT
                     CASE
                         WHEN EXISTS(SELECT 1 FROM usage_items WHERE treatment_id = t.id)
                              AND (EXISTS(SELECT 1 FROM treatment_courses WHERE treatment_id = t.id)
-                                  OR EXISTS(SELECT 1 FROM visits v 
-                                            JOIN visit_medications vm ON v.id = vm.visit_id
-                                            WHERE v.animal_id = t.animal_id 
-                                            AND v.visit_date = t.reg_date))
+                                  OR (t.visit_id IS NOT NULL AND EXISTS(
+                                      SELECT 1 FROM animal_visits av
+                                      WHERE av.id = t.visit_id
+                                      AND av.planned_medications IS NOT NULL
+                                      AND jsonb_array_length(av.planned_medications::jsonb) > 0
+                                  )))
                         THEN ', '
                         ELSE ''
                     END,
@@ -52,21 +69,23 @@ SELECT
                     CASE
                         WHEN (EXISTS(SELECT 1 FROM usage_items WHERE treatment_id = t.id)
                               OR EXISTS(SELECT 1 FROM treatment_courses WHERE treatment_id = t.id))
-                             AND EXISTS(SELECT 1 FROM visits v 
-                                        JOIN visit_medications vm ON v.id = vm.visit_id
-                                        WHERE v.animal_id = t.animal_id 
-                                        AND v.visit_date = t.reg_date)
+                             AND t.visit_id IS NOT NULL
+                             AND EXISTS(
+                                 SELECT 1 FROM animal_visits av
+                                 WHERE av.id = t.visit_id
+                                 AND av.planned_medications IS NOT NULL
+                                 AND jsonb_array_length(av.planned_medications::jsonb) > 0
+                             )
                         THEN ', '
                         ELSE ''
                     END,
-                    -- Visit medications from the same date
+                    -- Medications from animal_visits.planned_medications JSON
                     COALESCE(
                         (SELECT STRING_AGG(DISTINCT p.name, ', ')
-                         FROM visits v
-                         JOIN visit_medications vm ON v.id = vm.visit_id
-                         JOIN products p ON vm.product_id = p.id
-                         WHERE v.animal_id = t.animal_id 
-                         AND v.visit_date = t.reg_date),
+                         FROM animal_visits av,
+                         jsonb_array_elements(av.planned_medications::jsonb) as med
+                         JOIN products p ON p.id = (med->>'product_id')::uuid
+                         WHERE av.id = t.visit_id),
                         ''
                     )
                 )
@@ -76,7 +95,7 @@ SELECT
         NULL
     ) as products_used,
 
-    -- Dose summary from usage_items, treatment_courses AND visits
+    -- Dose summary from all sources
     COALESCE(
         NULLIF(
             TRIM(
@@ -97,10 +116,12 @@ SELECT
                     CASE
                         WHEN EXISTS(SELECT 1 FROM usage_items WHERE treatment_id = t.id)
                              AND (EXISTS(SELECT 1 FROM treatment_courses WHERE treatment_id = t.id)
-                                  OR EXISTS(SELECT 1 FROM visits v 
-                                            JOIN visit_medications vm ON v.id = vm.visit_id
-                                            WHERE v.animal_id = t.animal_id 
-                                            AND v.visit_date = t.reg_date))
+                                  OR (t.visit_id IS NOT NULL AND EXISTS(
+                                      SELECT 1 FROM animal_visits av
+                                      WHERE av.id = t.visit_id
+                                      AND av.planned_medications IS NOT NULL
+                                      AND jsonb_array_length(av.planned_medications::jsonb) > 0
+                                  )))
                         THEN '; '
                         ELSE ''
                     END,
@@ -120,25 +141,27 @@ SELECT
                     CASE
                         WHEN (EXISTS(SELECT 1 FROM usage_items WHERE treatment_id = t.id)
                               OR EXISTS(SELECT 1 FROM treatment_courses WHERE treatment_id = t.id))
-                             AND EXISTS(SELECT 1 FROM visits v 
-                                        JOIN visit_medications vm ON v.id = vm.visit_id
-                                        WHERE v.animal_id = t.animal_id 
-                                        AND v.visit_date = t.reg_date)
+                             AND t.visit_id IS NOT NULL
+                             AND EXISTS(
+                                 SELECT 1 FROM animal_visits av
+                                 WHERE av.id = t.visit_id
+                                 AND av.planned_medications IS NOT NULL
+                                 AND jsonb_array_length(av.planned_medications::jsonb) > 0
+                             )
                         THEN '; '
                         ELSE ''
                     END,
-                    -- Visit medication doses
+                    -- Doses from animal_visits.planned_medications JSON
                     COALESCE(
                         (SELECT STRING_AGG(
-                            CONCAT(vm.quantity, ' ', vm.unit, ' (', p.name, ')'),
+                            CONCAT((med->>'qty')::text, ' ', med->>'unit', ' (', p.name, ')'),
                             '; '
                             ORDER BY p.name
                         )
-                         FROM visits v
-                         JOIN visit_medications vm ON v.id = vm.visit_id
-                         JOIN products p ON vm.product_id = p.id
-                         WHERE v.animal_id = t.animal_id 
-                         AND v.visit_date = t.reg_date),
+                         FROM animal_visits av,
+                         jsonb_array_elements(av.planned_medications::jsonb) as med
+                         JOIN products p ON p.id = (med->>'product_id')::uuid
+                         WHERE av.id = t.visit_id),
                         ''
                     )
                 )
@@ -148,24 +171,21 @@ SELECT
         NULL
     ) as dose_summary,
 
-    -- Treatment duration: from treatment courses OR calculate from visits
+    -- Treatment duration: from courses OR 1 day default
     COALESCE(
         (SELECT MAX(tc.days)
          FROM treatment_courses tc
          WHERE tc.treatment_id = t.id),
-        (SELECT EXTRACT(DAY FROM MAX(v.visit_date) - MIN(v.visit_date))::integer + 1
-         FROM visits v
-         JOIN visit_medications vm ON v.id = vm.visit_id
-         WHERE v.animal_id = t.animal_id
-         AND v.visit_date >= t.reg_date
-         AND v.visit_date <= COALESCE(t.reg_date + INTERVAL '30 days', t.reg_date + INTERVAL '30 days')),
         1
     ) as treatment_days,
 
     t.withdrawal_until_meat,
     t.withdrawal_until_milk,
     t.outcome as treatment_outcome,
+
+    -- LEGAL REQUIREMENT: Always show ARTŪRAS ABROMAITIS as responsible veterinarian
     'ARTŪRAS ABROMAITIS' as veterinarian,
+
     t.notes
 FROM treatments t
 LEFT JOIN animals a ON t.animal_id = a.id
