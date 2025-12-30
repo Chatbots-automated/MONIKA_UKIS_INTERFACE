@@ -4394,6 +4394,8 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       return;
     }
 
+    let updatedMeds = visit.planned_medications;
+
     if (showMedicationEntry) {
       const allEntered = visit.planned_medications?.every((_: any, idx: number) => {
         const qty = medicationQuantities[`${idx}`];
@@ -4406,23 +4408,11 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         return;
       }
 
-      const updatedMeds = visit.planned_medications?.map((med: any, idx: number) => ({
+      updatedMeds = visit.planned_medications?.map((med: any, idx: number) => ({
         ...med,
         qty: parseFloat(medicationQuantities[`${idx}`]),
         batch_id: medicationBatches[`${idx}`]
       }));
-
-      const { error: updateError } = await supabase
-        .from('animal_visits')
-        .update({
-          planned_medications: updatedMeds
-        })
-        .eq('id', visit.id);
-
-      if (updateError) {
-        showNotification('Klaida atnaujinant vaistų kiekius: ' + updateError.message, 'error');
-        return;
-      }
     }
 
     if (!confirm('Ar tikrai norite pažymėti šį vizitą kaip užbaigtą?')) {
@@ -4431,11 +4421,14 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
     setLoading(true);
     try {
+      // CRITICAL FIX: Update both planned_medications AND status in a SINGLE atomic update
+      // This prevents race conditions where the trigger fires before medications are updated
       const { error } = await supabase
         .from('animal_visits')
         .update({
           status: 'Baigtas',
-          notes: notes
+          notes: notes,
+          planned_medications: updatedMeds
         })
         .eq('id', visit.id);
 
