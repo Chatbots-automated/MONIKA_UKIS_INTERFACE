@@ -18,13 +18,33 @@
   3. No double-counting in ProductUsageAnalysis
 
   ## Changes
-  1. Add vaccination_id column to usage_items to track the relationship
-  2. Create function to generate usage_items from vaccinations
-  3. Create trigger to call this function on vaccination INSERT
-  4. Backfill existing vaccinations to create usage_items
+  1. Make treatment_id nullable (to support vaccinations without treatments)
+  2. Add vaccination_id column to usage_items to track the relationship
+  3. Create function to generate usage_items from vaccinations
+  4. Create trigger to call this function on vaccination INSERT
+  5. Backfill existing vaccinations to create usage_items
 */
 
--- Add vaccination_id column to usage_items to track which vaccinations have been converted
+-- Step 1: Make treatment_id nullable in usage_items
+-- This is CRITICAL - vaccinations don't have treatments!
+DO $$
+BEGIN
+  -- Check if treatment_id is currently NOT NULL
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'usage_items'
+      AND column_name = 'treatment_id'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.usage_items
+    ALTER COLUMN treatment_id DROP NOT NULL;
+    
+    RAISE NOTICE 'Made treatment_id nullable in usage_items';
+  END IF;
+END $$;
+
+-- Step 2: Add vaccination_id column to usage_items to track which vaccinations have been converted
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -35,10 +55,29 @@ BEGIN
     ADD COLUMN vaccination_id uuid REFERENCES public.vaccinations(id) ON DELETE CASCADE;
     
     CREATE INDEX IF NOT EXISTS idx_usage_items_vaccination_id ON public.usage_items(vaccination_id);
+    
+    RAISE NOTICE 'Added vaccination_id column to usage_items';
   END IF;
 END $$;
 
--- Function to create usage_item when vaccination is inserted
+-- Step 3: Add constraint to ensure either treatment_id OR vaccination_id is set (but not both)
+DO $$
+BEGIN
+  -- Drop the constraint if it exists (for re-runs)
+  ALTER TABLE public.usage_items
+  DROP CONSTRAINT IF EXISTS usage_items_source_check;
+  
+  -- Add the constraint
+  ALTER TABLE public.usage_items
+  ADD CONSTRAINT usage_items_source_check CHECK (
+    (treatment_id IS NOT NULL AND vaccination_id IS NULL) OR
+    (treatment_id IS NULL AND vaccination_id IS NOT NULL)
+  );
+  
+  RAISE NOTICE 'Added check constraint to ensure either treatment_id OR vaccination_id is set';
+END $$;
+
+-- Step 4: Function to create usage_item when vaccination is inserted
 CREATE OR REPLACE FUNCTION create_usage_item_from_vaccination()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -78,14 +117,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger to automatically create usage_items when vaccination is inserted
+-- Step 5: Create trigger to automatically create usage_items when vaccination is inserted
 DROP TRIGGER IF EXISTS trigger_create_usage_from_vaccination ON public.vaccinations;
 CREATE TRIGGER trigger_create_usage_from_vaccination
   AFTER INSERT ON public.vaccinations
   FOR EACH ROW
   EXECUTE FUNCTION create_usage_item_from_vaccination();
 
--- Backfill existing vaccinations to create usage_items
+-- Step 6: Backfill existing vaccinations to create usage_items
 -- Only process vaccinations that don't already have a usage_item
 INSERT INTO usage_items (
   treatment_id,
@@ -115,7 +154,9 @@ WHERE v.batch_id IS NOT NULL
     WHERE ui.vaccination_id = v.id
   );
 
--- Add helpful comments
-COMMENT ON COLUMN usage_items.vaccination_id IS 'Links to the vaccination record if this usage_item was created from a vaccination';
+-- Step 7: Add helpful comments
+COMMENT ON COLUMN usage_items.treatment_id IS 'Links to treatment record (NULL for vaccinations)';
+COMMENT ON COLUMN usage_items.vaccination_id IS 'Links to vaccination record (NULL for treatments)';
 COMMENT ON FUNCTION create_usage_item_from_vaccination IS 'Automatically creates usage_items record when vaccination is inserted to ensure stock is properly deducted';
 COMMENT ON TRIGGER trigger_create_usage_from_vaccination ON public.vaccinations IS 'Ensures vaccinations are deducted from inventory by creating usage_items records';
+COMMENT ON CONSTRAINT usage_items_source_check ON public.usage_items IS 'Ensures usage_items are linked to either a treatment OR a vaccination, but not both';

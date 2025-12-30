@@ -83,12 +83,13 @@ export interface Treatment {
 
 export interface UsageItem {
   id: string;
-  treatment_id: string;
+  treatment_id: string | null;  // Nullable - vaccinations don't have treatment_id
   product_id: string;
   batch_id: string;
   qty: number;
   unit: Unit;
   purpose: string;
+  vaccination_id?: string | null;  // Links to vaccination if this usage came from a vaccination
   created_at: string;
 }
 
