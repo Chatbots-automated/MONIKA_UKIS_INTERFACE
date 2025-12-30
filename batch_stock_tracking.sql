@@ -162,8 +162,9 @@ CREATE TRIGGER usage_items_stock_check_trigger
   WHEN (NEW.batch_id IS NOT NULL)
   EXECUTE FUNCTION check_batch_stock();
 
--- Step 11: Create view for easy stock monitoring
-CREATE OR REPLACE VIEW stock_by_batch AS
+-- Step 11: Drop and recreate view for easy stock monitoring
+DROP VIEW IF EXISTS stock_by_batch;
+CREATE VIEW stock_by_batch AS
 SELECT
   b.id as batch_id,
   b.batch_number,
