@@ -2263,13 +2263,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const fetchStockLevel = async (productId: string) => {
     const { data, error } = await supabase
       .from('batches')
-      .select('qty_left')
+      .select('qty_left, expiry_date')
       .eq('product_id', productId)
       .gt('qty_left', 0);
 
     if (error || !data) return 0;
 
-    const total = data.reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Only count batches that are not expired
+    const total = data
+      .filter(batch => {
+        if (!batch.expiry_date) return true;
+        const expiryDate = new Date(batch.expiry_date);
+        return expiryDate >= today;
+      })
+      .reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
+
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
   };
@@ -3361,7 +3372,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
                     const availableBatches = batches.filter(b =>
                       b.product_id === med.product_id &&
-                      (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                      (!b.expiry_date || new Date(b.expiry_date) >= new Date()) &&
+                      b.qty_left > 0
                     );
 
                     return (
