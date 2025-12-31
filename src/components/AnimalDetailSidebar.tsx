@@ -2814,7 +2814,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         console.log('💾 Saving teat statuses. Disabled teats:', disabledTeats);
         const allTeatPositions = ['K1', 'K2', 'D1', 'D2'];
         for (const teatPosition of allTeatPositions) {
-          const isDisabled = disabledTeats.includes(teatPosition);
+          const isDisabled = disabledTeats.includes(teatPosition.toLowerCase());
           console.log(`  - ${teatPosition}: ${isDisabled ? 'DISABLED' : 'enabled'}`);
 
           const { data: teatData, error: teatError } = await supabase
