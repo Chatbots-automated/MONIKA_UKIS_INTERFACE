@@ -101,7 +101,7 @@ export function TeatStatusCard({ animalId }: TeatStatusCardProps) {
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {TEAT_POSITIONS.map((teat) => {
-          const status = teatStatuses.find(t => t.teat_position === teat.id);
+          const status = teatStatuses.find(t => t.teat_position === teat.id.toLowerCase());
           const isDisabled = status?.is_disabled || false;
           const isSick = sickTeatsFromTreatments.has(teat.id.toLowerCase());
 
@@ -168,11 +168,11 @@ export function TeatStatusCard({ animalId }: TeatStatusCardProps) {
         {disabledTeats.length > 0 && (
           <div>
             <div className="text-sm font-medium text-gray-900 mb-1">
-              Išjungti spenys: {disabledTeats.map(t => TEAT_POSITIONS.find(p => p.id === t.teat_position)?.label).join(', ')}
+              Išjungti spenys: {disabledTeats.map(t => TEAT_POSITIONS.find(p => p.id.toLowerCase() === t.teat_position)?.label).join(', ')}
             </div>
             {disabledTeats.map(teat => (
               <div key={teat.id} className="text-xs text-gray-600 border-t border-gray-200 pt-2 mt-1">
-                <div><strong>{TEAT_POSITIONS.find(p => p.id === teat.teat_position)?.label}:</strong></div>
+                <div><strong>{TEAT_POSITIONS.find(p => p.id.toLowerCase() === teat.teat_position)?.label}:</strong></div>
                 {teat.disabled_date && (
                   <div>Išjungtas: {new Date(teat.disabled_date).toLocaleDateString()}</div>
                 )}

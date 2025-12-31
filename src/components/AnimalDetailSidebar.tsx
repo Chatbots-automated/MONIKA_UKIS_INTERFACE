@@ -429,7 +429,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       .eq('is_disabled', true);
 
     if (!error && data) {
-      const disabledTeatPositions = data.map(t => t.teat_position);
+      const disabledTeatPositions = data.map(t => t.teat_position.toUpperCase());
       setDisabledTeats(disabledTeatPositions);
     }
   };
@@ -2582,7 +2582,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             throw new Error('Produktas privalomas');
           }
 
-          if (!isCourse && !med.batch_id) {
+          if (!isCourse && (!med.batch_id || med.batch_id.trim() === '')) {
             throw new Error('Serija privaloma vienkartiniams gydymams');
           }
 
@@ -2819,7 +2819,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             .from('teat_status')
             .upsert({
               animal_id: animalId,
-              teat_position: teatPosition,
+              teat_position: teatPosition.toLowerCase(),
               is_disabled: isDisabled,
               disabled_date: isDisabled ? formData.visit_datetime.split('T')[0] : null,
               disabled_reason: isDisabled ? (treatmentData.notes || 'Išjungtas per gydymą') : null,
@@ -2828,7 +2828,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             });
 
           if (teatError) {
-            console.error('Error saving teat status:', teatError);
+            console.error('❌ Error saving teat status:', teatError);
           }
         }
         console.log('✅ Teat statuses updated');
