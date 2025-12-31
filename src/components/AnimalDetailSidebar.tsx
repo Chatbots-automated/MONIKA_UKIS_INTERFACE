@@ -2811,11 +2811,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         // Save disabled teats to teat_status table
         // Update all teats: set disabled for selected ones, enable all others
+        console.log('💾 Saving teat statuses. Disabled teats:', disabledTeats);
         const allTeatPositions = ['K1', 'K2', 'D1', 'D2'];
         for (const teatPosition of allTeatPositions) {
           const isDisabled = disabledTeats.includes(teatPosition);
+          console.log(`  - ${teatPosition}: ${isDisabled ? 'DISABLED' : 'enabled'}`);
 
-          const { error: teatError } = await supabase
+          const { data: teatData, error: teatError } = await supabase
             .from('teat_status')
             .upsert({
               animal_id: animalId,
@@ -2825,13 +2827,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               disabled_reason: isDisabled ? (treatmentData.notes || 'Išjungtas per gydymą') : null,
             }, {
               onConflict: 'animal_id,teat_position'
-            });
+            })
+            .select();
 
           if (teatError) {
-            console.error('❌ Error saving teat status:', teatError);
+            console.error('❌ Error saving teat status for', teatPosition, ':', teatError);
+            throw new Error(`Nepavyko išsaugoti spenos būsenos: ${teatError.message}`);
+          } else {
+            console.log('  ✅ Saved:', teatData);
           }
         }
-        console.log('✅ Teat statuses updated');
+        console.log('✅ All teat statuses updated');
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
       }
