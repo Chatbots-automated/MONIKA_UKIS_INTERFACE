@@ -415,9 +415,23 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       loadVisits(),
       loadTreatments(),
       loadVaccinations(),
-      loadProducts()
+      loadProducts(),
+      loadCurrentTeatStatus()
     ]);
     setLoading(false);
+  };
+
+  const loadCurrentTeatStatus = async () => {
+    const { data, error } = await supabase
+      .from('teat_status')
+      .select('*')
+      .eq('animal_id', animal.id)
+      .eq('is_disabled', true);
+
+    if (!error && data) {
+      const disabledTeatPositions = data.map(t => t.teat_position);
+      setDisabledTeats(disabledTeatPositions);
+    }
   };
 
   const loadVisits = async () => {
@@ -730,7 +744,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
 
             <WithdrawalStatusCard animalId={animal.id} />
 
-            <TeatStatusCard animalId={animal.id} />
+            <TeatStatusCard key={`teat-${animal.id}-${treatments.length}`} animalId={animal.id} />
 
             <GeaDailyCard animalId={animal.id} onStatusChange={handleApsekStatusChange} />
 
@@ -2796,26 +2810,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
 
         // Save disabled teats to teat_status table
-        if (disabledTeats.length > 0) {
-          for (const teatPosition of disabledTeats) {
-            const { error: teatError } = await supabase
-              .from('teat_status')
-              .upsert({
-                animal_id: animalId,
-                teat_position: teatPosition,
-                is_disabled: true,
-                disabled_date: formData.visit_datetime.split('T')[0],
-                disabled_reason: treatmentData.notes || 'Išjungtas per gydymą',
-              }, {
-                onConflict: 'animal_id,teat_position'
-              });
+        // Update all teats: set disabled for selected ones, enable all others
+        const allTeatPositions = ['K1', 'K2', 'D1', 'D2'];
+        for (const teatPosition of allTeatPositions) {
+          const isDisabled = disabledTeats.includes(teatPosition);
 
-            if (teatError) {
-              console.error('Error saving teat status:', teatError);
-            }
+          const { error: teatError } = await supabase
+            .from('teat_status')
+            .upsert({
+              animal_id: animalId,
+              teat_position: teatPosition,
+              is_disabled: isDisabled,
+              disabled_date: isDisabled ? formData.visit_datetime.split('T')[0] : null,
+              disabled_reason: isDisabled ? (treatmentData.notes || 'Išjungtas per gydymą') : null,
+            }, {
+              onConflict: 'animal_id,teat_position'
+            });
+
+          if (teatError) {
+            console.error('Error saving teat status:', teatError);
           }
-          console.log('✅ Disabled teats saved');
         }
+        console.log('✅ Teat statuses updated');
 
         await logAction('create_treatment', 'treatments', treatmentRecord.id);
       }
