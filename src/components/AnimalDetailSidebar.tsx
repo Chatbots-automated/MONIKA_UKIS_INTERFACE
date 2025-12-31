@@ -1720,11 +1720,11 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                     </div>
                   )}
 
-                  {(treatment.sick_teats || treatment.affected_teats) && (
+                  {(treatment.sick_teats || treatment.affected_teats || treatment.disabled_teats) && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <TeatDisplay
                         sickTeats={treatment.sick_teats || []}
-                        disabledTeats={[]}
+                        disabledTeats={treatment.disabled_teats || []}
                       />
                     </div>
                   )}
@@ -2461,6 +2461,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 creates_future_visits: hasRecurringDays,
                 sick_teats: sickTeats,
                 affected_teats: sickTeats,
+                disabled_teats: disabledTeats,
               })
               .eq('id', existingTreatment.id)
               .select()
@@ -2492,6 +2493,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 creates_future_visits: hasRecurringDays,
                 sick_teats: sickTeats,
                 affected_teats: sickTeats,
+                disabled_teats: disabledTeats,
               })
               .select()
               .single();
@@ -2518,6 +2520,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               creates_future_visits: hasRecurringDays,
               sick_teats: sickTeats,
               affected_teats: sickTeats,
+              disabled_teats: disabledTeats,
             })
             .select()
             .single();
@@ -3870,7 +3873,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite produktą</option>
-                        {products.filter(p => p.category === 'prevention' || p.category === 'biocide').map(prod => (
+                        {products.filter(p =>
+                          p.category === 'prevention' ||
+                          p.category === 'biocide' ||
+                          p.category === 'bolusas' ||
+                          p.category === 'hygiene' ||
+                          p.category === 'treatment_materials'
+                        ).map(prod => (
                           <option key={prod.id} value={prod.id}>{prod.name}</option>
                         ))}
                       </select>
