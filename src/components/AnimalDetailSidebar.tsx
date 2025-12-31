@@ -3410,7 +3410,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                             <option value="">Serija *</option>
                             {availableBatches.map(b => (
                               <option key={b.id} value={b.id}>
-                                {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                                {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                               </option>
                             ))}
                           </select>
@@ -3711,7 +3711,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                           (!b.expiry_date || new Date(b.expiry_date) >= new Date())
                         ).map(b => (
                           <option key={b.id} value={b.id}>
-                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                           </option>
                         ))}
                       </select>
@@ -3911,7 +3911,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                           (!b.expiry_date || new Date(b.expiry_date) >= new Date())
                         ).map(b => (
                           <option key={b.id} value={b.id}>
-                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                           </option>
                         ))}
                       </select>
@@ -4766,7 +4766,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                             <option value="">Pasirinkite seriją</option>
                             {availableBatches.map(batch => (
                               <option key={batch.id} value={batch.id}>
-                                {batch.lot || batch.serial_number || batch.id.slice(0, 8)} · Exp: {batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                                {batch.lot || batch.serial_number || batch.id.slice(0, 8)} · Exp: {batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {batch.qty_left?.toFixed(2) || '0'}
                               </option>
                             ))}
                           </select>

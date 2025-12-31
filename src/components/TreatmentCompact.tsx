@@ -564,7 +564,7 @@ export function TreatmentCompact() {
                       <option value="">Serija *</option>
                       {availBatches.map(b => (
                         <option key={b.id} value={b.id}>
-                          {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'}
+                          {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                         </option>
                       ))}
                     </select>

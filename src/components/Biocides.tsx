@@ -196,7 +196,9 @@ export function Biocides() {
               >
                 <option value="">Pasirinkite partiją...</option>
                 {batches.filter(b => b.product_id === formData.product_id).map((b) => (
-                  <option key={b.batch_id} value={b.batch_id}>LOT: {b.lot || 'N/A'} (Likutis: {b.on_hand})</option>
+                  <option key={b.batch_id} value={b.batch_id}>
+                    {b.lot || 'N/A'} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.on_hand?.toFixed(2) || '0'}
+                  </option>
                 ))}
               </select>
             </div>

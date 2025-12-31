@@ -69,7 +69,7 @@ export function VisitMedicationEditor({
       .from('batches')
       .select('*')
       .eq('product_id', productId)
-      .gt('available_qty', 0)
+      .gt('qty_left', 0)
       .order('expiry_date', { ascending: true });
 
     if (data) {
@@ -190,12 +190,13 @@ export function VisitMedicationEditor({
     const requestedQty = parseFloat(qty);
     if (isNaN(requestedQty)) return;
 
+    const qtyLeft = (batch as any).qty_left || 0;
     const newWarnings = new Map(warnings);
 
-    if (requestedQty > batch.available_qty) {
-      newWarnings.set(medId, `Nepakanka atsargų! Turima: ${batch.available_qty}`);
-    } else if (requestedQty > batch.available_qty * 0.8) {
-      newWarnings.set(medId, `Mažos atsargos. Liko: ${batch.available_qty}`);
+    if (requestedQty > qtyLeft) {
+      newWarnings.set(medId, `Nepakanka atsargų! Turima: ${qtyLeft}`);
+    } else if (requestedQty > qtyLeft * 0.8) {
+      newWarnings.set(medId, `Mažos atsargos. Liko: ${qtyLeft}`);
     } else {
       newWarnings.delete(medId);
     }
@@ -361,7 +362,7 @@ export function VisitMedicationEditor({
                           <option value="">Pasirinkite...</option>
                           {productBatches.map(b => (
                             <option key={b.id} value={b.id}>
-                              {b.batch_no} (Liko: {b.available_qty})
+                              {(b as any).lot || (b as any).serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {((b as any).qty_left || 0).toFixed(2)}
                             </option>
                           ))}
                         </select>
