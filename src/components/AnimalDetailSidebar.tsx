@@ -2300,7 +2300,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       }
 
       if (data && data.length > 0) {
-        return data[0].id;
+        // Filter out expired batches
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const validBatch = data.find(batch => {
+          if (!batch.expiry_date) return true;
+          const expiryDate = new Date(batch.expiry_date);
+          return expiryDate >= today;
+        });
+
+        return validBatch?.id || '';
       }
 
       return '';
