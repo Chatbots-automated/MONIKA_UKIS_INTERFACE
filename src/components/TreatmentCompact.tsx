@@ -127,12 +127,23 @@ export function TreatmentCompact() {
   const fetchStockLevel = async (productId: string) => {
     const { data, error } = await supabase
       .from('stock_by_batch')
-      .select('on_hand')
-      .eq('product_id', productId);
+      .select('on_hand, expiry_date, status')
+      .eq('product_id', productId)
+      .gt('on_hand', 0);
 
     if (error || !data) return 0;
 
-    const total = data.reduce((sum, batch) => sum + (batch.on_hand || 0), 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const total = data
+      .filter(batch => {
+        if (!batch.expiry_date) return true;
+        const expiryDate = new Date(batch.expiry_date);
+        return expiryDate >= today;
+      })
+      .reduce((sum, batch) => sum + (batch.on_hand || 0), 0);
+
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
   };
@@ -164,8 +175,19 @@ export function TreatmentCompact() {
   };
 
   const getAvailableBatches = (productId: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     return batches
-      .filter(b => b.product_id === productId)
+      .filter(b => {
+        if (b.product_id !== productId) return false;
+        if ((b.qty_left || 0) <= 0) return false;
+        if (b.expiry_date) {
+          const expiryDate = new Date(b.expiry_date);
+          if (expiryDate < today) return false;
+        }
+        return true;
+      })
       .sort((a, b) => {
         const dateA = a.expiry_date ? new Date(a.expiry_date).getTime() : Infinity;
         const dateB = b.expiry_date ? new Date(b.expiry_date).getTime() : Infinity;
@@ -188,7 +210,16 @@ export function TreatmentCompact() {
       }
 
       if (data && data.length > 0) {
-        return data[0].batch_id;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const availableBatch = data.find(batch => {
+          if (!batch.expiry_date) return true;
+          const expiryDate = new Date(batch.expiry_date);
+          return expiryDate >= today;
+        });
+
+        return availableBatch?.batch_id || '';
       }
 
       return '';
