@@ -127,10 +127,19 @@ export function Inventory() {
       const results = await Promise.all(inventoryPromises);
       const batchesWithStock = results.filter((item): item is StockItem => item !== null);
 
+      // Filter out expired batches
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const validBatches = batchesWithStock.filter(batch => {
+        if (!batch.expiry_date) return true;
+        const expiryDate = new Date(batch.expiry_date);
+        return expiryDate >= today;
+      });
+
       // Group batches by product_id and sum up quantities
       const productMap = new Map<string, { item: StockItem, batchCount: number, lots: Set<string> }>();
 
-      batchesWithStock.forEach(batch => {
+      validBatches.forEach(batch => {
         const existing = productMap.get(batch.product_id);
         if (existing) {
           // Product already exists, sum the quantities

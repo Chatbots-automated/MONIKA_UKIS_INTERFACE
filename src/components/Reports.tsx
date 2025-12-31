@@ -143,8 +143,17 @@ export function Reports() {
         }
       });
 
+      // Filter out expired batches before calculating stock
+      const todayDate = new Date();
+      todayDate.setHours(0, 0, 0, 0);
+      const validBatches = batches.filter(b => {
+        if (!b.expiry_date) return true;
+        const expiryDate = new Date(b.expiry_date);
+        return expiryDate >= todayDate;
+      });
+
       let totalProductValue = 0;
-      batches.forEach(b => {
+      validBatches.forEach(b => {
         const totalUsed = usageByBatch.get(b.id) || 0;
         const receivedQty = parseFloat(b.received_qty) || 0;
         const onHand = receivedQty - totalUsed;
@@ -156,7 +165,7 @@ export function Reports() {
       });
 
       const stockByProduct = new Map<string, number>();
-      batches.forEach(b => {
+      validBatches.forEach(b => {
         const current = stockByProduct.get(b.product_id) || 0;
         stockByProduct.set(b.product_id, current + parseFloat(b.received_qty || 0));
       });
@@ -232,7 +241,7 @@ export function Reports() {
         .map(([outcome, count]) => ({ outcome, count }));
 
       const categoryValue = new Map<string, number>();
-      batches.forEach(b => {
+      validBatches.forEach(b => {
         const product = products.find(p => p.id === b.product_id);
         if (product) {
           const totalUsed = usageByBatch.get(b.id) || 0;
