@@ -4349,8 +4349,13 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
   useEffect(() => {
     loadProductsAndBatches();
-    checkMedicationEntry();
   }, []);
+
+  useEffect(() => {
+    if (batches.length > 0) {
+      checkMedicationEntry();
+    }
+  }, [batches, visit.planned_medications]);
 
   const loadProductsAndBatches = async () => {
     const [productsRes, batchesRes] = await Promise.all([
@@ -4373,12 +4378,24 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       visit.planned_medications.forEach((med: any, idx: number) => {
         // Pre-fill with existing quantities if they exist
         initialQtys[`${idx}`] = med.qty != null && med.qty !== '' && med.qty !== 0 ? String(med.qty) : '';
-        initialBatches[`${idx}`] = med.batch_id || '';
+
+        // Auto-select first available batch if no batch_id exists
+        if (med.batch_id) {
+          initialBatches[`${idx}`] = med.batch_id;
+        } else {
+          const availableBatches = batches.filter(b =>
+            b.product_id === med.product_id &&
+            (!b.expiry_date || new Date(b.expiry_date) >= new Date()) &&
+            b.qty_left > 0
+          );
+          initialBatches[`${idx}`] = availableBatches[0]?.id || '';
+        }
       });
 
       setMedicationQuantities(initialQtys);
       setMedicationBatches(initialBatches);
       console.log('🔍 Pre-filled medication quantities:', initialQtys);
+      console.log('🔍 Auto-selected batches:', initialBatches);
       console.log('🔍 Visit planned_medications:', visit.planned_medications);
     }
   };
@@ -4698,7 +4715,8 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
                   const selectedBatch = batches.find(b => b.id === selectedBatchId);
                   const availableBatches = batches.filter(b =>
                     b.product_id === med.product_id &&
-                    (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                    (!b.expiry_date || new Date(b.expiry_date) >= new Date()) &&
+                    b.qty_left > 0
                   );
 
                   return (

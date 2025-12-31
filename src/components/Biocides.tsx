@@ -53,6 +53,30 @@ export function Biocides() {
     if (usageRes.data) setUsageRecords(usageRes.data);
   };
 
+  const getOldestBatchWithStock = async (productId: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase
+        .from('stock_by_batch')
+        .select('batch_id, on_hand, expiry_date')
+        .eq('product_id', productId)
+        .gt('on_hand', 0)
+        .order('expiry_date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching batch stock:', error);
+        return '';
+      }
+
+      if (data && data.length > 0) {
+        return data[0].batch_id;
+      }
+      return '';
+    } catch (err) {
+      console.error('Error getting oldest batch:', err);
+      return '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -143,7 +167,15 @@ export function Biocides() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Biocidinis produktas *</label>
               <select
                 value={formData.product_id}
-                onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                onChange={async (e) => {
+                  const productId = e.target.value;
+                  if (productId) {
+                    const oldestBatchId = await getOldestBatchWithStock(productId);
+                    setFormData({ ...formData, product_id: productId, batch_id: oldestBatchId });
+                  } else {
+                    setFormData({ ...formData, product_id: '', batch_id: '' });
+                  }
+                }}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
                 required
               >

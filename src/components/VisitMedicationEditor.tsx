@@ -79,22 +79,39 @@ export function VisitMedicationEditor({
     }
   };
 
-  const initializeMedications = () => {
-    const initialized: VisitMedication[] = plannedMedications.map((pm, index) => {
-      if (pm.product_id) {
-        loadBatchesForProduct(pm.product_id);
-      }
-      return {
-        id: pm.id || `med-${index}`,
-        product_id: pm.product_id || '',
-        batch_id: pm.batch_id || null,
-        qty: pm.qty?.toString() || '',
-        unit: pm.unit || 'ml',
-        teat: pm.teat || null,
-        purpose: pm.purpose || 'Gydymas',
-        is_scheduled: true
-      };
-    });
+  const initializeMedications = async () => {
+    const initialized: VisitMedication[] = await Promise.all(
+      plannedMedications.map(async (pm, index) => {
+        let batchId = pm.batch_id;
+
+        if (pm.product_id) {
+          await loadBatchesForProduct(pm.product_id);
+
+          if (!batchId) {
+            const { data: batchData } = await supabase
+              .from('batches')
+              .select('id')
+              .eq('product_id', pm.product_id)
+              .gt('qty_left', 0)
+              .order('expiry_date', { ascending: true })
+              .limit(1);
+
+            batchId = batchData?.[0]?.id || null;
+          }
+        }
+
+        return {
+          id: pm.id || `med-${index}`,
+          product_id: pm.product_id || '',
+          batch_id: batchId,
+          qty: pm.qty?.toString() || '',
+          unit: pm.unit || 'ml',
+          teat: pm.teat || null,
+          purpose: pm.purpose || 'Gydymas',
+          is_scheduled: true
+        };
+      })
+    );
     setMedications(initialized);
   };
 
@@ -114,30 +131,46 @@ export function VisitMedicationEditor({
     onUpdate(updated);
   };
 
-  const updateMedication = (id: string, field: keyof VisitMedication, value: any) => {
-    const updated = medications.map(m => {
+  const updateMedication = async (id: string, field: keyof VisitMedication, value: any) => {
+    let updatedMeds = medications.map(m => {
       if (m.id === id) {
-        const newMed = { ...m, [field]: value };
-
-        if (field === 'product_id' && value) {
-          loadBatchesForProduct(value);
-          newMed.batch_id = null;
-        }
-
-        if (field === 'batch_id' && value) {
-          validateQuantity(id, m.product_id, value, m.qty);
-        }
-
-        if (field === 'qty' && value && m.batch_id) {
-          validateQuantity(id, m.product_id, m.batch_id, value);
-        }
-
-        return newMed;
+        return { ...m, [field]: value };
       }
       return m;
     });
-    setMedications(updated);
-    onUpdate(updated);
+
+    if (field === 'product_id' && value) {
+      await loadBatchesForProduct(value);
+
+      const { data: batchData } = await supabase
+        .from('batches')
+        .select('id')
+        .eq('product_id', value)
+        .gt('qty_left', 0)
+        .order('expiry_date', { ascending: true })
+        .limit(1);
+
+      updatedMeds = updatedMeds.map(m => {
+        if (m.id === id) {
+          return { ...m, batch_id: batchData?.[0]?.id || null };
+        }
+        return m;
+      });
+    }
+
+    const med = updatedMeds.find(m => m.id === id);
+    if (med) {
+      if (field === 'batch_id' && value) {
+        validateQuantity(id, med.product_id, value, med.qty);
+      }
+
+      if (field === 'qty' && value && med.batch_id) {
+        validateQuantity(id, med.product_id, med.batch_id, value);
+      }
+    }
+
+    setMedications(updatedMeds);
+    onUpdate(updatedMeds);
   };
 
   const removeMedication = (id: string) => {
