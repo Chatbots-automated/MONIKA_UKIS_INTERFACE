@@ -126,10 +126,10 @@ export function TreatmentCompact() {
 
   const fetchStockLevel = async (productId: string) => {
     const { data, error } = await supabase
-      .from('stock_by_batch')
-      .select('on_hand, expiry_date, status')
+      .from('batches')
+      .select('qty_left, expiry_date')
       .eq('product_id', productId)
-      .gt('on_hand', 0);
+      .gt('qty_left', 0);
 
     if (error || !data) return 0;
 
@@ -142,7 +142,7 @@ export function TreatmentCompact() {
         const expiryDate = new Date(batch.expiry_date);
         return expiryDate >= today;
       })
-      .reduce((sum, batch) => sum + (batch.on_hand || 0), 0);
+      .reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
 
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
@@ -198,10 +198,10 @@ export function TreatmentCompact() {
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
       const { data, error } = await supabase
-        .from('stock_by_batch')
-        .select('batch_id, on_hand, expiry_date')
+        .from('batches')
+        .select('id, qty_left, expiry_date')
         .eq('product_id', productId)
-        .gt('on_hand', 0)
+        .gt('qty_left', 0)
         .order('expiry_date', { ascending: true });
 
       if (error) {
@@ -219,7 +219,7 @@ export function TreatmentCompact() {
           return expiryDate >= today;
         });
 
-        return availableBatch?.batch_id || '';
+        return availableBatch?.id || '';
       }
 
       return '';

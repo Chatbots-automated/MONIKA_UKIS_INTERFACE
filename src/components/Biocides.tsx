@@ -56,10 +56,10 @@ export function Biocides() {
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
       const { data, error } = await supabase
-        .from('stock_by_batch')
-        .select('batch_id, on_hand, expiry_date')
+        .from('batches')
+        .select('id, qty_left, expiry_date')
         .eq('product_id', productId)
-        .gt('on_hand', 0)
+        .gt('qty_left', 0)
         .order('expiry_date', { ascending: true });
 
       if (error) {
@@ -68,7 +68,7 @@ export function Biocides() {
       }
 
       if (data && data.length > 0) {
-        return data[0].batch_id;
+        return data[0].id;
       }
       return '';
     } catch (err) {

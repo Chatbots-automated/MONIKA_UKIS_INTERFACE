@@ -2262,13 +2262,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const fetchStockLevel = async (productId: string) => {
     const { data, error } = await supabase
-      .from('stock_by_batch')
-      .select('on_hand')
-      .eq('product_id', productId);
+      .from('batches')
+      .select('qty_left')
+      .eq('product_id', productId)
+      .gt('qty_left', 0);
 
     if (error || !data) return 0;
 
-    const total = data.reduce((sum, batch) => sum + (batch.on_hand || 0), 0);
+    const total = data.reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
   };
@@ -2276,10 +2277,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
       const { data, error } = await supabase
-        .from('stock_by_batch')
-        .select('batch_id, on_hand, expiry_date')
+        .from('batches')
+        .select('id, qty_left, expiry_date')
         .eq('product_id', productId)
-        .gt('on_hand', 0)
+        .gt('qty_left', 0)
         .order('expiry_date', { ascending: true });
 
       if (error) {
@@ -2288,7 +2289,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       }
 
       if (data && data.length > 0) {
-        return data[0].batch_id;
+        return data[0].id;
       }
 
       return '';
@@ -2723,20 +2724,23 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               teat: med.teat || null,
             }));
 
-            futureVisits = treatmentData.recurring_days.map(dateStr => ({
-              animal_id: animalId,
-              visit_datetime: `${dateStr}T10:00:00`,
-              procedures: ['Gydymas'],
-              status: 'Planuojamas',
-              notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
-              vet_name: formData.vet_name || null,
-              next_visit_required: false,
-              treatment_required: true,
-              related_treatment_id: treatmentRecord.id,
-              related_visit_id: visitData.id,
-              planned_medications: dailyMedications,
-              medications_processed: false,
-            }));
+            // Filter out today's date to avoid creating a duplicate visit
+            futureVisits = treatmentData.recurring_days
+              .filter(dateStr => dateStr !== todayDate)
+              .map(dateStr => ({
+                animal_id: animalId,
+                visit_datetime: `${dateStr}T10:00:00`,
+                procedures: ['Gydymas'],
+                status: 'Planuojamas',
+                notes: `Pakartotinis gydymas (${treatmentData.disease_id ? diseases.find(d => d.id === treatmentData.disease_id)?.name || '' : 'liga nenurodyta'})\nVaistai: ${medicationNames}\n\n⚠️ Įveskite vaistų kiekį prieš užbaigiant vizitą`,
+                vet_name: formData.vet_name || null,
+                next_visit_required: false,
+                treatment_required: true,
+                related_treatment_id: treatmentRecord.id,
+                related_visit_id: visitData.id,
+                planned_medications: dailyMedications,
+                medications_processed: false,
+              }));
           }
 
           console.log(`📦 Creating ${futureVisits.length} future visits`);
