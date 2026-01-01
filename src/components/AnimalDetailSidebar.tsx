@@ -2372,6 +2372,16 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const handleSubmit = async (e: React.FormEvent, autoComplete = false) => {
     e.preventDefault();
+
+    console.log('🚀 handleSubmit called:', {
+      isEditMode,
+      visitId: visitToEdit?.id,
+      currentStatus: formData.status,
+      autoComplete,
+      procedures: formData.procedures,
+      hasTreatmentMeds: treatmentData.medications.length > 0
+    });
+
     if (formData.procedures.length === 0) {
       showNotification('Pasirinkite bent vieną procedūrą', 'error');
       return;
@@ -2573,6 +2583,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           med => med.is_course && parseInt(med.course_days) > 1
         );
 
+        console.log('🔍 Processing medications:', {
+          isEditMode,
+          visitStatus: formData.status,
+          autoComplete,
+          medicationCount: treatmentData.medications.length,
+          willDeductStock: formData.status === 'Baigtas' || autoComplete
+        });
+
         for (const med of treatmentData.medications) {
           const isCourse = med.is_course && parseInt(med.course_days) > 1;
 
@@ -2614,9 +2632,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
             // For multi-day courses, medications will be entered per visit
             // No immediate stock deduction
+            console.log('📅 Created course entry (no immediate stock deduction)');
           } else {
             // Single dose - only create usage if visit is completed
             if (formData.status === 'Baigtas' || autoComplete) {
+              console.log('✅ Creating usage_item (deducting stock):', {
+                product_id: med.product_id,
+                batch_id: med.batch_id,
+                qty: med.qty,
+                unit: med.unit
+              });
+
               const { error: usageError } = await supabase
                 .from('usage_items')
                 .insert({
@@ -2629,7 +2655,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   teat: med.teat || null,
                 });
 
-              if (usageError) throw usageError;
+              if (usageError) {
+                console.error('❌ Error creating usage_item:', usageError);
+                throw usageError;
+              }
+              console.log('✅ Stock deducted successfully');
+            } else {
+              console.log('⏸️  Visit not completed - storing as planned medication (no stock deduction yet)');
             }
           }
         }
@@ -3185,7 +3217,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         await logAction('complete_visit', 'animal_visits', visitData.id);
         showNotification('Vizitas išsaugotas ir užbaigtas!', 'success');
       } else {
-        showNotification(isEditMode ? 'Vizitas sėkmingai atnaujintas!' : 'Vizitas ir visi susiję įrašai sėkmingai sukurti!', 'success');
+        // Determine if stock was deducted
+        const hasTreatmentMeds = formData.procedures.includes('Gydymas') && treatmentData.medications.length > 0;
+        const stockDeducted = hasTreatmentMeds && (formData.status === 'Baigtas' || autoComplete);
+        const singleDoseMeds = treatmentData.medications.filter(med => !(med.is_course && parseInt(med.course_days) > 1));
+
+        let message = isEditMode ? 'Vizitas sėkmingai atnaujintas!' : 'Vizitas ir visi susiję įrašai sėkmingai sukurti!';
+
+        if (hasTreatmentMeds && singleDoseMeds.length > 0) {
+          if (stockDeducted) {
+            message += ' Vaistai nurašyti iš atsargų.';
+          } else {
+            message += ' Vaistai saugomi kaip planuojami (nebus nurašyti kol vizitas nebus užbaigtas).';
+          }
+        }
+
+        showNotification(message, 'success');
       }
 
       onSuccess();
@@ -3309,8 +3356,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               </label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as VisitStatus })}
+                onChange={(e) => {
+                  const newStatus = e.target.value as VisitStatus;
+                  // Warn if changing from Baigtas to something else
+                  if (isEditMode && visitToEdit?.status === 'Baigtas' && newStatus !== 'Baigtas') {
+                    if (!confirm('ĮSPĖJIMAS: Keičiate užbaigto vizito statusą. Jei pakeisite statusą į "' + newStatus + '", pridėti vaistai NEBUS nurašyti iš atsargų. Ar tikrai norite keisti statusą?')) {
+                      return;
+                    }
+                  }
+                  setFormData({ ...formData, status: newStatus });
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                title={isEditMode && visitToEdit?.status === 'Baigtas' ? 'Jei pakeisite statusą iš "Baigtas", nauji vaistai nebus nurašyti iš atsargų' : ''}
               >
                 <option value="Planuojamas">Planuojamas</option>
                 <option value="Vykdomas">Vykdomas</option>
@@ -3318,6 +3375,11 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 <option value="Atšauktas">Atšauktas</option>
                 <option value="Neįvykęs">Neįvykęs</option>
               </select>
+              {isEditMode && visitToEdit?.status === 'Baigtas' && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ Vizitas užbaigtas. Išlaikykite "Baigtas" statusą, kad pridėti vaistai būtų nurašyti iš atsargų.
+                </p>
+              )}
             </div>
           </div>
 
