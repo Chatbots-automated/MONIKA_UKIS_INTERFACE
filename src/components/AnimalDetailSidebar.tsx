@@ -4392,6 +4392,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const [showMedicationEntry, setShowMedicationEntry] = useState(false);
   const [medicationQuantities, setMedicationQuantities] = useState<Record<string, string>>({});
   const [medicationBatches, setMedicationBatches] = useState<Record<string, string>>({});
+  const [syncStepBatchId, setSyncStepBatchId] = useState<string>('');
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
 
@@ -4468,6 +4469,66 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
       return;
     }
 
+    // Handle synchronization visit completion
+    if (visit.sync_step_id) {
+      // Check if batch is required and selected
+      const { data: syncStep } = await supabase
+        .from('synchronization_steps')
+        .select('medication_product_id, batch_id')
+        .eq('id', visit.sync_step_id)
+        .maybeSingle();
+
+      if (syncStep?.medication_product_id && !syncStep.batch_id && !syncStepBatchId) {
+        showNotification('Prašome pasirinkti pakuotę / seriją prieš užbaigiant vizitą', 'error');
+        return;
+      }
+
+      if (!confirm('Ar tikrai norite pažymėti šį sinchronizacijos vizitą kaip užbaigtą? Vaistas bus nurašytas iš atsargų.')) {
+        return;
+      }
+
+      setLoading(true);
+      try {
+        // Update sync step with batch (if selected) and mark as completed
+        const updateData: any = {
+          completed: true,
+          completed_at: new Date().toISOString()
+        };
+
+        if (syncStepBatchId) {
+          updateData.batch_id = syncStepBatchId;
+        }
+
+        const { error: syncError } = await supabase
+          .from('synchronization_steps')
+          .update(updateData)
+          .eq('id', visit.sync_step_id);
+
+        if (syncError) throw syncError;
+
+        // Update visit status
+        const { error: visitError } = await supabase
+          .from('animal_visits')
+          .update({
+            status: 'Baigtas',
+            notes: notes
+          })
+          .eq('id', visit.id);
+
+        if (visitError) throw visitError;
+
+        await logAction('complete_sync_visit', 'animal_visits', visit.id);
+        onSuccess();
+        showNotification('Sinchronizacijos vizitas sėkmingai užbaigtas! Vaistas nurašytas iš atsargų.', 'success');
+      } catch (error: any) {
+        showNotification('Klaida: ' + error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Handle regular visit completion (existing logic)
     let updatedMeds = visit.planned_medications;
 
     if (showMedicationEntry) {
@@ -4507,16 +4568,6 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
         .eq('id', visit.id);
 
       if (error) throw error;
-
-      if (visit.sync_step_id) {
-        await supabase
-          .from('synchronization_steps')
-          .update({
-            completed: true,
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', visit.sync_step_id);
-      }
 
       await logAction('complete_visit', 'animal_visits', visit.id);
       onSuccess();
@@ -4740,7 +4791,13 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
             </div>
           )}
 
-          {visit.sync_step_id && <SyncStepMedicationDisplay visitId={visit.id} syncStepId={visit.sync_step_id} />}
+          {visit.sync_step_id && (
+            <SyncStepMedicationDisplay
+              visitId={visit.id}
+              syncStepId={visit.sync_step_id}
+              onBatchSelected={(batchId) => setSyncStepBatchId(batchId)}
+            />
+          )}
 
           {showMedicationEntry && visit.planned_medications && (
             <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
@@ -4976,10 +5033,12 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   );
 }
 
-function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; syncStepId: string }) {
+function SyncStepMedicationDisplay({ visitId, syncStepId, onBatchSelected }: { visitId: string; syncStepId: string; onBatchSelected?: (batchId: string) => void }) {
   const [stepData, setStepData] = useState<any>(null);
   const [productData, setProductData] = useState<any>(null);
   const [batchData, setBatchData] = useState<any>(null);
+  const [availableBatches, setAvailableBatches] = useState<any[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -4989,7 +5048,7 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
   const loadData = async () => {
     try {
       // Load synchronization step data
-      const { data: step, error: stepError } = await supabase
+      const { data: step, error: stepError} = await supabase
         .from('synchronization_steps')
         .select('*')
         .eq('id', syncStepId)
@@ -5010,7 +5069,24 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
         ]);
 
         if (productRes.data) setProductData(productRes.data);
-        if (batchRes.data) setBatchData(batchRes.data);
+        if (batchRes.data) {
+          setBatchData(batchRes.data);
+          setSelectedBatchId(step.batch_id);
+        }
+
+        // If visit not completed and no batch selected, load available batches for selection
+        if (productRes.data && !step.batch_id && !step.completed) {
+          const { data: batches } = await supabase
+            .from('batches')
+            .select('*')
+            .eq('product_id', step.medication_product_id)
+            .gt('qty_left', 0)
+            .order('expiry_date', { ascending: true });
+
+          if (batches) {
+            setAvailableBatches(batches);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading sync step medication data:', error);
@@ -5086,10 +5162,36 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
             </div>
           )}
 
-          {!stepData.completed && !batchData && productData && (
+          {!stepData.completed && !batchData && availableBatches.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Pasirinkite pakuotę / seriją *
+              </label>
+              <select
+                value={selectedBatchId}
+                onChange={(e) => {
+                  setSelectedBatchId(e.target.value);
+                  if (onBatchSelected) {
+                    onBatchSelected(e.target.value);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                required
+              >
+                <option value="">-- Pasirinkite seriją --</option>
+                {availableBatches.map(batch => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.lot} (Likutis: {batch.qty_left} {productData?.primary_pack_unit}) - Galioja iki: {batch.expiry_date}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!stepData.completed && !batchData && availableBatches.length === 0 && productData && (
             <div className="bg-orange-50 border border-orange-200 rounded p-2">
               <p className="text-xs text-orange-800">
-                Pakuotė bus pasirinkta atliekant vizitą
+                Nėra prieinamų pakuočių su likučiu
               </p>
             </div>
           )}
