@@ -4998,13 +4998,15 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
       if (stepError) throw stepError;
       setStepData(step);
 
-      // If step has medication data, load product and batch info
-      if (step?.batch_id) {
+      // Load product and batch info if available
+      if (step?.medication_product_id || step?.batch_id) {
         const [productRes, batchRes] = await Promise.all([
           step.medication_product_id
             ? supabase.from('products').select('*').eq('id', step.medication_product_id).maybeSingle()
             : Promise.resolve({ data: null }),
-          supabase.from('batches').select('*').eq('id', step.batch_id).maybeSingle()
+          step.batch_id
+            ? supabase.from('batches').select('*').eq('id', step.batch_id).maybeSingle()
+            : Promise.resolve({ data: null })
         ]);
 
         if (productRes.data) setProductData(productRes.data);
@@ -5047,6 +5049,9 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
             <div className="flex-1">
               <div className="text-xs font-medium text-gray-500 mb-1">Vaistas</div>
               <div className="text-base font-semibold text-gray-900">{stepData.step_name}</div>
+              {productData && (
+                <div className="text-xs text-gray-600 mt-0.5">{productData.name}</div>
+              )}
             </div>
             {!stepData.completed && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
@@ -5064,7 +5069,9 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
 
           {stepData.dosage && (
             <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Panaudotas kiekis</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">
+                {stepData.completed ? 'Panaudotas kiekis' : 'Planuojamas kiekis'}
+              </div>
               <div className="flex items-center gap-2">
                 <div className="text-2xl font-bold text-purple-700">{stepData.dosage}</div>
                 <div className="text-lg text-gray-600">{stepData.dosage_unit}</div>
@@ -5079,10 +5086,25 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
             </div>
           )}
 
+          {!stepData.completed && !batchData && productData && (
+            <div className="bg-orange-50 border border-orange-200 rounded p-2">
+              <p className="text-xs text-orange-800">
+                Pakuotė bus pasirinkta atliekant vizitą
+              </p>
+            </div>
+          )}
+
           {stepData.completed_at && (
             <div>
               <div className="text-xs font-medium text-gray-500 mb-1">Panaudota</div>
               <div className="text-sm text-gray-700">{formatDateTimeLT(stepData.completed_at)}</div>
+            </div>
+          )}
+
+          {!stepData.completed && stepData.scheduled_date && (
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Planuojama data</div>
+              <div className="text-sm text-gray-700">{formatDateLT(stepData.scheduled_date)}</div>
             </div>
           )}
 
