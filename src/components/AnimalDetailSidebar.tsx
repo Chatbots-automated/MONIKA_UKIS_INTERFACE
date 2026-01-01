@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem, HoofLeg, HoofClaw, HoofConditionCode } from '../lib/types';
-import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
+import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, CheckCircle2, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { normalizeNumberInput, sortByLithuanian } from '../lib/helpers';
 import { useAuth } from '../contexts/AuthContext';
@@ -5025,7 +5025,7 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
     );
   }
 
-  if (!stepData || !stepData.completed) {
+  if (!stepData) {
     return null;
   }
 
@@ -5037,15 +5037,29 @@ function SyncStepMedicationDisplay({ visitId, syncStepId }: { visitId: string; s
         </div>
         <div>
           <h3 className="font-bold text-gray-900">Sinchronizacijos vaistai</h3>
-          <p className="text-xs text-gray-600">Panaudoti vaistai šiame vizite</p>
+          <p className="text-xs text-gray-600">{stepData.completed ? 'Panaudoti vaistai šiame vizite' : 'Planuojami vaistai'}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-lg p-4 border border-purple-200">
         <div className="space-y-3">
-          <div>
-            <div className="text-xs font-medium text-gray-500 mb-1">Vaistas</div>
-            <div className="text-base font-semibold text-gray-900">{stepData.step_name}</div>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="text-xs font-medium text-gray-500 mb-1">Vaistas</div>
+              <div className="text-base font-semibold text-gray-900">{stepData.step_name}</div>
+            </div>
+            {!stepData.completed && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
+                <Clock className="w-3.5 h-3.5" />
+                Laukiama
+              </div>
+            )}
+            {stepData.completed && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Atlikta
+              </div>
+            )}
           </div>
 
           {stepData.dosage && (
