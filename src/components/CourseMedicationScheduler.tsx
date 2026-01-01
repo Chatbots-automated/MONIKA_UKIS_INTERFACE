@@ -82,7 +82,9 @@ export function CourseMedicationScheduler({
       .order('expiry_date', { ascending: true });
 
     if (data) {
-      setBatches(new Map(batches.set(productId, data)));
+      const newBatches = new Map(batches);
+      newBatches.set(productId, data);
+      setBatches(newBatches);
     }
   };
 
@@ -96,14 +98,17 @@ export function CourseMedicationScheduler({
 
     if (!selectedDates.includes(newDate)) {
       setSelectedDates([...selectedDates, newDate]);
-      dateSchedule.set(newDate, []);
+      const newSchedule = new Map(dateSchedule);
+      newSchedule.set(newDate, []);
+      setDateSchedule(newSchedule);
     }
   };
 
   const removeDate = (dateToRemove: string) => {
     setSelectedDates(selectedDates.filter(d => d !== dateToRemove));
-    dateSchedule.delete(dateToRemove);
-    setDateSchedule(new Map(dateSchedule));
+    const newSchedule = new Map(dateSchedule);
+    newSchedule.delete(dateToRemove);
+    setDateSchedule(newSchedule);
   };
 
   const addMedicationToDate = (date: string) => {
