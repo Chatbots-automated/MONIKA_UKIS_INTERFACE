@@ -136,9 +136,9 @@ export function CourseMedicationScheduler({
     setDateSchedule(newSchedule);
   };
 
-  const updateMedication = (date: string, medId: string, field: keyof ScheduledMedication, value: any) => {
+  const updateMedication = async (date: string, medId: string, field: keyof ScheduledMedication, value: any) => {
     const meds = dateSchedule.get(date) || [];
-    const updated = meds.map(m => {
+    let updated = meds.map(m => {
       if (m.id === medId) {
         const updatedMed = { ...m, [field]: value };
 
@@ -149,14 +149,33 @@ export function CourseMedicationScheduler({
           if (selectedProduct?.primary_pack_unit) {
             updatedMed.unit = selectedProduct.primary_pack_unit;
           }
-          console.log('Calling loadBatchesForProduct...');
-          loadBatchesForProduct(value);
         }
 
         return updatedMed;
       }
       return m;
     });
+
+    // Auto-select first available batch when product is selected
+    if (field === 'product_id' && value) {
+      console.log('Calling loadBatchesForProduct...');
+      await loadBatchesForProduct(value);
+
+      const { data: batchData } = await supabase
+        .from('batches')
+        .select('id')
+        .eq('product_id', value)
+        .gt('qty_left', 0)
+        .order('expiry_date', { ascending: true })
+        .limit(1);
+
+      updated = updated.map(m => {
+        if (m.id === medId) {
+          return { ...m, batch_id: batchData?.[0]?.id || null };
+        }
+        return m;
+      });
+    }
 
     const newSchedule = new Map(dateSchedule);
     newSchedule.set(date, updated);
