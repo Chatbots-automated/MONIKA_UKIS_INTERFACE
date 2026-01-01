@@ -13,8 +13,8 @@ interface Product {
 
 interface Batch {
   id: string;
-  batch_no: string;
-  available_qty: number;
+  batch_number: string;
+  qty_left: number;
 }
 
 interface ScheduledMedication {
@@ -77,9 +77,9 @@ export function CourseMedicationScheduler({
     console.log('Loading batches for product:', productId);
     const { data, error } = await supabase
       .from('batches')
-      .select('id, batch_no, available_qty')
+      .select('id, batch_number, qty_left')
       .eq('product_id', productId)
-      .gt('available_qty', 0)
+      .gt('qty_left', 0)
       .order('expiry_date', { ascending: true });
 
     console.log('Batches data:', data, 'error:', error);
@@ -370,7 +370,7 @@ export function CourseMedicationScheduler({
                                       <option value="">Pasirinkite seriją...</option>
                                       {productBatches.map((batch) => (
                                         <option key={batch.id} value={batch.id}>
-                                          {batch.batch_no} (Likutis: {batch.available_qty})
+                                          {batch.batch_number} (Likutis: {batch.qty_left})
                                         </option>
                                       ))}
                                     </select>
@@ -485,7 +485,7 @@ export function CourseMedicationScheduler({
                               <CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0" />
                               <span className="font-medium">{product?.name || 'Nežinomas'}</span>
                               {isFirstDay && med.qty && <span className="text-gray-700 font-medium">{med.qty} {med.unit}</span>}
-                              {isFirstDay && batch && <span className="text-gray-600 text-xs">({batch.batch_no})</span>}
+                              {isFirstDay && batch && <span className="text-gray-600 text-xs">({batch.batch_number})</span>}
                               {!isFirstDay && <span className="text-gray-500">- {med.unit}</span>}
                               {med.teat && <span className="text-gray-600">({med.teat})</span>}
                             </div>
