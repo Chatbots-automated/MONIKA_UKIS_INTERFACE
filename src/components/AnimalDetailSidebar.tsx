@@ -2755,23 +2755,63 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             );
 
             if (todaySchedule) {
-              console.log('✅ Found today\'s medications in course schedule, adding to current visit');
-              const todayMedications = todaySchedule.medications.map((med: any) => ({
-                product_id: med.product_id,
-                batch_id: med.batch_id || null,
-                qty: null,
-                unit: med.unit,
-                purpose: med.purpose || 'Gydymas',
-                teat: med.teat || null,
-              }));
+              console.log('✅ Found today\'s medications in course schedule, processing for today');
 
-              await supabase
-                .from('animal_visits')
-                .update({
-                  planned_medications: todayMedications,
-                  medications_processed: false
-                })
-                .eq('id', visitData.id);
+              // If the visit is being completed (autoComplete), we need to deduct stock for today
+              if (autoComplete) {
+                console.log('✅ Visit being completed - creating usage_items for today\'s medications');
+
+                for (const med of todaySchedule.medications) {
+                  // For today's visit when completing, we need batch_id and qty
+                  // These should have been filled by VisitMedicationEditor or similar
+                  if (med.batch_id && med.qty) {
+                    const { error: usageError } = await supabase
+                      .from('usage_items')
+                      .insert({
+                        treatment_id: treatmentRecord.id,
+                        product_id: med.product_id,
+                        batch_id: med.batch_id,
+                        qty: parseFloat(med.qty),
+                        unit: med.unit,
+                        purpose: med.purpose || 'Gydymas',
+                        teat: med.teat || null,
+                      });
+
+                    if (usageError) {
+                      console.error('❌ Error creating usage_item for today:', usageError);
+                      throw usageError;
+                    }
+                  }
+                }
+
+                // Mark medications as processed
+                await supabase
+                  .from('animal_visits')
+                  .update({ medications_processed: true })
+                  .eq('id', visitData.id);
+
+                console.log('✅ Today\'s medications processed and stock deducted');
+              } else {
+                // Visit not being completed - store as planned medications
+                const todayMedications = todaySchedule.medications.map((med: any) => ({
+                  product_id: med.product_id,
+                  batch_id: med.batch_id || null,
+                  qty: null,
+                  unit: med.unit,
+                  purpose: med.purpose || 'Gydymas',
+                  teat: med.teat || null,
+                }));
+
+                await supabase
+                  .from('animal_visits')
+                  .update({
+                    planned_medications: todayMedications,
+                    medications_processed: false
+                  })
+                  .eq('id', visitData.id);
+
+                console.log('⏸️ Today\'s medications stored as planned (no stock deduction)');
+              }
             }
           } else {
             // Fallback: Old system with same medications for all days
