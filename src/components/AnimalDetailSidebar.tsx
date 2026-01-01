@@ -2704,12 +2704,17 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
 
         // Create future visits for recurring treatments with planned medications
+        // ONLY when creating a NEW visit (not editing an existing one)
         if (hasRecurringDays) {
-          console.log('📅 Creating future visits for course...');
-          console.log('Course schedule:', treatmentData.courseMedicationSchedule);
+          if (isEditMode) {
+            console.log('⚠️  Skipping future visit creation - editing existing visit');
+            console.log('   Recurring days detected but in edit mode. Future visits not created.');
+          } else {
+            console.log('📅 Creating future visits for course...');
+            console.log('Course schedule:', treatmentData.courseMedicationSchedule);
 
-          let futureVisits: any[] = [];
-          const todayDate = formData.visit_datetime.split('T')[0];
+            let futureVisits: any[] = [];
+            const todayDate = formData.visit_datetime.split('T')[0];
 
           // If we have a full course schedule (from CourseMedicationScheduler)
           if (treatmentData.courseMedicationSchedule && treatmentData.courseMedicationSchedule.length > 0) {
@@ -2839,6 +2844,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             .eq('id', visitData.id);
 
           console.log(`✅ Auto-enabled next visit for check-up on ${checkupDate.toLocaleDateString('lt')}`);
+          }
         }
 
         // Save disabled teats to teat_status table
