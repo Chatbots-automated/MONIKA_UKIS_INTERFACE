@@ -74,17 +74,26 @@ export function CourseMedicationScheduler({
   const loadBatchesForProduct = async (productId: string) => {
     if (batches.has(productId)) return;
 
-    const { data } = await supabase
+    console.log('Loading batches for product:', productId);
+    const { data, error } = await supabase
       .from('batches')
       .select('id, batch_no, available_qty')
       .eq('product_id', productId)
       .gt('available_qty', 0)
       .order('expiry_date', { ascending: true });
 
+    console.log('Batches data:', data, 'error:', error);
+
+    if (error) {
+      console.error('Error loading batches:', error);
+      return;
+    }
+
     if (data) {
       const newBatches = new Map(batches);
       newBatches.set(productId, data);
       setBatches(newBatches);
+      console.log('Updated batches state:', newBatches);
     }
   };
 
@@ -135,10 +144,12 @@ export function CourseMedicationScheduler({
 
         // Auto-load unit when product is selected
         if (field === 'product_id' && value) {
+          console.log('Product selected:', value);
           const selectedProduct = products.find(p => p.id === value);
           if (selectedProduct?.primary_pack_unit) {
             updatedMed.unit = selectedProduct.primary_pack_unit;
           }
+          console.log('Calling loadBatchesForProduct...');
           loadBatchesForProduct(value);
         }
 
@@ -320,6 +331,7 @@ export function CourseMedicationScheduler({
                       {dayMeds.map((med) => {
                         const selectedProduct = products.find(p => p.id === med.product_id);
                         const productBatches = batches.get(med.product_id) || [];
+                        console.log('Rendering med:', med.product_id, 'batches:', productBatches, 'all batches:', batches);
                         return (
                           <div key={med.id} className="p-4 bg-white border border-gray-200 rounded-lg">
                             <div className="grid grid-cols-2 gap-3">
