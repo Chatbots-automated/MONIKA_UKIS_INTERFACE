@@ -194,33 +194,46 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     setLoading(true);
 
     try {
-      // Initialize the synchronization protocol
-      const { data: syncData, error: syncError } = await supabase.rpc('initialize_animal_synchronization', {
-        p_animal_id: animalId,
-        p_protocol_id: selectedProtocolId,
-        p_start_date: startDate,
-      });
+      // Create the animal synchronization record
+      const { data: createdSync, error: syncError } = await supabase
+        .from('animal_synchronizations')
+        .insert({
+          animal_id: animalId,
+          protocol_id: selectedProtocolId,
+          start_date: startDate,
+          status: 'Active'
+        })
+        .select('id')
+        .single();
 
       if (syncError) throw syncError;
+      if (!createdSync) throw new Error('Failed to create synchronization');
 
-      // Get the created synchronization ID
-      const { data: createdSync, error: fetchError } = await supabase
-        .from('animal_synchronizations')
-        .select('id')
-        .eq('animal_id', animalId)
-        .eq('protocol_id', selectedProtocolId)
-        .eq('status', 'Active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Create synchronization steps from the protocol
+      const stepsToCreate = selectedProtocol.steps.map(step => {
+        const stepDate = new Date(startDate);
+        stepDate.setDate(stepDate.getDate() + step.day_offset);
 
-      if (fetchError) throw fetchError;
+        // Find the medication product
+        const medicationProduct = products.find(p =>
+          p.name.toLowerCase() === step.medication.toLowerCase()
+        );
 
-      // Get all steps for this synchronization
+        return {
+          synchronization_id: createdSync.id,
+          step_number: step.step,
+          step_name: step.medication,
+          scheduled_date: stepDate.toISOString().split('T')[0],
+          is_evening: step.is_evening || false,
+          medication_product_id: medicationProduct?.id || null,
+          completed: false
+        };
+      });
+
       const { data: steps, error: stepsError } = await supabase
         .from('synchronization_steps')
+        .insert(stepsToCreate)
         .select('*')
-        .eq('synchronization_id', createdSync.id)
         .order('step_number');
 
       if (stepsError) throw stepsError;
@@ -293,15 +306,23 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             const stepData = todayStepData[step.step_number];
             if (stepData && stepData.batchId && stepData.dosage) {
               try {
-                const { error: completeError } = await supabase.rpc('complete_synchronization_step', {
-                  p_step_id: step.id,
-                  p_batch_id: stepData.batchId,
-                  p_actual_dosage: parseFloat(stepData.dosage),
-                  p_actual_unit: stepData.unit,
-                });
+                // Update the synchronization step with batch and dosage, and mark as completed
+                // This will trigger the stock deduction trigger
+                const { error: completeError } = await supabase
+                  .from('synchronization_steps')
+                  .update({
+                    batch_id: stepData.batchId,
+                    dosage: parseFloat(stepData.dosage),
+                    dosage_unit: stepData.unit,
+                    completed: true,
+                    completed_at: new Date().toISOString()
+                  })
+                  .eq('id', step.id);
 
                 if (completeError) {
                   console.error('Error completing today step:', step.step_number, completeError);
+                } else {
+                  console.log('✅ Completed today step:', step.step_number, 'Deducted:', stepData.dosage, stepData.unit);
                 }
               } catch (err) {
                 console.error('Error completing step:', err);
@@ -311,7 +332,6 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
         }
       }
 
-      alert('Sinchronizacijos protokolas sėkmingai pradėtas!');
       setShowCreateForm(false);
       setTodayStepData({});
       loadActiveSync();
@@ -372,16 +392,22 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     }
 
     try {
-      const { error } = await supabase.rpc('complete_synchronization_step', {
-        p_step_id: stepId,
-        p_batch_id: completeFormData.batchId,
-        p_actual_dosage: parseFloat(completeFormData.dosage),
-        p_actual_unit: completeFormData.unit,
-      });
+      // Update the synchronization step with batch and dosage, and mark as completed
+      // This will trigger the stock deduction trigger
+      const { error } = await supabase
+        .from('synchronization_steps')
+        .update({
+          batch_id: completeFormData.batchId,
+          dosage: parseFloat(completeFormData.dosage),
+          dosage_unit: completeFormData.unit,
+          completed: true,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', stepId);
 
       if (error) throw error;
 
-      alert('Žingsnis pažymėtas kaip atliktas!');
+      alert('Žingsnis pažymėtas kaip atliktas! Medikamentas atimtas iš atsargų.');
       setShowCompleteForm(null);
       setCompleteFormData({ batchId: '', dosage: '', unit: 'ml' });
       loadActiveSync();
