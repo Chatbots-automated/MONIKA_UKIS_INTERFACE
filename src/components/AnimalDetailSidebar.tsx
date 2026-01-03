@@ -982,21 +982,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
 
         {activeTab === 'treatments' && (
           <div className="space-y-4">
-            {/* SYNCHRONIZATION PROTOCOL SECTION */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-4">
-              <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-purple-600" />
-                Sinchronizacijos protokolas
-              </h4>
-              <SynchronizationProtocolComponent
-                animalId={animal.id}
-                onProtocolCreated={() => {
-                  loadVisits();
-                  showNotification('Sinchronizacijos protokolas sėkmingai sukurtas! Vizitai automatiškai sukurti.', 'success');
-                }}
-              />
-            </div>
-
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Filter className="w-4 h-4 text-gray-600" />
@@ -3792,7 +3777,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 onProtocolCreated={() => {
                   loadVisits();
                   setShowVisitModal(false);
-                  showNotification('Sinchronizacijos protokolas sukurtas! Vizitai automatiškai sukurti. Uždarykite šį langą.', 'success');
+                  showNotification('Sinchronizacijos protokolas sukurtas! Vizitai automatiškai sukurti ir medikamentai atimti iš atsargų.', 'success');
                 }}
               />
             </div>
