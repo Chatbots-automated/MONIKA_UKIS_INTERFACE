@@ -85,22 +85,50 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
     }
   };
 
+  // Helper function to merge overlapping withdrawal periods
+  const mergeWithdrawalPeriods = (periods: Array<{ start: Date; end: Date }>): number => {
+    if (periods.length === 0) return 0;
+
+    // Sort by start date
+    const sorted = periods.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    let totalDays = 0;
+    let currentStart = sorted[0].start;
+    let currentEnd = sorted[0].end;
+
+    for (let i = 1; i < sorted.length; i++) {
+      const period = sorted[i];
+
+      // If periods overlap or are adjacent (within 1 day), merge them
+      const daysBetween = Math.ceil((period.start.getTime() - currentEnd.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysBetween <= 1) {
+        // Overlapping or adjacent, extend the current period
+        currentEnd = new Date(Math.max(currentEnd.getTime(), period.end.getTime()));
+      } else {
+        // Gap detected, save current period and start new one
+        totalDays += Math.ceil((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        currentStart = period.start;
+        currentEnd = period.end;
+      }
+    }
+
+    // Add the last period
+    totalDays += Math.ceil((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    return totalDays;
+  };
+
   const aggregatedData = treatmentLossData.reduce((acc, row) => {
     const existing = acc.find(a => a.animal_id === row.animal_id);
 
     if (existing) {
       existing.treatment_count += 1;
-      // Track earliest and latest dates for continuous period calculation
-      const rowTreatmentDate = new Date(row.treatment_date);
-      const rowWithdrawalDate = new Date(row.withdrawal_until_milk);
-
-      if (!existing.earliest_treatment_date || rowTreatmentDate < existing.earliest_treatment_date) {
-        existing.earliest_treatment_date = rowTreatmentDate;
-      }
-      if (!existing.latest_withdrawal_date || rowWithdrawalDate > existing.latest_withdrawal_date) {
-        existing.latest_withdrawal_date = rowWithdrawalDate;
-      }
-
+      // Collect all withdrawal periods
+      existing.withdrawal_periods.push({
+        start: new Date(row.treatment_date),
+        end: new Date(row.withdrawal_until_milk),
+      });
       // Sum average milk for weighted calculation
       existing.total_avg_milk += row.avg_daily_milk_kg;
     } else {
@@ -108,34 +136,30 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
         animal_id: row.animal_id,
         animal_tag: row.animal_tag,
         treatment_count: 1,
-        earliest_treatment_date: new Date(row.treatment_date),
-        latest_withdrawal_date: new Date(row.withdrawal_until_milk),
+        withdrawal_periods: [{
+          start: new Date(row.treatment_date),
+          end: new Date(row.withdrawal_until_milk),
+        }],
         total_avg_milk: row.avg_daily_milk_kg,
-        total_loss_days: 0, // Will be calculated after
-        total_milk_lost_kg: 0, // Will be calculated after
-        total_value_lost_eur: 0, // Will be calculated after
+        total_loss_days: 0,
+        total_milk_lost_kg: 0,
+        total_value_lost_eur: 0,
       });
     }
 
     return acc;
   }, [] as (AnimalTreatmentAggregate & {
-    earliest_treatment_date?: Date;
-    latest_withdrawal_date?: Date;
+    withdrawal_periods: Array<{ start: Date; end: Date }>;
     total_avg_milk?: number;
   })[]).map(animal => {
-    // Calculate actual continuous period
-    if (animal.earliest_treatment_date && animal.latest_withdrawal_date) {
-      const daysDiff = Math.ceil(
-        (animal.latest_withdrawal_date.getTime() - animal.earliest_treatment_date.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const total_days = daysDiff + 1; // +1 for safety day
-      const avg_milk = animal.total_avg_milk! / animal.treatment_count; // Average across treatments
-      const milk_price = treatmentLossData[0]?.milk_price_eur_per_kg || 0.45;
+    // Calculate actual days by merging overlapping periods
+    const total_days = mergeWithdrawalPeriods(animal.withdrawal_periods);
+    const avg_milk = animal.total_avg_milk! / animal.treatment_count;
+    const milk_price = treatmentLossData[0]?.milk_price_eur_per_kg || 0.45;
 
-      animal.total_loss_days = total_days;
-      animal.total_milk_lost_kg = avg_milk * total_days;
-      animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
-    }
+    animal.total_loss_days = total_days;
+    animal.total_milk_lost_kg = avg_milk * total_days;
+    animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
 
     return animal as AnimalTreatmentAggregate;
   });
@@ -166,24 +190,20 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
 
     if (existing) {
       existing.treatment_count += 1;
-      const rowTreatmentDate = new Date(row.treatment_date);
-      const rowWithdrawalDate = new Date(row.withdrawal_until_milk);
-
-      if (!existing.earliest_treatment_date || rowTreatmentDate < existing.earliest_treatment_date) {
-        existing.earliest_treatment_date = rowTreatmentDate;
-      }
-      if (!existing.latest_withdrawal_date || rowWithdrawalDate > existing.latest_withdrawal_date) {
-        existing.latest_withdrawal_date = rowWithdrawalDate;
-      }
-
+      existing.withdrawal_periods.push({
+        start: new Date(row.treatment_date),
+        end: new Date(row.withdrawal_until_milk),
+      });
       existing.total_avg_milk += row.avg_daily_milk_kg;
     } else {
       acc.push({
         animal_id: row.animal_id,
         animal_tag: row.animal_tag,
         treatment_count: 1,
-        earliest_treatment_date: new Date(row.treatment_date),
-        latest_withdrawal_date: new Date(row.withdrawal_until_milk),
+        withdrawal_periods: [{
+          start: new Date(row.treatment_date),
+          end: new Date(row.withdrawal_until_milk),
+        }],
         total_avg_milk: row.avg_daily_milk_kg,
         total_loss_days: 0,
         total_milk_lost_kg: 0,
@@ -193,22 +213,16 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
 
     return acc;
   }, [] as (AnimalTreatmentAggregate & {
-    earliest_treatment_date?: Date;
-    latest_withdrawal_date?: Date;
+    withdrawal_periods: Array<{ start: Date; end: Date }>;
     total_avg_milk?: number;
   })[]).map(animal => {
-    if (animal.earliest_treatment_date && animal.latest_withdrawal_date) {
-      const daysDiff = Math.ceil(
-        (animal.latest_withdrawal_date.getTime() - animal.earliest_treatment_date.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const total_days = daysDiff + 1;
-      const avg_milk = animal.total_avg_milk! / animal.treatment_count;
-      const milk_price = filteredTreatmentData[0]?.milk_price_eur_per_kg || 0.45;
+    const total_days = mergeWithdrawalPeriods(animal.withdrawal_periods);
+    const avg_milk = animal.total_avg_milk! / animal.treatment_count;
+    const milk_price = filteredTreatmentData[0]?.milk_price_eur_per_kg || 0.45;
 
-      animal.total_loss_days = total_days;
-      animal.total_milk_lost_kg = avg_milk * total_days;
-      animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
-    }
+    animal.total_loss_days = total_days;
+    animal.total_milk_lost_kg = avg_milk * total_days;
+    animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
 
     return animal as AnimalTreatmentAggregate;
   });

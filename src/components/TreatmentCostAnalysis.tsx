@@ -18,6 +18,8 @@ interface AnimalCostData {
   vaccination_count: number;
   vaccination_costs: number;
   total_costs: number;
+  earliest_visit_date: string | null;
+  latest_visit_date: string | null;
 }
 
 interface MedicationDetail {
@@ -69,7 +71,10 @@ export function TreatmentCostAnalysis() {
   const [sortBy, setSortBy] = useState<'total' | 'visits' | 'medications' | 'vaccinations' | 'tag_no' | 'visit_count' | 'treatment_count'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
-  const [neckNumberSearch, setNeckNumberSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minCost, setMinCost] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [milkLossModalAnimal, setMilkLossModalAnimal] = useState<{ id: string; tag: string } | null>(null);
 
   useEffect(() => {
@@ -135,7 +140,7 @@ export function TreatmentCostAnalysis() {
 
       console.log('Vaccinations loaded:', vaccinations?.length);
 
-      // Get all visits (for counting only)
+      // Get all visits with dates for filtering
       const { data: visits, error: visitsError } = await supabase
         .from('animal_visits')
         .select('id, animal_id, visit_datetime, status');
@@ -229,6 +234,15 @@ export function TreatmentCostAnalysis() {
 
         const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
 
+        // Get earliest and latest visit dates
+        let earliestVisitDate: string | null = null;
+        let latestVisitDate: string | null = null;
+        if (completedVisits.length > 0) {
+          const visitDates = completedVisits.map(v => v.visit_datetime).sort();
+          earliestVisitDate = visitDates[0];
+          latestVisitDate = visitDates[visitDates.length - 1];
+        }
+
         // Include animals with any treatment activity OR synchronizations
         if (animalTreatments.length > 0 || animalVaccinations.length > 0 || visitCount > 0 || animalSyncs.length > 0) {
           animalCosts.push({
@@ -243,6 +257,8 @@ export function TreatmentCostAnalysis() {
             vaccination_count: animalVaccinations.length,
             vaccination_costs: vaccinationCosts,
             total_costs: totalCosts,
+            earliest_visit_date: earliestVisitDate,
+            latest_visit_date: latestVisitDate,
           });
         }
       }
@@ -566,15 +582,41 @@ export function TreatmentCostAnalysis() {
   };
 
   const filteredData = costData.filter(animal => {
-    let matchesGeneral = true;
-
+    // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      matchesGeneral = animal.tag_no?.toLowerCase().includes(searchLower) || false;
+      if (!animal.tag_no?.toLowerCase().includes(searchLower)) {
+        return false;
+      }
     }
 
-    return matchesGeneral;
+    // Date range filter
+    if (dateFrom && animal.latest_visit_date && animal.latest_visit_date < dateFrom) {
+      return false;
+    }
+    if (dateTo && animal.earliest_visit_date && animal.earliest_visit_date > dateTo) {
+      return false;
+    }
+
+    // Minimum cost filter
+    if (minCost) {
+      const minCostNum = parseFloat(minCost);
+      if (!isNaN(minCostNum) && animal.total_costs < minCostNum) {
+        return false;
+      }
+    }
+
+    return true;
   });
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setDateFrom('');
+    setDateTo('');
+    setMinCost('');
+  };
+
+  const hasActiveFilters = searchTerm || dateFrom || dateTo || minCost;
 
   const sortedData = [...filteredData].sort((a, b) => {
     let compareValue = 0;
@@ -658,18 +700,86 @@ export function TreatmentCostAnalysis() {
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Ieškoti pagal gyvūno numerį..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-            />
+        {/* Search Bar and Filters */}
+        <div className="mb-4 space-y-3">
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Ieškoti pagal gyvūno numerį..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${showFilters ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 border-2 border-gray-300 hover:bg-gray-50'}`}
+            >
+              {showFilters ? 'Paslėpti filtrus' : 'Rodyti filtrus'}
+            </button>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                title="Išvalyti visus filtrus"
+              >
+                Išvalyti
+              </button>
+            )}
           </div>
+
+          {showFilters && (
+            <div className="bg-white rounded-lg p-4 border-2 border-gray-300 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vizitai nuo
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vizitai iki
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Minimali kaina (€)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    value={minCost}
+                    onChange={(e) => setMinCost(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <div className="text-sm text-gray-600 pt-2 border-t border-gray-200">
+                  Rodoma: <span className="font-semibold">{filteredData.length}</span> gyvūnų iš <span className="font-semibold">{costData.length}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
