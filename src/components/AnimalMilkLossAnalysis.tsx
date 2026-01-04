@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
-import { AnimalMilkLossByTreatment } from '../lib/types';
+import { AnimalMilkLossBySynchronization } from '../lib/types';
 import { Milk, Calendar, TrendingDown, RefreshCw, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
 interface AnimalMilkLossAggregated {
   animal_id: string;
   animal_number: string;
   animal_name: string | null;
-  treatment_count: number;
+  sync_count: number;
   total_loss_days: number;
   total_milk_lost_kg: number;
   total_milk_loss_value_eur: number;
@@ -16,10 +16,10 @@ interface AnimalMilkLossAggregated {
 }
 
 export function AnimalMilkLossAnalysis() {
-  const [milkLossData, setMilkLossData] = useState<AnimalMilkLossByTreatment[]>([]);
+  const [milkLossData, setMilkLossData] = useState<AnimalMilkLossBySynchronization[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedAnimal, setExpandedAnimal] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'total_loss' | 'milk_lost' | 'days' | 'treatments' | 'animal'>('total_loss');
+  const [sortBy, setSortBy] = useState<'total_loss' | 'milk_lost' | 'days' | 'syncs' | 'animal'>('total_loss');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -32,9 +32,9 @@ export function AnimalMilkLossAnalysis() {
       setLoading(true);
 
       const { data, error } = await supabase
-        .from('animal_milk_loss_by_treatment')
+        .from('animal_milk_loss_by_synchronization')
         .select('*')
-        .order('treatment_date', { ascending: false });
+        .order('sync_start', { ascending: false });
 
       if (error) throw error;
 
@@ -50,7 +50,7 @@ export function AnimalMilkLossAnalysis() {
     const existing = acc.find(a => a.animal_id === row.animal_id);
 
     if (existing) {
-      existing.treatment_count += 1;
+      existing.sync_count += 1;
       existing.total_loss_days += row.loss_days;
       existing.total_milk_lost_kg += row.total_milk_lost_kg;
       existing.total_milk_loss_value_eur += row.milk_loss_value_eur;
@@ -59,7 +59,7 @@ export function AnimalMilkLossAnalysis() {
         animal_id: row.animal_id,
         animal_number: row.animal_number,
         animal_name: row.animal_name,
-        treatment_count: 1,
+        sync_count: 1,
         total_loss_days: row.loss_days,
         total_milk_lost_kg: row.total_milk_lost_kg,
         total_milk_loss_value_eur: row.milk_loss_value_eur,
@@ -91,8 +91,8 @@ export function AnimalMilkLossAnalysis() {
       case 'days':
         compareValue = a.total_loss_days - b.total_loss_days;
         break;
-      case 'treatments':
-        compareValue = a.treatment_count - b.treatment_count;
+      case 'syncs':
+        compareValue = a.sync_count - b.sync_count;
         break;
       case 'animal':
         compareValue = (a.animal_number || '').localeCompare(b.animal_number || '');
@@ -110,21 +110,21 @@ export function AnimalMilkLossAnalysis() {
     }
   };
 
-  const getTreatmentsForAnimal = (animalId: string) => {
-    return milkLossData.filter(t => t.animal_id === animalId);
+  const getSynchronizationsForAnimal = (animalId: string) => {
+    return milkLossData.filter(s => s.animal_id === animalId);
   };
 
   const totalStats = sortedData.reduce(
     (acc, row) => ({
       totalAnimals: acc.totalAnimals + 1,
-      totalTreatments: acc.totalTreatments + row.treatment_count,
+      totalSynchronizations: acc.totalSynchronizations + row.sync_count,
       totalLossDays: acc.totalLossDays + row.total_loss_days,
       totalMilkLost: acc.totalMilkLost + row.total_milk_lost_kg,
       totalValue: acc.totalValue + row.total_milk_loss_value_eur,
     }),
     {
       totalAnimals: 0,
-      totalTreatments: 0,
+      totalSynchronizations: 0,
       totalLossDays: 0,
       totalMilkLost: 0,
       totalValue: 0,
@@ -148,8 +148,8 @@ export function AnimalMilkLossAnalysis() {
               <Milk className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Pieno Nuostoliai Gydymo Metu</h2>
-              <p className="text-sm text-gray-600">Pieno gamybos nuostoliai per sinchronizacijas</p>
+              <h2 className="text-2xl font-bold text-gray-900">Pieno Nuostoliai Per Sinchronizacijas</h2>
+              <p className="text-sm text-gray-600">Pieno gamybos nuostoliai per gyvulių sinchronizacijų laikotarpius</p>
             </div>
           </div>
           <button
@@ -186,9 +186,9 @@ export function AnimalMilkLossAnalysis() {
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <TrendingDown className="w-4 h-4 text-orange-600" />
-              <span className="text-xs font-semibold text-gray-600 uppercase">Gydymų</span>
+              <span className="text-xs font-semibold text-gray-600 uppercase">Sinchronizacijų</span>
             </div>
-            <div className="text-2xl font-bold text-orange-600">{totalStats.totalTreatments}</div>
+            <div className="text-2xl font-bold text-orange-600">{totalStats.totalSynchronizations}</div>
           </div>
 
           <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -225,9 +225,9 @@ export function AnimalMilkLossAnalysis() {
               </span>
             </div>
             <div>
-              <span className="text-gray-600">Vid. nuostoliai per gydymą:</span>
+              <span className="text-gray-600">Vid. nuostoliai per sinchronizaciją:</span>
               <span className="ml-2 font-bold text-orange-700">
-                {formatCurrencyLT(totalStats.totalTreatments > 0 ? totalStats.totalValue / totalStats.totalTreatments : 0)}
+                {formatCurrencyLT(totalStats.totalSynchronizations > 0 ? totalStats.totalValue / totalStats.totalSynchronizations : 0)}
               </span>
             </div>
             <div>
@@ -254,9 +254,9 @@ export function AnimalMilkLossAnalysis() {
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('treatments')}
+                  onClick={() => handleSort('syncs')}
                 >
-                  Gydymų {sortBy === 'treatments' && (sortOrder === 'desc' ? '↓' : '↑')}
+                  Sinchronizacijų {sortBy === 'syncs' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -281,7 +281,7 @@ export function AnimalMilkLossAnalysis() {
             <tbody className="bg-white divide-y divide-gray-200">
               {sortedData.map((row) => {
                 const isExpanded = expandedAnimal === row.animal_id;
-                const treatments = getTreatmentsForAnimal(row.animal_id);
+                const synchronizations = getSynchronizationsForAnimal(row.animal_id);
 
                 return (
                   <React.Fragment key={row.animal_id}>
@@ -303,7 +303,7 @@ export function AnimalMilkLossAnalysis() {
                         {row.animal_name && <div className="text-xs text-gray-500">{row.animal_name}</div>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {row.treatment_count}
+                        {row.sync_count}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {row.total_loss_days}
@@ -320,46 +320,46 @@ export function AnimalMilkLossAnalysis() {
                       <tr>
                         <td colSpan={6} className="px-4 py-4 bg-gray-50">
                           <div className="space-y-3">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Gydymo istorija</h4>
-                            {treatments.map((treatment) => (
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Sinchronizacijų istorija</h4>
+                            {synchronizations.map((sync) => (
                               <div
-                                key={treatment.treatment_id}
+                                key={sync.sync_id}
                                 className="bg-white border border-gray-200 rounded-lg p-4"
                               >
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <div>
-                                    <div className="text-xs text-gray-500">Data</div>
-                                    <div className="text-sm font-medium">{formatDateLT(treatment.treatment_date)}</div>
+                                    <div className="text-xs text-gray-500">Pradžia</div>
+                                    <div className="text-sm font-medium">{formatDateLT(sync.sync_start)}</div>
                                   </div>
                                   <div>
-                                    <div className="text-xs text-gray-500">Diagnozė</div>
-                                    <div className="text-sm">{treatment.diagnosis || 'Nenustatyta'}</div>
+                                    <div className="text-xs text-gray-500">Protokolas</div>
+                                    <div className="text-sm">{sync.protocol_name || 'Nenurodytas'}</div>
                                   </div>
                                   <div>
                                     <div className="text-xs text-gray-500">Sinchronizacijos laikotarpis</div>
                                     <div className="text-sm">
-                                      {formatDateLT(treatment.sync_start)} - {formatDateLT(treatment.sync_end)}
+                                      {formatDateLT(sync.sync_start)} - {formatDateLT(sync.sync_end)}
                                     </div>
                                     <div className="text-xs text-gray-500 mt-1">
-                                      Statusas: <span className="font-medium">{treatment.sync_status}</span>
+                                      Statusas: <span className="font-medium">{sync.sync_status}</span>
                                     </div>
                                   </div>
                                   <div>
                                     <div className="text-xs text-gray-500">Pieno nuostoliai</div>
                                     <div className="text-sm">
-                                      {treatment.loss_days} d. × {formatNumberLT(treatment.avg_daily_milk_kg)} kg/d
+                                      {sync.loss_days} d. × {formatNumberLT(sync.avg_daily_milk_kg)} kg/d
                                     </div>
                                     <div className="text-sm font-semibold text-blue-600 mt-1">
-                                      = {formatNumberLT(treatment.total_milk_lost_kg)} kg
+                                      = {formatNumberLT(sync.total_milk_lost_kg)} kg
                                     </div>
                                   </div>
                                   <div className="md:col-span-2">
                                     <div className="text-xs text-gray-500">Nuostolių vertė</div>
                                     <div className="text-lg font-bold text-red-600">
-                                      {formatCurrencyLT(treatment.milk_loss_value_eur)}
+                                      {formatCurrencyLT(sync.milk_loss_value_eur)}
                                     </div>
                                     <div className="text-xs text-gray-500 mt-1">
-                                      Naudota kaina: {formatCurrencyLT(treatment.milk_price_used)}/kg
+                                      Naudota kaina: {formatCurrencyLT(sync.milk_price_used)}/kg
                                     </div>
                                   </div>
                                 </div>
@@ -376,7 +376,7 @@ export function AnimalMilkLossAnalysis() {
               {sortedData.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    {searchTerm ? 'Nerasta gyvūnų pagal paieškos kriterijus' : 'Nėra duomenų apie pieno nuostolius'}
+                    {searchTerm ? 'Nerasta gyvūnų pagal paieškos kriterijus' : 'Nėra duomenų apie pieno nuostolius per sinchronizacijas'}
                   </td>
                 </tr>
               )}
