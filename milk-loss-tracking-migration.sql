@@ -3,15 +3,16 @@
 
   1. New Functions
     - calculate_milk_loss_for_synchronization - Calculates expected milk loss for a synchronization period
-    - calculate_average_daily_milk - Gets animal's average daily milk production
+    - calculate_average_daily_milk - Gets animal's average daily milk production from gea_daily
 
   2. New Views
     - animal_milk_loss_by_synchronization - Aggregates milk loss data per animal and synchronization
 
   3. Changes
     - Adds comprehensive milk loss tracking capabilities
-    - Integrates milk production data with animal synchronization periods
+    - Integrates gea_daily milk production data with animal synchronization periods
     - Calculates financial impact of milk loss during synchronization
+    - Uses system_settings for milk price configuration
 
   4. Security
     - All functions respect RLS policies
@@ -19,7 +20,7 @@
 */
 
 -- Function to calculate average daily milk production for an animal
--- Uses the most recent 30 days of milk test data before a given date
+-- Uses the most recent 30 days of gea_daily data before a given date
 CREATE OR REPLACE FUNCTION calculate_average_daily_milk(
   p_animal_id uuid,
   p_before_date date DEFAULT CURRENT_DATE
@@ -32,15 +33,15 @@ AS $$
 DECLARE
   v_avg_milk numeric;
 BEGIN
-  -- Calculate average from milk tests in the 30 days before the given date
-  SELECT COALESCE(AVG(total_milk_weight), 0)
+  -- Calculate average from gea_daily in the 30 days before the given date
+  SELECT COALESCE(AVG(milk_avg), 0)
   INTO v_avg_milk
-  FROM milk_tests
+  FROM gea_daily
   WHERE animal_id = p_animal_id
-    AND test_date < p_before_date
-    AND test_date >= (p_before_date - INTERVAL '30 days')
-    AND total_milk_weight IS NOT NULL
-    AND total_milk_weight > 0;
+    AND snapshot_date < p_before_date
+    AND snapshot_date >= (p_before_date - INTERVAL '30 days')
+    AND milk_avg IS NOT NULL
+    AND milk_avg > 0;
 
   RETURN COALESCE(v_avg_milk, 0);
 END;
@@ -100,11 +101,11 @@ BEGIN
   -- Get average daily milk production before synchronization started
   v_avg_milk := calculate_average_daily_milk(p_animal_id, v_sync_start);
 
-  -- Get milk price from profitability settings (use most recent)
-  SELECT COALESCE(milk_price_per_liter, 0.40)
+  -- Get milk price from system settings
+  SELECT COALESCE(setting_value::numeric, 0.40)
   INTO v_milk_price
-  FROM profitability_settings
-  ORDER BY created_at DESC
+  FROM system_settings
+  WHERE setting_key = 'milk_price_per_liter'
   LIMIT 1;
 
   -- Return calculated values
@@ -123,8 +124,8 @@ $$;
 CREATE OR REPLACE VIEW animal_milk_loss_by_synchronization AS
 SELECT
   a.id as animal_id,
-  a.animal_id as animal_number,
-  a.name as animal_name,
+  a.tag_no as animal_number,
+  NULL::text as animal_name,
   s.id as sync_id,
   s.start_date as sync_start,
   s.status as sync_status,
@@ -142,7 +143,7 @@ LEFT JOIN synchronization_protocols sp ON sp.id = s.protocol_id
 CROSS JOIN LATERAL calculate_milk_loss_for_synchronization(a.id, s.id) ml
 WHERE s.status IN ('Active', 'Completed')
   AND ml.total_days > 0
-ORDER BY s.start_date DESC, a.animal_id;
+ORDER BY s.start_date DESC, a.tag_no;
 
 -- Grant permissions
 GRANT EXECUTE ON FUNCTION calculate_average_daily_milk TO authenticated;
