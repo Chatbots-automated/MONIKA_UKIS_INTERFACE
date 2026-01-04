@@ -417,3 +417,30 @@ export interface InseminationRecord {
   sperm_product?: InseminationProduct;
   glove_product?: InseminationProduct;
 }
+
+export interface MilkLossCalculation {
+  total_days: number;
+  avg_daily_milk: number;
+  total_milk_lost: number;
+  milk_loss_value: number;
+  milk_price_per_kg: number;
+}
+
+export interface AnimalMilkLossByTreatment {
+  animal_id: string;
+  animal_number: string;
+  animal_name: string | null;
+  treatment_id: string;
+  visit_id: string | null;
+  treatment_date: string;
+  diagnosis: string | null;
+  sync_id: string;
+  sync_start: string;
+  sync_end: string;
+  sync_status: string;
+  loss_days: number;
+  avg_daily_milk_kg: number;
+  total_milk_lost_kg: number;
+  milk_loss_value_eur: number;
+  milk_price_used: number;
+}

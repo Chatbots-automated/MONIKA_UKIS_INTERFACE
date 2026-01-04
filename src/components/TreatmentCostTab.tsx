@@ -3,16 +3,17 @@ import { MastitisMilk } from './MastitisMilk';
 import { TreatmentCostAnalysis } from './TreatmentCostAnalysis';
 import { ProductUsageAnalysis } from './ProductUsageAnalysis';
 import { ProfitabilityDashboard } from './ProfitabilityDashboard';
-import { Droplet, Euro, Package, TrendingUp } from 'lucide-react';
+import { AnimalMilkLossAnalysis } from './AnimalMilkLossAnalysis';
+import { Droplet, Euro, Package, TrendingUp, Milk } from 'lucide-react';
 
 export function TreatmentCostTab() {
-  const [activeTab, setActiveTab] = useState<'costs' | 'usage' | 'mastitis' | 'profitability'>('costs');
+  const [activeTab, setActiveTab] = useState<'costs' | 'usage' | 'mastitis' | 'profitability' | 'milk_loss'>('costs');
 
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           <button
             onClick={() => setActiveTab('costs')}
             className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
@@ -36,10 +37,21 @@ export function TreatmentCostTab() {
             <span>Pelningumas & ROI</span>
           </button>
           <button
+            onClick={() => setActiveTab('milk_loss')}
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'milk_loss'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Milk className="w-5 h-5" />
+            <span>Pieno Nuostoliai</span>
+          </button>
+          <button
             onClick={() => setActiveTab('usage')}
             className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
               activeTab === 'usage'
-                ? 'bg-blue-600 text-white shadow-md'
+                ? 'bg-orange-600 text-white shadow-md'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -64,6 +76,7 @@ export function TreatmentCostTab() {
       <div>
         {activeTab === 'costs' && <TreatmentCostAnalysis />}
         {activeTab === 'profitability' && <ProfitabilityDashboard />}
+        {activeTab === 'milk_loss' && <AnimalMilkLossAnalysis />}
         {activeTab === 'usage' && <ProductUsageAnalysis />}
         {activeTab === 'mastitis' && <MastitisMilk />}
       </div>
