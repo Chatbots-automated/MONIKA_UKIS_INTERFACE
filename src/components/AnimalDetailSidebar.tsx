@@ -2044,14 +2044,39 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         const treatment = treatmentRecords[0];
 
         // Load future planned visits that are part of the treatment course
+        // Include planned_medications to reconstruct the full course schedule
         const { data: futureVisits } = await supabase
           .from('animal_visits')
-          .select('visit_datetime')
+          .select('visit_datetime, planned_medications')
           .eq('related_visit_id', visitToEdit.id)
           .eq('status', 'Planuojamas')
           .order('visit_datetime', { ascending: true });
 
         const recurringDays = futureVisits ? futureVisits.map(v => v.visit_datetime.split('T')[0]) : [];
+
+        // Reconstruct the full course medication schedule including today's visit
+        let courseMedicationSchedule: any[] = [];
+
+        // Add today's visit medications if it has planned_medications
+        const todayDate = visitToEdit.visit_datetime.split('T')[0];
+        if ((visitToEdit as any).planned_medications && Array.isArray((visitToEdit as any).planned_medications)) {
+          courseMedicationSchedule.push({
+            date: todayDate,
+            medications: (visitToEdit as any).planned_medications
+          });
+        }
+
+        // Add future visits medications
+        if (futureVisits) {
+          futureVisits.forEach(visit => {
+            if ((visit as any).planned_medications && Array.isArray((visit as any).planned_medications)) {
+              courseMedicationSchedule.push({
+                date: visit.visit_datetime.split('T')[0],
+                medications: (visit as any).planned_medications
+              });
+            }
+          });
+        }
 
         setTreatmentData({
           disease_id: treatment.disease_id || '',
@@ -2063,6 +2088,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           withdrawal_until: treatment.withdrawal_until || '',
           notes: treatment.notes || '',
           recurring_days: recurringDays,
+          courseMedicationSchedule: courseMedicationSchedule.length > 0 ? courseMedicationSchedule : undefined,
           medications: (treatment.treatment_medications || []).map((med: any) => ({
             product_id: med.product_id,
             batch_id: med.batch_id,
@@ -2117,14 +2143,39 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         }
 
         // Load future planned visits that are part of the treatment course
+        // Include planned_medications to reconstruct the full course schedule
         const { data: futureVisits } = await supabase
           .from('animal_visits')
-          .select('visit_datetime')
+          .select('visit_datetime, planned_medications')
           .eq('related_visit_id', visitToEdit.id)
           .eq('status', 'Planuojamas')
           .order('visit_datetime', { ascending: true });
 
         const recurringDays = futureVisits ? futureVisits.map(v => v.visit_datetime.split('T')[0]) : [];
+
+        // Reconstruct the full course medication schedule including today's visit
+        let courseMedicationSchedule: any[] = [];
+
+        // Add today's visit medications if it has planned_medications
+        const todayDate = visitToEdit.visit_datetime.split('T')[0];
+        if ((visitToEdit as any).planned_medications && Array.isArray((visitToEdit as any).planned_medications)) {
+          courseMedicationSchedule.push({
+            date: todayDate,
+            medications: (visitToEdit as any).planned_medications
+          });
+        }
+
+        // Add future visits medications
+        if (futureVisits) {
+          futureVisits.forEach(visit => {
+            if ((visit as any).planned_medications && Array.isArray((visit as any).planned_medications)) {
+              courseMedicationSchedule.push({
+                date: visit.visit_datetime.split('T')[0],
+                medications: (visit as any).planned_medications
+              });
+            }
+          });
+        }
 
         setTreatmentData({
           disease_id: diseaseId,
@@ -2136,6 +2187,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           withdrawal_until: '',
           notes: relatedNotes,
           recurring_days: recurringDays,
+          courseMedicationSchedule: courseMedicationSchedule.length > 0 ? courseMedicationSchedule : undefined,
           medications: (visitToEdit as any).planned_medications.map((med: any) => ({
             product_id: med.product_id,
             batch_id: med.batch_id || '',
@@ -4587,6 +4639,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         <CourseMedicationScheduler
           animalId={animalId}
           initialStartDate={formData.visit_datetime.split('T')[0]}
+          initialSchedule={treatmentData.courseMedicationSchedule}
           onConfirm={(schedule) => {
             console.log('📅 Course schedule confirmed:', schedule);
 

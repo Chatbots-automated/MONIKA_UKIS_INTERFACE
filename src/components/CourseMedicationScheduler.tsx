@@ -37,13 +37,15 @@ interface CourseMedicationSchedulerProps {
   onConfirm: (schedule: DateMedications[]) => void;
   onCancel: () => void;
   initialStartDate?: string;
+  initialSchedule?: DateMedications[];
 }
 
 export function CourseMedicationScheduler({
   animalId,
   onConfirm,
   onCancel,
-  initialStartDate
+  initialStartDate,
+  initialSchedule
 }: CourseMedicationSchedulerProps) {
   const [step, setStep] = useState<'dates' | 'medications' | 'review'>('dates');
   const [products, setProducts] = useState<Product[]>([]);
@@ -54,11 +56,37 @@ export function CourseMedicationScheduler({
 
   useEffect(() => {
     loadProducts();
-    if (initialStartDate) {
+
+    // Load initial schedule if provided (for editing existing courses)
+    if (initialSchedule && initialSchedule.length > 0) {
+      console.log('📥 Loading existing course schedule:', initialSchedule);
+
+      const dates = initialSchedule.map(s => s.date).sort();
+      setSelectedDates(dates);
+
+      const scheduleMap = new Map<string, ScheduledMedication[]>();
+      initialSchedule.forEach(daySchedule => {
+        const meds = daySchedule.medications.map(med => ({
+          ...med,
+          id: med.id || crypto.randomUUID() // Ensure each med has an id
+        }));
+        scheduleMap.set(daySchedule.date, meds);
+
+        // Pre-load batches for each product
+        meds.forEach(med => {
+          if (med.product_id) {
+            loadBatchesForProduct(med.product_id);
+          }
+        });
+      });
+      setDateSchedule(scheduleMap);
+
+      console.log('✅ Schedule loaded with', dates.length, 'dates');
+    } else if (initialStartDate) {
       const today = new Date(initialStartDate);
       setSelectedDates([today.toISOString().split('T')[0]]);
     }
-  }, [initialStartDate]);
+  }, [initialStartDate, initialSchedule]);
 
   const loadProducts = async () => {
     const { data, error } = await supabase
