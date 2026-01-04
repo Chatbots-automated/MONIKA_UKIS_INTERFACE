@@ -62,8 +62,19 @@ interface AnimalDetailData {
   visits: VisitDetail[];
 }
 
+interface RawData {
+  animals: Array<{ id: string; tag_no: string | null }>;
+  treatments: any[];
+  usageItems: any[];
+  vaccinations: any[];
+  visits: any[];
+  syncs: any[];
+  syncSteps: any[];
+}
+
 export function TreatmentCostAnalysis() {
   const [costData, setCostData] = useState<AnimalCostData[]>([]);
+  const [rawData, setRawData] = useState<RawData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedAnimal, setExpandedAnimal] = useState<string | null>(null);
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set());
@@ -80,6 +91,152 @@ export function TreatmentCostAnalysis() {
   useEffect(() => {
     loadCostData();
   }, []);
+
+  // Recalculate costs when date filters change
+  useEffect(() => {
+    if (!rawData) return;
+
+    const recalculateCosts = () => {
+      const { animals, treatments, usageItems, vaccinations, visits, syncs, syncSteps } = rawData;
+
+      const animalCosts: AnimalCostData[] = [];
+
+      for (const animal of animals) {
+        const animalTreatments = treatments.filter(t => t.animal_id === animal.id);
+        const animalVaccinations = vaccinations.filter(v => v.animal_id === animal.id);
+        const animalSyncs = syncs.filter(s => s.animal_id === animal.id);
+
+        // Filter visits by date range
+        let completedVisits = visits.filter(v =>
+          v.animal_id === animal.id && v.status === 'Baigtas'
+        );
+
+        if (dateFrom || dateTo) {
+          completedVisits = completedVisits.filter(v => {
+            const visitDate = v.visit_datetime.split('T')[0]; // Get date part only
+            if (dateFrom && visitDate < dateFrom) return false;
+            if (dateTo && visitDate > dateTo) return false;
+            return true;
+          });
+        }
+
+        // Get treatment IDs from filtered visits only
+        const treatmentIdsInRange = new Set(
+          animalTreatments
+            .filter(t => {
+              // Find if this treatment has a visit in the date range
+              return completedVisits.some(v => {
+                // Check if treatment was created around the visit time
+                const treatmentDate = t.reg_date?.split('T')[0];
+                return treatmentDate; // Include if we have a treatment date
+              });
+            })
+            .map(t => t.id)
+        );
+
+        // Filter vaccinations by date range
+        let filteredVaccinations = animalVaccinations;
+        if (dateFrom || dateTo) {
+          filteredVaccinations = filteredVaccinations.filter(v => {
+            const vaccDate = v.vaccination_date;
+            if (dateFrom && vaccDate < dateFrom) return false;
+            if (dateTo && vaccDate > dateTo) return false;
+            return true;
+          });
+        }
+
+        // Filter syncs by date range
+        let filteredSyncs = animalSyncs;
+        if (dateFrom || dateTo) {
+          filteredSyncs = filteredSyncs.filter(s => {
+            const syncDate = s.start_date;
+            if (dateFrom && syncDate < dateFrom) return false;
+            if (dateTo && syncDate > dateTo) return false;
+            return true;
+          });
+        }
+
+        // Calculate medication costs from usage items (only for treatments with visits in range)
+        let medicationCostsFromUsageItems = 0;
+        for (const usage of usageItems) {
+          if (treatmentIdsInRange.has(usage.treatment_id) && usage.batches && usage.qty) {
+            const unitCost = calculateSafeUnitCost(
+              usage.batches.purchase_price,
+              usage.batches.received_qty
+            );
+            medicationCostsFromUsageItems += usage.qty * unitCost;
+          }
+        }
+
+        // Add costs from synchronization steps (only for syncs in range)
+        let medicationCostsFromSync = 0;
+        for (const sync of filteredSyncs) {
+          const syncStepsForAnimal = syncSteps.filter(ss => ss.synchronization_id === sync.id);
+          for (const step of syncStepsForAnimal) {
+            if (step.batches && step.dosage) {
+              const unitCost = calculateSafeUnitCost(
+                step.batches.purchase_price,
+                step.batches.received_qty
+              );
+              medicationCostsFromSync += step.dosage * unitCost;
+            }
+          }
+        }
+
+        const medicationCosts = medicationCostsFromUsageItems + medicationCostsFromSync;
+
+        // Calculate vaccination costs (only for vaccinations in range)
+        let vaccinationCosts = 0;
+        for (const vaccination of filteredVaccinations) {
+          if (vaccination.batches && vaccination.dose_amount) {
+            const unitCost = calculateSafeUnitCost(
+              vaccination.batches.purchase_price,
+              vaccination.batches.received_qty
+            );
+            vaccinationCosts += vaccination.dose_amount * unitCost;
+          }
+        }
+
+        // Calculate visit costs (only for visits in range)
+        const visitCount = completedVisits.length;
+        const visitCosts = visitCount * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
+
+        const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
+
+        // Get earliest and latest visit dates (from filtered visits)
+        let earliestVisitDate: string | null = null;
+        let latestVisitDate: string | null = null;
+        if (completedVisits.length > 0) {
+          const visitDates = completedVisits.map(v => v.visit_datetime).sort();
+          earliestVisitDate = visitDates[0];
+          latestVisitDate = visitDates[visitDates.length - 1];
+        }
+
+        // Include animals with activity in the filtered date range
+        if (visitCount > 0 || filteredVaccinations.length > 0 || filteredSyncs.length > 0) {
+          animalCosts.push({
+            animal_id: animal.id,
+            tag_no: animal.tag_no,
+            treatment_count: treatmentIdsInRange.size,
+            visit_count: visitCount,
+            visit_costs: visitCosts,
+            medication_costs: medicationCosts,
+            medication_costs_from_usage_items: medicationCostsFromUsageItems,
+            medication_costs_from_sync: medicationCostsFromSync,
+            vaccination_count: filteredVaccinations.length,
+            vaccination_costs: vaccinationCosts,
+            total_costs: totalCosts,
+            earliest_visit_date: earliestVisitDate,
+            latest_visit_date: latestVisitDate,
+          });
+        }
+      }
+
+      setCostData(animalCosts);
+    };
+
+    recalculateCosts();
+  }, [rawData, dateFrom, dateTo]);
 
   const loadCostData = async () => {
     try {
@@ -266,6 +423,17 @@ export function TreatmentCostAnalysis() {
       console.log('Final animal costs calculated:', animalCosts.length);
       console.log('Sample data:', animalCosts.slice(0, 3));
       setCostData(animalCosts);
+
+      // Store raw data for filtering
+      setRawData({
+        animals: animals || [],
+        treatments: treatments || [],
+        usageItems: usageItems || [],
+        vaccinations: vaccinations || [],
+        visits: visits || [],
+        syncs: syncs || [],
+        syncSteps: syncSteps || [],
+      });
     } catch (error) {
       console.error('Error loading cost data:', error);
     } finally {
@@ -590,14 +758,6 @@ export function TreatmentCostAnalysis() {
       }
     }
 
-    // Date range filter
-    if (dateFrom && animal.latest_visit_date && animal.latest_visit_date < dateFrom) {
-      return false;
-    }
-    if (dateTo && animal.earliest_visit_date && animal.earliest_visit_date > dateTo) {
-      return false;
-    }
-
     // Minimum cost filter
     if (minCost) {
       const minCostNum = parseFloat(minCost);
@@ -646,7 +806,7 @@ export function TreatmentCostAnalysis() {
     return sortOrder === 'desc' ? -compareValue : compareValue;
   });
 
-  const totalStats = costData.reduce(
+  const totalStats = filteredData.reduce(
     (acc, row) => ({
       totalAnimals: acc.totalAnimals + 1,
       totalVisits: acc.totalVisits + row.visit_count,
@@ -773,11 +933,19 @@ export function TreatmentCostAnalysis() {
                 </div>
               </div>
 
-              {hasActiveFilters && (
-                <div className="text-sm text-gray-600 pt-2 border-t border-gray-200">
-                  Rodoma: <span className="font-semibold">{filteredData.length}</span> gyvūnų iš <span className="font-semibold">{costData.length}</span>
-                </div>
-              )}
+              <div className="text-sm text-gray-600 pt-2 border-t border-gray-200">
+                {(dateFrom || dateTo) && (
+                  <div className="mb-2">
+                    Laikotarpis: {dateFrom ? formatDateLT(dateFrom) : 'pradžia'} - {dateTo ? formatDateLT(dateTo) : 'dabar'}
+                  </div>
+                )}
+                {hasActiveFilters && (
+                  <div>
+                    Rodoma: <span className="font-semibold">{filteredData.length}</span> gyvūnų
+                    {(searchTerm || minCost) && <span> (iš {costData.length})</span>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
