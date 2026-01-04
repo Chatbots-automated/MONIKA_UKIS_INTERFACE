@@ -172,14 +172,14 @@ SELECT
           'product_name', p.name,
           'qty', ui.qty,
           'unit', ui.unit,
-          'withdrawal_milk_days', p.withdrawal_milk_days,
-          'withdrawal_meat_days', p.withdrawal_meat_days
+          'withdrawal_milk_days', p.withdrawal_days_milk,
+          'withdrawal_meat_days', p.withdrawal_days_meat
         ) ORDER BY p.name
       )
       FROM usage_items ui
       JOIN products p ON p.id = ui.product_id
       WHERE ui.treatment_id = t.id
-        AND p.category = 'medications'
+        AND p.category = 'medicines'
     ),
     '[]'::json
   ) as medications_used
