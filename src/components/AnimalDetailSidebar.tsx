@@ -2758,20 +2758,18 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           console.log('📅 Creating future visits for course...');
           console.log('Course schedule:', treatmentData.courseMedicationSchedule);
 
-          // In EDIT mode: Delete existing related future visits to prevent duplicates
+          // In EDIT mode: Fetch existing related visits to update them instead of deleting
+          let existingVisits: any[] = [];
           if (isEditMode && visitToEdit) {
-            console.log('🗑️ Edit mode: Deleting existing related future visits');
-            const { error: deleteError } = await supabase
+            console.log('🔄 Edit mode: Fetching existing related visits to update');
+            const { data: existing } = await supabase
               .from('animal_visits')
-              .delete()
+              .select('*')
               .eq('related_visit_id', visitToEdit.id)
-              .eq('status', 'Planuojamas'); // Only delete unstarted planned visits
+              .eq('status', 'Planuojamas'); // Only update unstarted planned visits
 
-            if (deleteError) {
-              console.error('Error deleting related visits:', deleteError);
-            } else {
-              console.log('✅ Deleted existing related visits');
-            }
+            existingVisits = existing || [];
+            console.log(`Found ${existingVisits.length} existing related visits`);
           }
 
           let futureVisits: any[] = [];
@@ -2916,18 +2914,80 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               }));
           }
 
-          console.log(`📦 Creating ${futureVisits.length} future visits`);
+          // Process future visits: update existing ones, create new ones, delete removed ones
+          const scheduledDates = new Set(futureVisits.map(v => v.visit_datetime.split('T')[0]));
+          const existingVisitsMap = new Map(
+            existingVisits.map(v => [v.visit_datetime.split('T')[0], v])
+          );
 
-          const { error: futureVisitsError } = await supabase
-            .from('animal_visits')
-            .insert(futureVisits);
+          let updatedCount = 0;
+          let createdCount = 0;
+          const visitsToCreate: any[] = [];
 
-          if (futureVisitsError) {
-            console.error('Error creating future treatment visits:', futureVisitsError);
-            showNotification('Įspėjimas: Būsimų vizitų sukūrimas nepavyko. Klaida: ' + futureVisitsError.message, 'warning');
-          } else {
-            console.log(`✅ Created ${futureVisits.length} future treatment visits with planned medications`);
+          // Update existing visits or create new ones
+          for (const futureVisit of futureVisits) {
+            const visitDate = futureVisit.visit_datetime.split('T')[0];
+            const existingVisit = existingVisitsMap.get(visitDate);
+
+            if (existingVisit) {
+              // Update existing visit
+              const { error: updateError } = await supabase
+                .from('animal_visits')
+                .update({
+                  visit_datetime: futureVisit.visit_datetime,
+                  procedures: futureVisit.procedures,
+                  notes: futureVisit.notes,
+                  vet_name: futureVisit.vet_name,
+                  related_treatment_id: futureVisit.related_treatment_id,
+                  planned_medications: futureVisit.planned_medications,
+                  medications_processed: false,
+                })
+                .eq('id', existingVisit.id);
+
+              if (updateError) {
+                console.error('Error updating visit:', updateError);
+              } else {
+                updatedCount++;
+              }
+            } else {
+              // Add to create list
+              visitsToCreate.push(futureVisit);
+            }
           }
+
+          // Create new visits
+          if (visitsToCreate.length > 0) {
+            const { error: createError } = await supabase
+              .from('animal_visits')
+              .insert(visitsToCreate);
+
+            if (createError) {
+              console.error('Error creating future visits:', createError);
+              showNotification('Įspėjimas: Naujų vizitų sukūrimas nepavyko. Klaida: ' + createError.message, 'warning');
+            } else {
+              createdCount = visitsToCreate.length;
+            }
+          }
+
+          // Delete visits that are no longer in the schedule
+          const visitsToDelete = existingVisits
+            .filter(v => !scheduledDates.has(v.visit_datetime.split('T')[0]))
+            .map(v => v.id);
+
+          if (visitsToDelete.length > 0) {
+            const { error: deleteError } = await supabase
+              .from('animal_visits')
+              .delete()
+              .in('id', visitsToDelete);
+
+            if (deleteError) {
+              console.error('Error deleting removed visits:', deleteError);
+            } else {
+              console.log(`🗑️ Deleted ${visitsToDelete.length} visits no longer in schedule`);
+            }
+          }
+
+          console.log(`✅ Updated ${updatedCount} visits, created ${createdCount} new visits, deleted ${visitsToDelete.length} old visits`);
 
           // Auto-enable "Reikia sekančio vizito" when course is created
           // The next visit should be AFTER the last course day for check-up
