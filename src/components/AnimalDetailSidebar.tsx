@@ -2373,6 +2373,13 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const handleSubmit = async (e: React.FormEvent, autoComplete = false) => {
     e.preventDefault();
 
+    // Prevent double-submission: Set loading immediately
+    if (loading) {
+      console.log('⚠️ Submit already in progress, ignoring duplicate click');
+      return;
+    }
+    setLoading(true);
+
     console.log('🚀 handleSubmit called:', {
       isEditMode,
       visitId: visitToEdit?.id,
@@ -2384,6 +2391,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
     if (formData.procedures.length === 0) {
       showNotification('Pasirinkite bent vieną procedūrą', 'error');
+      setLoading(false);
       return;
     }
 
@@ -2392,25 +2400,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         treatmentData.medications.length === 0 &&
         !treatmentData.courseMedicationSchedule) {
       showNotification('Gydymui reikia pasirinkti bent vieną vaistą arba suplanuoti kursą', 'error');
+      setLoading(false);
       return;
     }
 
     if (formData.procedures.includes('Vakcina') && vaccinationData.vaccines.length === 0) {
       showNotification('Vakcinai reikia pasirinkti bent vieną produktą', 'error');
+      setLoading(false);
       return;
     }
 
     if (formData.procedures.includes('Nagai') && hoofData.examinations.length === 0) {
       showNotification('Nagų apžiūrai reikia apžiūrėti bent vieną nagą', 'error');
+      setLoading(false);
       return;
     }
 
     if (formData.procedures.includes('Profilaktika') && preventionData.products.length === 0) {
       showNotification('Profilaktikai reikia pasirinkti bent vieną produktą', 'error');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
     try {
       let visitData;
 
@@ -4393,7 +4404,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             >
               {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti pakeitimus' : 'Sukurti vizitą')}
             </button>
@@ -4401,7 +4412,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
               type="button"
               onClick={(e) => handleSubmit(e, true)}
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             >
               {loading ? (isEditMode ? 'Saugoma...' : 'Kuriama...') : (isEditMode ? 'Išsaugoti ir užbaigti' : 'Sukurti ir užbaigti')}
             </button>
