@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
 import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost, formatUnitCost } from '../lib/costCalculations';
 import { fetchAllRows } from '../lib/helpers';
-import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight, Search, Droplet } from 'lucide-react';
+import { TreatmentMilkLossAnalysis } from './TreatmentMilkLossAnalysis';
 
 interface AnimalCostData {
   animal_id: string;
@@ -69,6 +70,7 @@ export function TreatmentCostAnalysis() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
   const [neckNumberSearch, setNeckNumberSearch] = useState('');
+  const [milkLossModalAnimal, setMilkLossModalAnimal] = useState<{ id: string; tag: string } | null>(null);
 
   useEffect(() => {
     loadCostData();
@@ -877,10 +879,20 @@ export function TreatmentCostAnalysis() {
                         <tr>
                           <td colSpan={8} className="px-6 py-4 bg-gradient-to-br from-blue-50 to-blue-100">
                             <div className="max-w-5xl mx-auto">
-                              <h4 className="font-bold text-gray-900 text-xl mb-4 flex items-center gap-2 pb-3 border-b-2 border-blue-400">
-                                <Calendar className="w-7 h-7 text-blue-600" />
-                                Vizitai ({detailData.visits.length})
-                              </h4>
+                              <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-blue-400">
+                                <h4 className="font-bold text-gray-900 text-xl flex items-center gap-2">
+                                  <Calendar className="w-7 h-7 text-blue-600" />
+                                  Vizitai ({detailData.visits.length})
+                                </h4>
+                                <button
+                                  onClick={() => setMilkLossModalAnimal({ id: row.animal_id, tag: row.tag_no || '' })}
+                                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors shadow-md"
+                                  title="Pieno nuostoliai dėl karencijos"
+                                >
+                                  <Droplet className="w-5 h-5" />
+                                  <span className="text-sm font-medium">Pieno Nuostoliai</span>
+                                </button>
+                              </div>
 
                               <div className="space-y-3">
                                 {detailData.visits.length === 0 ? (
@@ -1060,6 +1072,15 @@ export function TreatmentCostAnalysis() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Milk Loss Modal */}
+      {milkLossModalAnimal && (
+        <TreatmentMilkLossAnalysis
+          animalId={milkLossModalAnimal.id}
+          animalTag={milkLossModalAnimal.tag}
+          onClose={() => setMilkLossModalAnimal(null)}
+        />
       )}
     </div>
   );
