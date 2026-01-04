@@ -2462,29 +2462,68 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
         await logAction('update_visit', 'animal_visits', visitData.id);
       } else {
-        // Create new visit
-        const { data, error: visitError } = await supabase
+        // Create new visit - but first check for recent duplicates (protection against double-click)
+        const visitDate = formData.visit_datetime.split('T')[0];
+        const { data: recentVisits } = await supabase
           .from('animal_visits')
-          .insert({
-            animal_id: animalId,
-            visit_datetime: formData.visit_datetime,
-            procedures: formData.procedures,
-            temperature: formData.temperature ? parseFloat(formData.temperature) : null,
-            temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
-            status: formData.status,
-            notes: formData.notes ? formData.notes : null,
-            vet_name: formData.vet_name ? formData.vet_name : null,
-            next_visit_required: formData.next_visit_required,
-            next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
-            treatment_required: formData.procedures.includes('Gydymas'),
-          })
-          .select()
-          .single();
+          .select('id, created_at')
+          .eq('animal_id', animalId)
+          .gte('visit_datetime', `${visitDate}T00:00:00`)
+          .lte('visit_datetime', `${visitDate}T23:59:59`)
+          .order('created_at', { ascending: false })
+          .limit(5);
 
-        if (visitError) throw visitError;
-        visitData = data;
+        // Check if a visit with identical procedures was just created (within last 10 seconds)
+        const now = new Date();
+        const tenSecondsAgo = new Date(now.getTime() - 10000);
+        const proceduresStr = JSON.stringify(formData.procedures.sort());
 
-        await logAction('create_visit', 'animal_visits', visitData.id);
+        let isDuplicate = false;
+        if (recentVisits && recentVisits.length > 0) {
+          for (const rv of recentVisits) {
+            const createdAt = new Date(rv.created_at);
+            if (createdAt > tenSecondsAgo) {
+              // Fetch full visit details to check procedures
+              const { data: fullVisit } = await supabase
+                .from('animal_visits')
+                .select('procedures')
+                .eq('id', rv.id)
+                .single();
+
+              if (fullVisit && JSON.stringify(fullVisit.procedures.sort()) === proceduresStr) {
+                isDuplicate = true;
+                console.warn('⚠️ Duplicate visit detected (created within last 10 seconds), skipping creation');
+                visitData = rv; // Use the existing visit
+                break;
+              }
+            }
+          }
+        }
+
+        if (!isDuplicate) {
+          const { data, error: visitError } = await supabase
+            .from('animal_visits')
+            .insert({
+              animal_id: animalId,
+              visit_datetime: formData.visit_datetime,
+              procedures: formData.procedures,
+              temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+              temperature_measured_at: formData.procedures.includes('Temperatūra') && formData.temperature ? formData.temperature_measured_at : null,
+              status: formData.status,
+              notes: formData.notes ? formData.notes : null,
+              vet_name: formData.vet_name ? formData.vet_name : null,
+              next_visit_required: formData.next_visit_required,
+              next_visit_date: formData.next_visit_required ? formData.next_visit_date : null,
+              treatment_required: formData.procedures.includes('Gydymas'),
+            })
+            .select()
+            .single();
+
+          if (visitError) throw visitError;
+          visitData = data;
+
+          await logAction('create_visit', 'animal_visits', visitData.id);
+        }
       }
 
       // 2. If Gydymas procedure, create or update treatment
@@ -2718,6 +2757,22 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         if (hasRecurringDays) {
           console.log('📅 Creating future visits for course...');
           console.log('Course schedule:', treatmentData.courseMedicationSchedule);
+
+          // In EDIT mode: Delete existing related future visits to prevent duplicates
+          if (isEditMode && visitToEdit) {
+            console.log('🗑️ Edit mode: Deleting existing related future visits');
+            const { error: deleteError } = await supabase
+              .from('animal_visits')
+              .delete()
+              .eq('related_visit_id', visitToEdit.id)
+              .eq('status', 'Planuojamas'); // Only delete unstarted planned visits
+
+            if (deleteError) {
+              console.error('Error deleting related visits:', deleteError);
+            } else {
+              console.log('✅ Deleted existing related visits');
+            }
+          }
 
           let futureVisits: any[] = [];
           const todayDate = formData.visit_datetime.split('T')[0];
