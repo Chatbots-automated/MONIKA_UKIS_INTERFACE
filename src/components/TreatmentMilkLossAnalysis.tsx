@@ -86,22 +86,55 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
 
     if (existing) {
       existing.treatment_count += 1;
-      existing.total_loss_days += row.total_loss_days;
-      existing.total_milk_lost_kg += row.total_milk_lost_kg;
-      existing.total_value_lost_eur += row.total_value_lost_eur;
+      // Track earliest and latest dates for continuous period calculation
+      const rowTreatmentDate = new Date(row.treatment_date);
+      const rowWithdrawalDate = new Date(row.withdrawal_until_milk);
+
+      if (!existing.earliest_treatment_date || rowTreatmentDate < existing.earliest_treatment_date) {
+        existing.earliest_treatment_date = rowTreatmentDate;
+      }
+      if (!existing.latest_withdrawal_date || rowWithdrawalDate > existing.latest_withdrawal_date) {
+        existing.latest_withdrawal_date = rowWithdrawalDate;
+      }
+
+      // Sum average milk for weighted calculation
+      existing.total_avg_milk += row.avg_daily_milk_kg;
     } else {
       acc.push({
         animal_id: row.animal_id,
         animal_tag: row.animal_tag,
         treatment_count: 1,
-        total_loss_days: row.total_loss_days,
-        total_milk_lost_kg: row.total_milk_lost_kg,
-        total_value_lost_eur: row.total_value_lost_eur,
+        earliest_treatment_date: new Date(row.treatment_date),
+        latest_withdrawal_date: new Date(row.withdrawal_until_milk),
+        total_avg_milk: row.avg_daily_milk_kg,
+        total_loss_days: 0, // Will be calculated after
+        total_milk_lost_kg: 0, // Will be calculated after
+        total_value_lost_eur: 0, // Will be calculated after
       });
     }
 
     return acc;
-  }, [] as AnimalTreatmentAggregate[]);
+  }, [] as (AnimalTreatmentAggregate & {
+    earliest_treatment_date?: Date;
+    latest_withdrawal_date?: Date;
+    total_avg_milk?: number;
+  })[]).map(animal => {
+    // Calculate actual continuous period
+    if (animal.earliest_treatment_date && animal.latest_withdrawal_date) {
+      const daysDiff = Math.ceil(
+        (animal.latest_withdrawal_date.getTime() - animal.earliest_treatment_date.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const total_days = daysDiff + 1; // +1 for safety day
+      const avg_milk = animal.total_avg_milk! / animal.treatment_count; // Average across treatments
+      const milk_price = treatmentLossData[0]?.milk_price_eur_per_kg || 0.45;
+
+      animal.total_loss_days = total_days;
+      animal.total_milk_lost_kg = avg_milk * total_days;
+      animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
+    }
+
+    return animal as AnimalTreatmentAggregate;
+  });
 
   const filteredData = aggregatedData.filter(row => {
     if (!searchTerm) return true;
@@ -265,7 +298,16 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
           </div>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-orange-200">
+        <div className="mt-4 pt-4 border-t border-orange-200 space-y-3">
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3">
+            <div className="flex items-start gap-2 text-sm">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-amber-900">
+                <span className="font-semibold">Svarbu:</span> Kai gyvūnas gauna kelis gydymus iš eilės, pieno nuostoliai skaičiuojami kaip <span className="font-semibold">ištisinis laikotarpis</span> nuo pirmojo gydymo iki paskutinės karencijos pabaigos. Persidengiančios dienos neskaičiuojamos kelis kartus.
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Vid. nuostoliai per gyvūną:</span>
@@ -310,8 +352,9 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('days')}
+                  title="Ištisinių dienų laikotarpis nuo pirmojo gydymo iki paskutinės karencijos"
                 >
-                  Dienų {sortBy === 'days' && (sortOrder === 'desc' ? '↓' : '↑')}
+                  Dienų (ištisinis) {sortBy === 'days' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -370,7 +413,26 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
                       <tr>
                         <td colSpan={isModal ? 5 : 6} className="px-4 py-4 bg-gray-50">
                           <div className="space-y-3">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Gydymų istorija su pieno nuostoliais</h4>
+                            <div className="mb-4">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2">Gydymų istorija su pieno nuostoliais</h4>
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <div className="font-medium text-blue-900 mb-1">Skaičiuojamas ištisinių dienų laikotarpis</div>
+                                    <div className="text-blue-700 text-xs">
+                                      Pieno nuostoliai skaičiuojami nuo <span className="font-semibold">pirmojo gydymo datos</span> iki <span className="font-semibold">paskutinės karencijos pabaigos</span>.
+                                      Kai gydymai persikloja, dienos neskaičiuojamos kelis kartus.
+                                      {treatments.length > 0 && (
+                                        <span className="block mt-1">
+                                          ({formatDateLT(treatments[treatments.length - 1]?.treatment_date)} → {formatDateLT(treatments[0]?.withdrawal_until_milk)} = {row.total_loss_days} d.)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                             {treatments.map((treatment) => (
                               <div
                                 key={treatment.treatment_id}
@@ -389,7 +451,7 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
                                   </div>
 
                                   <div>
-                                    <div className="text-xs text-gray-500">Karencijos laikotarpis</div>
+                                    <div className="text-xs text-gray-500">Karencijos laikotarpis (atskiras)</div>
                                     <div className="text-sm">
                                       {formatDateLT(treatment.treatment_date)} - {formatDateLT(treatment.withdrawal_until_milk)}
                                     </div>
@@ -399,15 +461,18 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
                                   </div>
 
                                   <div>
-                                    <div className="text-xs text-gray-500">Pieno nuostoliai</div>
-                                    <div className="text-sm">
+                                    <div className="text-xs text-gray-500">Nuostoliai (jei būtų atskiras)</div>
+                                    <div className="text-sm text-gray-600">
                                       {formatNumberLT(treatment.avg_daily_milk_kg)} kg/d. × {treatment.total_loss_days} d.
                                     </div>
-                                    <div className="text-sm font-semibold text-blue-600 mt-1">
+                                    <div className="text-sm font-semibold text-gray-600 mt-1">
                                       = {formatNumberLT(treatment.total_milk_lost_kg)} kg
                                     </div>
-                                    <div className="text-lg font-bold text-red-600 mt-2">
-                                      {formatCurrencyLT(treatment.total_value_lost_eur)}
+                                    <div className="text-base font-semibold text-gray-600 mt-1">
+                                      ({formatCurrencyLT(treatment.total_value_lost_eur)})
+                                    </div>
+                                    <div className="text-xs text-gray-500 italic mt-1">
+                                      *Tikroji suma skaičiuojama pagal visų gydymų laikotarpį
                                     </div>
                                   </div>
 
