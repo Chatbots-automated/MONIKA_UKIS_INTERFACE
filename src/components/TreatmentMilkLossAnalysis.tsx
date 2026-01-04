@@ -51,6 +51,10 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
   const [sortBy, setSortBy] = useState<'total_loss' | 'milk_lost' | 'days' | 'treatments' | 'animal'>('total_loss');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [vetFilter, setVetFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     loadTreatmentMilkLossData();
@@ -136,13 +140,80 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
     return animal as AnimalTreatmentAggregate;
   });
 
-  const filteredData = aggregatedData.filter(row => {
-    if (!searchTerm) return true;
-    const search = searchTerm.toLowerCase();
-    return row.animal_tag?.toLowerCase().includes(search);
+  // Get unique vets for filter dropdown
+  const uniqueVets = Array.from(new Set(treatmentLossData.map(t => t.vet_name).filter(Boolean)));
+
+  // Apply filters to treatment data first (before aggregation for proper date filtering)
+  const filteredTreatmentData = treatmentLossData.filter(row => {
+    // Search filter
+    if (searchTerm && !row.animal_tag.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return false;
+    }
+
+    // Date range filter
+    if (dateFrom && row.treatment_date < dateFrom) return false;
+    if (dateTo && row.treatment_date > dateTo) return false;
+
+    // Vet filter
+    if (vetFilter && row.vet_name !== vetFilter) return false;
+
+    return true;
   });
 
-  const sortedData = [...filteredData].sort((a, b) => {
+  // Re-aggregate filtered data
+  const filteredAggregatedData = filteredTreatmentData.reduce((acc, row) => {
+    const existing = acc.find(a => a.animal_id === row.animal_id);
+
+    if (existing) {
+      existing.treatment_count += 1;
+      const rowTreatmentDate = new Date(row.treatment_date);
+      const rowWithdrawalDate = new Date(row.withdrawal_until_milk);
+
+      if (!existing.earliest_treatment_date || rowTreatmentDate < existing.earliest_treatment_date) {
+        existing.earliest_treatment_date = rowTreatmentDate;
+      }
+      if (!existing.latest_withdrawal_date || rowWithdrawalDate > existing.latest_withdrawal_date) {
+        existing.latest_withdrawal_date = rowWithdrawalDate;
+      }
+
+      existing.total_avg_milk += row.avg_daily_milk_kg;
+    } else {
+      acc.push({
+        animal_id: row.animal_id,
+        animal_tag: row.animal_tag,
+        treatment_count: 1,
+        earliest_treatment_date: new Date(row.treatment_date),
+        latest_withdrawal_date: new Date(row.withdrawal_until_milk),
+        total_avg_milk: row.avg_daily_milk_kg,
+        total_loss_days: 0,
+        total_milk_lost_kg: 0,
+        total_value_lost_eur: 0,
+      });
+    }
+
+    return acc;
+  }, [] as (AnimalTreatmentAggregate & {
+    earliest_treatment_date?: Date;
+    latest_withdrawal_date?: Date;
+    total_avg_milk?: number;
+  })[]).map(animal => {
+    if (animal.earliest_treatment_date && animal.latest_withdrawal_date) {
+      const daysDiff = Math.ceil(
+        (animal.latest_withdrawal_date.getTime() - animal.earliest_treatment_date.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const total_days = daysDiff + 1;
+      const avg_milk = animal.total_avg_milk! / animal.treatment_count;
+      const milk_price = filteredTreatmentData[0]?.milk_price_eur_per_kg || 0.45;
+
+      animal.total_loss_days = total_days;
+      animal.total_milk_lost_kg = avg_milk * total_days;
+      animal.total_value_lost_eur = animal.total_milk_lost_kg * milk_price;
+    }
+
+    return animal as AnimalTreatmentAggregate;
+  });
+
+  const sortedData = [...filteredAggregatedData].sort((a, b) => {
     let compareValue = 0;
     switch (sortBy) {
       case 'total_loss':
@@ -174,8 +245,17 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
   };
 
   const getTreatmentsForAnimal = (animalId: string) => {
-    return treatmentLossData.filter(t => t.animal_id === animalId);
+    return filteredTreatmentData.filter(t => t.animal_id === animalId);
   };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setDateFrom('');
+    setDateTo('');
+    setVetFilter('');
+  };
+
+  const hasActiveFilters = searchTerm || dateFrom || dateTo || vetFilter;
 
   const totalStats = sortedData.reduce(
     (acc, row) => ({
@@ -242,17 +322,88 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
         </div>
 
         {!isModal && (
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Ieškoti pagal gyvūno numerį..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
-              />
+          <div className="mb-4 space-y-3">
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Ieškoti pagal gyvūno numerį..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                />
+              </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${showFilters ? 'bg-orange-600 text-white' : 'bg-white text-gray-700 border-2 border-gray-300 hover:bg-gray-50'}`}
+              >
+                {showFilters ? 'Paslėpti filtrus' : 'Rodyti filtrus'}
+              </button>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  title="Išvalyti visus filtrus"
+                >
+                  Išvalyti
+                </button>
+              )}
             </div>
+
+            {showFilters && (
+              <div className="bg-white rounded-lg p-4 border-2 border-gray-300 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data nuo
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data iki
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Veterinaras
+                    </label>
+                    <select
+                      value={vetFilter}
+                      onChange={(e) => setVetFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="">Visi</option>
+                      {uniqueVets.map((vet) => (
+                        <option key={vet} value={vet}>
+                          {vet}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {hasActiveFilters && (
+                  <div className="text-sm text-gray-600 pt-2 border-t border-gray-200">
+                    Rodoma: <span className="font-semibold">{filteredTreatmentData.length}</span> gydymų iš <span className="font-semibold">{treatmentLossData.length}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -415,19 +566,40 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
                           <div className="space-y-3">
                             <div className="mb-4">
                               <h4 className="text-sm font-semibold text-gray-700 mb-2">Gydymų istorija su pieno nuostoliais</h4>
-                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                                <div className="flex items-start gap-2">
-                                  <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                                  <div>
-                                    <div className="font-medium text-blue-900 mb-1">Skaičiuojamas ištisinių dienų laikotarpis</div>
-                                    <div className="text-blue-700 text-xs">
-                                      Pieno nuostoliai skaičiuojami nuo <span className="font-semibold">pirmojo gydymo datos</span> iki <span className="font-semibold">paskutinės karencijos pabaigos</span>.
-                                      Kai gydymai persikloja, dienos neskaičiuojamos kelis kartus.
-                                      {treatments.length > 0 && (
-                                        <span className="block mt-1">
-                                          ({formatDateLT(treatments[treatments.length - 1]?.treatment_date)} → {formatDateLT(treatments[0]?.withdrawal_until_milk)} = {row.total_loss_days} d.)
-                                        </span>
-                                      )}
+                              <div className="space-y-2">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                                  <div className="flex items-start gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="font-medium text-blue-900 mb-1">Skaičiuojamas ištisinių dienų laikotarpis</div>
+                                      <div className="text-blue-700 text-xs">
+                                        Pieno nuostoliai skaičiuojami nuo <span className="font-semibold">pirmojo gydymo datos</span> iki <span className="font-semibold">paskutinės karencijos pabaigos</span>.
+                                        Kai gydymai persikloja, dienos neskaičiuojamos kelis kartus.
+                                        {treatments.length > 0 && (
+                                          <span className="block mt-1">
+                                            ({formatDateLT(treatments[treatments.length - 1]?.treatment_date)} → {formatDateLT(treatments[0]?.withdrawal_until_milk)} = {row.total_loss_days} d.)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                                  <div className="flex items-start gap-2">
+                                    <Droplet className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="font-medium text-green-900 mb-1">Vidutinė pieno produkcija</div>
+                                      <div className="text-green-700 text-xs">
+                                        Kiekvieno gydymo pieno produkcija skaičiuojama kaip <span className="font-semibold">vidutinė reikšmė 7 dienų prieš gydymą</span>.
+                                        Bendriems nuostoliams naudojamas <span className="font-semibold">visų gydymų vidurkis</span>.
+                                        {treatments.length > 0 && (
+                                          <span className="block mt-1">
+                                            Vid. pieno: {formatNumberLT(treatments.reduce((sum, t) => sum + t.avg_daily_milk_kg, 0) / treatments.length)} kg/d.
+                                            (iš {treatments.length} gydymų)
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
