@@ -6,7 +6,7 @@
       - `id` (uuid, primary key)
       - `date` (date) - The date of the milking session
       - `session_type` (text) - 'rytinis' (morning 6am-3pm) or 'naktinis' (evening 3pm-6am)
-      - `weight` (integer) - Weight in grams from the latest measurement
+      - `weight` (integer) - Weight in kg from the latest measurement
       - `session_id` (text) - Session ID from the webhook
       - `measurement_timestamp` (timestamptz) - Timestamp of the measurement
       - `timezone` (text) - Timezone from webhook
@@ -171,4 +171,4 @@ CREATE INDEX IF NOT EXISTS idx_milk_weights_date ON milk_weights(date DESC);
 CREATE INDEX IF NOT EXISTS idx_milk_weights_session ON milk_weights(date, session_type);
 
 -- Add comment
-COMMENT ON TABLE milk_weights IS 'Stores daily milk weight measurements from milking sessions. One row per day per session type (morning/evening).';
+COMMENT ON TABLE milk_weights IS 'Stores daily milk weight measurements in kg from milking sessions. One row per day per session type (morning/evening).';

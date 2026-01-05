@@ -306,8 +306,8 @@ export function Pienas() {
     );
   }
 
-  const formatWeight = (grams: number) => {
-    return (grams / 1000).toFixed(1) + ' kg';
+  const formatWeight = (kg: number) => {
+    return kg.toFixed(1) + ' kg';
   };
 
   return (
