@@ -52,13 +52,20 @@ async function applyMigration() {
     console.log('1. Visit: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/sql/new');
     console.log('2. Copy the entire contents from: simplify-milk-weight-rpc.sql');
     console.log('3. Click "Run"');
-    console.log('\n📝 The function will accept this simplified payload:');
+    console.log('\n📝 The function will accept this webhook payload:');
     console.log('   {');
-    console.log('     "p_weight": 14975,');
-    console.log('     "p_hose": "disconnected",');
-    console.log('     "p_stable": true,');
-    console.log('     "p_timestamp_lt": "2026-01-05 22:34:22",');
-    console.log('     "p_tz": "Europe/Vilnius"');
+    console.log('     "event": "ALERT",');
+    console.log('     "at": "2026-01-05T20:14:45+00:00",');
+    console.log('     "session_id": "1767644085615",');
+    console.log('     "status": {');
+    console.log('       "hose": "disconnected",');
+    console.log('       "stable": true');
+    console.log('     },');
+    console.log('     "measurement": {');
+    console.log('       "weight": 14974,');
+    console.log('       "ts_local": "2026-01-05 22:14:45",');
+    console.log('       "tz": "Europe/Vilnius"');
+    console.log('     }');
     console.log('   }');
 
   } catch (error) {
