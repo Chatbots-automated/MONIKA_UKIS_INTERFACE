@@ -46,14 +46,13 @@ async function testCalculations() {
   console.log('Recent GEA Daily Data (last 10 days):');
   console.log('=====================================');
   geaData.forEach(day => {
-    const totalDaily = (day.m1_qty || 0) + (day.m2_qty || 0) + (day.m3_qty || 0) + (day.m4_qty || 0) + (day.m5_qty || 0);
-    console.log(`${day.snapshot_date}: milk_avg=${day.milk_avg}kg, actual_total=${totalDaily.toFixed(2)}kg`);
+    console.log(`${day.snapshot_date}: milk_avg (Pieno vidurkis) = ${day.milk_avg}kg`);
   });
 
   // Calculate 7-day average manually to verify
   const last7Days = geaData.slice(0, 7);
   const sum7day = last7Days.reduce((sum, day) => {
-    return sum + (day.m1_qty || 0) + (day.m2_qty || 0) + (day.m3_qty || 0) + (day.m4_qty || 0) + (day.m5_qty || 0);
+    return sum + (day.milk_avg || 0);
   }, 0);
   const manual7dayAvg = sum7day / last7Days.length;
 
