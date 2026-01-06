@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Beaker, ChevronDown, ChevronUp, Calendar, Weight, Sunrise, Moon } from 'lucide-react';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -23,6 +23,8 @@ interface DailyMilkWeights {
   rytinis: MilkWeight | null;
   naktinis: MilkWeight | null;
   total: number;
+  rytinisEvents: MilkWeight[];
+  naktinisEvents: MilkWeight[];
 }
 
 interface MilkProducer {
@@ -118,7 +120,7 @@ export function Pienas() {
 
     const dailyWeightsMap = new Map<string, DailyMilkWeights>();
 
-    // Group weights by date and session_type, taking the maximum weight for each session
+    // Group weights by date and session_type, keeping all events
     const sessionGroups = new Map<string, MilkWeight[]>();
     weights.forEach((weight) => {
       const key = `${weight.date}_${weight.session_type}`;
@@ -128,8 +130,13 @@ export function Pienas() {
       sessionGroups.get(key)!.push(weight);
     });
 
-    // For each session, find the event with maximum weight (peak before unloading)
+    // For each session, find the event with maximum weight and store all events
     sessionGroups.forEach((events, key) => {
+      // Sort events by timestamp
+      events.sort((a, b) =>
+        new Date(a.measurement_timestamp).getTime() - new Date(b.measurement_timestamp).getTime()
+      );
+
       const maxWeightEvent = events.reduce((max, event) =>
         event.weight > max.weight ? event : max
       );
@@ -140,6 +147,8 @@ export function Pienas() {
           date: dateKey,
           rytinis: null,
           naktinis: null,
+          rytinisEvents: [],
+          naktinisEvents: [],
           total: 0,
         });
       }
@@ -147,8 +156,10 @@ export function Pienas() {
       const daily = dailyWeightsMap.get(dateKey)!;
       if (maxWeightEvent.session_type === 'rytinis') {
         daily.rytinis = maxWeightEvent;
+        daily.rytinisEvents = events;
       } else {
         daily.naktinis = maxWeightEvent;
+        daily.naktinisEvents = events;
       }
     });
 
@@ -384,6 +395,7 @@ export function Pienas() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
+                    <th className="w-8"></th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Data</th>
                     <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
                       <div className="flex items-center justify-center gap-2">
@@ -393,79 +405,244 @@ export function Pienas() {
                     </th>
                     <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
                       <div className="flex items-center justify-center gap-2">
-                        <Moon className="w-4 h-4 text-indigo-500" />
+                        <Moon className="w-4 h-4 text-blue-500" />
                         Naktinis
                       </div>
                     </th>
                     <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Viso per dieną</th>
-                    <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Atnaujinta</th>
+                    <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Įvykių</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {milkWeights.map((daily) => (
-                    <tr key={daily.date} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm font-semibold text-gray-900">
-                        {new Date(daily.date).toLocaleDateString('lt-LT', {
-                          weekday: 'short',
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {daily.rytinis ? (
-                          <div>
-                            <div className="text-lg font-bold text-orange-600">
-                              {formatWeight(daily.rytinis.weight)}
+                  {milkWeights.map((daily) => {
+                    const isExpanded = expandedRows.has(daily.date);
+                    const totalEvents = daily.rytinisEvents.length + daily.naktinisEvents.length;
+
+                    return (
+                      <React.Fragment key={daily.date}>
+                        <tr
+                          className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                          onClick={() => toggleRow(daily.date)}
+                        >
+                          <td className="py-3 px-2 text-center">
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-gray-600" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-gray-600" />
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm font-semibold text-gray-900">
+                            {new Date(daily.date).toLocaleDateString('lt-LT', {
+                              weekday: 'short',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {daily.rytinis ? (
+                              <div>
+                                <div className="text-lg font-bold text-orange-600">
+                                  {formatWeight(daily.rytinis.weight)}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {new Date(daily.rytinis.measurement_timestamp).toLocaleTimeString('lt-LT', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </div>
+                                {daily.rytinisEvents.length > 1 && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    {daily.rytinisEvents.length} įvykiai
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {daily.naktinis ? (
+                              <div>
+                                <div className="text-lg font-bold text-blue-600">
+                                  {formatWeight(daily.naktinis.weight)}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {new Date(daily.naktinis.measurement_timestamp).toLocaleTimeString('lt-LT', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </div>
+                                {daily.naktinisEvents.length > 1 && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    {daily.naktinisEvents.length} įvykiai
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="text-xl font-bold text-green-600">
+                              {formatWeight(daily.total)}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(daily.rytinis.measurement_timestamp).toLocaleTimeString('lt-LT', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                              {totalEvents}
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={6} className="bg-gray-50 p-4 border-b border-gray-100">
+                              <div className="grid grid-cols-2 gap-4">
+                                {daily.rytinisEvents.length > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-orange-700 mb-2 flex items-center gap-2">
+                                      <Sunrise className="w-4 h-4" />
+                                      Rytinis melžimas ({daily.rytinisEvents.length} įvykiai)
+                                    </h4>
+                                    <div className="space-y-2">
+                                      {daily.rytinisEvents.map((event, idx) => (
+                                        <div
+                                          key={event.id}
+                                          className={`p-3 rounded-lg border ${
+                                            event.id === daily.rytinis?.id
+                                              ? 'bg-orange-50 border-orange-300'
+                                              : 'bg-white border-gray-200'
+                                          }`}
+                                        >
+                                          <div className="flex justify-between items-start mb-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-semibold text-gray-600">
+                                                #{idx + 1}
+                                              </span>
+                                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                                event.event_type === 'RECOVERY' ? 'bg-green-100 text-green-800' :
+                                                event.event_type === 'ALERT' ? 'bg-red-100 text-red-800' :
+                                                'bg-gray-100 text-gray-800'
+                                              }`}>
+                                                {event.event_type || 'N/A'}
+                                              </span>
+                                              {event.id === daily.rytinis?.id && (
+                                                <span className="text-xs px-2 py-0.5 rounded bg-orange-200 text-orange-900 font-semibold">
+                                                  MAX
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="text-xs text-gray-500">
+                                              {new Date(event.measurement_timestamp).toLocaleTimeString('lt-LT')}
+                                            </span>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div>
+                                              <span className="text-gray-600">Svoris:</span>
+                                              <span className="ml-1 font-semibold text-orange-700">
+                                                {formatWeight(event.weight)}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Žarna:</span>
+                                              <span className="ml-1 font-medium">
+                                                {event.hose_status || 'N/A'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Stabilus:</span>
+                                              <span className="ml-1 font-medium">
+                                                {event.stable_status ? 'Taip' : 'Ne'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Sesija:</span>
+                                              <span className="ml-1 font-mono text-xs">
+                                                {event.session_id?.slice(-6) || 'N/A'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {daily.naktinisEvents.length > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
+                                      <Moon className="w-4 h-4" />
+                                      Naktinis melžimas ({daily.naktinisEvents.length} įvykiai)
+                                    </h4>
+                                    <div className="space-y-2">
+                                      {daily.naktinisEvents.map((event, idx) => (
+                                        <div
+                                          key={event.id}
+                                          className={`p-3 rounded-lg border ${
+                                            event.id === daily.naktinis?.id
+                                              ? 'bg-blue-50 border-blue-300'
+                                              : 'bg-white border-gray-200'
+                                          }`}
+                                        >
+                                          <div className="flex justify-between items-start mb-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-semibold text-gray-600">
+                                                #{idx + 1}
+                                              </span>
+                                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                                event.event_type === 'RECOVERY' ? 'bg-green-100 text-green-800' :
+                                                event.event_type === 'ALERT' ? 'bg-red-100 text-red-800' :
+                                                'bg-gray-100 text-gray-800'
+                                              }`}>
+                                                {event.event_type || 'N/A'}
+                                              </span>
+                                              {event.id === daily.naktinis?.id && (
+                                                <span className="text-xs px-2 py-0.5 rounded bg-blue-200 text-blue-900 font-semibold">
+                                                  MAX
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="text-xs text-gray-500">
+                                              {new Date(event.measurement_timestamp).toLocaleTimeString('lt-LT')}
+                                            </span>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div>
+                                              <span className="text-gray-600">Svoris:</span>
+                                              <span className="ml-1 font-semibold text-blue-700">
+                                                {formatWeight(event.weight)}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Žarna:</span>
+                                              <span className="ml-1 font-medium">
+                                                {event.hose_status || 'N/A'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Stabilus:</span>
+                                              <span className="ml-1 font-medium">
+                                                {event.stable_status ? 'Taip' : 'Ne'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Sesija:</span>
+                                              <span className="ml-1 font-mono text-xs">
+                                                {event.session_id?.slice(-6) || 'N/A'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {daily.naktinis ? (
-                          <div>
-                            <div className="text-lg font-bold text-indigo-600">
-                              {formatWeight(daily.naktinis.weight)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(daily.naktinis.measurement_timestamp).toLocaleTimeString('lt-LT', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="text-xl font-bold text-green-600">
-                          {formatWeight(daily.total)}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center text-xs text-gray-500">
-                        {new Date(
-                          Math.max(
-                            new Date(daily.rytinis?.updated_at || 0).getTime(),
-                            new Date(daily.naktinis?.updated_at || 0).getTime()
-                          )
-                        ).toLocaleString('lt-LT', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                    </tr>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
 
