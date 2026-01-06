@@ -41,8 +41,8 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
               <tr key={idx} className="hover:bg-blue-50 transition-colors print-break-avoid">
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-semibold text-gray-600">{idx + 1}</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.registration_date ? formatDateLT(row.registration_date) : '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900 font-medium">{row.products_used || '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.dose_summary || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900 font-medium">{row.product_name || '-'}</td>
+                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.dose || '-'}</td>
                 <td className="border-2 border-gray-300 px-3 py-3 text-xs">
                   <div className="space-y-1">
                     <div className="font-bold text-gray-900">{row.animal_tag || '-'}</div>

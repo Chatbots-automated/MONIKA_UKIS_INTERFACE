@@ -310,7 +310,7 @@ export function Reports() {
         }
 
         case 'treated_animals': {
-          let query = supabase.from('vw_treated_animals').select('*');
+          let query = supabase.from('vw_treated_animals_detailed').select('*');
           if (dateFrom) query = query.gte('registration_date', dateFrom);
           if (dateTo) query = query.lte('registration_date', dateTo);
           if (filterAnimal) query = query.eq('animal_id', filterAnimal);
@@ -322,10 +322,10 @@ export function Reports() {
           result = data || [];
 
           if (filterProduct) {
-            const productName = products.find(p => p.id === filterProduct)?.name;
-            if (productName) {
-              result = result.filter(r => r.products_used?.toLowerCase().includes(productName.toLowerCase()));
-            }
+            result = result.filter(r => {
+              const product = products.find(p => p.id === filterProduct);
+              return product && r.product_name?.toLowerCase().includes(product.name.toLowerCase());
+            });
           }
           if (filterVet) {
             result = result.filter(r => r.veterinarian?.toLowerCase().includes(filterVet.toLowerCase()));
