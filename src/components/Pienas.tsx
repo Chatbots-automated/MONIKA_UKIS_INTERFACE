@@ -13,6 +13,7 @@ interface MilkWeight {
   timezone: string | null;
   hose_status: string | null;
   stable_status: boolean | null;
+  event_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -117,8 +118,23 @@ export function Pienas() {
 
     const dailyWeightsMap = new Map<string, DailyMilkWeights>();
 
+    // Group weights by date and session_type, taking the maximum weight for each session
+    const sessionGroups = new Map<string, MilkWeight[]>();
     weights.forEach((weight) => {
-      const dateKey = weight.date;
+      const key = `${weight.date}_${weight.session_type}`;
+      if (!sessionGroups.has(key)) {
+        sessionGroups.set(key, []);
+      }
+      sessionGroups.get(key)!.push(weight);
+    });
+
+    // For each session, find the event with maximum weight (peak before unloading)
+    sessionGroups.forEach((events, key) => {
+      const maxWeightEvent = events.reduce((max, event) =>
+        event.weight > max.weight ? event : max
+      );
+
+      const dateKey = maxWeightEvent.date;
       if (!dailyWeightsMap.has(dateKey)) {
         dailyWeightsMap.set(dateKey, {
           date: dateKey,
@@ -129,10 +145,10 @@ export function Pienas() {
       }
 
       const daily = dailyWeightsMap.get(dateKey)!;
-      if (weight.session_type === 'rytinis') {
-        daily.rytinis = weight;
+      if (maxWeightEvent.session_type === 'rytinis') {
+        daily.rytinis = maxWeightEvent;
       } else {
-        daily.naktinis = weight;
+        daily.naktinis = maxWeightEvent;
       }
     });
 
