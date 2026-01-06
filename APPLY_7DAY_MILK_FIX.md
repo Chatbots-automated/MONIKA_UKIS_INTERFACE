@@ -17,19 +17,21 @@ To apply the milk loss calculation fix, follow these steps:
 
 ### Problem
 - Current calculations use `AVG(milk_avg)` over 30 days
-- Need shorter window for more accurate recent production tracking
+- This is "averaging an average" which is unnecessary
+- The `milk_avg` (Pieno vidurkis) is already an average calculated by GEA
 - Results in inconsistent values across different sections
 
 ### Solution
-- Use **milk_avg (Pieno vidurkis)** field from gea_daily
-- Use **7-day window** instead of 30 days for more accurate recent production
+- Use **milk_avg (Pieno vidurkis)** field directly from gea_daily
+- No additional averaging calculations needed
+- Just get the latest milk_avg value for the animal
 - Apply consistently to both synchronization and treatment milk loss calculations
 
 ### Impact
-- Synchronization section will use 7-day average of milk_avg (Pieno vidurkis)
-- Treatment section will use 7-day average of milk_avg (Pieno vidurkis)
-- Both sections will now show **consistent** values based on 7-day window
-- More accurate tracking of recent milk production changes
+- Synchronization section will use milk_avg (Pieno vidurkis) directly
+- Treatment section will use milk_avg (Pieno vidurkis) directly
+- Both sections will now show **consistent** values
+- Simpler and more accurate calculations
 
 ## After Applying
 

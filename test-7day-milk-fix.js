@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 async function testCalculations() {
-  console.log('Testing 7-Day Milk Loss Calculations\n');
+  console.log('Testing Milk Loss Calculations (Using milk_avg Directly)\n');
   console.log('=====================================\n');
 
   // Test animal: LT000009135825
@@ -49,16 +49,11 @@ async function testCalculations() {
     console.log(`${day.snapshot_date}: milk_avg (Pieno vidurkis) = ${day.milk_avg}kg`);
   });
 
-  // Calculate 7-day average manually to verify
-  const last7Days = geaData.slice(0, 7);
-  const sum7day = last7Days.reduce((sum, day) => {
-    return sum + (day.milk_avg || 0);
-  }, 0);
-  const manual7dayAvg = sum7day / last7Days.length;
+  // Get the latest milk_avg (this is what the function should return)
+  const latestMilkAvg = geaData[0]?.milk_avg || 0;
 
-  console.log(`\nManual 7-Day Calculation:`);
-  console.log(`  Total from ${last7Days.length} days: ${sum7day.toFixed(2)}kg`);
-  console.log(`  Average: ${manual7dayAvg.toFixed(2)}kg/day`);
+  console.log(`\nLatest milk_avg (Pieno vidurkis): ${latestMilkAvg}kg/day`);
+  console.log('This is already an average calculated by GEA - no additional averaging needed');
 
   // Test the updated function
   console.log('\n=====================================');
@@ -79,8 +74,8 @@ async function testCalculations() {
   } else {
     console.log(`calculate_average_daily_milk(${testDate}):`);
     console.log(`  Result: ${avgResult}kg/day`);
-    console.log(`  Expected (manual): ${manual7dayAvg.toFixed(2)}kg/day`);
-    console.log(`  Match: ${Math.abs(avgResult - manual7dayAvg) < 0.01 ? '✅ YES' : '❌ NO'}`);
+    console.log(`  Expected (latest milk_avg): ${latestMilkAvg}kg/day`);
+    console.log(`  Match: ${Math.abs(avgResult - latestMilkAvg) < 0.01 ? '✅ YES' : '❌ NO'}`);
   }
 
   // Test get_animal_avg_milk_at_date
@@ -95,8 +90,8 @@ async function testCalculations() {
   } else {
     console.log(`\nget_animal_avg_milk_at_date(${testDate}):`);
     console.log(`  Result: ${atDateResult}kg/day`);
-    console.log(`  Expected (manual): ${manual7dayAvg.toFixed(2)}kg/day`);
-    console.log(`  Match: ${Math.abs(atDateResult - manual7dayAvg) < 0.01 ? '✅ YES' : '❌ NO'}`);
+    console.log(`  Expected (latest milk_avg): ${latestMilkAvg}kg/day`);
+    console.log(`  Match: ${Math.abs(atDateResult - latestMilkAvg) < 0.01 ? '✅ YES' : '❌ NO'}`);
   }
 
   // Test synchronization milk loss view
