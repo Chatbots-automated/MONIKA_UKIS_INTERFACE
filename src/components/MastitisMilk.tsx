@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatDateLT, formatNumberLT } from '../lib/formatters';
-import { Droplet, AlertCircle, Calendar, TrendingUp, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Droplet, AlertCircle, Calendar, TrendingUp, RefreshCw, AlertTriangle, Users } from 'lucide-react';
 
 interface DailyMilkSummary {
   snapshot_date: string;
@@ -10,8 +10,18 @@ interface DailyMilkSummary {
   missing_days_before: number;
 }
 
+interface AnimalMilkSummary {
+  animal_id: string;
+  tag_no: string;
+  total_milk: number;
+  days_count: number;
+  avg_per_day: number;
+  latest_milk_avg: number;
+}
+
 export function MastitisMilk() {
   const [dailyData, setDailyData] = useState<DailyMilkSummary[]>([]);
+  const [animalData, setAnimalData] = useState<AnimalMilkSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalMilk, setTotalMilk] = useState(0);
   const [totalAnimals, setTotalAnimals] = useState(0);
@@ -50,6 +60,7 @@ export function MastitisMilk() {
 
       if (!geaRecords || geaRecords.length === 0) {
         setDailyData([]);
+        setAnimalData([]);
         setTotalMilk(0);
         setTotalAnimals(0);
         setMissingDaysWarning(false);
@@ -107,7 +118,72 @@ export function MastitisMilk() {
       const uniqueAnimals = new Set<string>();
       geaRecords.forEach(r => uniqueAnimals.add(r.animal_id));
 
+      // Calculate per-animal summaries
+      const animalMilkMap = new Map<string, { total: number; dates: Set<string> }>();
+
+      for (const record of geaRecords) {
+        if (!animalMilkMap.has(record.animal_id)) {
+          animalMilkMap.set(record.animal_id, { total: 0, dates: new Set() });
+        }
+
+        const animalSummary = animalMilkMap.get(record.animal_id)!;
+        animalSummary.dates.add(record.snapshot_date);
+
+        const date = record.snapshot_date;
+        let dailyMilk = 0;
+        if (record.m1_date === date) dailyMilk += (record.m1_qty || 0);
+        if (record.m2_date === date) dailyMilk += (record.m2_qty || 0);
+        if (record.m3_date === date) dailyMilk += (record.m3_qty || 0);
+        if (record.m4_date === date) dailyMilk += (record.m4_qty || 0);
+        if (record.m5_date === date) dailyMilk += (record.m5_qty || 0);
+
+        animalSummary.total += dailyMilk;
+      }
+
+      // Fetch animal details and latest milk_avg
+      const animalIds = Array.from(uniqueAnimals);
+      const { data: animals } = await supabase
+        .from('animals')
+        .select('id, tag_no')
+        .in('id', animalIds);
+
+      // Get latest milk_avg for each animal
+      const { data: latestMilkAvgs } = await supabase
+        .from('gea_daily')
+        .select('animal_id, milk_avg, snapshot_date')
+        .in('animal_id', animalIds)
+        .order('snapshot_date', { ascending: false });
+
+      const latestMilkAvgMap = new Map<string, number>();
+      latestMilkAvgs?.forEach(record => {
+        if (!latestMilkAvgMap.has(record.animal_id)) {
+          latestMilkAvgMap.set(record.animal_id, record.milk_avg || 0);
+        }
+      });
+
+      const animalDataArray: AnimalMilkSummary[] = (animals || [])
+        .map(animal => {
+          const summary = animalMilkMap.get(animal.id);
+          if (!summary) return null;
+
+          const daysCount = summary.dates.size;
+          const avgPerDay = daysCount > 0 ? summary.total / daysCount : 0;
+          const latestMilkAvg = latestMilkAvgMap.get(animal.id) || 0;
+
+          return {
+            animal_id: animal.id,
+            tag_no: animal.tag_no,
+            total_milk: summary.total,
+            days_count: daysCount,
+            avg_per_day: avgPerDay,
+            latest_milk_avg: latestMilkAvg,
+          };
+        })
+        .filter((a): a is AnimalMilkSummary => a !== null)
+        .sort((a, b) => b.total_milk - a.total_milk);
+
       setDailyData(dailyDataArray);
+      setAnimalData(animalDataArray);
       setTotalMilk(totalMilkCalc);
       setTotalAnimals(uniqueAnimals.size);
       setMissingDaysWarning(hasMissingDays);
@@ -314,6 +390,86 @@ export function MastitisMilk() {
                     </div>
                   </td>
                   <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Animal List */}
+      {animalData.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-orange-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-orange-600" />
+              <h3 className="text-lg font-bold text-gray-900">Gyvūnai Grupėje 5</h3>
+              <span className="ml-auto text-sm text-gray-600">
+                Viso: {animalData.length} {animalData.length === 1 ? 'gyvulys' : 'gyvuliai'}
+              </span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Gyvulio Nr.
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Viso pieno (L)
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Dienų
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Vid. per dieną (L)
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Dabartinis vidurkis (L)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {animalData.map((animal) => (
+                  <tr key={animal.animal_id} className="hover:bg-orange-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-gray-900">{animal.tag_no}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-lg font-bold text-purple-600">
+                        {formatNumberLT(animal.total_milk)} L
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                        {animal.days_count}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-sm font-medium text-gray-900">
+                        {formatNumberLT(animal.avg_per_day)} L
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-sm font-semibold text-green-700">
+                        {formatNumberLT(animal.latest_milk_avg)} L
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-orange-50 border-t-2 border-orange-200">
+                <tr>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900 uppercase">
+                    Viso:
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="text-xl font-bold text-purple-700">
+                      {formatNumberLT(totalMilk)} L
+                    </div>
+                  </td>
+                  <td colSpan={3}></td>
                 </tr>
               </tfoot>
             </table>
