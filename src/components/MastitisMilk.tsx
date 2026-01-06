@@ -17,6 +17,9 @@ interface AnimalMilkSummary {
   days_count: number;
   avg_per_day: number;
   latest_milk_avg: number;
+  current_group: number | null;
+  first_date_in_group5: string;
+  last_date_in_group5: string;
 }
 
 export function MastitisMilk() {
@@ -119,15 +122,17 @@ export function MastitisMilk() {
       geaRecords.forEach(r => uniqueAnimals.add(r.animal_id));
 
       // Calculate per-animal summaries
-      const animalMilkMap = new Map<string, { total: number; dates: Set<string> }>();
+      const animalMilkMap = new Map<string, { total: number; dates: string[] }>();
 
       for (const record of geaRecords) {
         if (!animalMilkMap.has(record.animal_id)) {
-          animalMilkMap.set(record.animal_id, { total: 0, dates: new Set() });
+          animalMilkMap.set(record.animal_id, { total: 0, dates: [] });
         }
 
         const animalSummary = animalMilkMap.get(record.animal_id)!;
-        animalSummary.dates.add(record.snapshot_date);
+        if (!animalSummary.dates.includes(record.snapshot_date)) {
+          animalSummary.dates.push(record.snapshot_date);
+        }
 
         const date = record.snapshot_date;
         let dailyMilk = 0;
@@ -147,17 +152,20 @@ export function MastitisMilk() {
         .select('id, tag_no')
         .in('id', animalIds);
 
-      // Get latest milk_avg for each animal
+      // Get latest milk_avg and current group for each animal
       const { data: latestMilkAvgs } = await supabase
         .from('gea_daily')
-        .select('animal_id, milk_avg, snapshot_date')
+        .select('animal_id, milk_avg, snapshot_date, grupe')
         .in('animal_id', animalIds)
         .order('snapshot_date', { ascending: false });
 
       const latestMilkAvgMap = new Map<string, number>();
+      const currentGroupMap = new Map<string, number | null>();
+
       latestMilkAvgs?.forEach(record => {
         if (!latestMilkAvgMap.has(record.animal_id)) {
           latestMilkAvgMap.set(record.animal_id, record.milk_avg || 0);
+          currentGroupMap.set(record.animal_id, record.grupe);
         }
       });
 
@@ -166,9 +174,11 @@ export function MastitisMilk() {
           const summary = animalMilkMap.get(animal.id);
           if (!summary) return null;
 
-          const daysCount = summary.dates.size;
+          const sortedDates = summary.dates.sort();
+          const daysCount = summary.dates.length;
           const avgPerDay = daysCount > 0 ? summary.total / daysCount : 0;
           const latestMilkAvg = latestMilkAvgMap.get(animal.id) || 0;
+          const currentGroup = currentGroupMap.get(animal.id) ?? null;
 
           return {
             animal_id: animal.id,
@@ -177,6 +187,9 @@ export function MastitisMilk() {
             days_count: daysCount,
             avg_per_day: avgPerDay,
             latest_milk_avg: latestMilkAvg,
+            current_group: currentGroup,
+            first_date_in_group5: sortedDates[0],
+            last_date_in_group5: sortedDates[sortedDates.length - 1],
           };
         })
         .filter((a): a is AnimalMilkSummary => a !== null)
@@ -416,6 +429,12 @@ export function MastitisMilk() {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Gyvulio Nr.
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Dabartinė grupė
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Laikotarpis grupėje 5
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Viso pieno (L)
                   </th>
@@ -435,6 +454,24 @@ export function MastitisMilk() {
                   <tr key={animal.animal_id} className="hover:bg-orange-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{animal.tag_no}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {animal.current_group !== null ? (
+                        <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                          animal.current_group === 5
+                            ? 'bg-orange-100 text-orange-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          Grupė {animal.current_group}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs text-gray-600">
+                        {formatDateLT(animal.first_date_in_group5)} - {formatDateLT(animal.last_date_in_group5)}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-lg font-bold text-purple-600">
@@ -461,7 +498,7 @@ export function MastitisMilk() {
               </tbody>
               <tfoot className="bg-orange-50 border-t-2 border-orange-200">
                 <tr>
-                  <td className="px-6 py-4 text-sm font-bold text-gray-900 uppercase">
+                  <td colSpan={3} className="px-6 py-4 text-sm font-bold text-gray-900 uppercase">
                     Viso:
                   </td>
                   <td className="px-6 py-4 text-right">
