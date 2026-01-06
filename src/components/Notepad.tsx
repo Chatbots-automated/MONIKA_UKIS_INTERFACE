@@ -14,6 +14,7 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
   const [noteId, setNoteId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
@@ -22,31 +23,72 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
     }
   }, [isOpen, user]);
 
+  useEffect(() => {
+    if (!isOpen || !user) return;
+
+    const channel = supabase
+      .channel('shared_notepad_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shared_notepad'
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            const newData = payload.new as any;
+            if (newData.last_edited_by !== user.id) {
+              setContent(newData.content || '');
+              setLastSaved(new Date(newData.updated_at));
+              setNoteId(newData.id);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, user]);
+
   const loadNote = async () => {
-    if (!user) return;
+    if (!user) {
+      setError('Neprisijungęs vartotojas');
+      return;
+    }
+
+    setError(null);
 
     const { data, error } = await supabase
       .from('shared_notepad')
       .select('*')
+      .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) {
       console.error('Error loading note:', error);
+      setError('Klaida įkeliant užrašus: ' + error.message);
       return;
     }
 
     if (data) {
       setNoteId(data.id);
-      setContent(data.content);
+      setContent(data.content || '');
       setLastSaved(new Date(data.updated_at));
     }
   };
 
   const saveNote = async (newContent: string) => {
-    if (!user) return;
+    if (!user) {
+      setError('Neprisijungęs vartotojas');
+      return;
+    }
 
     setIsSaving(true);
+    setError(null);
 
     try {
       if (noteId) {
@@ -74,8 +116,10 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
       }
 
       setLastSaved(new Date());
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error saving note:', error);
+      setError('Klaida išsaugant: ' + (error.message || 'Nežinoma klaida'));
     } finally {
       setIsSaving(false);
     }
@@ -130,20 +174,27 @@ export default function Notepad({ isOpen, onClose }: NotepadProps) {
         </div>
 
         <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <div className="flex items-center gap-2">
-              {isSaving ? (
-                <span className="text-amber-600">Išsaugoma...</span>
-              ) : lastSaved ? (
-                <span>
-                  Išsaugota: {lastSaved.toLocaleTimeString('lt-LT', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              ) : (
-                <span>Nėra išsaugotų užrašų</span>
-              )}
+          <div className="flex flex-col gap-2">
+            {error && (
+              <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">
+                {error}
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                {isSaving ? (
+                  <span className="text-amber-600">Išsaugoma...</span>
+                ) : lastSaved ? (
+                  <span>
+                    Išsaugota: {lastSaved.toLocaleTimeString('lt-LT', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                ) : (
+                  <span>Nėra išsaugotų užrašų</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
