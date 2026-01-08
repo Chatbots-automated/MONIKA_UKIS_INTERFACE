@@ -173,7 +173,7 @@ export function BulkTreatment() {
   };
 
   const updateMedication = (id: string, field: keyof SelectedMedication, value: string) => {
-    setSelectedMedications(selectedMedications.map(item =>
+    setSelectedMedications(prev => prev.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
@@ -193,19 +193,24 @@ export function BulkTreatment() {
 
   const handleProductChange = async (itemId: string, productId: string) => {
     // Update product and clear batch
-    updateMedication(itemId, 'product_id', productId);
-    updateMedication(itemId, 'batch_id', '');
+    setSelectedMedications(prev => prev.map(item =>
+      item.id === itemId ? { ...item, product_id: productId, batch_id: '' } : item
+    ));
 
     // Get product details for unit
     const product = products.find(p => p.id === productId);
     if (product) {
-      updateMedication(itemId, 'unit', product.primary_pack_unit);
+      setSelectedMedications(prev => prev.map(item =>
+        item.id === itemId ? { ...item, unit: product.primary_pack_unit } : item
+      ));
     }
 
     // Suggest and set FIFO batch
     const suggestedBatch = await suggestFIFOBatch(productId);
     if (suggestedBatch) {
-      updateMedication(itemId, 'batch_id', suggestedBatch);
+      setSelectedMedications(prev => prev.map(item =>
+        item.id === itemId ? { ...item, batch_id: suggestedBatch } : item
+      ));
     }
   };
 
