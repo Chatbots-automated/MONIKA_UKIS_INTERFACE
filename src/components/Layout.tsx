@@ -43,7 +43,7 @@ const menuItems = [
   { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
   { id: 'insemination', label: 'Sėklinimas', icon: Heart, permission: 'animals' },
   { id: 'pienas', label: 'Pienas', icon: Droplets, permission: 'animals' },
-  { id: 'bulk-treatment', label: 'Masinė Profilaktika', icon: Users, permission: 'treatment' },
+  { id: 'bulk-treatment', label: 'Masinis Gydymas', icon: Users, permission: 'treatment' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },

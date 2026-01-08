@@ -244,7 +244,7 @@ export function BulkTreatment() {
             animal_id: animal.id,
             vet_name: formData.vet_name,
             notes: formData.notes,
-            clinical_diagnosis: 'Masinė profilaktika',
+            clinical_diagnosis: 'Masinis gydymas',
           })
           .select()
           .single();
@@ -315,7 +315,7 @@ export function BulkTreatment() {
             <Users className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Masinė Profilaktika</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Masinis Gydymas</h2>
             <p className="text-sm text-gray-600">Gydyti kelis gyvūnus vienu metu</p>
           </div>
         </div>
