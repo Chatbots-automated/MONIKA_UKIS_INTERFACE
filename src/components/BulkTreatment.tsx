@@ -37,7 +37,7 @@ export function BulkTreatment() {
   const [animals, setAnimals] = useState<SelectedAnimal[]>([]);
   const [filteredAnimals, setFilteredAnimals] = useState<SelectedAnimal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [batches, setBatches] = useState<(StockByBatch & { products?: { name: string }; batches?: { expiry_date: string | null } })[]>([]);
+  const [batches, setBatches] = useState<StockByBatch[]>([]);
   const [selectedAnimals, setSelectedAnimals] = useState<SelectedAnimal[]>([]);
   const [selectedMedications, setSelectedMedications] = useState<SelectedMedication[]>([
     { id: '1', product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'prevention' }
@@ -70,10 +70,7 @@ export function BulkTreatment() {
     const [animalsRes, productsRes, batchesRes, collarMap, vetsRes] = await Promise.all([
       fetchAllRows<Animal>('animals', '*', 'tag_no'),
       supabase.from('products').select('*').eq('is_active', true),
-      supabase.from('stock_by_batch').select(`
-        *,
-        products!inner(name)
-      `).gt('on_hand', 0),
+      supabase.from('stock_by_batch').select('*').gt('on_hand', 0),
       fetchLatestCollarNumbers(),
       supabase.from('treatments').select('vet_name').not('vet_name', 'is', null),
     ]);
