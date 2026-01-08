@@ -18,6 +18,7 @@ import { Reports } from './components/Reports';
 import { UserManagement } from './components/UserManagement';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Vaccinations } from './components/Vaccinations';
+import { BulkTreatment } from './components/BulkTreatment';
 import { TreatmentHistory } from './components/TreatmentHistory';
 import { TreatmentCostTab } from './components/TreatmentCostTab';
 import { AuthForm } from './components/AuthForm';
@@ -175,6 +176,8 @@ function App() {
         return <TreatmentCostTab />;
       case 'vaccinations':
         return <Vaccinations />;
+      case 'bulk-treatment':
+        return <BulkTreatment />;
       case 'products':
         return <Products />;
       case 'animals':
