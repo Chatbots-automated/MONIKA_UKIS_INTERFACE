@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchAllRows, sortByLithuanian, fetchLatestCollarNumbers } from '../lib/helpers';
 import { Product, Animal, StockByBatch, Unit } from '../lib/types';
-import { Users, Plus, Trash2, Check, Search, Filter, X, Syringe, Package } from 'lucide-react';
+import { Users, Plus, Trash2, Check, Search, Syringe, Package } from 'lucide-react';
 import { formatDateLT } from '../lib/formatters';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -42,6 +42,7 @@ export function BulkTreatment() {
   const [selectedMedications, setSelectedMedications] = useState<SelectedMedication[]>([
     { id: '1', product_id: '', batch_id: '', qty: '', unit: 'ml', purpose: 'prevention' }
   ]);
+  const [vetNames, setVetNames] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -50,7 +51,6 @@ export function BulkTreatment() {
   const [searchTerm, setSearchTerm] = useState('');
   const [collarSearch, setCollarSearch] = useState('');
   const [selectedAgeGroup, setSelectedAgeGroup] = useState<AgeGroup>(AGE_GROUPS[0]);
-  const [showFilters, setShowFilters] = useState(false);
 
   const [formData, setFormData] = useState({
     treatment_date: new Date().toISOString().split('T')[0],
@@ -67,7 +67,7 @@ export function BulkTreatment() {
   }, [animals, searchTerm, collarSearch, selectedAgeGroup]);
 
   const loadData = async () => {
-    const [animalsRes, productsRes, batchesRes, collarMap] = await Promise.all([
+    const [animalsRes, productsRes, batchesRes, collarMap, vetsRes] = await Promise.all([
       fetchAllRows<Animal>('animals', '*', 'tag_no'),
       supabase.from('products').select('*').eq('is_active', true),
       supabase.from('stock_by_batch').select(`
@@ -75,6 +75,7 @@ export function BulkTreatment() {
         products!inner(name)
       `).gt('on_hand', 0),
       fetchLatestCollarNumbers(),
+      supabase.from('treatments').select('vet_name').not('vet_name', 'is', null),
     ]);
 
     // Enrich animals with collar numbers
@@ -92,6 +93,12 @@ export function BulkTreatment() {
       setProducts(sortedProducts);
     }
     if (batchesRes.data) setBatches(batchesRes.data);
+
+    // Get unique vet names
+    if (vetsRes.data) {
+      const uniqueVets = Array.from(new Set(vetsRes.data.map(v => v.vet_name).filter(Boolean))) as string[];
+      setVetNames(uniqueVets.sort());
+    }
   };
 
   const filterAnimals = () => {
@@ -104,10 +111,10 @@ export function BulkTreatment() {
       );
     }
 
-    // Filter by collar number
+    // Filter by collar number - exact match
     if (collarSearch.trim()) {
       filtered = filtered.filter(a =>
-        a.collar_no?.includes(collarSearch)
+        a.collar_no === collarSearch
       );
     }
 
@@ -185,16 +192,25 @@ export function BulkTreatment() {
   };
 
   const handleProductChange = async (itemId: string, productId: string) => {
-    updateMedication(itemId, 'product_id', productId);
+    // First update the product
+    setSelectedMedications(prev => prev.map(item =>
+      item.id === itemId ? { ...item, product_id: productId } : item
+    ));
 
-    const batchId = await suggestFIFOBatch(productId);
-    if (batchId) {
-      updateMedication(itemId, 'batch_id', batchId);
-    }
-
+    // Get product details for unit
     const product = products.find(p => p.id === productId);
     if (product) {
-      updateMedication(itemId, 'unit', product.primary_pack_unit);
+      setSelectedMedications(prev => prev.map(item =>
+        item.id === itemId ? { ...item, unit: product.primary_pack_unit } : item
+      ));
+    }
+
+    // Then suggest and set the batch
+    const batchId = await suggestFIFOBatch(productId);
+    if (batchId) {
+      setSelectedMedications(prev => prev.map(item =>
+        item.id === itemId ? { ...item, batch_id: batchId } : item
+      ));
     }
   };
 
@@ -218,7 +234,7 @@ export function BulkTreatment() {
     setLoading(true);
 
     try {
-      // For each animal, create a treatment record
+      // For each animal, create a treatment record (not a visit)
       for (const animal of selectedAnimals) {
         // Create treatment
         const { data: treatment, error: treatmentError } = await supabase
@@ -337,9 +353,15 @@ export function BulkTreatment() {
                 type="text"
                 value={formData.vet_name}
                 onChange={(e) => setFormData({ ...formData, vet_name: e.target.value })}
+                list="vet-names"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Veterinaro vardas"
               />
+              <datalist id="vet-names">
+                {vetNames.map(name => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -481,88 +503,78 @@ export function BulkTreatment() {
                 {selectedAnimals.length} pasirinkta
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              <Filter className="w-4 h-4" />
-              Filtrai
-            </button>
           </div>
 
-          {/* Filters */}
-          {showFilters && (
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ausies Nr.
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Ieškoti pagal ausies nr..."
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kaklo Nr.
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={collarSearch}
-                      onChange={(e) => setCollarSearch(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Ieškoti pagal kaklo nr..."
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Amžiaus grupė
-                  </label>
-                  <select
-                    value={AGE_GROUPS.indexOf(selectedAgeGroup)}
-                    onChange={(e) => setSelectedAgeGroup(AGE_GROUPS[parseInt(e.target.value)])}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {AGE_GROUPS.map((group, index) => (
-                      <option key={index} value={index}>
-                        {group.label}
-                      </option>
-                    ))}
-                  </select>
+          {/* Filters - Always visible */}
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ausies Nr.
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ieškoti pagal ausies nr..."
+                  />
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={selectAllFiltered}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kaklo Nr.
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={collarSearch}
+                    onChange={(e) => setCollarSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Tikslus kaklo numeris..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amžiaus grupė
+                </label>
+                <select
+                  value={AGE_GROUPS.indexOf(selectedAgeGroup)}
+                  onChange={(e) => setSelectedAgeGroup(AGE_GROUPS[parseInt(e.target.value)])}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  Pasirinkti visus filtruotus ({filteredAnimals.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAllSelections}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
-                >
-                  Atžymėti visus
-                </button>
+                  {AGE_GROUPS.map((group, index) => (
+                    <option key={index} value={index}>
+                      {group.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={selectAllFiltered}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                Pasirinkti visus filtruotus ({filteredAnimals.length})
+              </button>
+              <button
+                type="button"
+                onClick={clearAllSelections}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+              >
+                Atžymėti visus
+              </button>
+            </div>
+          </div>
 
           {/* Animals Grid */}
           <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
