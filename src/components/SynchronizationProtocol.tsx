@@ -697,6 +697,23 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
               <p className="text-sm text-gray-700">{activeSync.result}</p>
             </div>
           )}
+
+          {isCancelled && (
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <button
+                onClick={async () => {
+                  // Reload GEA status to check if animal is still APSĖK
+                  await loadGeaStatus();
+                  setActiveSync(null);
+                  setShowCreateForm(true);
+                }}
+                className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Pradėti naują sinchronizacijos protokolą
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
