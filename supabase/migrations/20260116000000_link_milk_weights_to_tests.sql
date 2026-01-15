@@ -87,27 +87,37 @@ BEGIN
   -- Match criteria: test.paemimo_data = weight.date
   --                 AND producer.label = weight.session_type
   --                 AND paemimo_data <= CURRENT_DATE
-  UPDATE milk_composition_tests mct
-  SET milk_weight_id = mw.id
-  FROM milk_weights mw
-  INNER JOIN milk_producers mp ON mp.id = mct.producer_id
-  WHERE mct.milk_weight_id IS NULL
-    AND mct.paemimo_data = mw.date
-    AND mp.label = mw.session_type
-    AND mct.paemimo_data <= CURRENT_DATE;
+  UPDATE milk_composition_tests
+  SET milk_weight_id = subq.weight_id
+  FROM (
+    SELECT
+      mct.id as test_id,
+      mw.id as weight_id
+    FROM milk_composition_tests mct
+    INNER JOIN milk_producers mp ON mp.id = mct.producer_id
+    INNER JOIN milk_weights mw ON mw.date = mct.paemimo_data AND mw.session_type = mp.label
+    WHERE mct.milk_weight_id IS NULL
+      AND mct.paemimo_data <= CURRENT_DATE
+  ) subq
+  WHERE milk_composition_tests.id = subq.test_id;
 
   GET DIAGNOSTICS v_composition_count = ROW_COUNT;
 
   -- Link quality tests to milk weights
   -- Same matching criteria as composition tests
-  UPDATE milk_quality_tests mqt
-  SET milk_weight_id = mw.id
-  FROM milk_weights mw
-  INNER JOIN milk_producers mp ON mp.id = mqt.producer_id
-  WHERE mqt.milk_weight_id IS NULL
-    AND mqt.paemimo_data = mw.date
-    AND mp.label = mw.session_type
-    AND mqt.paemimo_data <= CURRENT_DATE;
+  UPDATE milk_quality_tests
+  SET milk_weight_id = subq.weight_id
+  FROM (
+    SELECT
+      mqt.id as test_id,
+      mw.id as weight_id
+    FROM milk_quality_tests mqt
+    INNER JOIN milk_producers mp ON mp.id = mqt.producer_id
+    INNER JOIN milk_weights mw ON mw.date = mqt.paemimo_data AND mw.session_type = mp.label
+    WHERE mqt.milk_weight_id IS NULL
+      AND mqt.paemimo_data <= CURRENT_DATE
+  ) subq
+  WHERE milk_quality_tests.id = subq.test_id;
 
   GET DIAGNOSTICS v_quality_count = ROW_COUNT;
 

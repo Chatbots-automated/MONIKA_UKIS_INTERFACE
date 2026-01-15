@@ -16,6 +16,17 @@ interface MilkWeight {
   event_type: string | null;
   created_at: string;
   updated_at: string;
+  composition_test?: {
+    fat_percentage?: number;
+    protein_percentage?: number;
+    lactose_percentage?: number;
+    urea_mg_100ml?: number;
+    ph_level?: number;
+  };
+  quality_test?: {
+    somatic_cell_count?: number;
+    total_bacteria_count?: number;
+  };
 }
 
 interface DailyMilkWeights {
@@ -97,14 +108,43 @@ export function Pienas() {
     console.log('[Pienas] loadMilkWeights called');
     setWeightsLoading(true);
 
-    const { data: weights, error } = await supabase
-      .from('milk_weights')
+    const { data: combinedData, error } = await supabase
+      .from('milk_data_combined')
       .select('*')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date', { ascending: false });
 
-    console.log('[Pienas] Milk weights response:', { count: weights?.length || 0, error, weights });
+    console.log('[Pienas] Milk combined data response:', { count: combinedData?.length || 0, error, data: combinedData });
+
+    // Map combined data back to MilkWeight format with test data
+    const weights: MilkWeight[] = combinedData?.map(row => ({
+      id: row.weight_id,
+      date: row.date,
+      session_type: row.session_type,
+      weight: row.milk_weight_kg,
+      session_id: row.session_id,
+      measurement_timestamp: row.measurement_timestamp,
+      timezone: null,
+      hose_status: null,
+      stable_status: null,
+      event_type: row.event_type,
+      created_at: row.weight_recorded_at,
+      updated_at: row.weight_recorded_at,
+      composition_test: row.composition_test_id ? {
+        fat_percentage: row.fat_percentage,
+        protein_percentage: row.protein_percentage,
+        lactose_percentage: row.lactose_percentage,
+        urea_mg_100ml: row.urea_mg_100ml,
+        ph_level: row.ph_level,
+      } : undefined,
+      quality_test: row.quality_test_id ? {
+        somatic_cell_count: row.somatic_cell_count,
+        total_bacteria_count: row.total_bacteria_count,
+      } : undefined,
+    })) || [];
+
+    console.log('[Pienas] Processed weights with tests:', weights);
 
     if (error) {
       console.error('[Pienas] Error loading milk weights:', error);
@@ -637,6 +677,177 @@ export function Pienas() {
                                   </div>
                                 )}
                               </div>
+
+                              {/* Lab Test Data */}
+                              {(daily.rytinis?.composition_test || daily.rytinis?.quality_test || daily.naktinis?.composition_test || daily.naktinis?.quality_test) && (
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <Beaker className="w-4 h-4 text-purple-600" />
+                                    Laboratorijos tyrimai
+                                  </h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    {/* Rytinis tests */}
+                                    {(daily.rytinis?.composition_test || daily.rytinis?.quality_test) && (
+                                      <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                        <h5 className="text-xs font-semibold text-orange-700 mb-2 flex items-center gap-1">
+                                          <Sunrise className="w-3 h-3" />
+                                          Rytinis
+                                        </h5>
+                                        {daily.rytinis?.composition_test && (
+                                          <div className="space-y-1 mb-2">
+                                            <div className="text-xs text-gray-700 font-medium">Sudėtis:</div>
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                              {daily.rytinis.composition_test.fat_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Riebalai:</span>
+                                                  <span className="ml-1 font-semibold text-orange-700">
+                                                    {daily.rytinis.composition_test.fat_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.rytinis.composition_test.protein_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Baltymai:</span>
+                                                  <span className="ml-1 font-semibold text-orange-700">
+                                                    {daily.rytinis.composition_test.protein_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.rytinis.composition_test.lactose_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Laktozė:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.rytinis.composition_test.lactose_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.rytinis.composition_test.ph_level !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">pH:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.rytinis.composition_test.ph_level.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.rytinis.composition_test.urea_mg_100ml !== undefined && (
+                                                <div className="col-span-2">
+                                                  <span className="text-gray-600">Šlapalo kiekis:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.rytinis.composition_test.urea_mg_100ml} mg/100ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {daily.rytinis?.quality_test && (
+                                          <div className="space-y-1">
+                                            <div className="text-xs text-gray-700 font-medium">Kokybė:</div>
+                                            <div className="grid grid-cols-1 gap-1 text-xs">
+                                              {daily.rytinis.quality_test.somatic_cell_count !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Somatinės ląstelės:</span>
+                                                  <span className="ml-1 font-semibold text-orange-700">
+                                                    {daily.rytinis.quality_test.somatic_cell_count} tūkst./ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.rytinis.quality_test.total_bacteria_count !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Bakterijos:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.rytinis.quality_test.total_bacteria_count} tūkst./ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Naktinis tests */}
+                                    {(daily.naktinis?.composition_test || daily.naktinis?.quality_test) && (
+                                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                                        <h5 className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1">
+                                          <Moon className="w-3 h-3" />
+                                          Naktinis
+                                        </h5>
+                                        {daily.naktinis?.composition_test && (
+                                          <div className="space-y-1 mb-2">
+                                            <div className="text-xs text-gray-700 font-medium">Sudėtis:</div>
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                              {daily.naktinis.composition_test.fat_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Riebalai:</span>
+                                                  <span className="ml-1 font-semibold text-blue-700">
+                                                    {daily.naktinis.composition_test.fat_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.naktinis.composition_test.protein_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Baltymai:</span>
+                                                  <span className="ml-1 font-semibold text-blue-700">
+                                                    {daily.naktinis.composition_test.protein_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.naktinis.composition_test.lactose_percentage !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Laktozė:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.naktinis.composition_test.lactose_percentage.toFixed(2)}%
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.naktinis.composition_test.ph_level !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">pH:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.naktinis.composition_test.ph_level.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.naktinis.composition_test.urea_mg_100ml !== undefined && (
+                                                <div className="col-span-2">
+                                                  <span className="text-gray-600">Šlapalo kiekis:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.naktinis.composition_test.urea_mg_100ml} mg/100ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {daily.naktinis?.quality_test && (
+                                          <div className="space-y-1">
+                                            <div className="text-xs text-gray-700 font-medium">Kokybė:</div>
+                                            <div className="grid grid-cols-1 gap-1 text-xs">
+                                              {daily.naktinis.quality_test.somatic_cell_count !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Somatinės ląstelės:</span>
+                                                  <span className="ml-1 font-semibold text-blue-700">
+                                                    {daily.naktinis.quality_test.somatic_cell_count} tūkst./ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {daily.naktinis.quality_test.total_bacteria_count !== undefined && (
+                                                <div>
+                                                  <span className="text-gray-600">Bakterijos:</span>
+                                                  <span className="ml-1 font-semibold">
+                                                    {daily.naktinis.quality_test.total_bacteria_count} tūkst./ml
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
