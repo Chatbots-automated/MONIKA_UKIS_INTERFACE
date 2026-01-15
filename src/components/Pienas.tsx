@@ -108,43 +108,15 @@ export function Pienas() {
     console.log('[Pienas] loadMilkWeights called');
     setWeightsLoading(true);
 
-    const { data: combinedData, error } = await supabase
-      .from('milk_data_combined')
+    // Load milk weights
+    const { data: weights, error } = await supabase
+      .from('milk_weights')
       .select('*')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date', { ascending: false });
 
-    console.log('[Pienas] Milk combined data response:', { count: combinedData?.length || 0, error, data: combinedData });
-
-    // Map combined data back to MilkWeight format with test data
-    const weights: MilkWeight[] = combinedData?.map(row => ({
-      id: row.weight_id,
-      date: row.date,
-      session_type: row.session_type,
-      weight: row.milk_weight_kg,
-      session_id: row.session_id,
-      measurement_timestamp: row.measurement_timestamp,
-      timezone: null,
-      hose_status: null,
-      stable_status: null,
-      event_type: row.event_type,
-      created_at: row.weight_recorded_at,
-      updated_at: row.weight_recorded_at,
-      composition_test: row.composition_test_id ? {
-        fat_percentage: row.fat_percentage,
-        protein_percentage: row.protein_percentage,
-        lactose_percentage: row.lactose_percentage,
-        urea_mg_100ml: row.urea_mg_100ml,
-        ph_level: row.ph_level,
-      } : undefined,
-      quality_test: row.quality_test_id ? {
-        somatic_cell_count: row.somatic_cell_count,
-        total_bacteria_count: row.total_bacteria_count,
-      } : undefined,
-    })) || [];
-
-    console.log('[Pienas] Processed weights with tests:', weights);
+    console.log('[Pienas] Milk weights response:', { count: weights?.length || 0, error, weights });
 
     if (error) {
       console.error('[Pienas] Error loading milk weights:', error);
@@ -158,11 +130,57 @@ export function Pienas() {
       return;
     }
 
+    // Load test data separately
+    const { data: testData } = await supabase
+      .from('milk_data_combined')
+      .select('date, session_type, composition_test_id, fat_percentage, protein_percentage, lactose_percentage, urea_mg_100ml, ph_level, quality_test_id, somatic_cell_count, total_bacteria_count')
+      .gte('date', dateFrom)
+      .lte('date', dateTo)
+      .not('composition_test_id', 'is', null);
+
+    console.log('[Pienas] Test data loaded:', { count: testData?.length || 0 });
+
+    // Create a map of date+session -> test data
+    const testMap = new Map<string, { composition_test?: any; quality_test?: any }>();
+    testData?.forEach(row => {
+      const key = `${row.date}_${row.session_type}`;
+      if (!testMap.has(key)) {
+        testMap.set(key, {
+          composition_test: row.composition_test_id ? {
+            fat_percentage: row.fat_percentage,
+            protein_percentage: row.protein_percentage,
+            lactose_percentage: row.lactose_percentage,
+            urea_mg_100ml: row.urea_mg_100ml,
+            ph_level: row.ph_level,
+          } : undefined,
+          quality_test: row.quality_test_id ? {
+            somatic_cell_count: row.somatic_cell_count,
+            total_bacteria_count: row.total_bacteria_count,
+          } : undefined,
+        });
+      }
+    });
+
+    console.log('[Pienas] Test map created with', testMap.size, 'entries');
+
+    // Enrich weights with test data
+    const enrichedWeights: MilkWeight[] = weights.map(w => {
+      const key = `${w.date}_${w.session_type}`;
+      const tests = testMap.get(key);
+      return {
+        ...w,
+        composition_test: tests?.composition_test,
+        quality_test: tests?.quality_test,
+      };
+    });
+
+    console.log('[Pienas] Enriched weights:', enrichedWeights.filter(w => w.composition_test).length, 'have composition test data');
+
     const dailyWeightsMap = new Map<string, DailyMilkWeights>();
 
     // Group weights by date and session_type, keeping all events
     const sessionGroups = new Map<string, MilkWeight[]>();
-    weights.forEach((weight) => {
+    enrichedWeights.forEach((weight) => {
       const key = `${weight.date}_${weight.session_type}`;
       if (!sessionGroups.has(key)) {
         sessionGroups.set(key, []);
