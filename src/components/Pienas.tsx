@@ -230,6 +230,13 @@ export function Pienas() {
     );
 
     console.log('[Pienas] Processed daily weights:', dailyWeightsArray);
+    console.log('[Pienas] Test data check:', dailyWeightsArray.map(d => ({
+      date: d.date,
+      rytinisTest: !!d.rytinis?.composition_test,
+      naktinisTest: !!d.naktinis?.composition_test,
+      rytinisTestData: d.rytinis?.composition_test,
+      naktinisTestData: d.naktinis?.composition_test,
+    })));
     setMilkWeights(dailyWeightsArray);
     setWeightsLoading(false);
   };
