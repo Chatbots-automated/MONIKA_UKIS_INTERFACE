@@ -206,10 +206,22 @@ export function EquipmentInvoices() {
 
       const data = await response.json();
       setInvoiceData(data);
+
+      // Handle supplier data - it might be an object or a string
+      const supplierName = typeof data.supplier === 'object'
+        ? (data.supplier?.name || '')
+        : (data.supplier || '');
+      const supplierCode = typeof data.supplier === 'object'
+        ? (data.supplier?.code || '')
+        : (data.supplier_code || '');
+      const vatCode = typeof data.supplier === 'object'
+        ? (data.supplier?.vat_code || '')
+        : (data.vat_code || '');
+
       setHeaderData({
-        supplier_name: data.supplier || '',
-        supplier_code: data.supplier_code || '',
-        vat_code: data.vat_code || '',
+        supplier_name: supplierName,
+        supplier_code: supplierCode,
+        vat_code: vatCode,
         invoice_number: data.invoice_number || '',
         invoice_date: data.invoice_date || new Date().toISOString().split('T')[0],
         currency: data.currency || 'EUR',
