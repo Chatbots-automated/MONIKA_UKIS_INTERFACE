@@ -146,7 +146,7 @@ export function ToolsManagement() {
         tool_id: tool.id,
         movement_type: 'checkout',
         to_holder: user.id,
-        from_location_id: tool.location?.name,
+        from_location_id: tool.current_location_id,
         movement_date: new Date().toISOString(),
         recorded_by: user.id,
       });
@@ -156,12 +156,13 @@ export function ToolsManagement() {
         .update({
           current_holder: user.id,
           is_available: false,
+          current_location_id: null,
         })
         .eq('id', tool.id);
 
       await logAction('checkout_tool', { tool_id: tool.id, tool_number: tool.tool_number });
       loadTools();
-      setShowCheckoutModal(false);
+      alert('Įrankis sėkmingai išduotas');
     } catch (error) {
       console.error('Error:', error);
       alert('Klaida išduodant įrankį');
@@ -188,6 +189,7 @@ export function ToolsManagement() {
 
       await logAction('return_tool', { tool_id: tool.id, tool_number: tool.tool_number });
       loadTools();
+      alert('Įrankis sėkmingai grąžintas');
     } catch (error) {
       console.error('Error:', error);
       alert('Klaida grąžinant įrankį');

@@ -11,7 +11,9 @@ import {
   Menu,
   X,
   ArrowLeft,
-  Settings
+  Settings,
+  Users,
+  Box
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -23,6 +25,8 @@ import { WorkOrders } from './technika/WorkOrders';
 import { MaintenanceSchedules } from './technika/MaintenanceSchedules';
 import { EquipmentInventory } from './technika/EquipmentInventory';
 import { TechnikaReports } from './technika/TechnikaReports';
+import { WorkerSchedules } from './technika/WorkerSchedules';
+import { ProductsManagement } from './technika/ProductsManagement';
 
 interface TechnikaProps {
   onBackToModules: () => void;
@@ -31,11 +35,13 @@ interface TechnikaProps {
 const menuItems = [
   { id: 'dashboard', label: 'Pagrindinis', icon: BarChart3 },
   { id: 'invoices', label: 'Sąskaitos', icon: FileText },
+  { id: 'products', label: 'Produktai', icon: Box },
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
   { id: 'work-orders', label: 'Aptarnavimai', icon: ClipboardList },
   { id: 'schedules', label: 'Grafikai', icon: Calendar },
+  { id: 'worker-schedules', label: 'Darbuotojų grafikai', icon: Users },
   { id: 'inventory', label: 'Sandėlis', icon: Package },
   { id: 'reports', label: 'Ataskaitos', icon: BarChart3 },
 ];
@@ -61,6 +67,8 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <TechnikaDashboard />;
       case 'invoices':
         return <EquipmentInvoices />;
+      case 'products':
+        return <ProductsManagement />;
       case 'tools':
         return <ToolsManagement />;
       case 'ppe':
@@ -71,6 +79,8 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <WorkOrders />;
       case 'schedules':
         return <MaintenanceSchedules />;
+      case 'worker-schedules':
+        return <WorkerSchedules />;
       case 'inventory':
         return <EquipmentInventory />;
       case 'reports':
