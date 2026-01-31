@@ -23,33 +23,61 @@ interface Tool {
   } | null;
 }
 
+interface Product {
+  id: string;
+  name: string;
+}
+
+interface Location {
+  id: string;
+  name: string;
+}
+
 export function ToolsManagement() {
   const { user, logAction } = useAuth();
   const [tools, setTools] = useState<Tool[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterAvailable, setFilterAvailable] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [newToolForm, setNewToolForm] = useState({
+    product_id: '',
+    tool_number: '',
+    serial_number: '',
+    type: 'manual',
+    condition: 'good',
+    purchase_date: '',
+    purchase_price: '0',
+    location_id: '',
+    notes: '',
+  });
 
   useEffect(() => {
-    loadTools();
+    loadData();
   }, []);
 
-  const loadTools = async () => {
-    const { data, error } = await supabase
-      .from('tools')
-      .select(`
+  const loadData = async () => {
+    const [toolsRes, productsRes, locationsRes] = await Promise.all([
+      supabase.from('tools').select(`
         *,
         product:equipment_products(name),
         holder:users!tools_current_holder_fkey(full_name),
         location:equipment_locations(name)
-      `)
-      .order('tool_number');
+      `).order('tool_number'),
+      supabase.from('equipment_products').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('equipment_locations').select('id, name').eq('is_active', true).order('name'),
+    ]);
 
-    if (data) setTools(data as any);
+    if (toolsRes.data) setTools(toolsRes.data as any);
+    if (productsRes.data) setProducts(productsRes.data);
+    if (locationsRes.data) setLocations(locationsRes.data);
   };
+
+  const loadTools = loadData;
 
   const filteredTools = tools.filter(tool => {
     const matchesSearch =
@@ -119,6 +147,49 @@ export function ToolsManagement() {
     } catch (error) {
       console.error('Error:', error);
       alert('Klaida grąžinant įrankį');
+    }
+  };
+
+  const handleAddTool = async () => {
+    if (!newToolForm.product_id || !newToolForm.tool_number) {
+      alert('Prašome užpildyti produktą ir įrankio numerį');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('tools').insert({
+        product_id: newToolForm.product_id,
+        tool_number: newToolForm.tool_number,
+        serial_number: newToolForm.serial_number || null,
+        type: newToolForm.type,
+        condition: newToolForm.condition,
+        purchase_date: newToolForm.purchase_date || null,
+        purchase_price: parseFloat(newToolForm.purchase_price) || 0,
+        location_id: newToolForm.location_id || null,
+        notes: newToolForm.notes || null,
+        is_available: true,
+      });
+
+      if (error) throw error;
+
+      await logAction('add_tool', { tool_number: newToolForm.tool_number });
+      setShowAddModal(false);
+      setNewToolForm({
+        product_id: '',
+        tool_number: '',
+        serial_number: '',
+        type: 'manual',
+        condition: 'good',
+        purchase_date: '',
+        purchase_price: '0',
+        location_id: '',
+        notes: '',
+      });
+      loadData();
+      alert('Įrankis sėkmingai pridėtas');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida pridedant įrankį: ${error.message}`);
     }
   };
 
@@ -246,6 +317,160 @@ export function ToolsManagement() {
         <StatCard title="Išduoti" value={tools.filter(t => !t.is_available).length.toString()} color="amber" />
         <StatCard title="Reikia taisyti" value={tools.filter(t => t.condition === 'needs_repair').length.toString()} color="red" />
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Pridėti naują įrankį</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
+                <select
+                  value={newToolForm.product_id}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, product_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite produktą</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Įrankio numeris *</label>
+                <input
+                  type="text"
+                  value={newToolForm.tool_number}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, tool_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="T-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Serijos numeris</label>
+                <input
+                  type="text"
+                  value={newToolForm.serial_number}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, serial_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
+                  <select
+                    value={newToolForm.type}
+                    onChange={(e) => setNewToolForm({ ...newToolForm, type: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="manual">Rankinis</option>
+                    <option value="electric">Elektrinis</option>
+                    <option value="pneumatic">Pneumatinis</option>
+                    <option value="hydraulic">Hidraulinis</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Būklė</label>
+                  <select
+                    value={newToolForm.condition}
+                    onChange={(e) => setNewToolForm({ ...newToolForm, condition: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="new">Naujas</option>
+                    <option value="good">Gera</option>
+                    <option value="fair">Patenkinama</option>
+                    <option value="needs_repair">Reikia taisyti</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Lokacija</label>
+                <select
+                  value={newToolForm.location_id}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, location_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite lokaciją</option>
+                  {locations.map(location => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pirkimo data</label>
+                  <input
+                    type="date"
+                    value={newToolForm.purchase_date}
+                    onChange={(e) => setNewToolForm({ ...newToolForm, purchase_date: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pirkimo kaina (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newToolForm.purchase_price}
+                    onChange={(e) => setNewToolForm({ ...newToolForm, purchase_price: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={newToolForm.notes}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setNewToolForm({
+                    product_id: '',
+                    tool_number: '',
+                    serial_number: '',
+                    type: 'manual',
+                    condition: 'good',
+                    purchase_date: '',
+                    purchase_price: '0',
+                    location_id: '',
+                    notes: '',
+                  });
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleAddTool}
+                className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+              >
+                Pridėti įrankį
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

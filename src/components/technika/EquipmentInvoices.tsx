@@ -14,7 +14,13 @@ interface Product {
   id: string;
   name: string;
   unit_type: string;
-  category_id: string;
+  category_id: string | null;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description: string;
 }
 
 interface Invoice {
@@ -32,6 +38,7 @@ export function EquipmentInvoices() {
   const { logAction } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
@@ -48,6 +55,7 @@ export function EquipmentInvoices() {
     name: '',
     product_code: '',
     unit_type: 'pcs',
+    category_id: '',
     manufacturer: '',
     model_number: '',
     description: '',
@@ -59,14 +67,16 @@ export function EquipmentInvoices() {
   }, []);
 
   const loadData = async () => {
-    const [suppliersRes, productsRes, invoicesRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
+      supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
     if (productsRes.data) setProducts(productsRes.data);
+    if (categoriesRes.data) setCategories(categoriesRes.data);
     if (invoicesRes.data) setInvoices(invoicesRes.data);
   };
 
@@ -126,6 +136,7 @@ export function EquipmentInvoices() {
       name: itemData.description || '',
       product_code: itemData.sku || '',
       unit_type: 'pcs',
+      category_id: '',
       manufacturer: '',
       model_number: '',
       description: itemData.description || '',
@@ -146,6 +157,7 @@ export function EquipmentInvoices() {
         .insert({
           name: newProductForm.name,
           product_code: newProductForm.product_code || null,
+          category_id: newProductForm.category_id || null,
           unit_type: newProductForm.unit_type,
           manufacturer: newProductForm.manufacturer || null,
           model_number: newProductForm.model_number || null,
@@ -987,6 +999,22 @@ export function EquipmentInvoices() {
                   onChange={(e) => setNewProductForm({ ...newProductForm, product_code: e.target.value })}
                   className="w-full border rounded px-3 py-2"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kategorija *</label>
+                <select
+                  value={newProductForm.category_id}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, category_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite kategoriją</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

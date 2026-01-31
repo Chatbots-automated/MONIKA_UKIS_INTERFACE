@@ -28,19 +28,33 @@ interface PPEIssuance {
   };
 }
 
+interface Employee {
+  id: string;
+  full_name: string;
+}
+
 export function PPEManagement() {
   const { user, logAction } = useAuth();
   const [items, setItems] = useState<PPEItem[]>([]);
   const [issuances, setIssuances] = useState<PPEIssuance[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [issueForm, setIssueForm] = useState({
+    ppe_item_id: '',
+    employee_id: '',
+    quantity_issued: '1',
+    issue_date: new Date().toISOString().split('T')[0],
+    expected_return_date: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [itemsRes, issuancesRes] = await Promise.all([
+    const [itemsRes, issuancesRes, employeesRes] = await Promise.all([
       supabase
         .from('ppe_items')
         .select('*, product:equipment_products(name)')
@@ -55,10 +69,15 @@ export function PPEManagement() {
         .is('actual_return_date', null)
         .order('issue_date', { ascending: false })
         .limit(20),
+      supabase
+        .from('users')
+        .select('id, full_name')
+        .order('full_name'),
     ]);
 
     if (itemsRes.data) setItems(itemsRes.data as any);
     if (issuancesRes.data) setIssuances(issuancesRes.data as any);
+    if (employeesRes.data) setEmployees(employeesRes.data);
   };
 
   const filteredItems = items.filter(item =>
@@ -76,6 +95,75 @@ export function PPEManagement() {
     goggles: 'Akiniai',
     ear_protection: 'Ausų apsauga',
     other: 'Kita',
+  };
+
+  const handleIssuePPE = async () => {
+    if (!issueForm.ppe_item_id || !issueForm.employee_id) {
+      alert('Prašome pasirinkti PPE elementą ir darbuotoją');
+      return;
+    }
+
+    const quantity = parseFloat(issueForm.quantity_issued);
+    if (quantity <= 0) {
+      alert('Kiekis turi būti didesnis už 0');
+      return;
+    }
+
+    const selectedItem = items.find(item => item.id === issueForm.ppe_item_id);
+    if (!selectedItem) {
+      alert('PPE elementas nerastas');
+      return;
+    }
+
+    if (quantity > selectedItem.quantity_on_hand) {
+      alert(`Nepakankamas kiekis. Sandėlyje: ${selectedItem.quantity_on_hand}`);
+      return;
+    }
+
+    try {
+      const { error: issueError } = await supabase.from('ppe_issuance_records').insert({
+        ppe_item_id: issueForm.ppe_item_id,
+        product_id: selectedItem.product_id,
+        employee_id: issueForm.employee_id,
+        issue_date: issueForm.issue_date,
+        quantity_issued: quantity,
+        expected_return_date: issueForm.expected_return_date || null,
+        issued_by: user?.id,
+        notes: issueForm.notes || null,
+      });
+
+      if (issueError) throw issueError;
+
+      const { error: updateError } = await supabase
+        .from('ppe_items')
+        .update({
+          quantity_on_hand: selectedItem.quantity_on_hand - quantity,
+        })
+        .eq('id', issueForm.ppe_item_id);
+
+      if (updateError) throw updateError;
+
+      await logAction('issue_ppe', {
+        ppe_item_id: issueForm.ppe_item_id,
+        employee_id: issueForm.employee_id,
+        quantity: quantity,
+      });
+
+      setShowIssueModal(false);
+      setIssueForm({
+        ppe_item_id: '',
+        employee_id: '',
+        quantity_issued: '1',
+        issue_date: new Date().toISOString().split('T')[0],
+        expected_return_date: '',
+        notes: '',
+      });
+      loadData();
+      alert('PPE sėkmingai išduotas');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida išduodant PPE: ${error.message}`);
+    }
   };
 
   return (
@@ -187,6 +275,116 @@ export function PPEManagement() {
         />
         <StatCard title="Išduota" value={issuances.length.toString()} color="amber" />
       </div>
+
+      {showIssueModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Išduoti PPE</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">PPE elementas *</label>
+                <select
+                  value={issueForm.ppe_item_id}
+                  onChange={(e) => setIssueForm({ ...issueForm, ppe_item_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite PPE</option>
+                  {items.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.product.name} - {ppeTypeLabels[item.ppe_type]} ({item.quantity_on_hand} sandėlyje)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas *</label>
+                <select
+                  value={issueForm.employee_id}
+                  onChange={(e) => setIssueForm({ ...issueForm, employee_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite darbuotoją</option>
+                  {employees.map(employee => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={issueForm.quantity_issued}
+                    onChange={(e) => setIssueForm({ ...issueForm, quantity_issued: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Išdavimo data *</label>
+                  <input
+                    type="date"
+                    value={issueForm.issue_date}
+                    onChange={(e) => setIssueForm({ ...issueForm, issue_date: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Grąžinimo data (jei taikoma)</label>
+                <input
+                  type="date"
+                  value={issueForm.expected_return_date}
+                  onChange={(e) => setIssueForm({ ...issueForm, expected_return_date: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={issueForm.notes}
+                  onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowIssueModal(false);
+                  setIssueForm({
+                    ppe_item_id: '',
+                    employee_id: '',
+                    quantity_issued: '1',
+                    issue_date: new Date().toISOString().split('T')[0],
+                    expected_return_date: '',
+                    notes: '',
+                  });
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleIssuePPE}
+                className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+              >
+                Išduoti PPE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
