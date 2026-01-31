@@ -1,58 +1,204 @@
-import { Package, Plus, Search, Upload } from 'lucide-react';
+import { Package, Plus, Search, Upload, Users, ArrowRight, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import { EquipmentReceiveStock } from './EquipmentReceiveStock';
+
+interface WarehouseStock {
+  product_id: string;
+  product_name: string;
+  product_code: string;
+  unit_type: string;
+  category_name: string;
+  total_qty: number;
+  total_value: number;
+  batch_count: number;
+  avg_price: number;
+}
+
+interface ItemOnLoan {
+  issuance_id: string;
+  issuance_number: string;
+  issued_to: string;
+  issued_to_name: string;
+  issue_date: string;
+  expected_return_date: string;
+  product_name: string;
+  unit_type: string;
+  quantity_issued: number;
+  quantity_returned: number;
+  quantity_outstanding: number;
+  value_outstanding: number;
+}
 
 interface Batch {
   id: string;
   batch_number: string;
-  received_qty: number;
   qty_left: number;
   purchase_price: number;
   product: {
+    id: string;
     name: string;
     unit_type: string;
   };
-  location: {
-    name: string;
-  } | null;
 }
 
-type Tab = 'inventory' | 'receive';
+interface UserOption {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+type Tab = 'inventory' | 'receive' | 'issue' | 'on-loan';
 
 export function EquipmentInventory() {
+  const { user, logAction } = useAuth();
+  const [warehouseStock, setWarehouseStock] = useState<WarehouseStock[]>([]);
+  const [itemsOnLoan, setItemsOnLoan] = useState<ItemOnLoan[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('inventory');
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<WarehouseStock | null>(null);
+  const [issueForm, setIssueForm] = useState({
+    issued_to: '',
+    issued_to_name: '',
+    batch_id: '',
+    quantity: '1',
+    expected_return_date: '',
+    notes: '',
+  });
 
   useEffect(() => {
-    loadBatches();
+    loadData();
   }, []);
 
-  const loadBatches = async () => {
+  const loadData = async () => {
+    const [stockRes, loansRes, usersRes] = await Promise.all([
+      supabase.from('equipment_warehouse_stock').select('*'),
+      supabase.from('equipment_items_on_loan').select('*'),
+      supabase.from('users').select('id, full_name, email').order('full_name'),
+    ]);
+
+    if (stockRes.data) setWarehouseStock(stockRes.data);
+    if (loansRes.data) setItemsOnLoan(loansRes.data);
+    if (usersRes.data) setUsers(usersRes.data);
+  };
+
+  const loadBatchesForProduct = async (productId: string) => {
     const { data } = await supabase
       .from('equipment_batches')
       .select(`
-        *,
-        product:equipment_products(name, unit_type),
-        location:equipment_locations(name)
+        id,
+        batch_number,
+        qty_left,
+        purchase_price,
+        product:equipment_products(id, name, unit_type)
       `)
+      .eq('product_id', productId)
       .gt('qty_left', 0)
-      .order('product(name)');
+      .order('created_at');
 
     if (data) setBatches(data as any);
   };
 
-  const filteredBatches = batches.filter(batch =>
-    batch.product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    batch.batch_number?.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleOpenIssueModal = async (product: WarehouseStock) => {
+    setSelectedProduct(product);
+    await loadBatchesForProduct(product.product_id);
+    setShowIssueModal(true);
+  };
+
+  const handleIssueItems = async () => {
+    if (!issueForm.batch_id || !issueForm.quantity) {
+      alert('Prašome pasirinkti partiją ir kiekį');
+      return;
+    }
+
+    if (!issueForm.issued_to && !issueForm.issued_to_name) {
+      alert('Prašome pasirinkti darbuotoją arba įvesti vardą');
+      return;
+    }
+
+    const quantity = parseFloat(issueForm.quantity);
+    const selectedBatch = batches.find(b => b.id === issueForm.batch_id);
+
+    if (!selectedBatch) {
+      alert('Partija nerasta');
+      return;
+    }
+
+    if (quantity > selectedBatch.qty_left) {
+      alert('Nepakanka atsargų. Turimas kiekis: ' + selectedBatch.qty_left);
+      return;
+    }
+
+    try {
+      const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
+
+      const { data: issuance, error: issuanceError } = await supabase
+        .from('equipment_issuances')
+        .insert({
+          issuance_number: issuanceNumber,
+          issued_to: issueForm.issued_to || null,
+          issued_to_name: issueForm.issued_to_name || null,
+          issued_by: user?.id,
+          expected_return_date: issueForm.expected_return_date || null,
+          notes: issueForm.notes || null,
+          created_by: user?.id,
+        })
+        .select()
+        .single();
+
+      if (issuanceError) throw issuanceError;
+
+      const { error: itemError } = await supabase
+        .from('equipment_issuance_items')
+        .insert({
+          issuance_id: issuance.id,
+          batch_id: issueForm.batch_id,
+          product_id: selectedProduct?.product_id,
+          quantity: quantity,
+          unit_price: selectedBatch.purchase_price,
+        });
+
+      if (itemError) throw itemError;
+
+      await logAction('issue_equipment', 'equipment_issuances', issuance.id);
+
+      alert('Prekės sėkmingai išduotos');
+      setShowIssueModal(false);
+      setIssueForm({
+        issued_to: '',
+        issued_to_name: '',
+        batch_id: '',
+        quantity: '1',
+        expected_return_date: '',
+        notes: '',
+      });
+      setSelectedProduct(null);
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida išduodant prekes: ${error.message}`);
+    }
+  };
+
+  const filteredStock = warehouseStock.filter(item =>
+    item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.product_code?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredLoans = itemsOnLoan.filter(item =>
+    item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.issued_to_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
-          <div className="flex">
+          <div className="flex flex-wrap">
             <button
               onClick={() => setActiveTab('inventory')}
               className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
@@ -62,7 +208,18 @@ export function EquipmentInventory() {
               }`}
             >
               <Package className="w-4 h-4 inline-block mr-2" />
-              Atsargos
+              Sandėlis
+            </button>
+            <button
+              onClick={() => setActiveTab('on-loan')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'on-loan'
+                  ? 'border-slate-600 text-slate-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users className="w-4 h-4 inline-block mr-2" />
+              Išduotos prekės
             </button>
             <button
               onClick={() => setActiveTab('receive')}
@@ -95,30 +252,41 @@ export function EquipmentInventory() {
               </div>
 
               <div className="space-y-2">
-                {filteredBatches.map(batch => (
-                  <div key={batch.id} className="border border-gray-200 rounded-lg p-4">
+                {filteredStock.map(item => (
+                  <div key={item.product_id} className="border border-gray-200 rounded-lg p-4 hover:border-slate-400 transition-all">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-1">
                         <Package className="w-5 h-5 text-slate-600" />
-                        <div>
-                          <p className="font-medium text-gray-800">{batch.product.name}</p>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{item.product_name}</p>
                           <p className="text-sm text-gray-600">
-                            Partija: {batch.batch_number || 'N/A'} · {batch.location?.name || 'Sandėlis'}
+                            {item.category_name} · {item.batch_count} partijos · Vidutinė kaina: €{item.avg_price?.toFixed(2) || '0.00'}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-800">
-                          {batch.qty_left} {batch.product.unit_type}
-                        </p>
-                        <p className="text-sm text-gray-600">iš {batch.received_qty}</p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-800">
+                            {item.total_qty} {item.unit_type}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Vertė: €{item.total_value?.toFixed(2) || '0.00'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenIssueModal(item)}
+                          className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                          Išduoti
+                        </button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {filteredBatches.length === 0 && (
+              {filteredStock.length === 0 && (
                 <div className="text-center py-12">
                   <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500">Atsargų nerasta</p>
@@ -126,19 +294,188 @@ export function EquipmentInventory() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <StatCard title="Produktų tipų" value={new Set(batches.map(b => b.product.name)).size.toString()} />
-                <StatCard title="Partijų" value={batches.length.toString()} />
-                <StatCard
-                  title="Bendra vertė"
-                  value={`€${batches.reduce((sum, b) => sum + b.qty_left * (b.purchase_price || 0), 0).toFixed(2)}`}
-                />
+                <StatCard title="Produktų tipų" value={warehouseStock.length.toString()} />
+                <StatCard title="Bendra vertė" value={`€${warehouseStock.reduce((sum, item) => sum + (item.total_value || 0), 0).toFixed(2)}`} />
+                <StatCard title="Išduotų prekių" value={itemsOnLoan.length.toString()} />
               </div>
             </>
           )}
 
-          {activeTab === 'receive' && <EquipmentReceiveStock />}
+          {activeTab === 'on-loan' && (
+            <>
+              <div className="mb-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Ieškoti pagal produktą ar darbuotoją..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {filteredLoans.map((item, idx) => (
+                  <div key={idx} className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <User className="w-5 h-5 text-amber-600" />
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{item.product_name}</p>
+                          <p className="text-sm text-gray-600">
+                            Išduota: {item.issued_to_name} · {new Date(item.issue_date).toLocaleDateString('lt-LT')}
+                            {item.expected_return_date && ` · Grąžinti iki: ${new Date(item.expected_return_date).toLocaleDateString('lt-LT')}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-800">
+                          {item.quantity_outstanding} {item.unit_type}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          iš {item.quantity_issued} · €{item.value_outstanding?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {filteredLoans.length === 0 && (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">Nėra išduotų prekių</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'receive' && <EquipmentReceiveStock onReceived={loadData} />}
         </div>
       </div>
+
+      {showIssueModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">
+              Išduoti: {selectedProduct.product_name}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
+                <select
+                  value={issueForm.issued_to}
+                  onChange={e => setIssueForm({ ...issueForm, issued_to: e.target.value, issued_to_name: '' })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite darbuotoją</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Arba įveskite vardą jei asmuo nėra sistemoje
+                </p>
+              </div>
+
+              {!issueForm.issued_to && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kitas gavėjo vardas</label>
+                  <input
+                    type="text"
+                    value={issueForm.issued_to_name}
+                    onChange={e => setIssueForm({ ...issueForm, issued_to_name: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="Vardas Pavardė"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Partija *</label>
+                <select
+                  value={issueForm.batch_id}
+                  onChange={e => setIssueForm({ ...issueForm, batch_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite partiją</option>
+                  {batches.map(batch => (
+                    <option key={batch.id} value={batch.id}>
+                      {batch.batch_number || 'N/A'} - Turima: {batch.qty_left} {batch.product.unit_type} (€{batch.purchase_price}/vnt)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Kiekis * ({selectedProduct.unit_type})
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={issueForm.quantity}
+                  onChange={e => setIssueForm({ ...issueForm, quantity: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Planuojama grąžinimo data
+                </label>
+                <input
+                  type="date"
+                  value={issueForm.expected_return_date}
+                  onChange={e => setIssueForm({ ...issueForm, expected_return_date: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={issueForm.notes}
+                  onChange={e => setIssueForm({ ...issueForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowIssueModal(false);
+                  setIssueForm({
+                    issued_to: '',
+                    issued_to_name: '',
+                    batch_id: '',
+                    quantity: '1',
+                    expected_return_date: '',
+                    notes: '',
+                  });
+                  setSelectedProduct(null);
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleIssueItems}
+                className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+              >
+                Išduoti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

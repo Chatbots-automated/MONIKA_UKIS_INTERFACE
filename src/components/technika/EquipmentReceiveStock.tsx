@@ -18,7 +18,11 @@ interface EquipmentSupplier {
   vat_code?: string;
 }
 
-export function EquipmentReceiveStock() {
+interface EquipmentReceiveStockProps {
+  onReceived?: () => void;
+}
+
+export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps = {}) {
   const { logAction } = useAuth();
   const [products, setProducts] = useState<EquipmentProduct[]>([]);
   const [suppliers, setSuppliers] = useState<EquipmentSupplier[]>([]);
@@ -442,6 +446,7 @@ export function EquipmentReceiveStock() {
       alert(`Sėkmingai priimta ${stockEntries.length} prekių!`);
       handleRemoveFile();
       await loadData();
+      if (onReceived) onReceived();
     } catch (error: any) {
       alert('Klaida priimant prekes: ' + error.message);
     } finally {
