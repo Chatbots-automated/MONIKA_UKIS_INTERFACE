@@ -52,8 +52,6 @@ export function ToolsManagement() {
     serial_number: '',
     type: 'manual',
     condition: 'good',
-    purchase_date: '',
-    purchase_price: '0',
     location_id: '',
     notes: '',
   });
@@ -65,16 +63,59 @@ export function ToolsManagement() {
   const loadData = async () => {
     const [toolsRes, productsRes, locationsRes] = await Promise.all([
       supabase.from('tools').select(`
-        *,
-        product:equipment_products(name),
-        holder:users!tools_current_holder_fkey(full_name),
-        location:equipment_locations!tools_current_location_id_fkey(name)
+        id,
+        tool_number,
+        name,
+        type,
+        condition,
+        serial_number,
+        is_available,
+        current_holder,
+        current_location_id,
+        product_id,
+        notes
       `).order('tool_number'),
       supabase.from('equipment_products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('equipment_locations').select('id, name').eq('is_active', true).order('name'),
     ]);
 
-    if (toolsRes.data) setTools(toolsRes.data as any);
+    if (toolsRes.data) {
+      const toolsWithRelations = await Promise.all(
+        toolsRes.data.map(async (tool: any) => {
+          const relations: any = { ...tool, product: null, holder: null, location: null };
+
+          if (tool.product_id) {
+            const { data: product } = await supabase
+              .from('equipment_products')
+              .select('name')
+              .eq('id', tool.product_id)
+              .maybeSingle();
+            relations.product = product;
+          }
+
+          if (tool.current_holder) {
+            const { data: holder } = await supabase
+              .from('users')
+              .select('full_name')
+              .eq('id', tool.current_holder)
+              .maybeSingle();
+            relations.holder = holder;
+          }
+
+          if (tool.current_location_id) {
+            const { data: location } = await supabase
+              .from('equipment_locations')
+              .select('name')
+              .eq('id', tool.current_location_id)
+              .maybeSingle();
+            relations.location = location;
+          }
+
+          return relations;
+        })
+      );
+      setTools(toolsWithRelations);
+    }
     if (productsRes.data) setProducts(productsRes.data);
     if (locationsRes.data) setLocations(locationsRes.data);
   };
@@ -167,8 +208,6 @@ export function ToolsManagement() {
         serial_number: newToolForm.serial_number || null,
         type: newToolForm.type,
         condition: newToolForm.condition,
-        purchase_date: newToolForm.purchase_date || null,
-        purchase_price: parseFloat(newToolForm.purchase_price) || 0,
         current_location_id: newToolForm.location_id || null,
         notes: newToolForm.notes || null,
         is_available: true,
@@ -185,8 +224,6 @@ export function ToolsManagement() {
         serial_number: '',
         type: 'manual',
         condition: 'good',
-        purchase_date: '',
-        purchase_price: '0',
         location_id: '',
         notes: '',
       });
@@ -423,29 +460,6 @@ export function ToolsManagement() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pirkimo data</label>
-                  <input
-                    type="date"
-                    value={newToolForm.purchase_date}
-                    onChange={(e) => setNewToolForm({ ...newToolForm, purchase_date: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pirkimo kaina (€)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newToolForm.purchase_price}
-                    onChange={(e) => setNewToolForm({ ...newToolForm, purchase_price: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
                 <textarea
@@ -468,8 +482,6 @@ export function ToolsManagement() {
                     serial_number: '',
                     type: 'manual',
                     condition: 'good',
-                    purchase_date: '',
-                    purchase_price: '0',
                     location_id: '',
                     notes: '',
                   });

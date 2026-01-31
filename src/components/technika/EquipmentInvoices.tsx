@@ -433,7 +433,23 @@ export function EquipmentInvoices() {
         )}
 
         {invoiceData && headerData && (
-          <div className="mt-6 space-y-6">
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {pdfUrl && (
+              <div className="lg:sticky lg:top-6 lg:self-start">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Sąskaitos PDF</h3>
+                  <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '800px' }}>
+                    <iframe
+                      src={pdfUrl}
+                      className="w-full h-full"
+                      title="Invoice PDF"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-6">
             <div className="border-2 border-blue-300 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
@@ -918,6 +934,7 @@ export function EquipmentInvoices() {
                 <LucideCheckCircle className="w-5 h-5" />
                 Patvirtinti pajamavimą
               </button>
+            </div>
             </div>
           </div>
         )}
