@@ -787,8 +787,8 @@ export function EquipmentInvoices() {
                               step="0.01"
                               value={(() => {
                                 const itemData = getItemData(item, index);
-                                if (itemData.editable_total_price !== undefined) {
-                                  return itemData.editable_total_price;
+                                if ('editable_total_price' in (editedItems.get(index) || {})) {
+                                  return itemData.editable_total_price || '';
                                 }
                                 return itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00';
                               })()}
@@ -799,9 +799,12 @@ export function EquipmentInvoices() {
                                 if (qty > 0 && totalPrice) {
                                   const perUnitPrice = (parseFloat(totalPrice) / qty).toFixed(4);
                                   handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                } else if (!totalPrice) {
+                                  handleItemEdit(index, 'price_per_unit', '');
                                 }
                               }}
                               className="w-20 px-1 py-0.5 border-2 border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
+                              placeholder="0.00"
                             />
                           </div>
                           <div>

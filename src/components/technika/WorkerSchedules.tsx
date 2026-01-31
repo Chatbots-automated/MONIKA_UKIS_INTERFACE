@@ -36,8 +36,8 @@ export function WorkerSchedules() {
   const [selectedWorker, setSelectedWorker] = useState<string>('');
   const [selectedScheduleType, setSelectedScheduleType] = useState('work');
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ date: string; hour: number } | null>(null);
-  const [dragEnd, setDragEnd] = useState<{ date: string; hour: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ date: string; hour: number; dayIndex: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<{ date: string; hour: number; dayIndex: number } | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -101,46 +101,82 @@ export function WorkerSchedules() {
     });
   };
 
-  const handleMouseDown = (date: Date, hour: number) => {
+  const handleMouseDown = (date: Date, hour: number, dayIndex: number) => {
     if (!selectedWorker) {
       alert('Prašome pasirinkti darbuotoją');
       return;
     }
     setIsDragging(true);
     const dateKey = formatDateKey(date);
-    setDragStart({ date: dateKey, hour });
-    setDragEnd({ date: dateKey, hour });
+    setDragStart({ date: dateKey, hour, dayIndex });
+    setDragEnd({ date: dateKey, hour, dayIndex });
   };
 
-  const handleMouseEnter = (date: Date, hour: number) => {
+  const handleMouseEnter = (date: Date, hour: number, dayIndex: number) => {
     if (isDragging && dragStart) {
       const dateKey = formatDateKey(date);
-      if (dateKey === dragStart.date) {
-        setDragEnd({ date: dateKey, hour });
-      }
+      setDragEnd({ date: dateKey, hour, dayIndex });
     }
   };
 
   const handleMouseUp = async () => {
     if (isDragging && dragStart && dragEnd && selectedWorker) {
-      const startHour = Math.min(dragStart.hour, dragEnd.hour);
-      const endHour = Math.max(dragStart.hour, dragEnd.hour) + 1;
+      const schedules = [];
 
-      const shift_start = `${String(startHour).padStart(2, '0')}:00`;
-      const shift_end = `${String(endHour).padStart(2, '0')}:00`;
+      if (dragStart.dayIndex === dragEnd.dayIndex) {
+        const startHour = Math.min(dragStart.hour, dragEnd.hour);
+        const endHour = Math.max(dragStart.hour, dragEnd.hour) + 1;
 
-      try {
-        const { error } = await supabase.from('worker_schedules').insert({
+        schedules.push({
           worker_id: selectedWorker,
           date: dragStart.date,
-          shift_start,
-          shift_end,
+          shift_start: `${String(startHour).padStart(2, '0')}:00`,
+          shift_end: `${String(endHour).padStart(2, '0')}:00`,
           schedule_type: selectedScheduleType,
           notes: '',
         });
+      } else {
+        const minDayIndex = Math.min(dragStart.dayIndex, dragEnd.dayIndex);
+        const maxDayIndex = Math.max(dragStart.dayIndex, dragEnd.dayIndex);
+        const dates = getWeekDates();
 
+        for (let i = minDayIndex; i <= maxDayIndex; i++) {
+          const currentDate = formatDateKey(dates[i]);
+          let startHour, endHour;
+
+          if (i === minDayIndex) {
+            startHour = dragStart.dayIndex === minDayIndex ? dragStart.hour : dragEnd.hour;
+            endHour = 24;
+          } else if (i === maxDayIndex) {
+            startHour = 0;
+            endHour = (dragStart.dayIndex === maxDayIndex ? dragStart.hour : dragEnd.hour) + 1;
+          } else {
+            startHour = 0;
+            endHour = 24;
+          }
+
+          if (startHour < endHour) {
+            schedules.push({
+              worker_id: selectedWorker,
+              date: currentDate,
+              shift_start: `${String(startHour).padStart(2, '0')}:00`,
+              shift_end: `${String(endHour).padStart(2, '0')}:00`,
+              schedule_type: selectedScheduleType,
+              notes: '',
+            });
+          }
+        }
+      }
+
+      try {
+        const { error } = await supabase.from('worker_schedules').insert(schedules);
         if (error) throw error;
-        await logAction('add_worker_schedule', { worker_id: selectedWorker, date: dragStart.date });
+
+        await logAction('add_worker_schedule', {
+          worker_id: selectedWorker,
+          dates: schedules.map(s => s.date).join(', '),
+          count: schedules.length
+        });
         loadData();
       } catch (error: any) {
         console.error('Error:', error);
@@ -153,14 +189,31 @@ export function WorkerSchedules() {
     setDragEnd(null);
   };
 
-  const isCellInDragRange = (date: Date, hour: number) => {
+  const isCellInDragRange = (date: Date, hour: number, dayIndex: number) => {
     if (!isDragging || !dragStart || !dragEnd) return false;
-    const dateKey = formatDateKey(date);
-    if (dateKey !== dragStart.date) return false;
 
-    const minHour = Math.min(dragStart.hour, dragEnd.hour);
-    const maxHour = Math.max(dragStart.hour, dragEnd.hour);
-    return hour >= minHour && hour <= maxHour;
+    const minDayIndex = Math.min(dragStart.dayIndex, dragEnd.dayIndex);
+    const maxDayIndex = Math.max(dragStart.dayIndex, dragEnd.dayIndex);
+
+    if (dayIndex < minDayIndex || dayIndex > maxDayIndex) return false;
+
+    if (minDayIndex === maxDayIndex) {
+      const minHour = Math.min(dragStart.hour, dragEnd.hour);
+      const maxHour = Math.max(dragStart.hour, dragEnd.hour);
+      return hour >= minHour && hour <= maxHour;
+    }
+
+    if (dayIndex === minDayIndex) {
+      const startHour = dragStart.dayIndex === minDayIndex ? dragStart.hour : dragEnd.hour;
+      return hour >= startHour;
+    }
+
+    if (dayIndex === maxDayIndex) {
+      const endHour = dragStart.dayIndex === maxDayIndex ? dragStart.hour : dragEnd.hour;
+      return hour <= endHour;
+    }
+
+    return true;
   };
 
   const handleDeleteSchedule = async (scheduleId: string) => {
@@ -313,7 +366,7 @@ export function WorkerSchedules() {
                       <div className="relative">
                         {HOURS.map(hour => {
                           const cellSchedules = getSchedulesForCell(date, hour);
-                          const isInDragRange = isCellInDragRange(date, hour);
+                          const isInDragRange = isCellInDragRange(date, hour, dateIdx);
                           const scheduleTypeColor = SCHEDULE_TYPES.find(t => t.value === selectedScheduleType);
 
                           return (
@@ -324,8 +377,8 @@ export function WorkerSchedules() {
                                   ? scheduleTypeColor?.lightColor
                                   : 'hover:bg-gray-50'
                               }`}
-                              onMouseDown={() => handleMouseDown(date, hour)}
-                              onMouseEnter={() => handleMouseEnter(date, hour)}
+                              onMouseDown={() => handleMouseDown(date, hour, dateIdx)}
+                              onMouseEnter={() => handleMouseEnter(date, hour, dateIdx)}
                             >
                               {cellSchedules.map(schedule => {
                                 const scheduleType = SCHEDULE_TYPES.find(t => t.value === schedule.schedule_type);
