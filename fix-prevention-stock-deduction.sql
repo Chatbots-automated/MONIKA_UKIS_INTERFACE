@@ -98,7 +98,7 @@ CREATE TRIGGER trigger_sync_biocide_to_stock
   EXECUTE FUNCTION sync_biocide_usage_to_stock();
 
 -- Step 5: Backfill existing biocide_usage records to create missing usage_items
--- NOTE: We temporarily disable ALL triggers on usage_items during backfill
+-- NOTE: We temporarily disable USER triggers on usage_items during backfill
 -- because historical prevention products were already used but stock was never deducted
 DO $$
 DECLARE
@@ -108,9 +108,10 @@ DECLARE
 BEGIN
   RAISE NOTICE 'Backfilling biocide_usage records to usage_items for stock tracking...';
 
-  -- Temporarily disable ALL triggers on usage_items to bypass stock validation
-  ALTER TABLE usage_items DISABLE TRIGGER ALL;
-  RAISE NOTICE 'Disabled all triggers on usage_items for backfill';
+  -- Temporarily disable USER triggers on usage_items to bypass stock validation
+  -- (This only disables user-defined triggers, not system triggers like FK constraints)
+  ALTER TABLE usage_items DISABLE TRIGGER USER;
+  RAISE NOTICE 'Disabled user triggers on usage_items for backfill';
 
   -- Process all biocide_usage records with valid stock data
   FOR v_record IN
@@ -162,9 +163,9 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Re-enable ALL triggers on usage_items
-  ALTER TABLE usage_items ENABLE TRIGGER ALL;
-  RAISE NOTICE 'Re-enabled all triggers on usage_items';
+  -- Re-enable USER triggers on usage_items
+  ALTER TABLE usage_items ENABLE TRIGGER USER;
+  RAISE NOTICE 'Re-enabled user triggers on usage_items';
 
   RAISE NOTICE 'Backfill complete: % new usage_items created, % skipped (already exist)',
     v_inserted_count, v_skipped_count;
