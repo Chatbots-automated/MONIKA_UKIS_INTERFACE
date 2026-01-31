@@ -14,6 +14,15 @@ import {
   Settings
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { TechnikaDashboard } from './technika/TechnikaDashboard';
+import { EquipmentInvoices } from './technika/EquipmentInvoices';
+import { ToolsManagement } from './technika/ToolsManagement';
+import { PPEManagement } from './technika/PPEManagement';
+import { VehiclesManagement } from './technika/VehiclesManagement';
+import { WorkOrders } from './technika/WorkOrders';
+import { MaintenanceSchedules } from './technika/MaintenanceSchedules';
+import { EquipmentInventory } from './technika/EquipmentInventory';
+import { TechnikaReports } from './technika/TechnikaReports';
 
 interface TechnikaProps {
   onBackToModules: () => void;
@@ -182,181 +191,6 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         {/* Content area */}
         <div className="p-6">{renderContent()}</div>
       </div>
-    </div>
-  );
-}
-
-// Dashboard Component
-function TechnikaDashboard() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Įrankiai"
-          value="42"
-          subtitle="Aktyvūs įrankiai"
-          icon={Wrench}
-          color="blue"
-        />
-        <StatCard
-          title="Transportas"
-          value="8"
-          subtitle="Aktyvios transporto priemonės"
-          icon={Truck}
-          color="green"
-        />
-        <StatCard
-          title="Aptarnavimai"
-          value="3"
-          subtitle="Laukiantys aptarnavimai"
-          icon={ClipboardList}
-          color="amber"
-        />
-        <StatCard
-          title="PPE"
-          value="156"
-          subtitle="Vienetai sandėlyje"
-          icon={HardHat}
-          color="purple"
-        />
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Sveiki atvykę į Technikos modulį</h3>
-        <p className="text-gray-600 mb-4">
-          Šis modulis skirtas valdyti įrankius, asmeninės apsaugos priemones, transporto priemones ir jų aptarnavimą.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-gray-200 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">Įrankių valdymas</h4>
-            <p className="text-sm text-gray-600">
-              Registruokite įrankius, sekite jų išdavimą darbuotojams ir stebėkite būklę.
-            </p>
-          </div>
-          <div className="border border-gray-200 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">Transporto apskaita</h4>
-            <p className="text-sm text-gray-600">
-              Valdykite transporto priemonių parką, draudimus, TA ir planinį aptarnavimą.
-            </p>
-          </div>
-          <div className="border border-gray-200 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">PPE išdavimas</h4>
-            <p className="text-sm text-gray-600">
-              Sekite darbuotojams išduotų apsauginių priemonių ir drabužių apskaitą.
-            </p>
-          </div>
-          <div className="border border-gray-200 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">Aptarnavimų valdymas</h4>
-            <p className="text-sm text-gray-600">
-              Planuokite ir vykdykite transporto bei įrangos aptarnavimus ir remontus.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Placeholder components
-function EquipmentInvoices() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Sąskaitos ir pajamavimas</h3>
-      <p className="text-gray-600">Įrangos pirkimo sąskaitų valdymas ir pajamavimas į sandėlį.</p>
-    </div>
-  );
-}
-
-function ToolsManagement() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Įrankių valdymas</h3>
-      <p className="text-gray-600">Įrankių registravimas, išdavimas ir grąžinimas.</p>
-    </div>
-  );
-}
-
-function PPEManagement() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">PPE ir drabužių valdymas</h3>
-      <p className="text-gray-600">Apsauginių priemonių ir drabužių išdavimo registracija.</p>
-    </div>
-  );
-}
-
-function VehiclesManagement() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Transporto priemonių valdymas</h3>
-      <p className="text-gray-600">Transporto priemonių parkas, draudimai ir techninė apžiūra.</p>
-    </div>
-  );
-}
-
-function WorkOrders() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Aptarnavimų užsakymai</h3>
-      <p className="text-gray-600">Planinių ir neplaninių aptarnavimų valdymas.</p>
-    </div>
-  );
-}
-
-function MaintenanceSchedules() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Aptarnavimų grafikai</h3>
-      <p className="text-gray-600">Planinių aptarnavimų grafikų nustatymas pagal laiką, ridą ar motovalandas.</p>
-    </div>
-  );
-}
-
-function EquipmentInventory() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Sandėlio atsargos</h3>
-      <p className="text-gray-600">Tepalų, filtrų ir kitų eksploatacinių medžiagų atsargos.</p>
-    </div>
-  );
-}
-
-function TechnikaReports() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Ataskaitos</h3>
-      <p className="text-gray-600">Išlaidų, judėjimo ir terminų ataskaitos.</p>
-    </div>
-  );
-}
-
-// Stat Card Component
-interface StatCardProps {
-  title: string;
-  value: string;
-  subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: 'blue' | 'green' | 'amber' | 'purple';
-}
-
-function StatCard({ title, value, subtitle, icon: Icon, color }: StatCardProps) {
-  const colors = {
-    blue: 'from-blue-500 to-blue-600',
-    green: 'from-green-500 to-green-600',
-    amber: 'from-amber-500 to-amber-600',
-    purple: 'from-purple-500 to-purple-600',
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`w-12 h-12 bg-gradient-to-br ${colors[color]} rounded-lg flex items-center justify-center`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-      </div>
-      <h3 className="text-sm font-medium text-gray-600 mb-1">{title}</h3>
-      <p className="text-3xl font-bold text-gray-900 mb-1">{value}</p>
-      <p className="text-sm text-gray-500">{subtitle}</p>
     </div>
   );
 }
