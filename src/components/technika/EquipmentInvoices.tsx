@@ -205,33 +205,39 @@ export function EquipmentInvoices() {
       }
 
       const data = await response.json();
-      setInvoiceData(data);
+
+      // Parse the response - it might be an array with a single object
+      const parsedData = Array.isArray(data) ? data[0] : data;
+      setInvoiceData(parsedData);
 
       // Handle supplier data - it might be an object or a string
-      const supplierName = typeof data.supplier === 'object'
-        ? (data.supplier?.name || '')
-        : (data.supplier || '');
-      const supplierCode = typeof data.supplier === 'object'
-        ? (data.supplier?.code || '')
-        : (data.supplier_code || '');
-      const vatCode = typeof data.supplier === 'object'
-        ? (data.supplier?.vat_code || '')
-        : (data.vat_code || '');
+      const supplierName = typeof parsedData.supplier === 'object'
+        ? (parsedData.supplier?.name || '')
+        : (parsedData.supplier || '');
+      const supplierCode = typeof parsedData.supplier === 'object'
+        ? (parsedData.supplier?.code || '')
+        : (parsedData.supplier_code || '');
+      const vatCode = typeof parsedData.supplier === 'object'
+        ? (parsedData.supplier?.vat_code || '')
+        : (parsedData.vat_code || '');
+
+      // Handle invoice data - might be nested under "invoice" key
+      const invoiceInfo = parsedData.invoice || parsedData;
 
       setHeaderData({
         supplier_name: supplierName,
         supplier_code: supplierCode,
         vat_code: vatCode,
-        invoice_number: data.invoice_number || '',
-        invoice_date: data.invoice_date || new Date().toISOString().split('T')[0],
-        currency: data.currency || 'EUR',
-        total_net: data.total_net || 0,
-        total_vat: data.total_vat || 0,
-        total_gross: data.total_gross || 0,
+        invoice_number: invoiceInfo.number || invoiceInfo.invoice_number || '',
+        invoice_date: invoiceInfo.date || invoiceInfo.invoice_date || new Date().toISOString().split('T')[0],
+        currency: invoiceInfo.currency || 'EUR',
+        total_net: invoiceInfo.total_net || 0,
+        total_vat: invoiceInfo.total_vat || 0,
+        total_gross: invoiceInfo.total_gross || 0,
       });
 
       const newMatches = new Map<number, Product | null>();
-      data.items?.forEach((item: any, index: number) => {
+      parsedData.items?.forEach((item: any, index: number) => {
         const match = searchProductMatch(item.description || '');
         newMatches.set(index, match);
       });
@@ -285,15 +291,22 @@ export function EquipmentInvoices() {
         const product = matchedProducts.get(index);
         if (!product) continue;
 
-        const quantity = parseFloat(item.quantity) || 0;
-        const unitPrice = parseFloat(item.unit_price) || 0;
+        const itemData = getItemData(item, index);
+        const quantity = parseFloat(itemData.qty || itemData.quantity) || 0;
+        const totalPrice = itemData.editable_total_price !== undefined
+          ? parseFloat(itemData.editable_total_price)
+          : (itemData.net ? parseFloat(itemData.net) : 0);
+        const unitPrice = quantity > 0 ? totalPrice / quantity : 0;
+        const batchNumber = itemData.batch || itemData.lot || '';
+        const expiryDate = itemData.expiry || null;
 
         const { data: batch } = await supabase
           .from('equipment_batches')
           .insert({
             product_id: product.id,
             invoice_id: invoice.id,
-            batch_number: item.lot || '',
+            batch_number: batchNumber,
+            expiry_date: expiryDate,
             received_qty: quantity,
             qty_left: quantity,
             purchase_price: unitPrice,
@@ -303,12 +316,12 @@ export function EquipmentInvoices() {
 
         await supabase.from('equipment_invoice_items').insert({
           invoice_id: invoice.id,
-          line_no: index + 1,
+          line_no: itemData.line_no || index + 1,
           product_id: product.id,
-          description: item.description,
+          description: itemData.description,
           quantity,
           unit_price: unitPrice,
-          total_price: quantity * unitPrice,
+          total_price: totalPrice,
           batch_id: batch?.id,
         });
       }
@@ -591,29 +604,100 @@ export function EquipmentInvoices() {
                       </div>
 
                       <div className="space-y-2 text-xs mb-2">
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 gap-2 mb-2">
                           <div>
                             <span className="text-gray-600">SKU:</span>{' '}
                             <input
                               type="text"
                               value={getItemData(item, index).sku || ''}
                               onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
-                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              className="w-24 px-2 py-1 border border-gray-300 rounded text-xs"
                             />
                           </div>
                           <div>
-                            <span className="text-gray-600">Pak. dydis:</span>{' '}
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={getItemData(item, index).package_size || ''}
-                              onChange={(e) => {
-                                handleItemEdit(index, 'package_size', e.target.value);
-                                const pkgSize = parseFloat(e.target.value) || 0;
-                                const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
-                                if (pkgSize && pkgCount) {
-                                  const newQty = (pkgSize * pkgCount).toString();
+                            <span className="text-gray-600">Vienetas:</span>{' '}
+                            <span className="font-semibold text-gray-900">{matchedProduct?.unit_type || item.unit || 'vnt'}</span>
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg mb-2">
+                          <p className="text-xs text-blue-800 font-semibold mb-1.5">Pakuočių skaičiavimas (neprivaloma):</p>
+                          <div className="grid grid-cols-5 gap-2 items-end">
+                            <div>
+                              <label className="block text-gray-700 font-medium mb-0.5">Pak. dydis:</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={getItemData(item, index).package_size || ''}
+                                onChange={(e) => {
+                                  const newPkgSize = e.target.value;
+                                  handleItemEdit(index, 'package_size', newPkgSize);
+                                  const pkgSize = parseFloat(newPkgSize) || 0;
+                                  const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
+                                  if (pkgSize && pkgCount) {
+                                    const newQty = (pkgSize * pkgCount).toFixed(2);
+                                    handleItemEdit(index, 'qty', newQty);
+                                    const itemData = getItemData(item, index);
+                                    const totalPrice = itemData.editable_total_price !== undefined
+                                      ? parseFloat(itemData.editable_total_price)
+                                      : (itemData.net ? parseFloat(itemData.net) : 0);
+                                    const qty = parseFloat(newQty) || 0;
+                                    if (qty > 0 && totalPrice) {
+                                      const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                      handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                    }
+                                  }
+                                }}
+                                className="w-full px-2 py-1.5 border-2 border-blue-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-600"
+                                placeholder="10"
+                              />
+                            </div>
+                            <div className="text-center pb-2">
+                              <span className="text-blue-600 font-bold text-lg">×</span>
+                            </div>
+                            <div>
+                              <label className="block text-gray-700 font-medium mb-0.5">Kiek pak.:</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={getItemData(item, index).package_count || ''}
+                                onChange={(e) => {
+                                  const newPkgCount = e.target.value;
+                                  handleItemEdit(index, 'package_count', newPkgCount);
+                                  const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
+                                  const pkgCount = parseFloat(newPkgCount) || 0;
+                                  if (pkgSize && pkgCount) {
+                                    const newQty = (pkgSize * pkgCount).toFixed(2);
+                                    handleItemEdit(index, 'qty', newQty);
+                                    const itemData = getItemData(item, index);
+                                    const totalPrice = itemData.editable_total_price !== undefined
+                                      ? parseFloat(itemData.editable_total_price)
+                                      : (itemData.net ? parseFloat(itemData.net) : 0);
+                                    const qty = parseFloat(newQty) || 0;
+                                    if (qty > 0 && totalPrice) {
+                                      const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                      handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                    }
+                                  }
+                                }}
+                                className="w-full px-2 py-1.5 border-2 border-blue-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-600"
+                                placeholder="6"
+                              />
+                            </div>
+                            <div className="text-center pb-2">
+                              <span className="text-blue-600 font-bold text-lg">=</span>
+                            </div>
+                            <div>
+                              <label className="block text-gray-700 font-medium mb-0.5">Viso:</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={getItemData(item, index).qty || getItemData(item, index).quantity || ''}
+                                onChange={(e) => {
+                                  const newQty = e.target.value;
                                   handleItemEdit(index, 'qty', newQty);
+                                  handleItemEdit(index, 'package_size', '');
+                                  handleItemEdit(index, 'package_count', '');
                                   const itemData = getItemData(item, index);
                                   const totalPrice = itemData.editable_total_price !== undefined
                                     ? parseFloat(itemData.editable_total_price)
@@ -623,63 +707,22 @@ export function EquipmentInvoices() {
                                     const perUnitPrice = (totalPrice / qty).toFixed(4);
                                     handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                   }
-                                }
-                              }}
-                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
-                              placeholder="10"
-                            />
+                                }}
+                                className={`w-full px-2 py-1.5 border-2 rounded text-sm font-bold ${
+                                  getItemData(item, index).package_size && getItemData(item, index).package_count
+                                    ? 'border-emerald-400 bg-emerald-100 cursor-not-allowed text-emerald-800'
+                                    : 'border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-600'
+                                }`}
+                                readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
+                                title={getItemData(item, index).package_size && getItemData(item, index).package_count ? 'Apskaičiuota iš pakuočių' : 'Įveskite kiekį tiesiogiai'}
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-gray-600">Kiek pak.:</span>{' '}
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={getItemData(item, index).package_count || ''}
-                              onChange={(e) => {
-                                handleItemEdit(index, 'package_count', e.target.value);
-                                const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
-                                const pkgCount = parseFloat(e.target.value) || 0;
-                                if (pkgSize && pkgCount) {
-                                  const newQty = (pkgSize * pkgCount).toString();
-                                  handleItemEdit(index, 'qty', newQty);
-                                  const itemData = getItemData(item, index);
-                                  const totalPrice = itemData.editable_total_price !== undefined
-                                    ? parseFloat(itemData.editable_total_price)
-                                    : (itemData.net ? parseFloat(itemData.net) : 0);
-                                  const qty = parseFloat(newQty) || 0;
-                                  if (qty > 0 && totalPrice) {
-                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
-                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
-                                  }
-                                }
-                              }}
-                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
-                              placeholder="6"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Viso:</span>{' '}
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={getItemData(item, index).qty || getItemData(item, index).quantity || ''}
-                              onChange={(e) => {
-                                const newQty = e.target.value;
-                                handleItemEdit(index, 'qty', newQty);
-                                const itemData = getItemData(item, index);
-                                const totalPrice = itemData.editable_total_price !== undefined
-                                  ? parseFloat(itemData.editable_total_price)
-                                  : (itemData.net ? parseFloat(itemData.net) : 0);
-                                const qty = parseFloat(newQty) || 0;
-                                if (qty > 0 && totalPrice) {
-                                  const perUnitPrice = (totalPrice / qty).toFixed(4);
-                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
-                                }
-                              }}
-                              className="w-16 px-1 py-0.5 border border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
-                              readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
-                            />
-                          </div>
+                          {getItemData(item, index).package_size && getItemData(item, index).package_count && (
+                            <p className="text-xs text-blue-700 mt-1.5 font-medium">
+                              📦 {getItemData(item, index).package_size} × {getItemData(item, index).package_count} = {getItemData(item, index).qty} {matchedProduct?.unit_type || item.unit || 'vnt'}
+                            </p>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
