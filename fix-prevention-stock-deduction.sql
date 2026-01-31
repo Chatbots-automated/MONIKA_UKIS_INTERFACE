@@ -142,8 +142,7 @@ END $$;
 
 -- Add helpful comments
 COMMENT ON FUNCTION sync_biocide_usage_to_stock IS
-  'Automatically creates usage_items when prevention products (biocide_usage) are used. ' ||
-  'This ensures prevention products deduct from stock just like treatments and vaccinations.';
+  'Automatically creates usage_items when prevention products (biocide_usage) are used. This ensures prevention products deduct from stock just like treatments and vaccinations.';
 
 COMMENT ON TRIGGER trigger_sync_biocide_to_stock ON biocide_usage IS
   'Ensures prevention products (biocide_usage) deduct from stock by creating usage_items entries';
