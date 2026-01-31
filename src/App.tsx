@@ -24,12 +24,13 @@ import { TreatmentCostTab } from './components/TreatmentCostTab';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { InvoiceViewer } from './components/InvoiceViewer';
+import { Technika } from './components/Technika';
 import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro, Droplets } from 'lucide-react';
 
-type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | null;
+type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | null;
 
 interface Notification {
   id: string;
@@ -136,6 +137,21 @@ function App() {
             </div>
           </div>
         </div>
+      </RealtimeProvider>
+    );
+  }
+
+  if (selectedModule === 'technika') {
+    return (
+      <RealtimeProvider>
+        <Technika onBackToModules={() => setSelectedModule(null)} />
+        {notification && (
+          <NotificationToast
+            message={notification.message}
+            type={notification.type}
+            onClose={() => setNotification(null)}
+          />
+        )}
       </RealtimeProvider>
     );
   }
