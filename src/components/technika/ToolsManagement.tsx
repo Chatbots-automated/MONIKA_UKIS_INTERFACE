@@ -6,6 +6,7 @@ import { Wrench, Plus, Search, User, MapPin, CheckCircle, AlertCircle, Edit2, Sa
 interface Tool {
   id: string;
   tool_number: string;
+  name: string | null;
   type: string;
   condition: string;
   serial_number: string;
@@ -14,7 +15,7 @@ interface Tool {
   notes: string;
   product: {
     name: string;
-  };
+  } | null;
   holder: {
     full_name: string;
   } | null;
@@ -45,6 +46,7 @@ export function ToolsManagement() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [newToolForm, setNewToolForm] = useState({
+    name: '',
     product_id: '',
     tool_number: '',
     serial_number: '',
@@ -66,7 +68,7 @@ export function ToolsManagement() {
         *,
         product:equipment_products(name),
         holder:users!tools_current_holder_fkey(full_name),
-        location:equipment_locations(name)
+        location:equipment_locations!tools_current_location_id_fkey(name)
       `).order('tool_number'),
       supabase.from('equipment_products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('equipment_locations').select('id, name').eq('is_active', true).order('name'),
@@ -82,7 +84,8 @@ export function ToolsManagement() {
   const filteredTools = tools.filter(tool => {
     const matchesSearch =
       tool.tool_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      tool.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      tool.product?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tool.serial_number?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesType = filterType === 'all' || tool.type === filterType;
@@ -151,21 +154,22 @@ export function ToolsManagement() {
   };
 
   const handleAddTool = async () => {
-    if (!newToolForm.product_id || !newToolForm.tool_number) {
-      alert('Prašome užpildyti produktą ir įrankio numerį');
+    if (!newToolForm.tool_number || (!newToolForm.name && !newToolForm.product_id)) {
+      alert('Prašome užpildyti įrankio numerį ir pavadinimą (arba pasirinkti produktą)');
       return;
     }
 
     try {
       const { error } = await supabase.from('tools').insert({
-        product_id: newToolForm.product_id,
+        name: newToolForm.name || null,
+        product_id: newToolForm.product_id || null,
         tool_number: newToolForm.tool_number,
         serial_number: newToolForm.serial_number || null,
         type: newToolForm.type,
         condition: newToolForm.condition,
         purchase_date: newToolForm.purchase_date || null,
         purchase_price: parseFloat(newToolForm.purchase_price) || 0,
-        location_id: newToolForm.location_id || null,
+        current_location_id: newToolForm.location_id || null,
         notes: newToolForm.notes || null,
         is_available: true,
       });
@@ -175,6 +179,7 @@ export function ToolsManagement() {
       await logAction('add_tool', { tool_number: newToolForm.tool_number });
       setShowAddModal(false);
       setNewToolForm({
+        name: '',
         product_id: '',
         tool_number: '',
         serial_number: '',
@@ -262,7 +267,7 @@ export function ToolsManagement() {
                 )}
               </div>
 
-              <h4 className="font-medium text-gray-800 mb-2">{tool.product.name}</h4>
+              <h4 className="font-medium text-gray-800 mb-2">{tool.name || tool.product?.name || 'Įrankis'}</h4>
 
               <div className="space-y-1 text-sm text-gray-600 mb-3">
                 <p>Tipas: {tool.type === 'manual' ? 'Rankinis' : tool.type === 'electric' ? 'Elektrinis' : tool.type === 'pneumatic' ? 'Pneumatinis' : 'Hidraulinis'}</p>
@@ -325,7 +330,29 @@ export function ToolsManagement() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Įrankio numeris *</label>
+                <input
+                  type="text"
+                  value={newToolForm.tool_number}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, tool_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="T-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas *</label>
+                <input
+                  type="text"
+                  value={newToolForm.name}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, name: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="Veržliaraktis 10mm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas (nebūtina)</label>
                 <select
                   value={newToolForm.product_id}
                   onChange={(e) => setNewToolForm({ ...newToolForm, product_id: e.target.value })}
@@ -338,17 +365,6 @@ export function ToolsManagement() {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Įrankio numeris *</label>
-                <input
-                  type="text"
-                  value={newToolForm.tool_number}
-                  onChange={(e) => setNewToolForm({ ...newToolForm, tool_number: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="T-001"
-                />
               </div>
 
               <div>
@@ -446,6 +462,7 @@ export function ToolsManagement() {
                 onClick={() => {
                   setShowAddModal(false);
                   setNewToolForm({
+                    name: '',
                     product_id: '',
                     tool_number: '',
                     serial_number: '',
