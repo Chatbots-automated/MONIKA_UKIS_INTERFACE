@@ -98,13 +98,29 @@ CREATE TRIGGER trigger_sync_biocide_to_stock
   EXECUTE FUNCTION sync_biocide_usage_to_stock();
 
 -- Step 5: Backfill existing biocide_usage records to create missing usage_items
+-- NOTE: We temporarily disable the stock validation trigger during backfill
+-- because historical prevention products were already used but stock was never deducted
 DO $$
 DECLARE
   v_inserted_count integer := 0;
   v_skipped_count integer := 0;
   v_record record;
+  v_trigger_exists boolean;
 BEGIN
   RAISE NOTICE 'Backfilling biocide_usage records to usage_items for stock tracking...';
+
+  -- Check if the stock validation trigger exists
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trigger_check_usage_constraints'
+    AND tgrelid = 'usage_items'::regclass
+  ) INTO v_trigger_exists;
+
+  -- Temporarily disable the stock validation trigger if it exists
+  IF v_trigger_exists THEN
+    ALTER TABLE usage_items DISABLE TRIGGER trigger_check_usage_constraints;
+    RAISE NOTICE 'Disabled stock validation trigger for backfill';
+  END IF;
 
   -- Process all biocide_usage records with valid stock data
   FOR v_record IN
@@ -127,7 +143,7 @@ BEGIN
       SELECT 1 FROM usage_items
       WHERE biocide_usage_id = v_record.id
     ) THEN
-      -- Insert new usage_item for stock tracking
+      -- Insert new usage_item for stock tracking (without validation)
       INSERT INTO usage_items (
         treatment_id,
         vaccination_id,
@@ -156,8 +172,16 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- Re-enable the stock validation trigger if it was disabled
+  IF v_trigger_exists THEN
+    ALTER TABLE usage_items ENABLE TRIGGER trigger_check_usage_constraints;
+    RAISE NOTICE 'Re-enabled stock validation trigger';
+  END IF;
+
   RAISE NOTICE 'Backfill complete: % new usage_items created, % skipped (already exist)',
     v_inserted_count, v_skipped_count;
+
+  RAISE NOTICE 'Note: Historical prevention stock deductions have been recorded. Stock levels may appear negative for some batches that were fully consumed.';
 END $$;
 
 -- Add helpful comments

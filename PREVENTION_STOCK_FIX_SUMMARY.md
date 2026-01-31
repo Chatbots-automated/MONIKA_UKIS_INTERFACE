@@ -27,8 +27,19 @@ The system tracks all stock usage in the `usage_items` table:
 ### Why This Happens
 1. Visit form saves prevention products to `biocide_usage` table
 2. Stock is calculated **only** from `usage_items` table
-3. No trigger exists to sync `biocide_usage` → `usage_items`
-4. Result: Prevention items are recorded but don't reduce stock
+3. The `usage_items` table has a constraint requiring entries to be linked to either `treatment_id` OR `vaccination_id`
+4. Prevention products are neither, so they couldn't be added to `usage_items`
+5. Result: Prevention items are recorded but don't reduce stock
+
+### Technical Constraint Issue
+The `usage_items` table had a check constraint:
+```sql
+CHECK (
+  (treatment_id IS NOT NULL AND vaccination_id IS NULL) OR
+  (treatment_id IS NULL AND vaccination_id IS NOT NULL)
+)
+```
+This prevented any records that weren't linked to treatments or vaccinations.
 
 ## The Fix
 
@@ -36,20 +47,35 @@ The system tracks all stock usage in the `usage_items` table:
 
 ### What It Does
 
-1. **Creates a trigger** on `biocide_usage` table
+1. **Adds biocide_usage_id column** to `usage_items` table
+   - Creates new foreign key linking to `biocide_usage` records
+   - Allows prevention products to be tracked in stock system
+
+2. **Updates the constraint** on `usage_items`
+   - Changes from requiring treatment OR vaccination
+   - Now allows treatment OR vaccination OR biocide_usage
+   - Maintains data integrity with three valid sources
+
+3. **Creates a trigger** on `biocide_usage` table
    - Automatically creates `usage_items` entry when prevention product is used
+   - Links via the new `biocide_usage_id` column
    - Matches the pattern used for vaccinations (proven approach)
 
-2. **Backfills historical data**
+4. **Backfills historical data** (with safety measures)
    - Processes all existing `biocide_usage` records
+   - Temporarily disables stock validation during backfill
    - Creates missing `usage_items` entries
-   - Prevents duplicates
+   - Prevents duplicates by checking for existing biocide_usage_id link
    - Preserves original timestamps
+   - Re-enables stock validation after completion
 
-3. **Ensures consistency**
+5. **Ensures consistency**
    - Prevention items now work exactly like treatments and vaccinations
    - Stock deduction is automatic and reliable
    - No frontend changes needed
+
+### Important Note About Backfill
+Because historical prevention products were already used but stock was never deducted, some batch quantities may show as negative after the backfill. This accurately reflects that the products were consumed but not previously tracked.
 
 ## How to Apply
 
@@ -102,15 +128,17 @@ Inventory tab shows correct stock
 ```
 
 ### Tables Modified
-- `biocide_usage` - Trigger added
-- `usage_items` - New records created (current + historical)
+- `usage_items` - New `biocide_usage_id` column added, constraint updated, new records created (current + historical)
+- `biocide_usage` - Trigger added to auto-sync to usage_items
 - `batches` - Stock auto-recalculated from usage_items
 
 ### Safety Features
-- Duplicate prevention logic (won't create duplicate usage_items)
+- Duplicate prevention logic (checks for existing `biocide_usage_id` link)
+- Stock validation temporarily disabled during backfill to allow historical records
 - Preserves original timestamps for audit trail
 - Uses same pattern as vaccination stock deduction
 - Non-destructive (only adds data, never deletes)
+- Constraint ensures each usage_item has exactly one valid source
 
 ## Testing Checklist
 
@@ -131,13 +159,19 @@ After applying the fix:
 
 ### Historical Correction
 - All **past** prevention items will be backfilled
-- Stock levels will be corrected retroactively
+- Stock levels will be corrected retroactively to reflect actual usage
 - Audit trail maintained with original dates
+- **Important**: Some batches may show negative quantities if they were fully consumed. This is correct - it shows the products were used but not previously tracked.
 
 ### Consistency
 - Prevention items now behave identically to treatments and vaccinations
 - Single unified approach to stock tracking across the system
 - Predictable, reliable inventory management
+
+### Potential Side Effects
+1. **Negative Stock Quantities**: Batches that were fully consumed may now show negative values. This is accurate - the products were used historically but stock wasn't deducted.
+2. **Usage Reports**: Historical prevention usage will now appear in usage reports and analytics.
+3. **Batch Tracking**: All prevention products will now be properly linked to their source batches.
 
 ## Notes
 
