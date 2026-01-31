@@ -35,7 +35,7 @@ interface Invoice {
 }
 
 export function EquipmentInvoices() {
-  const { logAction } = useAuth();
+  const { logAction, user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -74,9 +74,17 @@ export function EquipmentInvoices() {
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
     ]);
 
+    console.log('Categories response:', categoriesRes);
+    if (categoriesRes.error) {
+      console.error('Error loading categories:', categoriesRes.error);
+    }
+
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
     if (productsRes.data) setProducts(productsRes.data);
-    if (categoriesRes.data) setCategories(categoriesRes.data);
+    if (categoriesRes.data) {
+      console.log('Loaded categories:', categoriesRes.data);
+      setCategories(categoriesRes.data);
+    }
     if (invoicesRes.data) setInvoices(invoicesRes.data);
   };
 
@@ -164,6 +172,7 @@ export function EquipmentInvoices() {
           description: newProductForm.description || null,
           min_stock_level: parseFloat(newProductForm.min_stock_level) || 0,
           is_active: true,
+          created_by: user?.id,
         })
         .select()
         .single();
@@ -193,6 +202,9 @@ export function EquipmentInvoices() {
       alert('Produktas sėkmingai sukurtas');
     } catch (error: any) {
       console.error('Error creating product:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('User ID:', user?.id);
+      console.error('Form data:', newProductForm);
       alert('Klaida kuriant produktą: ' + error.message);
     }
   };
