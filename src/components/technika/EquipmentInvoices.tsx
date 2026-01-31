@@ -164,7 +164,6 @@ export function EquipmentInvoices() {
           description: newProductForm.description || null,
           min_stock_level: parseFloat(newProductForm.min_stock_level) || 0,
           is_active: true,
-          created_by: user?.id,
         })
         .select()
         .single();
