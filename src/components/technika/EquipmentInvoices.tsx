@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Upload, FileText, X, Check, AlertCircle, Eye, Trash2, Package } from 'lucide-react';
+import { Upload, FileText, X, Check, AlertCircle, Eye, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2 } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -40,6 +40,19 @@ export function EquipmentInvoices() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<Map<number, Product | null>>(new Map());
   const [headerData, setHeaderData] = useState<any>(null);
+  const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState<any>(null);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    product_code: '',
+    unit_type: 'pcs',
+    manufacturer: '',
+    model_number: '',
+    description: '',
+    min_stock_level: '0',
+  });
 
   useEffect(() => {
     loadData();
@@ -80,6 +93,91 @@ export function EquipmentInvoices() {
     return match || null;
   };
 
+  const getItemData = (item: any, index: number) => {
+    const edited = editedItems.get(index);
+    return edited ? { ...item, ...edited } : item;
+  };
+
+  const handleItemEdit = (index: number, field: string, value: any) => {
+    const currentEdits = editedItems.get(index) || {};
+    const newEdits = new Map(editedItems);
+    newEdits.set(index, { ...currentEdits, [field]: value });
+    setEditedItems(newEdits);
+  };
+
+  const handleProductMatch = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    const newMatches = new Map(matchedProducts);
+    newMatches.set(index, product || null);
+    setMatchedProducts(newMatches);
+  };
+
+  const handleCreateProduct = (item: any, index: number) => {
+    const itemData = getItemData(item, index);
+    setCreatingProduct({ ...itemData, index });
+    setNewProductForm({
+      name: itemData.description || '',
+      product_code: itemData.sku || '',
+      unit_type: 'pcs',
+      manufacturer: '',
+      model_number: '',
+      description: itemData.description || '',
+      min_stock_level: '0',
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleSaveNewProduct = async () => {
+    if (!newProductForm.name) {
+      alert('Prašome įvesti produkto pavadinimą');
+      return;
+    }
+
+    try {
+      const { data: newProduct, error } = await supabase
+        .from('equipment_products')
+        .insert({
+          name: newProductForm.name,
+          product_code: newProductForm.product_code || null,
+          unit_type: newProductForm.unit_type,
+          manufacturer: newProductForm.manufacturer || null,
+          model_number: newProductForm.model_number || null,
+          description: newProductForm.description || null,
+          min_stock_level: parseFloat(newProductForm.min_stock_level) || 0,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setProducts([...products, newProduct]);
+
+      if (creatingProduct) {
+        handleProductMatch(creatingProduct.index, newProduct.id);
+      }
+
+      await logAction('create_equipment_product', { product_id: newProduct.id, name: newProduct.name });
+
+      setShowCreateModal(false);
+      setCreatingProduct(null);
+      setNewProductForm({
+        name: '',
+        product_code: '',
+        unit_type: 'pcs',
+        manufacturer: '',
+        model_number: '',
+        description: '',
+        min_stock_level: '0',
+      });
+
+      alert('Produktas sėkmingai sukurtas');
+    } catch (error: any) {
+      console.error('Error creating product:', error);
+      alert('Klaida kuriant produktą: ' + error.message);
+    }
+  };
+
   const handleFileUpload = async () => {
     if (!selectedFile) return;
 
@@ -110,8 +208,11 @@ export function EquipmentInvoices() {
       setInvoiceData(data);
       setHeaderData({
         supplier_name: data.supplier || '',
+        supplier_code: data.supplier_code || '',
+        vat_code: data.vat_code || '',
         invoice_number: data.invoice_number || '',
         invoice_date: data.invoice_date || new Date().toISOString().split('T')[0],
+        currency: data.currency || 'EUR',
         total_net: data.total_net || 0,
         total_vat: data.total_vat || 0,
         total_gross: data.total_gross || 0,
@@ -288,72 +389,420 @@ export function EquipmentInvoices() {
         )}
 
         {invoiceData && headerData && (
-          <div className="mt-6 space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tiekėjas</label>
-                <input
-                  type="text"
-                  value={headerData.supplier_name}
-                  onChange={e => setHeaderData({ ...headerData, supplier_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+          <div className="mt-6 space-y-6">
+            <div className="border-2 border-blue-300 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
+                <button
+                  onClick={() => setEditingHeader(!editingHeader)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  {editingHeader ? 'Baigti redaguoti' : 'Redaguoti'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sąskaitos nr.</label>
-                <input
-                  type="text"
-                  value={headerData.invoice_number}
-                  onChange={e => setHeaderData({ ...headerData, invoice_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">Sąskaita Nr.</label>
+                  {editingHeader ? (
+                    <input
+                      type="text"
+                      value={headerData.invoice_number}
+                      onChange={e => setHeaderData({ ...headerData, invoice_number: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"
+                    />
+                  ) : (
+                    <p className="text-lg font-bold text-gray-900">{headerData.invoice_number}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">Data</label>
+                  {editingHeader ? (
+                    <input
+                      type="date"
+                      value={headerData.invoice_date}
+                      onChange={e => setHeaderData({ ...headerData, invoice_date: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <p className="text-lg font-bold text-gray-900">{headerData.invoice_date}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">Valiuta</label>
+                  {editingHeader ? (
+                    <input
+                      type="text"
+                      value={headerData.currency}
+                      onChange={e => setHeaderData({ ...headerData, currency: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <p className="text-lg font-bold text-gray-900">{headerData.currency}</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                <input
-                  type="date"
-                  value={headerData.invoice_date}
-                  onChange={e => setHeaderData({ ...headerData, invoice_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+
+              <div className="border-t-2 border-blue-200 pt-4 mb-4">
+                <h4 className="text-lg font-bold text-blue-900 mb-3">Tiekėjas</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-blue-900 mb-1">Tiekėjas</label>
+                    {editingHeader ? (
+                      <input
+                        type="text"
+                        value={headerData.supplier_name}
+                        onChange={e => setHeaderData({ ...headerData, supplier_name: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"
+                      />
+                    ) : (
+                      <p className="text-lg font-bold text-gray-900">{headerData.supplier_name}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-blue-900 mb-1">Tiekėjo kodas</label>
+                    {editingHeader ? (
+                      <input
+                        type="text"
+                        value={headerData.supplier_code}
+                        onChange={e => setHeaderData({ ...headerData, supplier_code: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <p className="text-lg font-bold text-gray-900">{headerData.supplier_code || '-'}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-blue-900 mb-1">PVM kodas</label>
+                    {editingHeader ? (
+                      <input
+                        type="text"
+                        value={headerData.vat_code}
+                        onChange={e => setHeaderData({ ...headerData, vat_code: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <p className="text-lg font-bold text-gray-900">{headerData.vat_code || '-'}</p>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Suma su PVM</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={headerData.total_gross}
-                  onChange={e => setHeaderData({ ...headerData, total_gross: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+
+              <div className="border-t-2 border-blue-200 pt-4">
+                <h4 className="text-lg font-bold text-blue-900 mb-3">Sumos</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-4 border-2 border-blue-200">
+                    <label className="block text-sm font-semibold text-blue-900 mb-1">Suma be PVM</label>
+                    {editingHeader ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_net}
+                        onChange={e => setHeaderData({ ...headerData, total_net: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-bold text-lg"
+                      />
+                    ) : (
+                      <p className="text-2xl font-bold text-blue-600">{parseFloat(headerData.total_net).toFixed(2)} EUR</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border-2 border-amber-200">
+                    <label className="block text-sm font-semibold text-amber-900 mb-1">PVM</label>
+                    {editingHeader ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_vat}
+                        onChange={e => setHeaderData({ ...headerData, total_vat: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-bold text-lg"
+                      />
+                    ) : (
+                      <p className="text-2xl font-bold text-amber-600">{parseFloat(headerData.total_vat).toFixed(2)} EUR</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border-2 border-green-200">
+                    <label className="block text-sm font-semibold text-green-900 mb-1">Suma su PVM</label>
+                    {editingHeader ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={headerData.total_gross}
+                        onChange={e => setHeaderData({ ...headerData, total_gross: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold text-lg"
+                      />
+                    ) : (
+                      <p className="text-2xl font-bold text-green-600">{parseFloat(headerData.total_gross).toFixed(2)} EUR</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-800 mb-3">Prekės</h4>
-              <div className="space-y-2">
-                {invoiceData.items?.map((item: any, index: number) => (
-                  <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-800">{item.description}</p>
-                      <p className="text-sm text-gray-600">
-                        Kiekis: {item.quantity} | Kaina: €{item.unit_price}
-                      </p>
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Prekės ({invoiceData.items?.length || 0})</h3>
+              {invoiceData.items?.map((item: any, index: number) => {
+                const itemData = getItemData(item, index);
+                const matchedProduct = matchedProducts.get(index);
+                const isMatched = matchedProduct !== null && matchedProduct !== undefined;
+
+                return (
+                  <div
+                    key={index}
+                    className={`border-2 rounded-xl overflow-hidden transition-all ${
+                      isMatched
+                        ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50'
+                        : 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50'
+                    }`}
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        {isMatched ? (
+                          <LucideCheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="font-semibold text-gray-700 text-sm">#{item.line_no || index + 1}:</span>
+                          <input
+                            type="text"
+                            value={getItemData(item, index).description}
+                            onChange={(e) => handleItemEdit(index, 'description', e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-xs mb-2">
+                        <div className="grid grid-cols-4 gap-2">
+                          <div>
+                            <span className="text-gray-600">SKU:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).sku || ''}
+                              onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Pak. dydis:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_size || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_size', e.target.value);
+                                const pkgSize = parseFloat(e.target.value) || 0;
+                                const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
+                                if (pkgSize && pkgCount) {
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="10"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Kiek pak.:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_count || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_count', e.target.value);
+                                const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
+                                const pkgCount = parseFloat(e.target.value) || 0;
+                                if (pkgSize && pkgCount) {
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="6"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Viso:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).qty || getItemData(item, index).quantity || ''}
+                              onChange={(e) => {
+                                const newQty = e.target.value;
+                                handleItemEdit(index, 'qty', newQty);
+                                const itemData = getItemData(item, index);
+                                const totalPrice = itemData.editable_total_price !== undefined
+                                  ? parseFloat(itemData.editable_total_price)
+                                  : (itemData.net ? parseFloat(itemData.net) : 0);
+                                const qty = parseFloat(newQty) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
+                              readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={(() => {
+                                const itemData = getItemData(item, index);
+                                if (itemData.editable_total_price !== undefined) {
+                                  return itemData.editable_total_price;
+                                }
+                                return itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00';
+                              })()}
+                              onChange={(e) => {
+                                const totalPrice = e.target.value;
+                                handleItemEdit(index, 'editable_total_price', totalPrice);
+                                const qty = parseFloat(getItemData(item, index).qty || getItemData(item, index).quantity) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (parseFloat(totalPrice) / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
+                              className="w-20 px-1 py-0.5 border-2 border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">
+                              {matchedProduct?.unit_type || 'vnt'} kaina:
+                            </span>{' '}
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={getItemData(item, index).price_per_unit || ''}
+                              readOnly
+                              className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
+                            />
+                          </div>
+                        </div>
+                        {matchedProduct && (
+                          <div className="text-xs text-blue-600 mt-1 font-medium">
+                            📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.unit_type}
+                            {(() => {
+                              const itemData = getItemData(item, index);
+                              const finalPrice = itemData.editable_total_price !== undefined
+                                ? itemData.editable_total_price
+                                : (itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00');
+                              const qty = parseFloat(itemData.qty || itemData.quantity) || 0;
+                              if (finalPrice && qty) {
+                                return (
+                                  <span className="ml-2">
+                                    ({finalPrice} ÷ {qty} = {itemData.price_per_unit || '...'} EUR/{matchedProduct.unit_type})
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-200">
+                          <div>
+                            <span className="text-gray-600">Serija:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).batch || getItemData(item, index).lot || ''}
+                              onChange={(e) => handleItemEdit(index, 'batch', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              placeholder="Serijos Nr."
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Galioja iki:</span>{' '}
+                            <input
+                              type="date"
+                              value={getItemData(item, index).expiry || ''}
+                              onChange={(e) => handleItemEdit(index, 'expiry', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {isMatched ? (
+                        <div className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-emerald-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-800"><strong>Produktas:</strong></span>
+                            <select
+                              value={matchedProduct.id}
+                              onChange={(e) => handleProductMatch(index, e.target.value)}
+                              className="px-2 py-0.5 border border-emerald-300 rounded text-xs bg-white"
+                            >
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-amber-800 font-semibold">
+                              Produktas nerastas
+                            </p>
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleProductMatch(index, e.target.value);
+                                }
+                              }}
+                              className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white"
+                              defaultValue=""
+                            >
+                              <option value="">Pasirinkti esamą...</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            onClick={() => handleCreateProduct(item, index)}
+                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
+                          >
+                            <PlusCircle className="w-3 h-3" />
+                            Sukurti naują
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {matchedProducts.get(index) ? (
-                      <div className="flex items-center gap-2 text-green-600">
-                        <Check className="w-5 h-5" />
-                        <span className="text-sm">{matchedProducts.get(index)?.name}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-amber-600">
-                        <AlertCircle className="w-5 h-5" />
-                        <span className="text-sm">Neatpažinta</span>
-                      </div>
-                    )}
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
 
             <div className="flex justify-end gap-3">
@@ -362,6 +811,7 @@ export function EquipmentInvoices() {
                   setInvoiceData(null);
                   setSelectedFile(null);
                   setPdfUrl(null);
+                  setEditedItems(new Map());
                 }}
                 className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
@@ -369,8 +819,9 @@ export function EquipmentInvoices() {
               </button>
               <button
                 onClick={handleConfirmInvoice}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
               >
+                <LucideCheckCircle className="w-5 h-5" />
                 Patvirtinti pajamavimą
               </button>
             </div>
@@ -400,6 +851,140 @@ export function EquipmentInvoices() {
           ))}
         </div>
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują produktą</h3>
+
+            {creatingProduct && (
+              <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                <h4 className="text-sm font-bold text-blue-900 mb-2">Duomenys iš sąskaitos:</h4>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <span className="text-blue-700 font-medium">Pakuotės dydis:</span>
+                    <p className="font-bold text-blue-900">{creatingProduct.package_size || 'Nenustatyta'}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">Pakuočių skaičius:</span>
+                    <p className="font-bold text-blue-900">{creatingProduct.package_count || 'Nenustatyta'}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">Viso:</span>
+                    <p className="font-bold text-green-700">{creatingProduct.qty || creatingProduct.quantity || 'Nenustatyta'}</p>
+                  </div>
+                </div>
+                {creatingProduct.package_size && creatingProduct.package_count ? (
+                  <p className="text-xs text-blue-600 mt-2 font-medium">
+                    {creatingProduct.package_count} pak. × {creatingProduct.package_size} = {creatingProduct.qty || creatingProduct.quantity} viso
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600 mt-2 font-medium">
+                    Pakuočių informacija nebuvo automatiškai ištraukta iš PDF
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas *</label>
+                <input
+                  type="text"
+                  value={newProductForm.name}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produkto kodas</label>
+                <input
+                  type="text"
+                  value={newProductForm.product_code}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, product_code: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                  <select
+                    value={newProductForm.unit_type}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, unit_type: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="pcs">vnt</option>
+                    <option value="kg">kg</option>
+                    <option value="l">l</option>
+                    <option value="m">m</option>
+                    <option value="box">dėžė</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min. atsargos</label>
+                  <input
+                    type="number"
+                    value={newProductForm.min_stock_level}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, min_stock_level: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gamintojas</label>
+                <input
+                  type="text"
+                  value={newProductForm.manufacturer}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, manufacturer: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modelio numeris</label>
+                <input
+                  type="text"
+                  value={newProductForm.model_number}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, model_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Aprašymas</label>
+                <textarea
+                  value={newProductForm.description}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreatingProduct(null);
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveNewProduct}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Sukurti produktą
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
