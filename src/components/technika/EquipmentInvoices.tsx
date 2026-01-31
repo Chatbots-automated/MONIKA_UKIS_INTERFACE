@@ -821,7 +821,7 @@ export function EquipmentInvoices() {
                             />
                           </div>
                           <div>
-                            <span className="text-gray-600">Galioja iki:</span>{' '}
+                            <span className="text-gray-600">Galioja iki <span className="text-gray-400 text-xs">(optional)</span>:</span>{' '}
                             <input
                               type="date"
                               value={getItemData(item, index).expiry || ''}
@@ -874,7 +874,7 @@ export function EquipmentInvoices() {
                           </div>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded text-xs font-medium hover:from-gray-700 hover:to-gray-800 transition-all shadow-md"
+                            className="flex items-center gap-1 px-3 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 transition-all shadow-md"
                           >
                             <PlusCircle className="w-3 h-3" />
                             Sukurti naują
