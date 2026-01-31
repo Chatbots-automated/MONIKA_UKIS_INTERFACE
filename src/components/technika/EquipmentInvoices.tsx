@@ -620,11 +620,11 @@ export function EquipmentInvoices() {
                           </div>
                         </div>
 
-                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg mb-2">
-                          <p className="text-xs text-blue-800 font-semibold mb-1.5">Pakuočių skaičiavimas (neprivaloma):</p>
+                        <div className="p-3 bg-gray-50 border-2 border-gray-300 rounded mb-2">
+                          <p className="text-xs text-gray-700 font-bold mb-2 uppercase tracking-wide">Pakuočių skaičiavimas (optional)</p>
                           <div className="grid grid-cols-5 gap-2 items-end">
                             <div>
-                              <label className="block text-gray-700 font-medium mb-0.5">Pak. dydis:</label>
+                              <label className="block text-gray-700 font-medium mb-0.5 text-xs">Pak. dydis:</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -632,31 +632,34 @@ export function EquipmentInvoices() {
                                 onChange={(e) => {
                                   const newPkgSize = e.target.value;
                                   handleItemEdit(index, 'package_size', newPkgSize);
+
+                                  const itemData = getItemData(item, index);
                                   const pkgSize = parseFloat(newPkgSize) || 0;
-                                  const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
-                                  if (pkgSize && pkgCount) {
+                                  const pkgCount = parseFloat(itemData.package_count || '0') || 0;
+
+                                  if (pkgSize > 0 && pkgCount > 0) {
                                     const newQty = (pkgSize * pkgCount).toFixed(2);
                                     handleItemEdit(index, 'qty', newQty);
-                                    const itemData = getItemData(item, index);
+
                                     const totalPrice = itemData.editable_total_price !== undefined
                                       ? parseFloat(itemData.editable_total_price)
                                       : (itemData.net ? parseFloat(itemData.net) : 0);
-                                    const qty = parseFloat(newQty) || 0;
-                                    if (qty > 0 && totalPrice) {
-                                      const perUnitPrice = (totalPrice / qty).toFixed(4);
+
+                                    if (totalPrice > 0) {
+                                      const perUnitPrice = (totalPrice / parseFloat(newQty)).toFixed(4);
                                       handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                     }
                                   }
                                 }}
-                                className="w-full px-2 py-1.5 border-2 border-blue-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-600"
+                                className="w-full px-3 py-2 border border-gray-400 rounded bg-white text-sm focus:ring-2 focus:ring-gray-600 focus:border-gray-600 font-mono"
                                 placeholder="10"
                               />
                             </div>
                             <div className="text-center pb-2">
-                              <span className="text-blue-600 font-bold text-lg">×</span>
+                              <span className="text-gray-600 font-bold text-lg">×</span>
                             </div>
                             <div>
-                              <label className="block text-gray-700 font-medium mb-0.5">Kiek pak.:</label>
+                              <label className="block text-gray-700 font-medium mb-0.5 text-xs">Kiek pak.:</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -664,31 +667,34 @@ export function EquipmentInvoices() {
                                 onChange={(e) => {
                                   const newPkgCount = e.target.value;
                                   handleItemEdit(index, 'package_count', newPkgCount);
-                                  const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
+
+                                  const itemData = getItemData(item, index);
+                                  const pkgSize = parseFloat(itemData.package_size || '0') || 0;
                                   const pkgCount = parseFloat(newPkgCount) || 0;
-                                  if (pkgSize && pkgCount) {
+
+                                  if (pkgSize > 0 && pkgCount > 0) {
                                     const newQty = (pkgSize * pkgCount).toFixed(2);
                                     handleItemEdit(index, 'qty', newQty);
-                                    const itemData = getItemData(item, index);
+
                                     const totalPrice = itemData.editable_total_price !== undefined
                                       ? parseFloat(itemData.editable_total_price)
                                       : (itemData.net ? parseFloat(itemData.net) : 0);
-                                    const qty = parseFloat(newQty) || 0;
-                                    if (qty > 0 && totalPrice) {
-                                      const perUnitPrice = (totalPrice / qty).toFixed(4);
+
+                                    if (totalPrice > 0) {
+                                      const perUnitPrice = (totalPrice / parseFloat(newQty)).toFixed(4);
                                       handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                     }
                                   }
                                 }}
-                                className="w-full px-2 py-1.5 border-2 border-blue-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-600"
+                                className="w-full px-3 py-2 border border-gray-400 rounded bg-white text-sm focus:ring-2 focus:ring-gray-600 focus:border-gray-600 font-mono"
                                 placeholder="6"
                               />
                             </div>
                             <div className="text-center pb-2">
-                              <span className="text-blue-600 font-bold text-lg">=</span>
+                              <span className="text-gray-600 font-bold text-lg">=</span>
                             </div>
                             <div>
-                              <label className="block text-gray-700 font-medium mb-0.5">Viso:</label>
+                              <label className="block text-gray-700 font-medium mb-0.5 text-xs">Viso:</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -698,20 +704,22 @@ export function EquipmentInvoices() {
                                   handleItemEdit(index, 'qty', newQty);
                                   handleItemEdit(index, 'package_size', '');
                                   handleItemEdit(index, 'package_count', '');
+
                                   const itemData = getItemData(item, index);
                                   const totalPrice = itemData.editable_total_price !== undefined
                                     ? parseFloat(itemData.editable_total_price)
                                     : (itemData.net ? parseFloat(itemData.net) : 0);
                                   const qty = parseFloat(newQty) || 0;
-                                  if (qty > 0 && totalPrice) {
+
+                                  if (qty > 0 && totalPrice > 0) {
                                     const perUnitPrice = (totalPrice / qty).toFixed(4);
                                     handleItemEdit(index, 'price_per_unit', perUnitPrice);
                                   }
                                 }}
-                                className={`w-full px-2 py-1.5 border-2 rounded text-sm font-bold ${
+                                className={`w-full px-3 py-2 border rounded text-sm font-bold font-mono ${
                                   getItemData(item, index).package_size && getItemData(item, index).package_count
-                                    ? 'border-emerald-400 bg-emerald-100 cursor-not-allowed text-emerald-800'
-                                    : 'border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-600'
+                                    ? 'border-slate-500 bg-slate-100 cursor-not-allowed text-slate-700'
+                                    : 'border-gray-400 bg-white focus:ring-2 focus:ring-gray-600 focus:border-gray-600'
                                 }`}
                                 readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
                                 title={getItemData(item, index).package_size && getItemData(item, index).package_count ? 'Apskaičiuota iš pakuočių' : 'Įveskite kiekį tiesiogiai'}
@@ -719,9 +727,11 @@ export function EquipmentInvoices() {
                             </div>
                           </div>
                           {getItemData(item, index).package_size && getItemData(item, index).package_count && (
-                            <p className="text-xs text-blue-700 mt-1.5 font-medium">
-                              📦 {getItemData(item, index).package_size} × {getItemData(item, index).package_count} = {getItemData(item, index).qty} {matchedProduct?.unit_type || item.unit || 'vnt'}
-                            </p>
+                            <div className="mt-2 px-2 py-1 bg-slate-100 border border-slate-300 rounded">
+                              <p className="text-xs text-slate-700 font-mono font-medium">
+                                = {getItemData(item, index).package_size} × {getItemData(item, index).package_count} = {getItemData(item, index).qty} {matchedProduct?.unit_type || item.unit || 'vnt'}
+                              </p>
+                            </div>
                           )}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
