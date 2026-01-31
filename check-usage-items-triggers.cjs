@@ -1,38 +1,55 @@
 const { createClient } = require('@supabase/supabase-js');
-const { Client } = require('pg');
 require('dotenv').config();
 
-(async () => {
-  const client = new Client({
-    connectionString: process.env.VITE_SUPABASE_DB_URL,
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_ANON_KEY
+);
+
+async function checkTriggers() {
+  console.log('Checking triggers on usage_items table...\n');
+  
+  const { data, error } = await supabase.rpc('exec_sql', {
+    sql_query: `
+      SELECT 
+        tgname as trigger_name,
+        tgtype,
+        tgenabled,
+        pg_get_triggerdef(oid) as trigger_definition
+      FROM pg_trigger
+      WHERE tgrelid = 'usage_items'::regclass
+      AND tgisinternal = false
+      ORDER BY tgname;
+    `
   });
 
-  await client.connect();
-
-  // Check triggers on usage_items
-  const result = await client.query(`
-    SELECT
-      t.tgname as trigger_name,
-      t.tgenabled as enabled,
-      pg_get_triggerdef(t.oid) as trigger_def
-    FROM pg_trigger t
-    JOIN pg_class c ON c.oid = t.tgrelid
-    WHERE c.relname = 'usage_items'
-    AND NOT t.tgisinternal
-    ORDER BY t.tgname;
-  `);
-
-  console.log('=== Triggers on usage_items table ===\n');
-
-  if (result.rows.length === 0) {
-    console.log('No triggers found!');
-  } else {
-    result.rows.forEach(row => {
-      console.log(`Trigger: ${row.trigger_name}`);
-      console.log(`Enabled: ${row.enabled}`);
-      console.log(`Definition:\n${row.trigger_def}\n`);
+  if (error) {
+    console.log('Error:', error.message);
+    console.log('\nTrying alternative method...');
+    
+    // Try to get function that's being called
+    const { data: funcData, error: funcError } = await supabase.rpc('exec_sql', {
+      sql_query: `
+        SELECT 
+          proname as function_name,
+          pg_get_functiondef(oid) as definition
+        FROM pg_proc
+        WHERE proname LIKE '%usage%constraint%'
+        OR proname LIKE '%check_usage%'
+        ORDER BY proname;
+      `
     });
+    
+    if (funcError) {
+      console.log('Function check error:', funcError.message);
+    } else {
+      console.log('Functions related to usage constraints:');
+      console.log(JSON.stringify(funcData, null, 2));
+    }
+  } else {
+    console.log('Triggers on usage_items:');
+    console.log(JSON.stringify(data, null, 2));
   }
+}
 
-  await client.end();
-})();
+checkTriggers();

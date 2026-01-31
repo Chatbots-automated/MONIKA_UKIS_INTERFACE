@@ -112,13 +112,13 @@ BEGIN
   -- Check if the stock validation trigger exists
   SELECT EXISTS (
     SELECT 1 FROM pg_trigger
-    WHERE tgname = 'trigger_check_usage_constraints'
+    WHERE tgname = 'usage_items_stock_check_trigger'
     AND tgrelid = 'usage_items'::regclass
   ) INTO v_trigger_exists;
 
   -- Temporarily disable the stock validation trigger if it exists
   IF v_trigger_exists THEN
-    ALTER TABLE usage_items DISABLE TRIGGER trigger_check_usage_constraints;
+    ALTER TABLE usage_items DISABLE TRIGGER usage_items_stock_check_trigger;
     RAISE NOTICE 'Disabled stock validation trigger for backfill';
   END IF;
 
@@ -174,7 +174,7 @@ BEGIN
 
   -- Re-enable the stock validation trigger if it was disabled
   IF v_trigger_exists THEN
-    ALTER TABLE usage_items ENABLE TRIGGER trigger_check_usage_constraints;
+    ALTER TABLE usage_items ENABLE TRIGGER usage_items_stock_check_trigger;
     RAISE NOTICE 'Re-enabled stock validation trigger';
   END IF;
 
