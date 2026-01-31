@@ -1,0 +1,828 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { Plus, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Save, Edit2 } from 'lucide-react';
+
+interface EquipmentProduct {
+  id: string;
+  name: string;
+  product_code?: string;
+  category_id?: string;
+  unit_type?: string;
+}
+
+interface EquipmentSupplier {
+  id: string;
+  name: string;
+  code?: string;
+  vat_code?: string;
+}
+
+export function EquipmentReceiveStock() {
+  const { logAction } = useAuth();
+  const [products, setProducts] = useState<EquipmentProduct[]>([]);
+  const [suppliers, setSuppliers] = useState<EquipmentSupplier[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadMessage, setUploadMessage] = useState('');
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [matchedProducts, setMatchedProducts] = useState<Map<number, EquipmentProduct | null>>(new Map());
+  const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
+  const [itemsToReceive, setItemsToReceive] = useState<Map<number, boolean>>(new Map());
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState<any>(null);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    product_code: '',
+    category_id: '',
+    unit_type: 'pcs',
+    manufacturer: '',
+    model_number: '',
+    description: '',
+    min_stock_level: '0',
+  });
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerData, setHeaderData] = useState<any>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [bulkReceiving, setBulkReceiving] = useState(false);
+  const [defaultLocationId, setDefaultLocationId] = useState<string>('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const [productsRes, suppliersRes, categoriesRes, locationsRes] = await Promise.all([
+      supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
+      supabase.from('equipment_suppliers').select('*').eq('is_active', true).order('name'),
+      supabase.from('equipment_categories').select('*').order('name'),
+      supabase.from('equipment_locations').select('*').order('name'),
+    ]);
+
+    if (productsRes.data) setProducts(productsRes.data);
+    if (suppliersRes.data) setSuppliers(suppliersRes.data);
+    if (categoriesRes.data) setCategories(categoriesRes.data);
+    if (locationsRes.data) {
+      setLocations(locationsRes.data);
+      const mainWarehouse = locationsRes.data.find(l => l.location_type === 'warehouse');
+      if (mainWarehouse) setDefaultLocationId(mainWarehouse.id);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setSelectedFile(file);
+      setUploadStatus('idle');
+      setUploadMessage('');
+      const url = URL.createObjectURL(file);
+      setPdfUrl(url);
+    } else {
+      alert('Prašome pasirinkti PDF failą');
+      e.target.value = '';
+    }
+  };
+
+  const searchProductMatch = async (itemDescription: string): Promise<EquipmentProduct | null> => {
+    const searchTerm = itemDescription.toLowerCase();
+    const match = products.find(p =>
+      p.name.toLowerCase().includes(searchTerm) ||
+      searchTerm.includes(p.name.toLowerCase())
+    );
+    return match || null;
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+
+    setUploadStatus('uploading');
+    setUploadMessage('Įkeliama...');
+
+    try {
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const sanitizeFilename = (filename: string): string => {
+        return filename
+          .replace(/[()]/g, '')
+          .replace(/[^\w\s.-]/g, '_')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_');
+      };
+
+      const sanitizedFilename = sanitizeFilename(selectedFile.name);
+
+      const response = await fetch('https://n8n-up8s.onrender.com/webhook/36549f46-a08b-4790-bf56-40cdc919e4c0', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${sanitizedFilename}"`,
+        },
+        body: arrayBuffer,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Serverio klaida: ${response.status}`);
+      }
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        throw new Error('Nepavyko perskaityti serverio atsakymo');
+      }
+
+      let invoiceObject;
+      if (Array.isArray(data) && data.length > 0) {
+        invoiceObject = data[0];
+      } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+        invoiceObject = data;
+      } else {
+        throw new Error('Netinkamas atsakymo formatas');
+      }
+
+      if (!invoiceObject.items || !Array.isArray(invoiceObject.items)) {
+        throw new Error('Atsakyme nerasta prekių sąrašo');
+      }
+
+      setInvoiceData(invoiceObject);
+      setHeaderData({
+        invoice_number: invoiceObject.invoice.number,
+        invoice_date: invoiceObject.invoice.date,
+        supplier_name: invoiceObject.supplier.name,
+        supplier_code: invoiceObject.supplier.code,
+        supplier_vat: invoiceObject.supplier.vat_code,
+        total_net: invoiceObject.invoice.total_net,
+        total_vat: invoiceObject.invoice.total_vat,
+        total_gross: invoiceObject.invoice.total_gross,
+      });
+
+      const matches = new Map<number, EquipmentProduct | null>();
+      const receiveFlags = new Map<number, boolean>();
+      for (let i = 0; i < invoiceObject.items.length; i++) {
+        const match = await searchProductMatch(invoiceObject.items[i].description);
+        matches.set(i, match);
+        receiveFlags.set(i, true);
+      }
+      setMatchedProducts(matches);
+      setItemsToReceive(receiveFlags);
+
+      setUploadStatus('success');
+      setUploadMessage(`PDF sėkmingai įkeltas! Rasta ${invoiceObject.items.length} prekių.`);
+    } catch (error: any) {
+      setUploadStatus('error');
+      setUploadMessage(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
+    setSelectedFile(null);
+    setUploadStatus('idle');
+    setUploadMessage('');
+    setInvoiceData(null);
+    setMatchedProducts(new Map());
+    setEditedItems(new Map());
+    setItemsToReceive(new Map());
+    setHeaderData(null);
+    setEditingHeader(false);
+  };
+
+  const handleSaveHeader = () => {
+    if (headerData && invoiceData) {
+      setInvoiceData({
+        ...invoiceData,
+        invoice: {
+          ...invoiceData.invoice,
+          number: headerData.invoice_number,
+          date: headerData.invoice_date,
+          total_net: parseFloat(headerData.total_net) || 0,
+          total_vat: parseFloat(headerData.total_vat) || 0,
+          total_gross: parseFloat(headerData.total_gross) || 0,
+        },
+        supplier: {
+          ...invoiceData.supplier,
+          name: headerData.supplier_name,
+          code: headerData.supplier_code,
+          vat_code: headerData.supplier_vat,
+        },
+      });
+    }
+    setEditingHeader(false);
+  };
+
+  const getItemData = (item: any, index: number) => {
+    const edited = editedItems.get(index);
+    return edited || item;
+  };
+
+  const handleItemEdit = (index: number, field: string, value: any) => {
+    const currentItem = invoiceData.items[index];
+    const edited = editedItems.get(index) || { ...currentItem };
+    edited[field] = value;
+    const newEdited = new Map(editedItems);
+    newEdited.set(index, edited);
+    setEditedItems(newEdited);
+  };
+
+  const handleProductMatch = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    const newMatches = new Map(matchedProducts);
+    newMatches.set(index, product || null);
+    setMatchedProducts(newMatches);
+  };
+
+  const handleCreateProduct = (item: any, index: number) => {
+    const itemData = getItemData(item, index);
+    setCreatingProduct({ ...itemData, index });
+    setNewProductForm({
+      name: itemData.description || '',
+      product_code: itemData.sku || '',
+      category_id: '',
+      unit_type: itemData.unit || 'pcs',
+      manufacturer: '',
+      model_number: '',
+      description: itemData.description || '',
+      min_stock_level: '0',
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleSaveNewProduct = async () => {
+    if (!newProductForm.name) {
+      alert('Įveskite produkto pavadinimą');
+      return;
+    }
+
+    try {
+      const productData = {
+        name: newProductForm.name,
+        product_code: newProductForm.product_code || null,
+        category_id: newProductForm.category_id || null,
+        unit_type: newProductForm.unit_type,
+        manufacturer: newProductForm.manufacturer || null,
+        model_number: newProductForm.model_number || null,
+        description: newProductForm.description || null,
+        min_stock_level: parseFloat(newProductForm.min_stock_level) || 0,
+        is_active: true,
+      };
+
+      const { data: newProduct, error } = await supabase
+        .from('equipment_products')
+        .insert(productData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await loadData();
+
+      if (creatingProduct.index !== undefined) {
+        const newMatches = new Map(matchedProducts);
+        newMatches.set(creatingProduct.index, newProduct);
+        setMatchedProducts(newMatches);
+      }
+
+      setShowCreateModal(false);
+      setCreatingProduct(null);
+      setNewProductForm({
+        name: '',
+        product_code: '',
+        category_id: '',
+        unit_type: 'pcs',
+        manufacturer: '',
+        model_number: '',
+        description: '',
+        min_stock_level: '0',
+      });
+      alert('Produktas sėkmingai sukurtas!');
+    } catch (error: any) {
+      alert('Klaida kuriant produktą: ' + error.message);
+    }
+  };
+
+  const handleBulkReceive = async () => {
+    if (!invoiceData || !invoiceData.supplier) {
+      alert('Nėra sąskaitos duomenų');
+      return;
+    }
+
+    const matchedItems = invoiceData.items.filter((_: any, index: number) => {
+      const matched = matchedProducts.get(index);
+      const shouldReceive = itemsToReceive.get(index) !== false;
+      return matched !== undefined && matched !== null && shouldReceive;
+    });
+
+    if (matchedItems.length === 0) {
+      alert('Nėra susieti produktai. Prašome susieti produktus prieš priėmimą.');
+      return;
+    }
+
+    setBulkReceiving(true);
+
+    try {
+      let supplierId = invoiceData.supplier_id;
+
+      if (!supplierId) {
+        const { data: existingSupplier } = await supabase
+          .from('equipment_suppliers')
+          .select('id')
+          .eq('name', invoiceData.supplier.name)
+          .maybeSingle();
+
+        if (existingSupplier) {
+          supplierId = existingSupplier.id;
+        } else {
+          const { data: newSupplier, error: supplierError } = await supabase
+            .from('equipment_suppliers')
+            .insert({
+              name: invoiceData.supplier.name,
+              code: invoiceData.supplier.code || null,
+              vat_code: invoiceData.supplier.vat_code || null,
+            })
+            .select()
+            .single();
+
+          if (supplierError) throw supplierError;
+          supplierId = newSupplier.id;
+        }
+      }
+
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('equipment_invoices')
+        .insert({
+          invoice_number: invoiceData.invoice.number,
+          invoice_date: invoiceData.invoice.date || new Date().toISOString().split('T')[0],
+          supplier_id: supplierId,
+          supplier_name: invoiceData.supplier.name,
+          currency: invoiceData.invoice.currency || 'EUR',
+          total_net: parseFloat(invoiceData.invoice.total_net) || 0,
+          total_vat: parseFloat(invoiceData.invoice.total_vat) || 0,
+          total_gross: parseFloat(invoiceData.invoice.total_gross) || 0,
+          pdf_url: selectedFile?.name || null,
+          status: 'received',
+        })
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      const stockEntries = [];
+      const invoiceItemsEntries = [];
+
+      for (let i = 0; i < invoiceData.items.length; i++) {
+        const matched = matchedProducts.get(i);
+        const shouldReceive = itemsToReceive.get(i) !== false;
+
+        if (!matched || !shouldReceive) continue;
+
+        const item = invoiceData.items[i];
+        const itemData = getItemData(item, i);
+
+        const quantity = parseFloat(itemData.qty) || 0;
+        const unitPrice = parseFloat(itemData.unit_price) || 0;
+        const totalPrice = parseFloat(itemData.net) || (quantity * unitPrice);
+
+        const batchData = {
+          product_id: matched.id,
+          batch_number: itemData.batch || null,
+          lot_number: itemData.batch || null,
+          invoice_id: invoice.id,
+          location_id: defaultLocationId || null,
+          received_qty: quantity,
+          qty_left: quantity,
+          purchase_price: unitPrice,
+          expiry_date: itemData.expiry || null,
+          notes: itemData.description || null,
+        };
+
+        stockEntries.push(batchData);
+
+        const invoiceItemData = {
+          invoice_id: invoice.id,
+          line_no: itemData.line_no || i + 1,
+          product_id: matched.id,
+          description: itemData.description,
+          quantity: quantity,
+          unit_price: unitPrice,
+          total_price: totalPrice,
+          vat_rate: parseFloat(itemData.vat_rate) || 0,
+        };
+
+        invoiceItemsEntries.push(invoiceItemData);
+      }
+
+      if (stockEntries.length > 0) {
+        const { error: batchError } = await supabase.from('equipment_batches').insert(stockEntries);
+        if (batchError) throw batchError;
+      }
+
+      if (invoiceItemsEntries.length > 0) {
+        const { error: itemsError } = await supabase.from('equipment_invoice_items').insert(invoiceItemsEntries);
+        if (itemsError) throw itemsError;
+      }
+
+      await logAction(
+        'receive_equipment_stock',
+        'equipment_invoices',
+        invoice.id,
+        null,
+        {
+          invoice_number: invoice.invoice_number,
+          items_count: stockEntries.length,
+          total_gross: invoice.total_gross,
+        }
+      );
+
+      alert(`Sėkmingai priimta ${stockEntries.length} prekių!`);
+      handleRemoveFile();
+      await loadData();
+    } catch (error: any) {
+      alert('Klaida priimant prekes: ' + error.message);
+    } finally {
+      setBulkReceiving(false);
+    }
+  };
+
+  const toggleItemReceive = (index: number) => {
+    const newFlags = new Map(itemsToReceive);
+    newFlags.set(index, !itemsToReceive.get(index));
+    setItemsToReceive(newFlags);
+  };
+
+  return (
+    <div className="p-6 bg-white rounded-lg shadow-sm">
+      <h2 className="text-2xl font-semibold text-gray-800 mb-6">Priimti įrangos atsargas</h2>
+
+      <div className="space-y-6">
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+          <div className="flex items-center justify-center">
+            <label className="flex flex-col items-center cursor-pointer">
+              <Upload className="w-12 h-12 text-gray-400 mb-2" />
+              <span className="text-sm text-gray-600">Įkelkite sąskaitą faktūrą (PDF)</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {selectedFile && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                <div className="flex items-center">
+                  <FileText className="w-5 h-5 text-blue-600 mr-2" />
+                  <span className="text-sm text-gray-700">{selectedFile.name}</span>
+                </div>
+                <button
+                  onClick={handleRemoveFile}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {uploadStatus === 'idle' && (
+                <button
+                  onClick={handleFileUpload}
+                  className="mt-3 w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Apdoroti PDF
+                </button>
+              )}
+
+              {uploadStatus === 'uploading' && (
+                <div className="mt-3 flex items-center justify-center text-blue-600">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                  {uploadMessage}
+                </div>
+              )}
+
+              {uploadStatus === 'success' && (
+                <div className="mt-3 flex items-center text-green-600">
+                  <CheckCircle className="w-5 h-5 mr-2" />
+                  {uploadMessage}
+                </div>
+              )}
+
+              {uploadStatus === 'error' && (
+                <div className="mt-3 flex items-center text-red-600">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  {uploadMessage}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {invoiceData && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold">Sąskaitos informacija</h3>
+                {!editingHeader ? (
+                  <button
+                    onClick={() => setEditingHeader(true)}
+                    className="text-blue-600 hover:text-blue-700 flex items-center text-sm"
+                  >
+                    <Edit2 className="w-4 h-4 mr-1" />
+                    Redaguoti
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSaveHeader}
+                    className="text-green-600 hover:text-green-700 flex items-center text-sm"
+                  >
+                    <Save className="w-4 h-4 mr-1" />
+                    Išsaugoti
+                  </button>
+                )}
+              </div>
+
+              {editingHeader ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sąskaitos nr.</label>
+                    <input
+                      type="text"
+                      value={headerData?.invoice_number || ''}
+                      onChange={(e) => setHeaderData({ ...headerData, invoice_number: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                    <input
+                      type="date"
+                      value={headerData?.invoice_date || ''}
+                      onChange={(e) => setHeaderData({ ...headerData, invoice_date: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tiekėjas</label>
+                    <input
+                      type="text"
+                      value={headerData?.supplier_name || ''}
+                      onChange={(e) => setHeaderData({ ...headerData, supplier_name: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Sąskaitos nr.:</strong> {headerData?.invoice_number}</div>
+                  <div><strong>Data:</strong> {headerData?.invoice_date}</div>
+                  <div className="col-span-2"><strong>Tiekėjas:</strong> {headerData?.supplier_name}</div>
+                  <div><strong>Neto:</strong> {headerData?.total_net?.toFixed(2)} EUR</div>
+                  <div><strong>Bruto:</strong> {headerData?.total_gross?.toFixed(2)} EUR</div>
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Numatytoji vieta
+              </label>
+              <select
+                value={defaultLocationId}
+                onChange={(e) => setDefaultLocationId(e.target.value)}
+                className="w-full border rounded px-3 py-2"
+              >
+                <option value="">Pasirinkite vietą</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Prekės ({invoiceData.items.length})</h3>
+              {invoiceData.items.map((item: any, index: number) => {
+                const itemData = getItemData(item, index);
+                const matched = matchedProducts.get(index);
+                const shouldReceive = itemsToReceive.get(index) !== false;
+
+                return (
+                  <div key={index} className={`border rounded-lg p-4 ${!shouldReceive ? 'bg-gray-50 opacity-60' : 'bg-white'}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={shouldReceive}
+                          onChange={() => toggleItemReceive(index)}
+                          className="mr-3 h-4 w-4"
+                        />
+                        <div>
+                          <div className="font-medium">{itemData.description}</div>
+                          <div className="text-sm text-gray-500">
+                            Kiekis: {itemData.qty} {itemData.unit} | Kaina: {itemData.unit_price} EUR
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Serijos nr.</label>
+                        <input
+                          type="text"
+                          value={itemData.batch || ''}
+                          onChange={(e) => handleItemEdit(index, 'batch', e.target.value)}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                          placeholder="Serijos numeris"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Galiojimas</label>
+                        <input
+                          type="date"
+                          value={itemData.expiry || ''}
+                          onChange={(e) => handleItemEdit(index, 'expiry', e.target.value)}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {matched ? (
+                        <div className="flex-1 flex items-center justify-between bg-green-50 border border-green-200 rounded px-3 py-2">
+                          <span className="text-sm text-green-700">
+                            <CheckCircle className="w-4 h-4 inline mr-1" />
+                            {matched.name}
+                          </span>
+                          <button
+                            onClick={() => handleProductMatch(index, '')}
+                            className="text-xs text-red-600 hover:text-red-700"
+                          >
+                            Atšaukti
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            value=""
+                            onChange={(e) => handleProductMatch(index, e.target.value)}
+                            className="flex-1 border rounded px-3 py-2 text-sm"
+                          >
+                            <option value="">Pasirinkite produktą...</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleCreateProduct(item, index)}
+                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center text-sm"
+                          >
+                            <PlusCircle className="w-4 h-4 mr-1" />
+                            Sukurti
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleBulkReceive}
+                disabled={bulkReceiving}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {bulkReceiving ? 'Priimama...' : 'Priimti visas prekes'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-semibold mb-4">Sukurti naują produktą</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas *</label>
+                <input
+                  type="text"
+                  value={newProductForm.name}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produkto kodas</label>
+                <input
+                  type="text"
+                  value={newProductForm.product_code}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, product_code: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kategorija</label>
+                <select
+                  value={newProductForm.category_id}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, category_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite kategoriją</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                  <select
+                    value={newProductForm.unit_type}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, unit_type: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="pcs">vnt</option>
+                    <option value="kg">kg</option>
+                    <option value="l">l</option>
+                    <option value="m">m</option>
+                    <option value="box">dėžė</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min. atsargos</label>
+                  <input
+                    type="number"
+                    value={newProductForm.min_stock_level}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, min_stock_level: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gamintojas</label>
+                <input
+                  type="text"
+                  value={newProductForm.manufacturer}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, manufacturer: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modelio numeris</label>
+                <input
+                  type="text"
+                  value={newProductForm.model_number}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, model_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Aprašymas</label>
+                <textarea
+                  value={newProductForm.description}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreatingProduct(null);
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveNewProduct}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Sukurti produktą
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
