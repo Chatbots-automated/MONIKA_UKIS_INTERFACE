@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem, HoofLeg, HoofClaw, HoofConditionCode } from '../lib/types';
+import { Animal, AnimalVisit, VisitProcedure, VisitStatus, Treatment, Product, UsageItem, HoofLeg, HoofClaw, HoofConditionCode, Unit } from '../lib/types';
 import { X, Calendar, Thermometer, Pill, Syringe, FileText, Plus, CheckCircle, CheckCircle2, XCircle, Clock, AlertCircle, Package, Check, Filter, Search, ExternalLink, Milk, Activity } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../lib/formatters';
 import { normalizeNumberInput, sortByLithuanian } from '../lib/helpers';
@@ -1944,7 +1944,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       product_id: string;
       batch_id: string;
       qty: string;
-      unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      unit: Unit;
       purpose: string;
       is_course: boolean;
       course_days: string;
@@ -1968,7 +1968,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       batch_id: string;
       dose_amount: string;
       dose_number: string;
-      unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      unit: Unit;
       next_booster_date: string;
     }>,
     administered_by: '',
@@ -1981,7 +1981,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       product_id: string;
       batch_id: string;
       dose_qty: string;
-      dose_unit: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      dose_unit: Unit;
       purpose: string;
       is_course: boolean;
       course_days: string;
@@ -2009,7 +2009,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       treatment_product_id?: string;
       treatment_batch_id?: string;
       treatment_quantity?: string;
-      treatment_unit?: 'ml' | 'l' | 'g' | 'kg' | 'pcs';
+      treatment_unit?: Unit;
       treatment_notes?: string;
       bandage_applied: boolean;
       requires_followup: boolean;
