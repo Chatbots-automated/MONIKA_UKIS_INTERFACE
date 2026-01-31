@@ -713,84 +713,268 @@ export function EquipmentReceiveStock() {
               <h3 className="text-lg font-semibold">Prekės ({invoiceData.items.length})</h3>
               {invoiceData.items.map((item: any, index: number) => {
                 const itemData = getItemData(item, index);
-                const matched = matchedProducts.get(index);
+                const matchedProduct = matchedProducts.get(index);
+                const isMatched = matchedProduct !== null && matchedProduct !== undefined;
                 const shouldReceive = itemsToReceive.get(index) !== false;
 
                 return (
-                  <div key={index} className={`border rounded-lg p-4 ${!shouldReceive ? 'bg-gray-50 opacity-60' : 'bg-white'}`}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center">
+                  <div
+                    key={index}
+                    className={`border-2 rounded-xl overflow-hidden transition-all ${
+                      !shouldReceive
+                        ? 'bg-gray-50 opacity-60 border-gray-200'
+                        : isMatched
+                        ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50'
+                        : 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50'
+                    }`}
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
                         <input
                           type="checkbox"
                           checked={shouldReceive}
                           onChange={() => toggleItemReceive(index)}
-                          className="mr-3 h-4 w-4"
+                          className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                         />
-                        <div>
-                          <div className="font-medium">{itemData.description}</div>
-                          <div className="text-sm text-gray-500">
-                            Kiekis: {itemData.qty} {itemData.unit} | Kaina: {itemData.unit_price} EUR
+                        {isMatched ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="font-semibold text-gray-700 text-sm">#{item.line_no}:</span>
+                          <input
+                            type="text"
+                            value={getItemData(item, index).description}
+                            onChange={(e) => handleItemEdit(index, 'description', e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-xs mb-2">
+                        <div className="grid grid-cols-4 gap-2">
+                          <div>
+                            <span className="text-gray-600">SKU:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).sku}
+                              onChange={(e) => handleItemEdit(index, 'sku', e.target.value)}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Pak. dydis:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_size || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_size', e.target.value);
+                                const pkgSize = parseFloat(e.target.value) || 0;
+                                const pkgCount = parseFloat(getItemData(item, index).package_count) || 0;
+                                if (pkgSize && pkgCount) {
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="10"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Kiek pak.:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).package_count || ''}
+                              onChange={(e) => {
+                                handleItemEdit(index, 'package_count', e.target.value);
+                                const pkgSize = parseFloat(getItemData(item, index).package_size) || 0;
+                                const pkgCount = parseFloat(e.target.value) || 0;
+                                if (pkgSize && pkgCount) {
+                                  const newQty = (pkgSize * pkgCount).toString();
+                                  handleItemEdit(index, 'qty', newQty);
+                                  const itemData = getItemData(item, index);
+                                  const totalPrice = itemData.editable_total_price !== undefined
+                                    ? parseFloat(itemData.editable_total_price)
+                                    : (itemData.net ? parseFloat(itemData.net) : 0);
+                                  const qty = parseFloat(newQty) || 0;
+                                  if (qty > 0 && totalPrice) {
+                                    const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                    handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                  }
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              placeholder="6"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Viso:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={getItemData(item, index).qty}
+                              onChange={(e) => {
+                                const newQty = e.target.value;
+                                handleItemEdit(index, 'qty', newQty);
+                                const itemData = getItemData(item, index);
+                                const totalPrice = itemData.editable_total_price !== undefined
+                                  ? parseFloat(itemData.editable_total_price)
+                                  : (itemData.net ? parseFloat(itemData.net) : 0);
+                                const qty = parseFloat(newQty) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (totalPrice / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
+                              className="w-16 px-1 py-0.5 border border-green-300 rounded text-xs font-semibold bg-green-50"
+                              readOnly={!!(getItemData(item, index).package_size && getItemData(item, index).package_count)}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={(() => {
+                                const itemData = getItemData(item, index);
+                                if (itemData.editable_total_price !== undefined) {
+                                  return itemData.editable_total_price;
+                                }
+                                return itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00';
+                              })()}
+                              onChange={(e) => {
+                                const totalPrice = e.target.value;
+                                handleItemEdit(index, 'editable_total_price', totalPrice);
+                                const qty = parseFloat(getItemData(item, index).qty) || 0;
+                                if (qty > 0 && totalPrice) {
+                                  const perUnitPrice = (parseFloat(totalPrice) / qty).toFixed(4);
+                                  handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                }
+                              }}
+                              className="w-20 px-1 py-0.5 border-2 border-green-300 rounded text-xs font-semibold bg-green-50"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">
+                              {(() => {
+                                const unit = matchedProduct?.unit_type || 'vnt';
+                                return `${unit} kaina:`;
+                              })()}
+                            </span>{' '}
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={getItemData(item, index).price_per_unit || ''}
+                              readOnly
+                              className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
+                            />
+                          </div>
+                        </div>
+                        {matchedProduct && (
+                          <div className="text-xs text-blue-600 mt-1 font-medium">
+                            📦 {matchedProduct.name} - Matavimo vienetas: {matchedProduct.unit_type || 'vnt'}
+                            {(() => {
+                              const itemData = getItemData(item, index);
+                              const finalPrice = itemData.editable_total_price !== undefined
+                                ? itemData.editable_total_price
+                                : (itemData.net ? parseFloat(itemData.net).toFixed(2) : '0.00');
+                              const qty = parseFloat(itemData.qty) || 0;
+                              if (finalPrice && qty) {
+                                return (
+                                  <span className="ml-2">
+                                    ({finalPrice} ÷ {qty} = {itemData.price_per_unit || '...'} EUR/{matchedProduct.unit_type || 'vnt'})
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-200">
+                          <div>
+                            <span className="text-gray-600">Serija:</span>{' '}
+                            <input
+                              type="text"
+                              value={getItemData(item, index).batch || ''}
+                              onChange={(e) => handleItemEdit(index, 'batch', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              placeholder="Serijos Nr."
+                            />
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Galioja iki:</span>{' '}
+                            <input
+                              type="date"
+                              value={getItemData(item, index).expiry || ''}
+                              onChange={(e) => handleItemEdit(index, 'expiry', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                            />
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Serijos nr.</label>
-                        <input
-                          type="text"
-                          value={itemData.batch || ''}
-                          onChange={(e) => handleItemEdit(index, 'batch', e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                          placeholder="Serijos numeris"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Galiojimas</label>
-                        <input
-                          type="date"
-                          value={itemData.expiry || ''}
-                          onChange={(e) => handleItemEdit(index, 'expiry', e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {matched ? (
-                        <div className="flex-1 flex items-center justify-between bg-green-50 border border-green-200 rounded px-3 py-2">
-                          <span className="text-sm text-green-700">
-                            <CheckCircle className="w-4 h-4 inline mr-1" />
-                            {matched.name}
-                          </span>
-                          <button
-                            onClick={() => handleProductMatch(index, '')}
-                            className="text-xs text-red-600 hover:text-red-700"
-                          >
-                            Atšaukti
-                          </button>
+                      {isMatched ? (
+                        <div className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-800"><strong>Produktas:</strong></span>
+                            <select
+                              value={matchedProduct.id}
+                              onChange={(e) => handleProductMatch(index, e.target.value)}
+                              className="px-2 py-0.5 border border-green-300 rounded text-xs bg-white"
+                            >
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       ) : (
-                        <>
-                          <select
-                            value=""
-                            onChange={(e) => handleProductMatch(index, e.target.value)}
-                            className="flex-1 border rounded px-3 py-2 text-sm"
-                          >
-                            <option value="">Pasirinkite produktą...</option>
-                            {products.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-amber-800 font-semibold">
+                              Produktas nerastas
+                            </p>
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleProductMatch(index, e.target.value);
+                                }
+                              }}
+                              className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white"
+                              defaultValue=""
+                            >
+                              <option value="">Pasirinkti esamą...</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center text-sm"
+                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
                           >
-                            <PlusCircle className="w-4 h-4 mr-1" />
-                            Sukurti
+                            <PlusCircle className="w-3 h-3" />
+                            Sukurti naują
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -798,13 +982,22 @@ export function EquipmentReceiveStock() {
               })}
             </div>
 
-            <div className="flex justify-end">
+            <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
+              <h4 className="text-lg font-bold text-gray-900 mb-2">Masinis priėmimas</h4>
+              <p className="text-xs text-gray-600 mb-4">
+                Patikrinkite produktus ir paspauskite mygtuką norint priimti visas pažymėtas prekes į atsargas.
+              </p>
               <button
                 onClick={handleBulkReceive}
                 disabled={bulkReceiving}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {bulkReceiving ? 'Priimama...' : 'Priimti visas prekes'}
+                <CheckCircle className="w-5 h-5" />
+                {bulkReceiving ? 'Priimama...' : `Priimti pažymėtus produktus (${
+                  Array.from(matchedProducts.entries())
+                    .filter(([index, product]) => product !== null && itemsToReceive.get(index) !== false)
+                    .length
+                })`}
               </button>
             </div>
           </div>
@@ -813,8 +1006,37 @@ export function EquipmentReceiveStock() {
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-xl font-semibold mb-4">Sukurti naują produktą</h3>
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Sukurti naują produktą</h3>
+
+            {creatingProduct && (
+              <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                <h4 className="text-sm font-bold text-blue-900 mb-2">Duomenys iš sąskaitos:</h4>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <span className="text-blue-700 font-medium">Pakuotės dydis:</span>
+                    <p className="font-bold text-blue-900">{creatingProduct.package_size || 'Nenustatyta'}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">Pakuočių skaičius:</span>
+                    <p className="font-bold text-blue-900">{creatingProduct.package_count || 'Nenustatyta'}</p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">Viso:</span>
+                    <p className="font-bold text-green-700">{creatingProduct.qty || 'Nenustatyta'}</p>
+                  </div>
+                </div>
+                {creatingProduct.package_size && creatingProduct.package_count ? (
+                  <p className="text-xs text-blue-600 mt-2 font-medium">
+                    {creatingProduct.package_count} pak. × {creatingProduct.package_size} = {creatingProduct.qty} viso
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600 mt-2 font-medium">
+                    Pakuočių informacija nebuvo automatiškai ištraukta iš PDF
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
