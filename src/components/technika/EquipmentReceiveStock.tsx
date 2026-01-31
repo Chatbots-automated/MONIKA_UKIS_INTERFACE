@@ -154,9 +154,9 @@ export function EquipmentReceiveStock() {
         supplier_name: invoiceObject.supplier.name,
         supplier_code: invoiceObject.supplier.code,
         supplier_vat: invoiceObject.supplier.vat_code,
-        total_net: invoiceObject.invoice.total_net,
-        total_vat: invoiceObject.invoice.total_vat,
-        total_gross: invoiceObject.invoice.total_gross,
+        total_net: invoiceObject.invoice.total_net || 0,
+        total_vat: invoiceObject.invoice.total_vat || 0,
+        total_gross: invoiceObject.invoice.total_gross || 0,
       });
 
       const matches = new Map<number, EquipmentProduct | null>();
@@ -201,9 +201,9 @@ export function EquipmentReceiveStock() {
           ...invoiceData.invoice,
           number: headerData.invoice_number,
           date: headerData.invoice_date,
-          total_net: parseFloat(headerData.total_net) || 0,
-          total_vat: parseFloat(headerData.total_vat) || 0,
-          total_gross: parseFloat(headerData.total_gross) || 0,
+          total_net: parseFloat(String(headerData.total_net)) || 0,
+          total_vat: parseFloat(String(headerData.total_vat)) || 0,
+          total_gross: parseFloat(String(headerData.total_gross)) || 0,
         },
         supplier: {
           ...invoiceData.supplier,
@@ -524,67 +524,173 @@ export function EquipmentReceiveStock() {
 
         {invoiceData && (
           <div className="space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-semibold">Sąskaitos informacija</h3>
+            <div className="bg-white border-2 border-gray-200 rounded-xl p-6">
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
+                  {!editingHeader ? (
+                    <button
+                      onClick={() => setEditingHeader(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Redaguoti
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSaveHeader}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                    >
+                      <Save className="w-4 h-4" />
+                      Išsaugoti
+                    </button>
+                  )}
+                </div>
+
                 {!editingHeader ? (
-                  <button
-                    onClick={() => setEditingHeader(true)}
-                    className="text-blue-600 hover:text-blue-700 flex items-center text-sm"
-                  >
-                    <Edit2 className="w-4 h-4 mr-1" />
-                    Redaguoti
-                  </button>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Sąskaita Nr.</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.invoice.number}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Data</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.invoice.date}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Valiuta</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.invoice.currency}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Tiekėjas</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.supplier.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Tiekėjo kodas</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.supplier.code || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">PVM kodas</p>
+                        <p className="font-semibold text-gray-900">{invoiceData.supplier.vat_code || '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-green-200">
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Suma be PVM</p>
+                        <p className="font-bold text-blue-700 text-lg">
+                          €{invoiceData.invoice.total_net?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">PVM ({invoiceData.invoice.vat_rate || 0}%)</p>
+                        <p className="font-bold text-orange-700 text-lg">
+                          €{invoiceData.invoice.total_vat?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Viso su PVM</p>
+                        <p className="font-bold text-green-700 text-xl">
+                          €{invoiceData.invoice.total_gross?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <button
-                    onClick={handleSaveHeader}
-                    className="text-green-600 hover:text-green-700 flex items-center text-sm"
-                  >
-                    <Save className="w-4 h-4 mr-1" />
-                    Išsaugoti
-                  </button>
+                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-300">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Sąskaita Nr.</label>
+                        <input
+                          type="text"
+                          value={headerData.invoice_number}
+                          onChange={(e) => setHeaderData({ ...headerData, invoice_number: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Data</label>
+                        <input
+                          type="date"
+                          value={headerData.invoice_date}
+                          onChange={(e) => setHeaderData({ ...headerData, invoice_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Valiuta</label>
+                        <input
+                          type="text"
+                          value={invoiceData.invoice.currency}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-100"
+                          disabled
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Tiekėjas</label>
+                        <input
+                          type="text"
+                          value={headerData.supplier_name}
+                          onChange={(e) => setHeaderData({ ...headerData, supplier_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Tiekėjo kodas</label>
+                        <input
+                          type="text"
+                          value={headerData.supplier_code || ''}
+                          onChange={(e) => setHeaderData({ ...headerData, supplier_code: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">PVM kodas</label>
+                        <input
+                          type="text"
+                          value={headerData.supplier_vat || ''}
+                          onChange={(e) => setHeaderData({ ...headerData, supplier_vat: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 p-4 bg-white rounded-lg border border-gray-300">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Suma be PVM (€)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={headerData.total_net || 0}
+                          onChange={(e) => setHeaderData({ ...headerData, total_net: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-blue-700 focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">PVM (€)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={headerData.total_vat || 0}
+                          onChange={(e) => setHeaderData({ ...headerData, total_vat: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-orange-700 focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Viso su PVM (€)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={headerData.total_gross || 0}
+                          onChange={(e) => setHeaderData({ ...headerData, total_gross: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-green-700 focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-
-              {editingHeader ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sąskaitos nr.</label>
-                    <input
-                      type="text"
-                      value={headerData?.invoice_number || ''}
-                      onChange={(e) => setHeaderData({ ...headerData, invoice_number: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                    <input
-                      type="date"
-                      value={headerData?.invoice_date || ''}
-                      onChange={(e) => setHeaderData({ ...headerData, invoice_date: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tiekėjas</label>
-                    <input
-                      type="text"
-                      value={headerData?.supplier_name || ''}
-                      onChange={(e) => setHeaderData({ ...headerData, supplier_name: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><strong>Sąskaitos nr.:</strong> {headerData?.invoice_number}</div>
-                  <div><strong>Data:</strong> {headerData?.invoice_date}</div>
-                  <div className="col-span-2"><strong>Tiekėjas:</strong> {headerData?.supplier_name}</div>
-                  <div><strong>Neto:</strong> {headerData?.total_net?.toFixed(2)} EUR</div>
-                  <div><strong>Bruto:</strong> {headerData?.total_gross?.toFixed(2)} EUR</div>
-                </div>
-              )}
             </div>
 
             <div className="mb-4">
