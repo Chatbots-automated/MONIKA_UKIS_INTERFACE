@@ -105,6 +105,13 @@ export function EquipmentInvoices() {
     setEditedItems(newEdits);
   };
 
+  const handleBatchItemEdit = (index: number, updates: Record<string, any>) => {
+    const currentEdits = editedItems.get(index) || {};
+    const newEdits = new Map(editedItems);
+    newEdits.set(index, { ...currentEdits, ...updates });
+    setEditedItems(newEdits);
+  };
+
   const handleProductMatch = (index: number, productId: string) => {
     const product = products.find(p => p.id === productId);
     const newMatches = new Map(matchedProducts);
@@ -536,18 +543,18 @@ export function EquipmentInvoices() {
                     )}
                   </div>
 
-                  <div className="bg-white rounded-lg p-4 border-2 border-amber-200">
-                    <label className="block text-sm font-semibold text-amber-900 mb-1">PVM</label>
+                  <div className="bg-white rounded-lg p-4 border-2 border-gray-300">
+                    <label className="block text-sm font-semibold text-gray-800 mb-1">PVM</label>
                     {editingHeader ? (
                       <input
                         type="number"
                         step="0.01"
                         value={headerData.total_vat}
                         onChange={e => setHeaderData({ ...headerData, total_vat: e.target.value })}
-                        className="w-full px-3 py-2 border-2 border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-bold text-lg"
+                        className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-gray-600 font-bold text-lg font-mono"
                       />
                     ) : (
-                      <p className="text-2xl font-bold text-amber-600">{parseFloat(headerData.total_vat).toFixed(2)} EUR</p>
+                      <p className="text-2xl font-bold text-gray-700 font-mono">{parseFloat(headerData.total_vat).toFixed(2)} EUR</p>
                     )}
                   </div>
 
@@ -582,7 +589,7 @@ export function EquipmentInvoices() {
                     className={`border-2 rounded-xl overflow-hidden transition-all ${
                       isMatched
                         ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50'
-                        : 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50'
+                        : 'border-gray-200 bg-gradient-to-br from-gray-50 to-slate-100'
                     }`}
                   >
                     <div className="p-4">
@@ -590,7 +597,7 @@ export function EquipmentInvoices() {
                         {isMatched ? (
                           <LucideCheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                         ) : (
-                          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                          <AlertCircle className="w-4 h-4 text-gray-600 flex-shrink-0" />
                         )}
                         <div className="flex-1 flex items-center gap-2">
                           <span className="font-semibold text-gray-700 text-sm">#{item.line_no || index + 1}:</span>
@@ -631,25 +638,30 @@ export function EquipmentInvoices() {
                                 value={getItemData(item, index).package_size || ''}
                                 onChange={(e) => {
                                   const newPkgSize = e.target.value;
-                                  handleItemEdit(index, 'package_size', newPkgSize);
-
                                   const itemData = getItemData(item, index);
                                   const pkgSize = parseFloat(newPkgSize) || 0;
                                   const pkgCount = parseFloat(itemData.package_count || '0') || 0;
 
+                                  const updates: Record<string, any> = {
+                                    package_size: newPkgSize
+                                  };
+
                                   if (pkgSize > 0 && pkgCount > 0) {
                                     const newQty = (pkgSize * pkgCount).toFixed(2);
-                                    handleItemEdit(index, 'qty', newQty);
+                                    updates.qty = newQty;
 
                                     const totalPrice = itemData.editable_total_price !== undefined
                                       ? parseFloat(itemData.editable_total_price)
                                       : (itemData.net ? parseFloat(itemData.net) : 0);
 
                                     if (totalPrice > 0) {
-                                      const perUnitPrice = (totalPrice / parseFloat(newQty)).toFixed(4);
-                                      handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                      updates.price_per_unit = (totalPrice / parseFloat(newQty)).toFixed(4);
                                     }
+                                  } else if (!newPkgSize) {
+                                    updates.qty = '';
                                   }
+
+                                  handleBatchItemEdit(index, updates);
                                 }}
                                 className="w-full px-3 py-2 border border-gray-400 rounded bg-white text-sm focus:ring-2 focus:ring-gray-600 focus:border-gray-600 font-mono"
                                 placeholder="10"
@@ -666,25 +678,30 @@ export function EquipmentInvoices() {
                                 value={getItemData(item, index).package_count || ''}
                                 onChange={(e) => {
                                   const newPkgCount = e.target.value;
-                                  handleItemEdit(index, 'package_count', newPkgCount);
-
                                   const itemData = getItemData(item, index);
                                   const pkgSize = parseFloat(itemData.package_size || '0') || 0;
                                   const pkgCount = parseFloat(newPkgCount) || 0;
 
+                                  const updates: Record<string, any> = {
+                                    package_count: newPkgCount
+                                  };
+
                                   if (pkgSize > 0 && pkgCount > 0) {
                                     const newQty = (pkgSize * pkgCount).toFixed(2);
-                                    handleItemEdit(index, 'qty', newQty);
+                                    updates.qty = newQty;
 
                                     const totalPrice = itemData.editable_total_price !== undefined
                                       ? parseFloat(itemData.editable_total_price)
                                       : (itemData.net ? parseFloat(itemData.net) : 0);
 
                                     if (totalPrice > 0) {
-                                      const perUnitPrice = (totalPrice / parseFloat(newQty)).toFixed(4);
-                                      handleItemEdit(index, 'price_per_unit', perUnitPrice);
+                                      updates.price_per_unit = (totalPrice / parseFloat(newQty)).toFixed(4);
                                     }
+                                  } else if (!newPkgCount) {
+                                    updates.qty = '';
                                   }
+
+                                  handleBatchItemEdit(index, updates);
                                 }}
                                 className="w-full px-3 py-2 border border-gray-400 rounded bg-white text-sm focus:ring-2 focus:ring-gray-600 focus:border-gray-600 font-mono"
                                 placeholder="6"
@@ -835,7 +852,7 @@ export function EquipmentInvoices() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <p className="text-xs text-amber-800 font-semibold">
+                            <p className="text-xs text-gray-700 font-semibold">
                               Produktas nerastas
                             </p>
                             <select
@@ -844,7 +861,7 @@ export function EquipmentInvoices() {
                                   handleProductMatch(index, e.target.value);
                                 }
                               }}
-                              className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white"
+                              className="px-2 py-0.5 border border-gray-400 rounded text-xs bg-white font-mono"
                               defaultValue=""
                             >
                               <option value="">Pasirinkti esamą...</option>
@@ -857,7 +874,7 @@ export function EquipmentInvoices() {
                           </div>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
+                            className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded text-xs font-medium hover:from-gray-700 hover:to-gray-800 transition-all shadow-md"
                           >
                             <PlusCircle className="w-3 h-3" />
                             Sukurti naują
@@ -944,7 +961,7 @@ export function EquipmentInvoices() {
                     {creatingProduct.package_count} pak. × {creatingProduct.package_size} = {creatingProduct.qty || creatingProduct.quantity} viso
                   </p>
                 ) : (
-                  <p className="text-xs text-amber-600 mt-2 font-medium">
+                  <p className="text-xs text-gray-600 mt-2 font-medium">
                     Pakuočių informacija nebuvo automatiškai ištraukta iš PDF
                   </p>
                 )}
