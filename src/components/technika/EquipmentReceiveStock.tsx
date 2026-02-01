@@ -60,6 +60,7 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
     quantity: '1',
     package_qty: '1',
     units_per_package: '1',
+    total_price: '',
     unit_price: '',
     batch_number: '',
     expiry_date: '',
@@ -474,8 +475,8 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
   };
 
   const handleAddManualItem = () => {
-    if (!currentManualItem.product_id || !currentManualItem.package_qty || !currentManualItem.units_per_package || !currentManualItem.unit_price) {
-      alert('Prašome užpildyti produktą, pakuočių kiekį, vienetų skaičių ir kainą');
+    if (!currentManualItem.product_id || !currentManualItem.package_qty || !currentManualItem.units_per_package || !currentManualItem.total_price) {
+      alert('Prašome užpildyti produktą, pakuočių kiekį, vienetų skaičių ir galutinę kainą');
       return;
     }
 
@@ -485,13 +486,16 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
     const packageQty = parseFloat(currentManualItem.package_qty);
     const unitsPerPackage = parseFloat(currentManualItem.units_per_package);
     const totalQuantity = packageQty * unitsPerPackage;
+    const totalPrice = parseFloat(currentManualItem.total_price);
+    const unitPrice = totalPrice / totalQuantity;
 
     const newItem = {
       ...currentManualItem,
       quantity: totalQuantity.toString(),
+      unit_price: unitPrice.toFixed(4),
       product_name: product.name,
       product_unit: product.unit_type,
-      total_price: totalQuantity * parseFloat(currentManualItem.unit_price),
+      total_price: totalPrice,
     };
 
     setManualItems([...manualItems, newItem]);
@@ -500,6 +504,7 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
       quantity: '1',
       package_qty: '1',
       units_per_package: '1',
+      total_price: '',
       unit_price: '',
       batch_number: '',
       expiry_date: '',
@@ -1133,8 +1138,11 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
           </>
         ) : (
           <>
-            <div className="border-2 border-gray-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Pridėti prekę</h3>
+            <div className="bg-gradient-to-br from-blue-50 to-green-50 border-2 border-blue-200 rounded-xl p-6 shadow-lg">
+              <h3 className="text-xl font-bold text-blue-900 mb-6 flex items-center gap-2">
+                <PlusCircle className="w-6 h-6 text-blue-600" />
+                Pridėti prekę į sandėlį
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1188,24 +1196,35 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Viso vienetų
                   </label>
-                  <div className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-gray-700 font-medium">
+                  <div className="w-full border border-gray-200 bg-blue-50 rounded-lg px-3 py-2 text-blue-700 font-bold text-lg">
                     {(parseFloat(currentManualItem.package_qty || '0') * parseFloat(currentManualItem.units_per_package || '0')).toFixed(2)}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Vnt. kaina (EUR) <span className="text-red-600">*</span>
+                    Galutinė kaina (EUR) <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={currentManualItem.unit_price}
-                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, unit_price: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    value={currentManualItem.total_price}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, total_price: e.target.value })}
+                    className="w-full border border-green-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 text-lg font-semibold"
                     placeholder="0.00"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vnt. kaina (apskaičiuota)
+                  </label>
+                  <div className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-gray-600 font-medium">
+                    €{currentManualItem.total_price && (parseFloat(currentManualItem.package_qty || '0') * parseFloat(currentManualItem.units_per_package || '0')) > 0
+                      ? (parseFloat(currentManualItem.total_price) / (parseFloat(currentManualItem.package_qty || '0') * parseFloat(currentManualItem.units_per_package || '0'))).toFixed(4)
+                      : '0.0000'}
+                  </div>
                 </div>
 
                 <div>
@@ -1265,20 +1284,21 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
                 </div>
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div className="mt-6 flex justify-end">
                 <button
                   onClick={handleAddManualItem}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-green-600 text-white rounded-lg hover:from-blue-700 hover:to-green-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 font-semibold text-lg"
                 >
-                  <Plus className="w-4 h-4" />
-                  Pridėti prekę
+                  <Plus className="w-5 h-5" />
+                  Pridėti prekę į sąrašą
                 </button>
               </div>
             </div>
 
             {manualItems.length > 0 && (
-              <div className="border-2 border-gray-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              <div className="bg-white border-2 border-green-200 rounded-xl p-6 shadow-lg">
+                <h3 className="text-xl font-bold text-green-900 mb-6 flex items-center gap-2">
+                  <Package className="w-6 h-6 text-green-600" />
                   Pridėtos prekės ({manualItems.length})
                 </h3>
                 <div className="space-y-3">
@@ -1344,10 +1364,10 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
                   <button
                     onClick={handleReceiveManualItems}
                     disabled={bulkReceiving}
-                    className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold text-lg hover:from-green-700 hover:to-emerald-700 focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
                   >
-                    <CheckCircle className="w-5 h-5" />
-                    {bulkReceiving ? 'Priimama...' : 'Priimti atsargas'}
+                    <CheckCircle className="w-6 h-6" />
+                    {bulkReceiving ? 'Priimama į sandėlį...' : 'Priimti visas atsargas į sandėlį'}
                   </button>
                 </div>
               </div>

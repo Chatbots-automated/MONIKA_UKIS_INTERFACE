@@ -86,13 +86,19 @@ export function PPEManagement() {
   );
 
   const loadBatchesForProduct = async (productId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('equipment_batches')
       .select('*')
       .eq('product_id', productId)
       .gt('qty_left', 0)
       .order('received_date', { ascending: true });
 
+    if (error) {
+      console.error('Error loading batches:', error);
+      return;
+    }
+
+    console.log('Loaded batches for product:', productId, data);
     if (data) setBatches(data);
   };
 
