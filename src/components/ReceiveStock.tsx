@@ -428,12 +428,14 @@ export function ReceiveStock() {
 
     const allItemsHaveData = invoiceData.items.every((_: any, index: number) => {
       if (!matchedProducts.get(index)) return true;
+      const shouldReceive = itemsToReceive.get(index) !== false;
+      if (!shouldReceive) return true;
       const itemData = getItemData(invoiceData.items[index], index);
       return (itemData.batch || bulkReceiveData.lot) && itemData.expiry;
     });
 
     if (!allItemsHaveData) {
-      alert('Prašome užpildyti serijos numerius ir galiojimo datas kiekvienai prekėje.');
+      alert('Prašome užpildyti serijos numerius ir galiojimo datas pažymėtoms prekėms.');
       return;
     }
 
@@ -1026,11 +1028,14 @@ export function ReceiveStock() {
                   const matchedProduct = matchedProducts.get(index);
                   const isMatched = matchedProduct !== undefined && matchedProduct !== null;
 
+                  const isChecked = itemsToReceive.get(index) !== false;
                   return (
                     <div
                       key={item.line_no}
-                      className={`p-3 rounded-lg border-2 ${
-                        isMatched
+                      className={`p-3 rounded-lg border-2 transition-all ${
+                        !isChecked
+                          ? 'bg-gray-100 border-gray-300 opacity-50'
+                          : isMatched
                           ? 'bg-emerald-50 border-emerald-300'
                           : 'bg-amber-50 border-amber-300'
                       }`}
@@ -1045,7 +1050,7 @@ export function ReceiveStock() {
                             setItemsToReceive(newFlags);
                           }}
                           className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                          title={itemsToReceive.get(index) !== false ? "Įtraukti į pajamimą" : "Neįtraukti į pajamimą"}
+                          title={itemsToReceive.get(index) !== false ? "Pašalinti žymėjimą" : "Įtraukti į pajamimą"}
                         />
                         {isMatched ? (
                           <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />

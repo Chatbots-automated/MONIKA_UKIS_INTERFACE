@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Plus, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Save, Edit2 } from 'lucide-react';
+import { Plus, Upload, FileText, X, AlertCircle, CheckCircle, PlusCircle, Save, Edit2, Package } from 'lucide-react';
 
 interface EquipmentProduct {
   id: string;
