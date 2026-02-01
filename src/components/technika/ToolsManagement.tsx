@@ -173,7 +173,7 @@ export function ToolsManagement() {
     const notesWithQty = `Kiekis: ${quantity}${checkoutForm.notes ? ` | ${checkoutForm.notes}` : ''}`;
 
     try {
-      await supabase.from('tool_movements').insert({
+      const { error: movementError } = await supabase.from('tool_movements').insert({
         tool_id: selectedTool.id,
         movement_type: 'checkout',
         to_holder: checkoutForm.holder_id,
@@ -183,7 +183,9 @@ export function ToolsManagement() {
         recorded_by: user?.id || null,
       });
 
-      await supabase
+      if (movementError) throw movementError;
+
+      const { error: updateError } = await supabase
         .from('tools')
         .update({
           current_holder: checkoutForm.holder_id,
@@ -192,6 +194,8 @@ export function ToolsManagement() {
         })
         .eq('id', selectedTool.id);
 
+      if (updateError) throw updateError;
+
       await logAction('checkout_tool', 'tools', selectedTool.id, null, {
         tool_number: selectedTool.tool_number,
         holder_id: checkoutForm.holder_id
@@ -199,7 +203,7 @@ export function ToolsManagement() {
 
       setShowCheckoutModal(false);
       setSelectedTool(null);
-      loadTools();
+      await loadTools();
       alert('Įrankis sėkmingai išduotas');
     } catch (error: any) {
       console.error('Error:', error);
@@ -209,7 +213,7 @@ export function ToolsManagement() {
 
   const handleReturn = async (tool: Tool) => {
     try {
-      await supabase.from('tool_movements').insert({
+      const { error: movementError } = await supabase.from('tool_movements').insert({
         tool_id: tool.id,
         movement_type: 'return',
         from_holder: tool.current_holder,
@@ -217,7 +221,9 @@ export function ToolsManagement() {
         recorded_by: user?.id,
       });
 
-      await supabase
+      if (movementError) throw movementError;
+
+      const { error: updateError } = await supabase
         .from('tools')
         .update({
           current_holder: null,
@@ -225,12 +231,14 @@ export function ToolsManagement() {
         })
         .eq('id', tool.id);
 
+      if (updateError) throw updateError;
+
       await logAction('return_tool', { tool_id: tool.id, tool_number: tool.tool_number });
-      loadTools();
+      await loadTools();
       alert('Įrankis sėkmingai grąžintas');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      alert('Klaida grąžinant įrankį');
+      alert(`Klaida grąžinant įrankį: ${error.message}`);
     }
   };
 
