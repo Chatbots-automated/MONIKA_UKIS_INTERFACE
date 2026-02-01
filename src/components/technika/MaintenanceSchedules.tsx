@@ -261,7 +261,12 @@ export function MaintenanceSchedules() {
       .gt('qty_left', 0)
       .order('created_at', { ascending: true });
 
-    if (data) setBatches(data);
+    if (data) {
+      setBatches(prevBatches => {
+        const filteredPrev = prevBatches.filter(b => b.product_id !== productId);
+        return [...filteredPrev, ...data];
+      });
+    }
   };
 
   const handleAddServiceItem = () => {
@@ -278,16 +283,17 @@ export function MaintenanceSchedules() {
     });
   };
 
-  const handleServiceItemChange = (index: number, field: string, value: string) => {
+  const handleServiceItemChange = async (index: number, field: string, value: string) => {
     const newItems = [...serviceForm.items];
     newItems[index] = { ...newItems[index], [field]: value };
 
     if (field === 'product_id' && value) {
+      newItems[index].batch_id = '';
       const product = products.find(p => p.product_id === value);
       if (product) {
         newItems[index].product_name = product.product_name;
       }
-      loadBatchesForProduct(value);
+      await loadBatchesForProduct(value);
     }
 
     setServiceForm({ ...serviceForm, items: newItems });
@@ -308,12 +314,12 @@ export function MaintenanceSchedules() {
           work_order_number: woNumber,
           schedule_id: servicingSchedule.id,
           vehicle_id: servicingSchedule.vehicle_id,
-          work_order_type: 'scheduled',
+          order_type: 'scheduled',
           priority: 'medium',
           status: 'completed',
           completed_date: serviceForm.service_date,
           description: `${servicingSchedule.schedule_name} - ${servicingSchedule.vehicle.registration_number}`,
-          work_performed: serviceForm.notes || null,
+          notes: serviceForm.notes || null,
           created_by: user?.id,
         })
         .select()
