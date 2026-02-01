@@ -34,17 +34,28 @@ interface Location {
   name: string;
 }
 
+interface UserOption {
+  id: string;
+  full_name: string;
+}
+
 export function ToolsManagement() {
   const { user, logAction } = useAuth();
   const [tools, setTools] = useState<Tool[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterAvailable, setFilterAvailable] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [checkoutForm, setCheckoutForm] = useState({
+    holder_id: '',
+    expected_return_date: '',
+    notes: '',
+  });
   const [newToolForm, setNewToolForm] = useState({
     name: '',
     product_id: '',
@@ -61,7 +72,7 @@ export function ToolsManagement() {
   }, []);
 
   const loadData = async () => {
-    const [toolsRes, productsRes, locationsRes] = await Promise.all([
+    const [toolsRes, productsRes, locationsRes, usersRes] = await Promise.all([
       supabase.from('tools').select(`
         id,
         tool_number,
@@ -77,6 +88,7 @@ export function ToolsManagement() {
       `).order('tool_number'),
       supabase.from('equipment_products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('equipment_locations').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('users').select('id, full_name').order('full_name'),
     ]);
 
     if (toolsRes.data) {
@@ -118,6 +130,7 @@ export function ToolsManagement() {
     }
     if (productsRes.data) setProducts(productsRes.data);
     if (locationsRes.data) setLocations(locationsRes.data);
+    if (usersRes.data) setUsers(usersRes.data);
   };
 
   const loadTools = loadData;
@@ -138,34 +151,55 @@ export function ToolsManagement() {
     return matchesSearch && matchesType && matchesAvailable;
   });
 
-  const handleCheckout = async (tool: Tool) => {
-    if (!user) return;
+  const handleOpenCheckoutModal = (tool: Tool) => {
+    setSelectedTool(tool);
+    setCheckoutForm({
+      holder_id: '',
+      expected_return_date: '',
+      notes: '',
+    });
+    setShowCheckoutModal(true);
+  };
+
+  const handleCheckout = async () => {
+    if (!selectedTool || !checkoutForm.holder_id) {
+      alert('Prašome pasirinkti darbuotoją');
+      return;
+    }
 
     try {
       await supabase.from('tool_movements').insert({
-        tool_id: tool.id,
+        tool_id: selectedTool.id,
         movement_type: 'checkout',
-        to_holder: user.id,
-        from_location_id: tool.current_location_id,
+        to_holder: checkoutForm.holder_id,
+        from_location_id: selectedTool.current_location_id,
         movement_date: new Date().toISOString(),
-        recorded_by: user.id,
+        expected_return_date: checkoutForm.expected_return_date || null,
+        notes: checkoutForm.notes || null,
+        recorded_by: user?.id || null,
       });
 
       await supabase
         .from('tools')
         .update({
-          current_holder: user.id,
+          current_holder: checkoutForm.holder_id,
           is_available: false,
           current_location_id: null,
         })
-        .eq('id', tool.id);
+        .eq('id', selectedTool.id);
 
-      await logAction('checkout_tool', { tool_id: tool.id, tool_number: tool.tool_number });
+      await logAction('checkout_tool', 'tools', selectedTool.id, null, {
+        tool_number: selectedTool.tool_number,
+        holder_id: checkoutForm.holder_id
+      });
+
+      setShowCheckoutModal(false);
+      setSelectedTool(null);
       loadTools();
       alert('Įrankis sėkmingai išduotas');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      alert('Klaida išduodant įrankį');
+      alert(`Klaida išduodant įrankį: ${error.message}`);
     }
   };
 
@@ -330,7 +364,7 @@ export function ToolsManagement() {
 
               {tool.is_available ? (
                 <button
-                  onClick={() => handleCheckout(tool)}
+                  onClick={() => handleOpenCheckoutModal(tool)}
                   className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm"
                 >
                   Išduoti
@@ -497,6 +531,83 @@ export function ToolsManagement() {
                 className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
               >
                 Pridėti įrankį
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCheckoutModal && selectedTool && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Išduoti įrankį</h3>
+
+            <div className="mb-4 p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Įrankis</p>
+              <p className="font-semibold text-gray-900">
+                {selectedTool.tool_number} - {selectedTool.name || selectedTool.product?.name}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas *</label>
+                <select
+                  value={checkoutForm.holder_id}
+                  onChange={(e) => setCheckoutForm({ ...checkoutForm, holder_id: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Pasirinkite darbuotoją</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tikėtina grąžinimo data</label>
+                <input
+                  type="date"
+                  value={checkoutForm.expected_return_date}
+                  onChange={(e) => setCheckoutForm({ ...checkoutForm, expected_return_date: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={checkoutForm.notes}
+                  onChange={(e) => setCheckoutForm({ ...checkoutForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  placeholder="Kodėl išduodamas, darbų aprašymas..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowCheckoutModal(false);
+                  setSelectedTool(null);
+                  setCheckoutForm({
+                    holder_id: '',
+                    expected_return_date: '',
+                    notes: '',
+                  });
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleCheckout}
+                className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+              >
+                Išduoti įrankį
               </button>
             </div>
           </div>
