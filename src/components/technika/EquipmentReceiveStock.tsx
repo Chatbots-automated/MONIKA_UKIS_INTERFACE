@@ -53,6 +53,17 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [bulkReceiving, setBulkReceiving] = useState(false);
   const [defaultLocationId, setDefaultLocationId] = useState<string>('');
+  const [entryMode, setEntryMode] = useState<'invoice' | 'manual'>('invoice');
+  const [manualItems, setManualItems] = useState<any[]>([]);
+  const [currentManualItem, setCurrentManualItem] = useState({
+    product_id: '',
+    quantity: '1',
+    unit_price: '',
+    batch_number: '',
+    expiry_date: '',
+    location_id: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadData();
@@ -460,12 +471,115 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
     setItemsToReceive(newFlags);
   };
 
+  const handleAddManualItem = () => {
+    if (!currentManualItem.product_id || !currentManualItem.quantity || !currentManualItem.unit_price) {
+      alert('Prašome užpildyti produktą, kiekį ir kainą');
+      return;
+    }
+
+    const product = products.find(p => p.id === currentManualItem.product_id);
+    if (!product) return;
+
+    const newItem = {
+      ...currentManualItem,
+      product_name: product.name,
+      product_unit: product.unit_type,
+      total_price: parseFloat(currentManualItem.quantity) * parseFloat(currentManualItem.unit_price),
+    };
+
+    setManualItems([...manualItems, newItem]);
+    setCurrentManualItem({
+      product_id: '',
+      quantity: '1',
+      unit_price: '',
+      batch_number: '',
+      expiry_date: '',
+      location_id: '',
+      notes: '',
+    });
+  };
+
+  const handleRemoveManualItem = (index: number) => {
+    setManualItems(manualItems.filter((_, i) => i !== index));
+  };
+
+  const handleReceiveManualItems = async () => {
+    if (manualItems.length === 0) {
+      alert('Pridėkite bent vieną prekę');
+      return;
+    }
+
+    setBulkReceiving(true);
+    try {
+      const stockEntries = manualItems.map(item => ({
+        product_id: item.product_id,
+        batch_number: item.batch_number || `BATCH-${Date.now()}`,
+        location_id: item.location_id || defaultLocationId || null,
+        received_qty: parseFloat(item.quantity),
+        qty_left: parseFloat(item.quantity),
+        purchase_price: parseFloat(item.unit_price),
+        expiry_date: item.expiry_date || null,
+        notes: item.notes || null,
+      }));
+
+      const { error } = await supabase.from('equipment_batches').insert(stockEntries);
+      if (error) throw error;
+
+      await logAction(
+        'receive_equipment_stock_manual',
+        'equipment_batches',
+        null,
+        null,
+        {
+          items_count: stockEntries.length,
+          total_value: manualItems.reduce((sum, item) => sum + item.total_price, 0),
+        }
+      );
+
+      alert(`Sėkmingai priimta ${stockEntries.length} prekių!`);
+      setManualItems([]);
+      await loadData();
+      if (onReceived) onReceived();
+    } catch (error: any) {
+      alert('Klaida priimant prekes: ' + error.message);
+    } finally {
+      setBulkReceiving(false);
+    }
+  };
+
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-2xl font-semibold text-gray-800 mb-6">Priimti įrangos atsargas</h2>
 
+      <div className="mb-6 flex gap-3 border-b border-gray-200">
+        <button
+          onClick={() => setEntryMode('invoice')}
+          className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+            entryMode === 'invoice'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <FileText className="w-4 h-4 inline-block mr-2" />
+          Su sąskaita (PDF)
+        </button>
+        <button
+          onClick={() => setEntryMode('manual')}
+          className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+            entryMode === 'manual'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Plus className="w-4 h-4 inline-block mr-2" />
+          Rankinė registracija
+        </button>
+      </div>
+
       <div className="space-y-6">
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+        {entryMode === 'invoice' ? (
+          <>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
           <div className="flex items-center justify-center">
             <label className="flex flex-col items-center cursor-pointer">
               <Upload className="w-12 h-12 text-gray-400 mb-2" />
@@ -1006,6 +1120,200 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
               </button>
             </div>
           </div>
+        )}
+          </>
+        ) : (
+          <>
+            <div className="border-2 border-gray-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Pridėti prekę</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Produktas <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    value={currentManualItem.product_id}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, product_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Pasirinkite produktą</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.unit_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Kiekis <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={currentManualItem.quantity}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, quantity: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vnt. kaina (EUR) <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={currentManualItem.unit_price}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, unit_price: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Partijos numeris
+                  </label>
+                  <input
+                    type="text"
+                    value={currentManualItem.batch_number}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, batch_number: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    placeholder="Pvz: BATCH-2024-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Galioja iki
+                  </label>
+                  <input
+                    type="date"
+                    value={currentManualItem.expiry_date}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, expiry_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vieta
+                  </label>
+                  <select
+                    value={currentManualItem.location_id}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, location_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Pagrindinė vieta</option>
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pastabos
+                  </label>
+                  <textarea
+                    value={currentManualItem.notes}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, notes: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                    placeholder="Papildoma informacija..."
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleAddManualItem}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Pridėti prekę
+                </button>
+              </div>
+            </div>
+
+            {manualItems.length > 0 && (
+              <div className="border-2 border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Pridėtos prekės ({manualItems.length})
+                </h3>
+                <div className="space-y-3">
+                  {manualItems.map((item, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{item.product_name}</p>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
+                            <div>
+                              <span className="font-medium">Kiekis:</span> {item.quantity} {item.product_unit}
+                            </div>
+                            <div>
+                              <span className="font-medium">Vnt. kaina:</span> €{parseFloat(item.unit_price).toFixed(2)}
+                            </div>
+                            <div>
+                              <span className="font-medium">Bendra kaina:</span> €{item.total_price.toFixed(2)}
+                            </div>
+                            {item.batch_number && (
+                              <div>
+                                <span className="font-medium">Partija:</span> {item.batch_number}
+                              </div>
+                            )}
+                            {item.expiry_date && (
+                              <div>
+                                <span className="font-medium">Galioja iki:</span> {new Date(item.expiry_date).toLocaleDateString('lt-LT')}
+                              </div>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <p className="text-sm text-gray-500 mt-2">{item.notes}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleRemoveManualItem(index)}
+                          className="ml-4 text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-lg font-bold text-gray-900">Bendra suma</h4>
+                      <p className="text-2xl font-bold text-green-600">
+                        €{manualItems.reduce((sum, item) => sum + item.total_price, 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm text-gray-600">
+                      <p>Iš viso: {manualItems.length} prekių</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleReceiveManualItems}
+                    disabled={bulkReceiving}
+                    className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                    {bulkReceiving ? 'Priimama...' : 'Priimti atsargas'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
