@@ -393,6 +393,40 @@ export function ToolsManagement() {
         )}
       </div>
 
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Šiuo metu išduoti įrankiai</h3>
+        <div className="space-y-2">
+          {tools.filter(t => !t.is_available).length === 0 ? (
+            <p className="text-gray-500 text-center py-4">Nėra išduotų įrankių</p>
+          ) : (
+            tools.filter(t => !t.is_available).map(tool => (
+              <div key={tool.id} className="flex items-center justify-between p-4 border border-amber-200 bg-amber-50 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <Wrench className="w-8 h-8 text-amber-600" />
+                  <div>
+                    <p className="font-medium text-gray-800">{tool.name || tool.product?.name || 'Įrankis'}</p>
+                    <p className="text-sm text-gray-600">
+                      {tool.holder?.full_name || 'Nežinomas darbuotojas'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      #{tool.tool_number}
+                      {tool.serial_number && ` · SN: ${tool.serial_number}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleReturn(tool)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Grąžinti
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard title="Viso įrankių" value={tools.length.toString()} color="blue" />
         <StatCard title="Prieinami" value={tools.filter(t => t.is_available).length.toString()} color="green" />

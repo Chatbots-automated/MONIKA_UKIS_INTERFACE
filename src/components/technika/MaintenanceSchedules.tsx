@@ -55,6 +55,8 @@ export function MaintenanceSchedules() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [servicingSchedule, setServicingSchedule] = useState<MaintenanceSchedule | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<MaintenanceSchedule | null>(null);
   const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({
     schedule_name: '',
@@ -67,13 +69,22 @@ export function MaintenanceSchedules() {
     last_performed_hours: '',
     notes: '',
   });
+  const [serviceForm, setServiceForm] = useState({
+    service_date: new Date().toISOString().split('T')[0],
+    current_mileage: '',
+    current_hours: '',
+    notes: '',
+    items: [] as Array<{ product_id: string; batch_id: string; quantity: string; product_name?: string }>,
+  });
+  const [products, setProducts] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [schedulesRes, vehiclesRes] = await Promise.all([
+    const [schedulesRes, vehiclesRes, productsRes] = await Promise.all([
       supabase
         .from('maintenance_schedules')
         .select(`
@@ -87,10 +98,16 @@ export function MaintenanceSchedules() {
         .select('id, registration_number, make, model, current_mileage, current_engine_hours')
         .eq('is_active', true)
         .order('registration_number'),
+      supabase
+        .from('equipment_warehouse_stock')
+        .select('product_id, product_name, unit_type, total_qty')
+        .gt('total_qty', 0)
+        .order('product_name'),
     ]);
 
     if (schedulesRes.data) setSchedules(schedulesRes.data as any);
     if (vehiclesRes.data) setVehicles(vehiclesRes.data);
+    if (productsRes.data) setProducts(productsRes.data);
   };
 
   const handleOpenScheduleModal = (schedule?: MaintenanceSchedule) => {
@@ -217,6 +234,174 @@ export function MaintenanceSchedules() {
       if (error) throw error;
       await logAction('delete_maintenance_schedule', 'maintenance_schedules', schedule.id);
       alert('Grafikas ištrintas');
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleOpenServiceModal = (schedule: MaintenanceSchedule) => {
+    setServicingSchedule(schedule);
+    setServiceForm({
+      service_date: new Date().toISOString().split('T')[0],
+      current_mileage: schedule.vehicle.current_mileage?.toString() || '',
+      current_hours: schedule.vehicle.current_engine_hours?.toString() || '',
+      notes: '',
+      items: [],
+    });
+    setShowServiceModal(true);
+  };
+
+  const loadBatchesForProduct = async (productId: string) => {
+    const { data } = await supabase
+      .from('equipment_batches')
+      .select('*')
+      .eq('product_id', productId)
+      .gt('qty_left', 0)
+      .order('created_at', { ascending: true });
+
+    if (data) setBatches(data);
+  };
+
+  const handleAddServiceItem = () => {
+    setServiceForm({
+      ...serviceForm,
+      items: [...serviceForm.items, { product_id: '', batch_id: '', quantity: '1' }],
+    });
+  };
+
+  const handleRemoveServiceItem = (index: number) => {
+    setServiceForm({
+      ...serviceForm,
+      items: serviceForm.items.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleServiceItemChange = (index: number, field: string, value: string) => {
+    const newItems = [...serviceForm.items];
+    newItems[index] = { ...newItems[index], [field]: value };
+
+    if (field === 'product_id' && value) {
+      const product = products.find(p => p.product_id === value);
+      if (product) {
+        newItems[index].product_name = product.product_name;
+      }
+      loadBatchesForProduct(value);
+    }
+
+    setServiceForm({ ...serviceForm, items: newItems });
+  };
+
+  const handleSaveService = async () => {
+    if (!servicingSchedule || !serviceForm.service_date) {
+      alert('Prašome užpildyti privalomas laukas');
+      return;
+    }
+
+    try {
+      const { data: woNumber } = await supabase.rpc('generate_work_order_number');
+
+      const { data: workOrder, error: workOrderError } = await supabase
+        .from('maintenance_work_orders')
+        .insert({
+          work_order_number: woNumber,
+          schedule_id: servicingSchedule.id,
+          vehicle_id: servicingSchedule.vehicle_id,
+          work_order_type: 'scheduled',
+          priority: 'medium',
+          status: 'completed',
+          completed_date: serviceForm.service_date,
+          description: `${servicingSchedule.schedule_name} - ${servicingSchedule.vehicle.registration_number}`,
+          work_performed: serviceForm.notes || null,
+          created_by: user?.id,
+        })
+        .select()
+        .single();
+
+      if (workOrderError) throw workOrderError;
+
+      for (const item of serviceForm.items) {
+        if (item.product_id && item.batch_id && parseFloat(item.quantity) > 0) {
+          const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
+
+          const { data: issuance, error: issuanceError } = await supabase
+            .from('equipment_issuances')
+            .insert({
+              issuance_number: issuanceNumber,
+              issued_to: null,
+              issued_to_name: `Aptarnavimas: ${servicingSchedule.vehicle.registration_number}`,
+              issued_by: user?.id,
+              issue_date: serviceForm.service_date,
+              status: 'issued',
+              notes: `Naudota aptarnavime: ${workOrder.work_order_number}`,
+              created_by: user?.id,
+            })
+            .select()
+            .single();
+
+          if (issuanceError) throw issuanceError;
+
+          const selectedProduct = products.find(p => p.product_id === item.product_id);
+          const selectedBatch = batches.find(b => b.id === item.batch_id);
+
+          const { error: itemError } = await supabase
+            .from('equipment_issuance_items')
+            .insert({
+              issuance_id: issuance.id,
+              batch_id: item.batch_id,
+              product_id: item.product_id,
+              quantity: parseFloat(item.quantity),
+              unit_price: selectedBatch?.purchase_price || 0,
+            });
+
+          if (itemError) throw itemError;
+        }
+      }
+
+      const newMileage = serviceForm.current_mileage ? parseFloat(serviceForm.current_mileage) : null;
+      const newHours = serviceForm.current_hours ? parseFloat(serviceForm.current_hours) : null;
+
+      await supabase
+        .from('vehicles')
+        .update({
+          current_mileage: newMileage || servicingSchedule.vehicle.current_mileage,
+          current_engine_hours: newHours || servicingSchedule.vehicle.current_engine_hours,
+        })
+        .eq('id', servicingSchedule.vehicle_id);
+
+      const updateData: any = {
+        last_performed_date: serviceForm.service_date,
+      };
+
+      if (servicingSchedule.maintenance_type === 'mileage' && newMileage) {
+        updateData.last_performed_mileage = newMileage;
+        updateData.next_due_mileage = newMileage + servicingSchedule.interval_value;
+      } else if (servicingSchedule.maintenance_type === 'hours' && newHours) {
+        updateData.last_performed_hours = newHours;
+        updateData.next_due_hours = newHours + servicingSchedule.interval_value;
+      } else if (servicingSchedule.maintenance_type === 'date') {
+        const nextDate = new Date(serviceForm.service_date);
+        if (servicingSchedule.interval_type === 'days') {
+          nextDate.setDate(nextDate.getDate() + servicingSchedule.interval_value);
+        } else if (servicingSchedule.interval_type === 'months') {
+          nextDate.setMonth(nextDate.getMonth() + servicingSchedule.interval_value);
+        } else if (servicingSchedule.interval_type === 'years') {
+          nextDate.setFullYear(nextDate.getFullYear() + servicingSchedule.interval_value);
+        }
+        updateData.next_due_date = nextDate.toISOString().split('T')[0];
+      }
+
+      await supabase
+        .from('maintenance_schedules')
+        .update(updateData)
+        .eq('id', servicingSchedule.id);
+
+      await logAction('complete_maintenance', 'maintenance_work_orders', workOrder.id);
+
+      alert('Aptarnavimas sėkmingai įrašytas');
+      setShowServiceModal(false);
+      setServicingSchedule(null);
       loadData();
     } catch (error: any) {
       console.error('Error:', error);
@@ -379,6 +564,15 @@ export function MaintenanceSchedules() {
                 </div>
 
                 <div className="flex gap-2">
+                  {overdue && (
+                    <button
+                      onClick={() => handleOpenServiceModal(schedule)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Aptarnauti
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenScheduleModal(schedule)}
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
@@ -576,6 +770,163 @@ export function MaintenanceSchedules() {
               >
                 <Save className="w-4 h-4" />
                 {editingSchedule ? 'Išsaugoti' : 'Sukurti'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showServiceModal && servicingSchedule && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full my-8 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                Aptarnauti: {servicingSchedule.schedule_name}
+              </h3>
+              <button onClick={() => setShowServiceModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+              <p className="font-medium text-gray-800">{servicingSchedule.vehicle.registration_number}</p>
+              <p className="text-sm text-gray-600">{servicingSchedule.vehicle.make} {servicingSchedule.vehicle.model}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Aptarnavimo data *</label>
+                  <input
+                    type="date"
+                    value={serviceForm.service_date}
+                    onChange={(e) => setServiceForm({ ...serviceForm, service_date: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+                {servicingSchedule.maintenance_type === 'mileage' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dabartinė rida (km)</label>
+                    <input
+                      type="number"
+                      value={serviceForm.current_mileage}
+                      onChange={(e) => setServiceForm({ ...serviceForm, current_mileage: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                )}
+                {servicingSchedule.maintenance_type === 'hours' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dabartinės motovalandos</label>
+                    <input
+                      type="number"
+                      value={serviceForm.current_hours}
+                      onChange={(e) => setServiceForm({ ...serviceForm, current_hours: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={serviceForm.notes}
+                  onChange={(e) => setServiceForm({ ...serviceForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  placeholder="Aprašykite atliktus darbus..."
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-semibold text-gray-800">Naudotos prekės</h4>
+                  <button
+                    onClick={handleAddServiceItem}
+                    className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pridėti prekę
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {serviceForm.items.map((item, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Produktas</label>
+                        <select
+                          value={item.product_id}
+                          onChange={(e) => handleServiceItemChange(index, 'product_id', e.target.value)}
+                          className="w-full border rounded px-3 py-2"
+                        >
+                          <option value="">Pasirinkite produktą</option>
+                          {products.map(product => (
+                            <option key={product.product_id} value={product.product_id}>
+                              {product.product_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {item.product_id && (
+                        <div className="col-span-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Partija</label>
+                          <select
+                            value={item.batch_id}
+                            onChange={(e) => handleServiceItemChange(index, 'batch_id', e.target.value)}
+                            className="w-full border rounded px-3 py-2"
+                          >
+                            <option value="">Pasirinkite partiją</option>
+                            {batches.filter(b => b.product_id === item.product_id).map(batch => (
+                              <option key={batch.id} value={batch.id}>
+                                {batch.batch_number} - Likutis: {batch.qty_left}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="col-span-3">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) => handleServiceItemChange(index, 'quantity', e.target.value)}
+                          className="w-full border rounded px-3 py-2"
+                        />
+                      </div>
+
+                      <div className="col-span-1">
+                        <button
+                          onClick={() => handleRemoveServiceItem(index)}
+                          className="w-full px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowServiceModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveService}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Užbaigti aptarnavimą
               </button>
             </div>
           </div>

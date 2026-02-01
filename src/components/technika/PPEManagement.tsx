@@ -91,7 +91,7 @@ export function PPEManagement() {
       .select('*')
       .eq('product_id', productId)
       .gt('qty_left', 0)
-      .order('received_date', { ascending: true });
+      .order('created_at', { ascending: true });
 
     if (error) {
       console.error('Error loading batches:', error);
