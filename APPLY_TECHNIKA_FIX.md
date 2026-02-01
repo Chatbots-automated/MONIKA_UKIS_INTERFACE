@@ -37,9 +37,12 @@ ALTER TABLE tool_movements
   ADD CONSTRAINT tool_movements_recorded_by_fkey
   FOREIGN KEY (recorded_by) REFERENCES users(id);
 
--- 2. Create generate_work_order_number RPC function
--- Drop existing function first if it exists with different return type
-DROP FUNCTION IF EXISTS generate_work_order_number();
+-- 2. Fix generate_work_order_number function and its trigger
+-- First drop the trigger that depends on the function
+DROP TRIGGER IF EXISTS set_work_order_number ON maintenance_work_orders;
+
+-- Now drop and recreate the function with CASCADE to handle any remaining dependencies
+DROP FUNCTION IF EXISTS generate_work_order_number() CASCADE;
 
 CREATE FUNCTION generate_work_order_number()
 RETURNS text AS $$
@@ -58,6 +61,22 @@ BEGIN
   RETURN new_number;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Recreate the trigger for auto-generating work order numbers
+CREATE OR REPLACE FUNCTION set_work_order_number_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.work_order_number IS NULL THEN
+    NEW.work_order_number := generate_work_order_number();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_work_order_number
+  BEFORE INSERT ON maintenance_work_orders
+  FOR EACH ROW
+  EXECUTE FUNCTION set_work_order_number_trigger();
 
 -- 3. Ensure maintenance_work_orders has status column
 DO $$
