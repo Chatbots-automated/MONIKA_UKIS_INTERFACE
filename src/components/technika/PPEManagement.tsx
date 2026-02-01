@@ -133,12 +133,12 @@ export function PPEManagement() {
         .insert({
           issuance_number: issuanceNumber,
           issued_to: issueForm.employee_id,
-          issued_by: user?.id,
+          issued_by: user?.id || null,
           issue_date: issueForm.issue_date,
           expected_return_date: issueForm.expected_return_date || null,
           status: 'issued',
           notes: issueForm.notes || null,
-          created_by: user?.id,
+          created_by: user?.id || null,
         })
         .select()
         .single();
@@ -404,13 +404,15 @@ export function PPEManagement() {
                 onClick={() => {
                   setShowIssueModal(false);
                   setIssueForm({
-                    ppe_item_id: '',
+                    product_id: '',
+                    batch_id: '',
                     employee_id: '',
                     quantity_issued: '1',
                     issue_date: new Date().toISOString().split('T')[0],
                     expected_return_date: '',
                     notes: '',
                   });
+                  setBatches([]);
                 }}
                 className="px-4 py-2 border rounded hover:bg-gray-50"
               >

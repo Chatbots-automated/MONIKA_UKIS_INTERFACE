@@ -190,10 +190,10 @@ export function EquipmentInventory() {
           issuance_number: issuanceNumber,
           issued_to: issueForm.issued_to || null,
           issued_to_name: issueForm.issued_to_name || null,
-          issued_by: user?.id,
+          issued_by: user?.id || null,
           expected_return_date: issueForm.expected_return_date || null,
           notes: issueForm.notes || null,
-          created_by: user?.id,
+          created_by: user?.id || null,
         })
         .select()
         .single();

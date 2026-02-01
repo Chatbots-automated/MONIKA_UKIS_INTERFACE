@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Truck, Plus, Search, AlertTriangle, Calendar, User, Gauge } from 'lucide-react';
+import { Truck, Plus, Search, AlertTriangle, Calendar, User, Gauge, Edit, Trash2, X, Save } from 'lucide-react';
 
 interface Vehicle {
   id: string;
@@ -19,29 +19,244 @@ interface Vehicle {
   assignee: {
     full_name: string;
   } | null;
+  notes: string | null;
+}
+
+interface VehicleForm {
+  registration_number: string;
+  vehicle_type: string;
+  make: string;
+  model: string;
+  year: string;
+  status: string;
+  current_mileage: string;
+  current_engine_hours: string;
+  insurance_expiry_date: string;
+  technical_inspection_due_date: string;
+  assigned_to: string;
+  notes: string;
+}
+
+interface User {
+  id: string;
+  full_name: string;
+  email: string;
 }
 
 export function VehiclesManagement() {
-  const { logAction } = useAuth();
+  const { user, logAction } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [showReadingsModal, setShowReadingsModal] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
+    registration_number: '',
+    vehicle_type: 'tractor',
+    make: '',
+    model: '',
+    year: new Date().getFullYear().toString(),
+    status: 'active',
+    current_mileage: '0',
+    current_engine_hours: '0',
+    insurance_expiry_date: '',
+    technical_inspection_due_date: '',
+    assigned_to: '',
+    notes: '',
+  });
+  const [readingsForm, setReadingsForm] = useState({
+    mileage: '',
+    engine_hours: '',
+  });
 
   useEffect(() => {
-    loadVehicles();
+    loadData();
   }, []);
 
-  const loadVehicles = async () => {
-    const { data } = await supabase
-      .from('vehicles')
-      .select(`
-        *,
-        assignee:users!vehicles_assigned_to_fkey(full_name)
-      `)
-      .eq('is_active', true)
-      .order('registration_number');
+  const loadData = async () => {
+    const [vehiclesRes, usersRes] = await Promise.all([
+      supabase
+        .from('vehicles')
+        .select(`
+          *,
+          assignee:users!vehicles_assigned_to_fkey(full_name)
+        `)
+        .eq('is_active', true)
+        .order('registration_number'),
+      supabase
+        .from('users')
+        .select('id, full_name, email')
+        .order('full_name'),
+    ]);
 
-    if (data) setVehicles(data as any);
+    if (vehiclesRes.data) setVehicles(vehiclesRes.data as any);
+    if (usersRes.data) setUsers(usersRes.data);
+  };
+
+  const handleOpenVehicleModal = (vehicle?: Vehicle) => {
+    if (vehicle) {
+      setEditingVehicle(vehicle);
+      setVehicleForm({
+        registration_number: vehicle.registration_number,
+        vehicle_type: vehicle.vehicle_type,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year.toString(),
+        status: vehicle.status,
+        current_mileage: vehicle.current_mileage?.toString() || '0',
+        current_engine_hours: vehicle.current_engine_hours?.toString() || '0',
+        insurance_expiry_date: vehicle.insurance_expiry_date || '',
+        technical_inspection_due_date: vehicle.technical_inspection_due_date || '',
+        assigned_to: vehicle.assigned_to || '',
+        notes: vehicle.notes || '',
+      });
+    } else {
+      setEditingVehicle(null);
+      setVehicleForm({
+        registration_number: '',
+        vehicle_type: 'tractor',
+        make: '',
+        model: '',
+        year: new Date().getFullYear().toString(),
+        status: 'active',
+        current_mileage: '0',
+        current_engine_hours: '0',
+        insurance_expiry_date: '',
+        technical_inspection_due_date: '',
+        assigned_to: '',
+        notes: '',
+      });
+    }
+    setShowVehicleModal(true);
+  };
+
+  const handleSaveVehicle = async () => {
+    if (!vehicleForm.registration_number || !vehicleForm.make || !vehicleForm.model) {
+      alert('Prašome užpildyti privalomas laukas');
+      return;
+    }
+
+    try {
+      const vehicleData = {
+        registration_number: vehicleForm.registration_number.toUpperCase(),
+        vehicle_type: vehicleForm.vehicle_type,
+        make: vehicleForm.make,
+        model: vehicleForm.model,
+        year: parseInt(vehicleForm.year),
+        status: vehicleForm.status,
+        current_mileage: parseFloat(vehicleForm.current_mileage) || 0,
+        current_engine_hours: parseFloat(vehicleForm.current_engine_hours) || 0,
+        insurance_expiry_date: vehicleForm.insurance_expiry_date || null,
+        technical_inspection_due_date: vehicleForm.technical_inspection_due_date || null,
+        assigned_to: vehicleForm.assigned_to || null,
+        notes: vehicleForm.notes || null,
+      };
+
+      if (editingVehicle) {
+        const { error } = await supabase
+          .from('vehicles')
+          .update(vehicleData)
+          .eq('id', editingVehicle.id);
+
+        if (error) throw error;
+        await logAction('update_vehicle', 'vehicles', editingVehicle.id);
+        alert('Transporto priemonė sėkmingai atnaujinta');
+      } else {
+        const { data, error } = await supabase
+          .from('vehicles')
+          .insert({ ...vehicleData, created_by: user?.id || null })
+          .select()
+          .single();
+
+        if (error) throw error;
+        await logAction('create_vehicle', 'vehicles', data.id);
+        alert('Transporto priemonė sėkmingai sukurta');
+      }
+
+      setShowVehicleModal(false);
+      setEditingVehicle(null);
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleOpenReadingsModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setReadingsForm({
+      mileage: vehicle.current_mileage?.toString() || '0',
+      engine_hours: vehicle.current_engine_hours?.toString() || '0',
+    });
+    setShowReadingsModal(true);
+  };
+
+  const handleUpdateReadings = async () => {
+    if (!selectedVehicle) return;
+
+    const newMileage = parseFloat(readingsForm.mileage) || 0;
+    const newEngineHours = parseFloat(readingsForm.engine_hours) || 0;
+
+    if (newMileage < selectedVehicle.current_mileage) {
+      alert('Rida negali būti mažesnė nei dabartinė');
+      return;
+    }
+
+    if (newEngineHours < selectedVehicle.current_engine_hours) {
+      alert('Valandos negali būti mažesnės nei dabartinės');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .update({
+          current_mileage: newMileage,
+          current_engine_hours: newEngineHours,
+        })
+        .eq('id', selectedVehicle.id);
+
+      if (error) throw error;
+
+      await logAction('update_vehicle_readings', 'vehicles', selectedVehicle.id, null, {
+        old_mileage: selectedVehicle.current_mileage,
+        new_mileage: newMileage,
+        old_engine_hours: selectedVehicle.current_engine_hours,
+        new_engine_hours: newEngineHours,
+      });
+
+      alert('Rodmenys sėkmingai atnaujinti');
+      setShowReadingsModal(false);
+      setSelectedVehicle(null);
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicle: Vehicle) => {
+    if (!confirm(`Ar tikrai norite ištrinti transporto priemonę ${vehicle.registration_number}?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .update({ is_active: false })
+        .eq('id', vehicle.id);
+
+      if (error) throw error;
+      await logAction('delete_vehicle', 'vehicles', vehicle.id);
+      alert('Transporto priemonė ištrinta');
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
   };
 
   const filteredVehicles = vehicles.filter(vehicle => {
@@ -83,6 +298,7 @@ export function VehiclesManagement() {
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-800">Transporto priemonės</h3>
           <button
+            onClick={() => handleOpenVehicleModal()}
             className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -135,17 +351,19 @@ export function VehiclesManagement() {
                     <Truck className="w-5 h-5 text-slate-600" />
                     <span className="font-bold text-gray-800">{vehicle.registration_number}</span>
                   </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      vehicle.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : vehicle.status === 'maintenance'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    {vehicle.status === 'active' ? 'Aktyvus' : vehicle.status === 'maintenance' ? 'Aptarnavimas' : 'Neaktyvus'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        vehicle.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : vehicle.status === 'maintenance'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {vehicle.status === 'active' ? 'Aktyvus' : vehicle.status === 'maintenance' ? 'Aptarnavimas' : 'Neaktyvus'}
+                    </span>
+                  </div>
                 </div>
 
                 <h4 className="font-medium text-gray-800 mb-1">
@@ -183,11 +401,33 @@ export function VehiclesManagement() {
                 </div>
 
                 {hasWarnings && (
-                  <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-100 px-3 py-2 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-100 px-3 py-2 rounded-lg mb-3">
                     <AlertTriangle className="w-4 h-4" />
                     <span>Reikia dėmesio</span>
                   </div>
                 )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleOpenReadingsModal(vehicle)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Gauge className="w-4 h-4" />
+                    Rodmenys
+                  </button>
+                  <button
+                    onClick={() => handleOpenVehicleModal(vehicle)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteVehicle(vehicle)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -219,6 +459,251 @@ export function VehiclesManagement() {
           color="red"
         />
       </div>
+
+      {showVehicleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                {editingVehicle ? 'Redaguoti transportą' : 'Naujas transportas'}
+              </h3>
+              <button onClick={() => setShowVehicleModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valstybinis numeris *</label>
+                <input
+                  type="text"
+                  value={vehicleForm.registration_number}
+                  onChange={e => setVehicleForm({ ...vehicleForm, registration_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2 uppercase"
+                  placeholder="ABC123"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipas *</label>
+                <select
+                  value={vehicleForm.vehicle_type}
+                  onChange={e => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="tractor">Traktorius</option>
+                  <option value="truck">Sunkvežimis</option>
+                  <option value="car">Automobilis</option>
+                  <option value="harvester">Kombainas</option>
+                  <option value="sprayer">Purkštuvas</option>
+                  <option value="loader">Krautuvas</option>
+                  <option value="trailer">Priekaba</option>
+                  <option value="other">Kita</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Markė *</label>
+                <input
+                  type="text"
+                  value={vehicleForm.make}
+                  onChange={e => setVehicleForm({ ...vehicleForm, make: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="John Deere"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modelis *</label>
+                <input
+                  type="text"
+                  value={vehicleForm.model}
+                  onChange={e => setVehicleForm({ ...vehicleForm, model: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="6120M"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Metai *</label>
+                <input
+                  type="number"
+                  value={vehicleForm.year}
+                  onChange={e => setVehicleForm({ ...vehicleForm, year: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  min="1900"
+                  max={new Date().getFullYear() + 1}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Statusas</label>
+                <select
+                  value={vehicleForm.status}
+                  onChange={e => setVehicleForm({ ...vehicleForm, status: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="active">Aktyvus</option>
+                  <option value="maintenance">Aptarnavime</option>
+                  <option value="inactive">Neaktyvus</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rida (km)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={vehicleForm.current_mileage}
+                  onChange={e => setVehicleForm({ ...vehicleForm, current_mileage: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motovalandos</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={vehicleForm.current_engine_hours}
+                  onChange={e => setVehicleForm({ ...vehicleForm, current_engine_hours: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Draudimo galiojimas</label>
+                <input
+                  type="date"
+                  value={vehicleForm.insurance_expiry_date}
+                  onChange={e => setVehicleForm({ ...vehicleForm, insurance_expiry_date: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">TA galiojimas</label>
+                <input
+                  type="date"
+                  value={vehicleForm.technical_inspection_due_date}
+                  onChange={e => setVehicleForm({ ...vehicleForm, technical_inspection_due_date: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Priskirtas darbuotojui</label>
+                <select
+                  value={vehicleForm.assigned_to}
+                  onChange={e => setVehicleForm({ ...vehicleForm, assigned_to: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Nepriskirtas</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={vehicleForm.notes}
+                  onChange={e => setVehicleForm({ ...vehicleForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowVehicleModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveVehicle}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+              >
+                <Save className="w-4 h-4" />
+                {editingVehicle ? 'Išsaugoti' : 'Sukurti'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReadingsModal && selectedVehicle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Atnaujinti rodmenis</h3>
+              <button onClick={() => setShowReadingsModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600 mb-2">Transportas</p>
+                <p className="font-bold text-gray-900">
+                  {selectedVehicle.registration_number} - {selectedVehicle.make} {selectedVehicle.model}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rida (km)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={selectedVehicle.current_mileage}
+                  value={readingsForm.mileage}
+                  onChange={e => setReadingsForm({ ...readingsForm, mileage: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Dabartinė: {selectedVehicle.current_mileage?.toLocaleString()} km
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motovalandos</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={selectedVehicle.current_engine_hours}
+                  value={readingsForm.engine_hours}
+                  onChange={e => setReadingsForm({ ...readingsForm, engine_hours: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Dabartinės: {selectedVehicle.current_engine_hours} mval.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowReadingsModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleUpdateReadings}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Save className="w-4 h-4" />
+                Atnaujinti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
