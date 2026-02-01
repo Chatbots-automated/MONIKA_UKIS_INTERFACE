@@ -125,8 +125,6 @@ export function TechnikaReports() {
             equipment_invoices(invoice_number, invoice_date, supplier_name)
           `)
           .eq('product_id', product.id)
-          .gte('created_at', dateFilter.from)
-          .lte('created_at', dateFilter.to + 'T23:59:59')
           .order('created_at', { ascending: false });
 
         const { data: issuanceItems } = await supabase
@@ -142,12 +140,10 @@ export function TechnikaReports() {
             )
           `)
           .eq('product_id', product.id)
-          .gte('created_at', dateFilter.from)
-          .lte('created_at', dateFilter.to + 'T23:59:59')
           .order('created_at', { ascending: false });
 
-        const totalReceived = batches?.reduce((sum, b) => sum + parseFloat(b.quantity_received || 0), 0) || 0;
-        const totalSpent = batches?.reduce((sum, b) => sum + parseFloat(b.purchase_price || 0) * parseFloat(b.quantity_received || 0), 0) || 0;
+        const totalReceived = batches?.reduce((sum, b) => sum + parseFloat(b.received_qty || 0), 0) || 0;
+        const totalSpent = batches?.reduce((sum, b) => sum + parseFloat(b.purchase_price || 0) * parseFloat(b.received_qty || 0), 0) || 0;
         const totalIssued = issuanceItems?.reduce((sum, i) => sum + parseFloat(i.quantity || 0), 0) || 0;
         const currentStock = batches?.reduce((sum, b) => sum + parseFloat(b.qty_left || 0), 0) || 0;
         const avgPrice = totalReceived > 0 ? totalSpent / totalReceived : 0;
@@ -180,7 +176,7 @@ export function TechnikaReports() {
         product_id,
         qty_left,
         purchase_price,
-        quantity_received,
+        received_qty,
         equipment_products!inner(
           category_id,
           equipment_categories(name)
@@ -196,7 +192,7 @@ export function TechnikaReports() {
     stats.forEach((item: any) => {
       const categoryName = item.equipment_products?.equipment_categories?.name || 'Nėra kategorijos';
       const value = parseFloat(item.qty_left || 0) * parseFloat(item.purchase_price || 0);
-      const received = parseFloat(item.quantity_received || 0);
+      const received = parseFloat(item.received_qty || 0);
 
       if (!categoryMap.has(categoryName)) {
         categoryMap.set(categoryName, {
@@ -582,7 +578,7 @@ export function TechnikaReports() {
                                     </div>
                                     <div className="flex justify-between text-gray-700">
                                       <span>
-                                        Kiekis: {batch.quantity_received} {product.unit_type}
+                                        Kiekis: {batch.received_qty} {product.unit_type}
                                       </span>
                                       <span>
                                         Likutis: {batch.qty_left} {product.unit_type}
@@ -593,7 +589,7 @@ export function TechnikaReports() {
                                         Kaina: €{parseFloat(batch.purchase_price || 0).toFixed(2)}
                                       </span>
                                       <span className="font-medium">
-                                        Suma: €{(parseFloat(batch.purchase_price || 0) * parseFloat(batch.quantity_received || 0)).toFixed(2)}
+                                        Suma: €{(parseFloat(batch.purchase_price || 0) * parseFloat(batch.received_qty || 0)).toFixed(2)}
                                       </span>
                                     </div>
                                     {batch.equipment_invoices?.supplier_name && (
