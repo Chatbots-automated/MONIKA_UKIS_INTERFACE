@@ -31,6 +31,9 @@ interface ItemOnLoan {
   quantity_outstanding: number;
   value_outstanding: number;
   batch_id: string;
+  item_type: 'equipment' | 'tool';
+  tool_number?: string;
+  serial_number?: string;
 }
 
 interface Batch {
@@ -83,7 +86,7 @@ export function EquipmentInventory() {
   }, []);
 
   const loadData = async () => {
-    const [stockRes, loansRes, usersRes] = await Promise.all([
+    const [stockRes, loansRes, toolsRes, usersRes] = await Promise.all([
       supabase.from('equipment_warehouse_stock').select('*'),
       supabase
         .from('equipment_issuance_items')
@@ -106,12 +109,27 @@ export function EquipmentInventory() {
           equipment_products(name, unit_type)
         `)
         .in('equipment_issuances.status', ['issued', 'partial_return']),
+      supabase
+        .from('tools')
+        .select(`
+          id,
+          tool_number,
+          name,
+          serial_number,
+          current_holder,
+          product:equipment_products(name, unit_type),
+          holder:users!tools_current_holder_fkey(full_name)
+        `)
+        .eq('is_available', false),
       supabase.from('users').select('id, full_name, email').order('full_name'),
     ]);
 
     if (stockRes.data) setWarehouseStock(stockRes.data);
+
+    const allLoans: ItemOnLoan[] = [];
+
     if (loansRes.data) {
-      const formattedLoans: ItemOnLoan[] = loansRes.data
+      const equipmentLoans = loansRes.data
         .filter((item: any) => parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0))
         .map((item: any) => ({
           item_id: item.id,
@@ -128,9 +146,35 @@ export function EquipmentInventory() {
           quantity_outstanding: parseFloat(item.quantity || 0) - parseFloat(item.quantity_returned || 0),
           value_outstanding: (parseFloat(item.quantity || 0) - parseFloat(item.quantity_returned || 0)) * parseFloat(item.unit_price || 0),
           batch_id: item.batch_id,
+          item_type: 'equipment' as const,
         }));
-      setItemsOnLoan(formattedLoans);
+      allLoans.push(...equipmentLoans);
     }
+
+    if (toolsRes.data) {
+      const toolLoans = toolsRes.data.map((tool: any) => ({
+        item_id: tool.id,
+        issuance_id: tool.id,
+        issuance_number: tool.tool_number || 'N/A',
+        issued_to: tool.current_holder || '',
+        issued_to_name: tool.holder?.full_name || 'N/A',
+        issue_date: new Date().toISOString(),
+        expected_return_date: '',
+        product_name: tool.name || tool.product?.name || 'N/A',
+        unit_type: 'vnt',
+        quantity_issued: 1,
+        quantity_returned: 0,
+        quantity_outstanding: 1,
+        value_outstanding: 0,
+        batch_id: '',
+        item_type: 'tool' as const,
+        tool_number: tool.tool_number,
+        serial_number: tool.serial_number,
+      }));
+      allLoans.push(...toolLoans);
+    }
+
+    setItemsOnLoan(allLoans);
     if (usersRes.data) setUsers(usersRes.data);
   };
 
@@ -242,71 +286,102 @@ export function EquipmentInventory() {
   };
 
   const handleReturnItems = async () => {
-    if (!selectedLoanItem || !returnForm.quantity) {
-      alert('Prašome įvesti kiekį');
-      return;
-    }
-
-    const returnQty = parseFloat(returnForm.quantity);
-
-    if (returnQty <= 0) {
-      alert('Grąžinamas kiekis turi būti didesnis už 0');
-      return;
-    }
-
-    if (returnQty > selectedLoanItem.quantity_outstanding) {
-      alert(`Negalite grąžinti daugiau nei ${selectedLoanItem.quantity_outstanding} ${selectedLoanItem.unit_type}`);
+    if (!selectedLoanItem) {
+      alert('Nepasirinkta prekė');
       return;
     }
 
     try {
-      const newQuantityReturned = selectedLoanItem.quantity_returned + returnQty;
-      const isFullyReturned = newQuantityReturned >= selectedLoanItem.quantity_issued;
+      if (selectedLoanItem.item_type === 'tool') {
+        await supabase
+          .from('tool_movements')
+          .insert({
+            tool_id: selectedLoanItem.item_id,
+            movement_type: 'return',
+            from_holder: selectedLoanItem.issued_to,
+            movement_date: new Date().toISOString(),
+            notes: returnForm.notes || null,
+            recorded_by: user?.id || null,
+          });
 
-      const { error: itemError } = await supabase
-        .from('equipment_issuance_items')
-        .update({
-          quantity_returned: newQuantityReturned,
-        })
-        .eq('id', selectedLoanItem.item_id);
+        const { error: toolError } = await supabase
+          .from('tools')
+          .update({
+            is_available: true,
+            current_holder: null,
+          })
+          .eq('id', selectedLoanItem.item_id);
 
-      if (itemError) throw itemError;
+        if (toolError) throw toolError;
 
-      const { data: allItems } = await supabase
-        .from('equipment_issuance_items')
-        .select('quantity, quantity_returned')
-        .eq('issuance_id', selectedLoanItem.issuance_id);
-
-      let newIssuanceStatus = 'returned';
-      if (allItems) {
-        const hasOutstanding = allItems.some((item: any) =>
-          parseFloat(item.quantity) > parseFloat(item.quantity_returned || 0)
-        );
-        if (hasOutstanding) {
-          newIssuanceStatus = 'partial_return';
+        await logAction('return_tool', 'tools', selectedLoanItem.item_id);
+        alert('Įrankis sėkmingai grąžintas');
+      } else {
+        if (!returnForm.quantity) {
+          alert('Prašome įvesti kiekį');
+          return;
         }
+
+        const returnQty = parseFloat(returnForm.quantity);
+
+        if (returnQty <= 0) {
+          alert('Grąžinamas kiekis turi būti didesnis už 0');
+          return;
+        }
+
+        if (returnQty > selectedLoanItem.quantity_outstanding) {
+          alert(`Negalite grąžinti daugiau nei ${selectedLoanItem.quantity_outstanding} ${selectedLoanItem.unit_type}`);
+          return;
+        }
+
+        const newQuantityReturned = selectedLoanItem.quantity_returned + returnQty;
+        const isFullyReturned = newQuantityReturned >= selectedLoanItem.quantity_issued;
+
+        const { error: itemError } = await supabase
+          .from('equipment_issuance_items')
+          .update({
+            quantity_returned: newQuantityReturned,
+          })
+          .eq('id', selectedLoanItem.item_id);
+
+        if (itemError) throw itemError;
+
+        const { data: allItems } = await supabase
+          .from('equipment_issuance_items')
+          .select('quantity, quantity_returned')
+          .eq('issuance_id', selectedLoanItem.issuance_id);
+
+        let newIssuanceStatus = 'returned';
+        if (allItems) {
+          const hasOutstanding = allItems.some((item: any) =>
+            parseFloat(item.quantity) > parseFloat(item.quantity_returned || 0)
+          );
+          if (hasOutstanding) {
+            newIssuanceStatus = 'partial_return';
+          }
+        }
+
+        const { error: issuanceError } = await supabase
+          .from('equipment_issuances')
+          .update({
+            status: newIssuanceStatus,
+            actual_return_date: isFullyReturned ? new Date().toISOString().split('T')[0] : null,
+          })
+          .eq('id', selectedLoanItem.issuance_id);
+
+        if (issuanceError) throw issuanceError;
+
+        await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id);
+        alert('Prekės sėkmingai grąžintos');
       }
 
-      const { error: issuanceError } = await supabase
-        .from('equipment_issuances')
-        .update({
-          status: newIssuanceStatus,
-          actual_return_date: isFullyReturned ? new Date().toISOString().split('T')[0] : null,
-        })
-        .eq('id', selectedLoanItem.issuance_id);
-
-      if (issuanceError) throw issuanceError;
-
-      await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id);
-
-      alert('Prekės sėkmingai grąžintos');
       setShowReturnModal(false);
       setReturnForm({ quantity: '1', notes: '' });
       setSelectedLoanItem(null);
       loadData();
     } catch (error: any) {
       console.error('Error:', error);
-      alert(`Klaida grąžinant prekes: ${error.message}`);
+      alert(`Klaida grąžinant: ${error.message}`);
     }
   };
 
@@ -449,10 +524,20 @@ export function EquipmentInventory() {
                       <div className="flex items-center gap-3 flex-1">
                         <User className="w-5 h-5 text-amber-600" />
                         <div className="flex-1">
-                          <p className="font-medium text-gray-800">{item.product_name}</p>
+                          <p className="font-medium text-gray-800">
+                            {item.product_name}
+                            {item.item_type === 'tool' && item.tool_number && ` · ${item.tool_number}`}
+                            {item.item_type === 'tool' && item.serial_number && ` · SN: ${item.serial_number}`}
+                          </p>
                           <p className="text-sm text-gray-600">
-                            Išduota: {item.issued_to_name} · {new Date(item.issue_date).toLocaleDateString('lt-LT')}
-                            {item.expected_return_date && ` · Grąžinti iki: ${new Date(item.expected_return_date).toLocaleDateString('lt-LT')}`}
+                            Išduota: {item.issued_to_name}
+                            {item.item_type === 'equipment' && (
+                              <>
+                                {' · '}{new Date(item.issue_date).toLocaleDateString('lt-LT')}
+                                {item.expected_return_date && ` · Grąžinti iki: ${new Date(item.expected_return_date).toLocaleDateString('lt-LT')}`}
+                              </>
+                            )}
+                            {item.item_type === 'tool' && ' · Įrankis'}
                           </p>
                         </div>
                       </div>
@@ -461,9 +546,11 @@ export function EquipmentInventory() {
                           <p className="font-semibold text-gray-800">
                             {item.quantity_outstanding} {item.unit_type}
                           </p>
-                          <p className="text-sm text-gray-600">
-                            iš {item.quantity_issued} · €{item.value_outstanding?.toFixed(2) || '0.00'}
-                          </p>
+                          {item.item_type === 'equipment' && (
+                            <p className="text-sm text-gray-600">
+                              iš {item.quantity_issued} · €{item.value_outstanding?.toFixed(2) || '0.00'}
+                            </p>
+                          )}
                         </div>
                         <button
                           onClick={() => handleOpenReturnModal(item)}
@@ -625,37 +712,55 @@ export function EquipmentInventory() {
                   <span className="text-gray-600">Išduota:</span>
                   <span className="font-medium">{selectedLoanItem.issued_to_name}</span>
                 </div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600">Išduotas kiekis:</span>
-                  <span className="font-medium">{selectedLoanItem.quantity_issued} {selectedLoanItem.unit_type}</span>
-                </div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600">Jau grąžinta:</span>
-                  <span className="font-medium">{selectedLoanItem.quantity_returned} {selectedLoanItem.unit_type}</span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold pt-2 border-t border-amber-300">
-                  <span className="text-gray-900">Likutis:</span>
-                  <span className="text-amber-700">{selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}</span>
-                </div>
+                {selectedLoanItem.item_type === 'tool' && selectedLoanItem.tool_number && (
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600">Įrankio numeris:</span>
+                    <span className="font-medium">{selectedLoanItem.tool_number}</span>
+                  </div>
+                )}
+                {selectedLoanItem.item_type === 'tool' && selectedLoanItem.serial_number && (
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600">Serijos numeris:</span>
+                    <span className="font-medium">{selectedLoanItem.serial_number}</span>
+                  </div>
+                )}
+                {selectedLoanItem.item_type === 'equipment' && (
+                  <>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-600">Išduotas kiekis:</span>
+                      <span className="font-medium">{selectedLoanItem.quantity_issued} {selectedLoanItem.unit_type}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-600">Jau grąžinta:</span>
+                      <span className="font-medium">{selectedLoanItem.quantity_returned} {selectedLoanItem.unit_type}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-semibold pt-2 border-t border-amber-300">
+                      <span className="text-gray-900">Likutis:</span>
+                      <span className="text-amber-700">{selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Grąžinamas kiekis ({selectedLoanItem.unit_type})
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={selectedLoanItem.quantity_outstanding}
-                  value={returnForm.quantity}
-                  onChange={e => setReturnForm({ ...returnForm, quantity: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Maksimalus kiekis: {selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}
-                </p>
-              </div>
+              {selectedLoanItem.item_type === 'equipment' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Grąžinamas kiekis ({selectedLoanItem.unit_type})
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={selectedLoanItem.quantity_outstanding}
+                    value={returnForm.quantity}
+                    onChange={e => setReturnForm({ ...returnForm, quantity: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maksimalus kiekis: {selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
