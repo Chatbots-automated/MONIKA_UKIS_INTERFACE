@@ -4,28 +4,30 @@ import { useAuth } from '../../contexts/AuthContext';
 import { HardHat, Plus, Search, User, Package } from 'lucide-react';
 
 interface PPEItem {
-  id: string;
-  ppe_type: string;
-  size: string;
-  quantity_on_hand: number;
-  min_stock_level: number;
-  product: {
-    name: string;
-  };
+  product_id: string;
+  product_name: string;
+  product_code: string;
+  unit_type: string;
+  category_name: string;
+  total_qty: number;
+  total_value: number;
+  batch_count: number;
 }
 
 interface PPEIssuance {
-  id: string;
+  issuance_id: string;
+  issuance_number: string;
+  issued_to: string;
+  issued_to_name: string;
   issue_date: string;
-  quantity_issued: number;
   expected_return_date: string;
-  actual_return_date: string | null;
-  employee: {
-    full_name: string;
-  };
-  product: {
-    name: string;
-  };
+  status: string;
+  product_name: string;
+  unit_type: string;
+  quantity_issued: number;
+  quantity_returned: number;
+  quantity_outstanding: number;
+  value_outstanding: number;
 }
 
 interface Employee {
@@ -40,8 +42,10 @@ export function PPEManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [batches, setBatches] = useState<any[]>([]);
   const [issueForm, setIssueForm] = useState({
-    ppe_item_id: '',
+    product_id: '',
+    batch_id: '',
     employee_id: '',
     quantity_issued: '1',
     issue_date: new Date().toISOString().split('T')[0],
@@ -56,19 +60,16 @@ export function PPEManagement() {
   const loadData = async () => {
     const [itemsRes, issuancesRes, employeesRes] = await Promise.all([
       supabase
-        .from('ppe_items')
-        .select('*, product:equipment_products(name)')
-        .order('product(name)'),
+        .from('equipment_warehouse_stock')
+        .select('*')
+        .ilike('category_name', '%drabužiai%')
+        .gt('total_qty', 0)
+        .order('product_name'),
       supabase
-        .from('ppe_issuance_records')
-        .select(`
-          *,
-          employee:users(full_name),
-          product:equipment_products(name)
-        `)
-        .is('actual_return_date', null)
+        .from('equipment_items_on_loan')
+        .select('*')
         .order('issue_date', { ascending: false })
-        .limit(20),
+        .limit(50),
       supabase
         .from('users')
         .select('id, full_name')
@@ -81,25 +82,23 @@ export function PPEManagement() {
   };
 
   const filteredItems = items.filter(item =>
-    item.product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.ppe_type.toLowerCase().includes(searchTerm.toLowerCase())
+    item.product_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const ppeTypeLabels: any = {
-    helmet: 'Šalmas',
-    gloves: 'Pirštinės',
-    boots: 'Batai',
-    coverall: 'Kombinezons',
-    vest: 'Liemenė',
-    mask: 'Kaukė',
-    goggles: 'Akiniai',
-    ear_protection: 'Ausų apsauga',
-    other: 'Kita',
+  const loadBatchesForProduct = async (productId: string) => {
+    const { data } = await supabase
+      .from('equipment_batches')
+      .select('*')
+      .eq('product_id', productId)
+      .gt('qty_left', 0)
+      .order('received_date', { ascending: true });
+
+    if (data) setBatches(data);
   };
 
   const handleIssuePPE = async () => {
-    if (!issueForm.ppe_item_id || !issueForm.employee_id) {
-      alert('Prašome pasirinkti PPE elementą ir darbuotoją');
+    if (!issueForm.product_id || !issueForm.batch_id || !issueForm.employee_id) {
+      alert('Prašome užpildyti visus laukus');
       return;
     }
 
@@ -109,60 +108,71 @@ export function PPEManagement() {
       return;
     }
 
-    const selectedItem = items.find(item => item.id === issueForm.ppe_item_id);
-    if (!selectedItem) {
-      alert('PPE elementas nerastas');
+    const selectedBatch = batches.find(b => b.id === issueForm.batch_id);
+    if (!selectedBatch) {
+      alert('Partija nerasta');
       return;
     }
 
-    if (quantity > selectedItem.quantity_on_hand) {
-      alert(`Nepakankamas kiekis. Sandėlyje: ${selectedItem.quantity_on_hand}`);
+    if (quantity > selectedBatch.qty_left) {
+      alert(`Nepakankamas kiekis. Partijoje liko: ${selectedBatch.qty_left}`);
       return;
     }
 
     try {
-      const { error: issueError } = await supabase.from('ppe_issuance_records').insert({
-        ppe_item_id: issueForm.ppe_item_id,
-        product_id: selectedItem.product_id,
-        employee_id: issueForm.employee_id,
-        issue_date: issueForm.issue_date,
-        quantity_issued: quantity,
-        expected_return_date: issueForm.expected_return_date || null,
-        issued_by: user?.id,
-        notes: issueForm.notes || null,
-      });
+      const issuanceNumber = `ISS-${Date.now().toString().slice(-6)}`;
 
-      if (issueError) throw issueError;
-
-      const { error: updateError } = await supabase
-        .from('ppe_items')
-        .update({
-          quantity_on_hand: selectedItem.quantity_on_hand - quantity,
+      const { data: issuance, error: issuanceError } = await supabase
+        .from('equipment_issuances')
+        .insert({
+          issuance_number: issuanceNumber,
+          issued_to: issueForm.employee_id,
+          issued_by: user?.id,
+          issue_date: issueForm.issue_date,
+          expected_return_date: issueForm.expected_return_date || null,
+          status: 'issued',
+          notes: issueForm.notes || null,
+          created_by: user?.id,
         })
-        .eq('id', issueForm.ppe_item_id);
+        .select()
+        .single();
 
-      if (updateError) throw updateError;
+      if (issuanceError) throw issuanceError;
 
-      await logAction('issue_ppe', {
-        ppe_item_id: issueForm.ppe_item_id,
+      const { error: itemError } = await supabase
+        .from('equipment_issuance_items')
+        .insert({
+          issuance_id: issuance.id,
+          batch_id: issueForm.batch_id,
+          product_id: issueForm.product_id,
+          quantity: quantity,
+          unit_price: selectedBatch.purchase_price,
+        });
+
+      if (itemError) throw itemError;
+
+      await logAction('issue_ppe', 'equipment_issuances', issuance.id, null, {
         employee_id: issueForm.employee_id,
+        product_id: issueForm.product_id,
         quantity: quantity,
       });
 
       setShowIssueModal(false);
       setIssueForm({
-        ppe_item_id: '',
+        product_id: '',
+        batch_id: '',
         employee_id: '',
         quantity_issued: '1',
         issue_date: new Date().toISOString().split('T')[0],
         expected_return_date: '',
         notes: '',
       });
+      setBatches([]);
       loadData();
-      alert('PPE sėkmingai išduotas');
+      alert('Drabužiai sėkmingai išduoti');
     } catch (error: any) {
       console.error('Error:', error);
-      alert(`Klaida išduodant PPE: ${error.message}`);
+      alert(`Klaida išduodant drabužius: ${error.message}`);
     }
   };
 
@@ -196,40 +206,27 @@ export function PPEManagement() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map(item => (
             <div
-              key={item.id}
-              className={`border rounded-lg p-4 ${
-                item.quantity_on_hand <= item.min_stock_level
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-gray-200'
-              }`}
+              key={item.product_id}
+              className="border rounded-lg p-4 border-gray-200 bg-white hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <HardHat className="w-5 h-5 text-slate-600" />
-                  <span className="font-medium text-gray-800">{ppeTypeLabels[item.ppe_type]}</span>
+                  <span className="font-medium text-gray-800">{item.category_name}</span>
                 </div>
-                {item.quantity_on_hand <= item.min_stock_level && (
-                  <span className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full">Mažos atsargos</span>
-                )}
+                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                  {item.batch_count} partijos
+                </span>
               </div>
 
-              <h4 className="font-medium text-gray-800 mb-2">{item.product.name}</h4>
+              <h4 className="font-medium text-gray-800 mb-2">{item.product_name}</h4>
+              {item.product_code && (
+                <p className="text-xs text-gray-500 mb-2">Kodas: {item.product_code}</p>
+              )}
 
               <div className="space-y-1 text-sm text-gray-600 mb-3">
-                {item.size && <p>Dydis: {item.size}</p>}
-                <p className="font-semibold">Sandėlyje: {item.quantity_on_hand}</p>
-                <p>Min. lygis: {item.min_stock_level}</p>
-              </div>
-
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${
-                    item.quantity_on_hand <= item.min_stock_level ? 'bg-red-500' : 'bg-green-500'
-                  }`}
-                  style={{
-                    width: `${Math.min(100, (item.quantity_on_hand / (item.min_stock_level * 2)) * 100)}%`,
-                  }}
-                />
+                <p className="font-semibold text-lg text-green-600">Sandėlyje: {item.total_qty} {item.unit_type}</p>
+                <p className="text-gray-500">Vertė: €{item.total_value?.toFixed(2) || '0.00'}</p>
               </div>
             </div>
           ))}
@@ -237,41 +234,53 @@ export function PPEManagement() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Paskutiniai išdavimai</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Šiuo metu išduoti daiktai</h3>
         <div className="space-y-2">
-          {issuances.map(issuance => (
-            <div key={issuance.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-              <div className="flex items-center gap-4">
-                <User className="w-8 h-8 text-slate-600" />
-                <div>
-                  <p className="font-medium text-gray-800">{issuance.employee.full_name}</p>
+          {issuances.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">Nėra išduotų daiktų</p>
+          ) : (
+            issuances.map(issuance => (
+              <div key={issuance.issuance_id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <User className="w-8 h-8 text-slate-600" />
+                  <div>
+                    <p className="font-medium text-gray-800">{issuance.issued_to_name}</p>
+                    <p className="text-sm text-gray-600">
+                      {issuance.product_name} · {issuance.quantity_outstanding} {issuance.unit_type}
+                    </p>
+                    <p className="text-xs text-gray-500">#{issuance.issuance_number}</p>
+                  </div>
+                </div>
+                <div className="text-right">
                   <p className="text-sm text-gray-600">
-                    {issuance.product.name} · {issuance.quantity_issued} vnt.
+                    Išduota: {new Date(issuance.issue_date).toLocaleDateString('lt-LT')}
+                  </p>
+                  {issuance.expected_return_date && (
+                    <p className="text-sm text-amber-600">
+                      Grąžinti iki: {new Date(issuance.expected_return_date).toLocaleDateString('lt-LT')}
+                    </p>
+                  )}
+                  <p className="text-sm font-medium text-blue-600">
+                    Vertė: €{issuance.value_outstanding?.toFixed(2) || '0.00'}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Išduota: {issuance.issue_date}</p>
-                {issuance.expected_return_date && (
-                  <p className="text-sm text-amber-600">Grąžinti iki: {issuance.expected_return_date}</p>
-                )}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="PPE tipų" value={items.length.toString()} color="blue" />
+        <StatCard title="Produktų tipų" value={items.length.toString()} color="blue" />
         <StatCard
           title="Viso vienetų"
-          value={items.reduce((sum, item) => sum + item.quantity_on_hand, 0).toString()}
+          value={items.reduce((sum, item) => sum + item.total_qty, 0).toFixed(1)}
           color="green"
         />
         <StatCard
-          title="Mažos atsargos"
-          value={items.filter(item => item.quantity_on_hand <= item.min_stock_level).length.toString()}
-          color="red"
+          title="Atsargų vertė"
+          value={`€${items.reduce((sum, item) => sum + (item.total_value || 0), 0).toFixed(2)}`}
+          color="emerald"
         />
         <StatCard title="Išduota" value={issuances.length.toString()} color="amber" />
       </div>
@@ -279,24 +288,49 @@ export function PPEManagement() {
       {showIssueModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-6">Išduoti PPE</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Išduoti drabužius</h3>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">PPE elementas *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
                 <select
-                  value={issueForm.ppe_item_id}
-                  onChange={(e) => setIssueForm({ ...issueForm, ppe_item_id: e.target.value })}
+                  value={issueForm.product_id}
+                  onChange={(e) => {
+                    setIssueForm({ ...issueForm, product_id: e.target.value, batch_id: '' });
+                    if (e.target.value) {
+                      loadBatchesForProduct(e.target.value);
+                    } else {
+                      setBatches([]);
+                    }
+                  }}
                   className="w-full border rounded px-3 py-2"
                 >
-                  <option value="">Pasirinkite PPE</option>
+                  <option value="">Pasirinkite produktą</option>
                   {items.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.product.name} - {ppeTypeLabels[item.ppe_type]} ({item.quantity_on_hand} sandėlyje)
+                    <option key={item.product_id} value={item.product_id}>
+                      {item.product_name} ({item.total_qty} {item.unit_type} sandėlyje)
                     </option>
                   ))}
                 </select>
               </div>
+
+              {issueForm.product_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Partija *</label>
+                  <select
+                    value={issueForm.batch_id}
+                    onChange={(e) => setIssueForm({ ...issueForm, batch_id: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="">Pasirinkite partiją</option>
+                    {batches.map(batch => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.batch_number} - Likutis: {batch.qty_left} - Kaina: €{batch.purchase_price}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas *</label>
@@ -319,7 +353,8 @@ export function PPEManagement() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
                   <input
                     type="number"
-                    min="1"
+                    step="0.01"
+                    min="0.01"
                     value={issueForm.quantity_issued}
                     onChange={(e) => setIssueForm({ ...issueForm, quantity_issued: e.target.value })}
                     className="w-full border rounded px-3 py-2"

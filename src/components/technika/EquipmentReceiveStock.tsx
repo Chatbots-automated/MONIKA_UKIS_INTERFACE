@@ -58,6 +58,8 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
   const [currentManualItem, setCurrentManualItem] = useState({
     product_id: '',
     quantity: '1',
+    package_qty: '1',
+    units_per_package: '1',
     unit_price: '',
     batch_number: '',
     expiry_date: '',
@@ -472,25 +474,32 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
   };
 
   const handleAddManualItem = () => {
-    if (!currentManualItem.product_id || !currentManualItem.quantity || !currentManualItem.unit_price) {
-      alert('Prašome užpildyti produktą, kiekį ir kainą');
+    if (!currentManualItem.product_id || !currentManualItem.package_qty || !currentManualItem.units_per_package || !currentManualItem.unit_price) {
+      alert('Prašome užpildyti produktą, pakuočių kiekį, vienetų skaičių ir kainą');
       return;
     }
 
     const product = products.find(p => p.id === currentManualItem.product_id);
     if (!product) return;
 
+    const packageQty = parseFloat(currentManualItem.package_qty);
+    const unitsPerPackage = parseFloat(currentManualItem.units_per_package);
+    const totalQuantity = packageQty * unitsPerPackage;
+
     const newItem = {
       ...currentManualItem,
+      quantity: totalQuantity.toString(),
       product_name: product.name,
       product_unit: product.unit_type,
-      total_price: parseFloat(currentManualItem.quantity) * parseFloat(currentManualItem.unit_price),
+      total_price: totalQuantity * parseFloat(currentManualItem.unit_price),
     };
 
     setManualItems([...manualItems, newItem]);
     setCurrentManualItem({
       product_id: '',
       quantity: '1',
+      package_qty: '1',
+      units_per_package: '1',
       unit_price: '',
       batch_number: '',
       expiry_date: '',
@@ -1147,17 +1156,41 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Kiekis <span className="text-red-600">*</span>
+                    Pakuočių kiekis <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={currentManualItem.package_qty}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, package_qty: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vienetų pakuotėje <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0.01"
-                    value={currentManualItem.quantity}
-                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, quantity: e.target.value })}
+                    value={currentManualItem.units_per_package}
+                    onChange={(e) => setCurrentManualItem({ ...currentManualItem, units_per_package: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
                     placeholder="1"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Viso vienetų
+                  </label>
+                  <div className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-gray-700 font-medium">
+                    {(parseFloat(currentManualItem.package_qty || '0') * parseFloat(currentManualItem.units_per_package || '0')).toFixed(2)}
+                  </div>
                 </div>
 
                 <div>
@@ -1256,7 +1289,13 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
                           <p className="font-medium text-gray-800">{item.product_name}</p>
                           <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
                             <div>
-                              <span className="font-medium">Kiekis:</span> {item.quantity} {item.product_unit}
+                              <span className="font-medium">Pakuotės:</span> {item.package_qty} vnt.
+                            </div>
+                            <div>
+                              <span className="font-medium">Vnt./pakuotė:</span> {item.units_per_package}
+                            </div>
+                            <div className="col-span-2 text-base text-blue-600 font-semibold">
+                              <span className="font-medium">Viso kiekis:</span> {item.quantity} {item.product_unit}
                             </div>
                             <div>
                               <span className="font-medium">Vnt. kaina:</span> €{parseFloat(item.unit_price).toFixed(2)}
