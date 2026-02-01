@@ -38,7 +38,10 @@ ALTER TABLE tool_movements
   FOREIGN KEY (recorded_by) REFERENCES users(id);
 
 -- 2. Create generate_work_order_number RPC function
-CREATE OR REPLACE FUNCTION generate_work_order_number()
+-- Drop existing function first if it exists with different return type
+DROP FUNCTION IF EXISTS generate_work_order_number();
+
+CREATE FUNCTION generate_work_order_number()
 RETURNS text AS $$
 DECLARE
   next_num integer;

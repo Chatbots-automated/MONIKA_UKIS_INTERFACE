@@ -37,7 +37,9 @@ ADD CONSTRAINT tool_movements_recorded_by_fkey
 FOREIGN KEY (recorded_by) REFERENCES users(id);
 
 -- Create generate_work_order_number RPC function
-CREATE OR REPLACE FUNCTION generate_work_order_number()
+DROP FUNCTION IF EXISTS generate_work_order_number();
+
+CREATE FUNCTION generate_work_order_number()
 RETURNS text AS $$
 DECLARE
   next_num integer;
@@ -45,7 +47,8 @@ DECLARE
 BEGIN
   SELECT COALESCE(MAX(CAST(SUBSTRING(work_order_number FROM 'WO-(.*)') AS INTEGER)), 0) + 1
   INTO next_num
-  FROM maintenance_work_orders;
+  FROM maintenance_work_orders
+  WHERE work_order_number ~ '^WO-[0-9]+$';
 
   new_number := 'WO-' || LPAD(next_num::text, 6, '0');
   RETURN new_number;
@@ -84,13 +87,34 @@ ON maintenance_work_orders(work_order_number);
 CREATE INDEX IF NOT EXISTS idx_maintenance_work_orders_status
 ON maintenance_work_orders(status);
 
+-- Ensure maintenance_work_orders has completed_date column
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'maintenance_work_orders' AND column_name = 'completed_date'
+  ) THEN
+    ALTER TABLE maintenance_work_orders
+    ADD COLUMN completed_date timestamptz;
+  END IF;
+END $$;
+
 -- Create function to update schedule when work order completes
 CREATE OR REPLACE FUNCTION update_schedule_on_work_order_complete()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') AND NEW.schedule_id IS NOT NULL THEN
+  -- Handle INSERT (when work order is created as 'completed')
+  IF TG_OP = 'INSERT' AND NEW.status = 'completed' AND NEW.schedule_id IS NOT NULL THEN
     UPDATE maintenance_schedules
-    SET last_completed_date = NEW.completed_date
+    SET last_completed_date = COALESCE(NEW.completed_date, NEW.created_at, NOW())
+    WHERE id = NEW.schedule_id;
+    RETURN NEW;
+  END IF;
+
+  -- Handle UPDATE (when work order status changes to 'completed')
+  IF TG_OP = 'UPDATE' AND NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') AND NEW.schedule_id IS NOT NULL THEN
+    UPDATE maintenance_schedules
+    SET last_completed_date = COALESCE(NEW.completed_date, NOW())
     WHERE id = NEW.schedule_id;
   END IF;
 
@@ -102,6 +126,22 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trigger_update_schedule_on_complete ON maintenance_work_orders;
 
 CREATE TRIGGER trigger_update_schedule_on_complete
-  AFTER UPDATE OF status ON maintenance_work_orders
+  AFTER INSERT OR UPDATE OF status ON maintenance_work_orders
   FOR EACH ROW
   EXECUTE FUNCTION update_schedule_on_work_order_complete();
+
+-- Update any existing completed work orders to update their schedules
+DO $$
+DECLARE
+  wo_record RECORD;
+BEGIN
+  FOR wo_record IN
+    SELECT id, schedule_id, completed_date, created_at
+    FROM maintenance_work_orders
+    WHERE status = 'completed' AND schedule_id IS NOT NULL
+  LOOP
+    UPDATE maintenance_schedules
+    SET last_completed_date = COALESCE(wo_record.completed_date, wo_record.created_at, NOW())
+    WHERE id = wo_record.schedule_id;
+  END LOOP;
+END $$;
