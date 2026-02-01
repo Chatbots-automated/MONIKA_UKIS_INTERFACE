@@ -127,7 +127,7 @@ export function TechnikaReports() {
           .eq('product_id', product.id)
           .order('created_at', { ascending: false });
 
-        const { data: issuanceItems } = await supabase
+        const { data: issuanceItems, error: issuanceError } = await supabase
           .from('equipment_issuance_items')
           .select(`
             *,
@@ -136,11 +136,15 @@ export function TechnikaReports() {
               issue_date,
               issued_to_name,
               status,
-              users(full_name)
+              issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
             )
           `)
           .eq('product_id', product.id)
           .order('created_at', { ascending: false });
+
+        if (issuanceError) {
+          console.error('Error loading issuances for product:', product.name, issuanceError);
+        }
 
         const totalReceived = batches?.reduce((sum, b) => sum + parseFloat(b.received_qty || 0), 0) || 0;
         const totalSpent = batches?.reduce((sum, b) => sum + parseFloat(b.purchase_price || 0) * parseFloat(b.received_qty || 0), 0) || 0;
@@ -620,7 +624,7 @@ export function TechnikaReports() {
                                       </span>
                                     </div>
                                     <div className="text-gray-700">
-                                      Kam: {issuance.equipment_issuances?.users?.full_name || issuance.equipment_issuances?.issued_to_name || 'N/A'}
+                                      Kam: {issuance.equipment_issuances?.issued_to_user?.full_name || issuance.equipment_issuances?.issued_to_name || 'N/A'}
                                     </div>
                                     <div className="flex justify-between text-gray-700 mt-1">
                                       <span>
