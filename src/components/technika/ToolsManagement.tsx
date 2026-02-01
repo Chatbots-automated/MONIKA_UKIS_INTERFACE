@@ -53,6 +53,7 @@ export function ToolsManagement() {
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [checkoutForm, setCheckoutForm] = useState({
     holder_id: '',
+    quantity: '1',
     expected_return_date: '',
     notes: '',
   });
@@ -155,6 +156,7 @@ export function ToolsManagement() {
     setSelectedTool(tool);
     setCheckoutForm({
       holder_id: '',
+      quantity: '1',
       expected_return_date: '',
       notes: '',
     });
@@ -167,6 +169,9 @@ export function ToolsManagement() {
       return;
     }
 
+    const quantity = parseFloat(checkoutForm.quantity) || 1;
+    const notesWithQty = `Kiekis: ${quantity}${checkoutForm.notes ? ` | ${checkoutForm.notes}` : ''}`;
+
     try {
       await supabase.from('tool_movements').insert({
         tool_id: selectedTool.id,
@@ -174,8 +179,7 @@ export function ToolsManagement() {
         to_holder: checkoutForm.holder_id,
         from_location_id: selectedTool.current_location_id,
         movement_date: new Date().toISOString(),
-        expected_return_date: checkoutForm.expected_return_date || null,
-        notes: checkoutForm.notes || null,
+        notes: notesWithQty,
         recorded_by: user?.id || null,
       });
 
@@ -567,6 +571,18 @@ export function ToolsManagement() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={checkoutForm.quantity}
+                  onChange={(e) => setCheckoutForm({ ...checkoutForm, quantity: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tikėtina grąžinimo data</label>
                 <input
                   type="date"
@@ -595,6 +611,7 @@ export function ToolsManagement() {
                   setSelectedTool(null);
                   setCheckoutForm({
                     holder_id: '',
+                    quantity: '1',
                     expected_return_date: '',
                     notes: '',
                   });

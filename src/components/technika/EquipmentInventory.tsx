@@ -297,23 +297,6 @@ export function EquipmentInventory() {
 
       if (issuanceError) throw issuanceError;
 
-      const { data: batchData } = await supabase
-        .from('equipment_batches')
-        .select('qty_left')
-        .eq('id', selectedLoanItem.batch_id)
-        .single();
-
-      if (batchData) {
-        const { error: batchError } = await supabase
-          .from('equipment_batches')
-          .update({
-            qty_left: parseFloat(batchData.qty_left) + returnQty,
-          })
-          .eq('id', selectedLoanItem.batch_id);
-
-        if (batchError) throw batchError;
-      }
-
       await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id);
 
       alert('Prekės sėkmingai grąžintos');
