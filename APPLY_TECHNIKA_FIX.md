@@ -109,7 +109,7 @@ BEGIN
   -- Handle INSERT (when work order is created as 'completed')
   IF TG_OP = 'INSERT' AND NEW.status = 'completed' AND NEW.schedule_id IS NOT NULL THEN
     UPDATE maintenance_schedules
-    SET last_completed_date = COALESCE(NEW.completed_date, NEW.created_at, NOW())
+    SET last_performed_date = COALESCE(NEW.completed_date, NEW.created_at, NOW())
     WHERE id = NEW.schedule_id;
     RETURN NEW;
   END IF;
@@ -117,7 +117,7 @@ BEGIN
   -- Handle UPDATE (when work order status changes to 'completed')
   IF TG_OP = 'UPDATE' AND NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') AND NEW.schedule_id IS NOT NULL THEN
     UPDATE maintenance_schedules
-    SET last_completed_date = COALESCE(NEW.completed_date, NOW())
+    SET last_performed_date = COALESCE(NEW.completed_date, NOW())
     WHERE id = NEW.schedule_id;
   END IF;
 
@@ -155,7 +155,7 @@ BEGIN
     WHERE status = 'completed' AND schedule_id IS NOT NULL
   LOOP
     UPDATE maintenance_schedules
-    SET last_completed_date = COALESCE(wo_record.completed_date, wo_record.created_at, NOW())
+    SET last_performed_date = COALESCE(wo_record.completed_date, wo_record.created_at, NOW())
     WHERE id = wo_record.schedule_id;
   END LOOP;
 END $$;
