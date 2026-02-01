@@ -184,21 +184,28 @@ export function VisitMedicationEditor({
   };
 
   const validateQuantity = (medId: string, productId: string, batchId: string, qty: string) => {
-    const batch = batches.get(productId)?.find(b => b.id === batchId);
-    if (!batch) return;
-
     const requestedQty = parseFloat(qty);
     if (isNaN(requestedQty)) return;
 
-    const qtyLeft = (batch as any).qty_left || 0;
+    const productBatches = batches.get(productId) || [];
+    const totalAvailable = productBatches.reduce((sum, b) => sum + ((b as any).qty_left || 0), 0);
+
     const newWarnings = new Map(warnings);
 
-    if (requestedQty > qtyLeft) {
-      newWarnings.set(medId, `Nepakanka atsargų! Turima: ${qtyLeft}`);
-    } else if (requestedQty > qtyLeft * 0.8) {
-      newWarnings.set(medId, `Mažos atsargos. Liko: ${qtyLeft}`);
-    } else {
-      newWarnings.delete(medId);
+    if (requestedQty > totalAvailable) {
+      newWarnings.set(medId, `Nepakanka atsargų! Turima iš viso: ${totalAvailable.toFixed(2)}`);
+    } else if (productBatches.length > 0) {
+      const selectedBatch = productBatches.find(b => b.id === batchId);
+      const batchQty = (selectedBatch as any)?.qty_left || 0;
+
+      if (requestedQty > batchQty) {
+        const batchesNeeded = productBatches.filter(b => (b as any).qty_left > 0).length;
+        newWarnings.set(medId, `Bus naudojamos ${Math.min(batchesNeeded, Math.ceil(requestedQty / batchQty))} serijos (turima: ${totalAvailable.toFixed(2)})`);
+      } else if (requestedQty > batchQty * 0.8) {
+        newWarnings.set(medId, `Mažos atsargos. Liko serijoje: ${batchQty.toFixed(2)}`);
+      } else {
+        newWarnings.delete(medId);
+      }
     }
 
     setWarnings(newWarnings);
@@ -211,7 +218,7 @@ export function VisitMedicationEditor({
   const hasErrors = () => {
     return medications.some(m => {
       const warning = warnings.get(m.id);
-      return warning && warning.includes('Nepakanka');
+      return warning && warning.includes('Nepakanka atsargų!');
     });
   };
 
@@ -381,7 +388,9 @@ export function VisitMedicationEditor({
                         />
                         {warning && (
                           <p className={`text-xs mt-1 ${
-                            warning.includes('Nepakanka') ? 'text-red-600' : 'text-amber-600'
+                            warning.includes('Nepakanka atsargų!') ? 'text-red-600' :
+                            warning.includes('Bus naudojamos') ? 'text-blue-600 font-medium' :
+                            'text-amber-600'
                           }`}>
                             {warning}
                           </p>
