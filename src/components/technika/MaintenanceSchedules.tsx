@@ -7,12 +7,12 @@ interface MaintenanceSchedule {
   id: string;
   schedule_name: string;
   vehicle_id: string;
-  schedule_type: string;
+  maintenance_type: string;
   interval_value: number;
-  interval_unit: string;
-  last_service_date: string | null;
-  last_service_mileage: number | null;
-  last_service_hours: number | null;
+  interval_type: string;
+  last_performed_date: string | null;
+  last_performed_mileage: number | null;
+  last_performed_hours: number | null;
   next_due_date: string | null;
   next_due_mileage: number | null;
   next_due_hours: number | null;
@@ -30,12 +30,12 @@ interface MaintenanceSchedule {
 interface ScheduleForm {
   schedule_name: string;
   vehicle_id: string;
-  schedule_type: string;
+  maintenance_type: string;
   interval_value: string;
-  interval_unit: string;
-  last_service_date: string;
-  last_service_mileage: string;
-  last_service_hours: string;
+  interval_type: string;
+  last_performed_date: string;
+  last_performed_mileage: string;
+  last_performed_hours: string;
   notes: string;
 }
 
@@ -59,12 +59,12 @@ export function MaintenanceSchedules() {
   const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({
     schedule_name: '',
     vehicle_id: '',
-    schedule_type: 'date',
+    maintenance_type: 'date',
     interval_value: '',
-    interval_unit: 'days',
-    last_service_date: '',
-    last_service_mileage: '',
-    last_service_hours: '',
+    interval_type: 'days',
+    last_performed_date: '',
+    last_performed_mileage: '',
+    last_performed_hours: '',
     notes: '',
   });
 
@@ -99,12 +99,12 @@ export function MaintenanceSchedules() {
       setScheduleForm({
         schedule_name: schedule.schedule_name,
         vehicle_id: schedule.vehicle_id,
-        schedule_type: schedule.schedule_type,
+        maintenance_type: schedule.maintenance_type,
         interval_value: schedule.interval_value.toString(),
-        interval_unit: schedule.interval_unit,
-        last_service_date: schedule.last_service_date || '',
-        last_service_mileage: schedule.last_service_mileage?.toString() || '',
-        last_service_hours: schedule.last_service_hours?.toString() || '',
+        interval_type: schedule.interval_type,
+        last_performed_date: schedule.last_performed_date || '',
+        last_performed_mileage: schedule.last_performed_mileage?.toString() || '',
+        last_performed_hours: schedule.last_performed_hours?.toString() || '',
         notes: schedule.notes || '',
       });
     } else {
@@ -112,12 +112,12 @@ export function MaintenanceSchedules() {
       setScheduleForm({
         schedule_name: '',
         vehicle_id: '',
-        schedule_type: 'date',
+        maintenance_type: 'date',
         interval_value: '',
-        interval_unit: 'days',
-        last_service_date: '',
-        last_service_mileage: '',
-        last_service_hours: '',
+        interval_type: 'days',
+        last_performed_date: '',
+        last_performed_mileage: '',
+        last_performed_hours: '',
         notes: '',
       });
     }
@@ -127,24 +127,24 @@ export function MaintenanceSchedules() {
   const calculateNextDue = (form: ScheduleForm) => {
     const intervalValue = parseFloat(form.interval_value);
 
-    if (form.schedule_type === 'date' && form.last_service_date) {
-      const lastDate = new Date(form.last_service_date);
+    if (form.maintenance_type === 'date' && form.last_performed_date) {
+      const lastDate = new Date(form.last_performed_date);
       const nextDate = new Date(lastDate);
 
-      if (form.interval_unit === 'days') {
+      if (form.interval_type === 'days') {
         nextDate.setDate(nextDate.getDate() + intervalValue);
-      } else if (form.interval_unit === 'months') {
+      } else if (form.interval_type === 'months') {
         nextDate.setMonth(nextDate.getMonth() + intervalValue);
-      } else if (form.interval_unit === 'years') {
+      } else if (form.interval_type === 'years') {
         nextDate.setFullYear(nextDate.getFullYear() + intervalValue);
       }
 
       return { next_due_date: nextDate.toISOString().split('T')[0] };
-    } else if (form.schedule_type === 'mileage' && form.last_service_mileage) {
-      const lastMileage = parseFloat(form.last_service_mileage);
+    } else if (form.maintenance_type === 'mileage' && form.last_performed_mileage) {
+      const lastMileage = parseFloat(form.last_performed_mileage);
       return { next_due_mileage: lastMileage + intervalValue };
-    } else if (form.schedule_type === 'hours' && form.last_service_hours) {
-      const lastHours = parseFloat(form.last_service_hours);
+    } else if (form.maintenance_type === 'hours' && form.last_performed_hours) {
+      const lastHours = parseFloat(form.last_performed_hours);
       return { next_due_hours: lastHours + intervalValue };
     }
 
@@ -163,12 +163,12 @@ export function MaintenanceSchedules() {
       const scheduleData = {
         schedule_name: scheduleForm.schedule_name,
         vehicle_id: scheduleForm.vehicle_id,
-        schedule_type: scheduleForm.schedule_type,
+        maintenance_type: scheduleForm.maintenance_type,
         interval_value: parseFloat(scheduleForm.interval_value),
-        interval_unit: scheduleForm.interval_unit,
-        last_service_date: scheduleForm.last_service_date || null,
-        last_service_mileage: scheduleForm.last_service_mileage ? parseFloat(scheduleForm.last_service_mileage) : null,
-        last_service_hours: scheduleForm.last_service_hours ? parseFloat(scheduleForm.last_service_hours) : null,
+        interval_type: scheduleForm.interval_type,
+        last_performed_date: scheduleForm.last_performed_date || null,
+        last_performed_mileage: scheduleForm.last_performed_mileage ? parseFloat(scheduleForm.last_performed_mileage) : null,
+        last_performed_hours: scheduleForm.last_performed_hours ? parseFloat(scheduleForm.last_performed_hours) : null,
         notes: scheduleForm.notes || null,
         ...nextDue,
       };
@@ -225,20 +225,20 @@ export function MaintenanceSchedules() {
   };
 
   const getProgressPercentage = (schedule: MaintenanceSchedule) => {
-    if (schedule.schedule_type === 'date' && schedule.last_service_date && schedule.next_due_date) {
-      const lastDate = new Date(schedule.last_service_date).getTime();
+    if (schedule.maintenance_type === 'date' && schedule.last_performed_date && schedule.next_due_date) {
+      const lastDate = new Date(schedule.last_performed_date).getTime();
       const nextDate = new Date(schedule.next_due_date).getTime();
       const now = Date.now();
 
       const progress = ((now - lastDate) / (nextDate - lastDate)) * 100;
       return Math.min(Math.max(progress, 0), 100);
-    } else if (schedule.schedule_type === 'mileage' && schedule.last_service_mileage && schedule.next_due_mileage) {
-      const progress = ((schedule.vehicle.current_mileage - schedule.last_service_mileage) /
-        (schedule.next_due_mileage - schedule.last_service_mileage)) * 100;
+    } else if (schedule.maintenance_type === 'mileage' && schedule.last_performed_mileage && schedule.next_due_mileage) {
+      const progress = ((schedule.vehicle.current_mileage - schedule.last_performed_mileage) /
+        (schedule.next_due_mileage - schedule.last_performed_mileage)) * 100;
       return Math.min(Math.max(progress, 0), 100);
-    } else if (schedule.schedule_type === 'hours' && schedule.last_service_hours && schedule.next_due_hours) {
-      const progress = ((schedule.vehicle.current_engine_hours - schedule.last_service_hours) /
-        (schedule.next_due_hours - schedule.last_service_hours)) * 100;
+    } else if (schedule.maintenance_type === 'hours' && schedule.last_performed_hours && schedule.next_due_hours) {
+      const progress = ((schedule.vehicle.current_engine_hours - schedule.last_performed_hours) /
+        (schedule.next_due_hours - schedule.last_performed_hours)) * 100;
       return Math.min(Math.max(progress, 0), 100);
     }
     return 0;
@@ -259,7 +259,7 @@ export function MaintenanceSchedules() {
       schedule.schedule_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       schedule.vehicle.registration_number.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesType = filterType === 'all' || schedule.schedule_type === filterType;
+    const matchesType = filterType === 'all' || schedule.maintenance_type === filterType;
 
     return matchesSearch && matchesType;
   });
@@ -345,18 +345,18 @@ export function MaintenanceSchedules() {
                 </div>
 
                 <div className="space-y-2 text-sm text-gray-600 mb-3">
-                  <p>Tipas: {scheduleTypeLabels[schedule.schedule_type]}</p>
-                  <p>Intervalas: {schedule.interval_value} {intervalUnitLabels[schedule.interval_unit]}</p>
+                  <p>Tipas: {scheduleTypeLabels[schedule.maintenance_type]}</p>
+                  <p>Intervalas: {schedule.interval_value} {intervalUnitLabels[schedule.interval_type]}</p>
 
-                  {schedule.schedule_type === 'date' && schedule.next_due_date && (
+                  {schedule.maintenance_type === 'date' && schedule.next_due_date && (
                     <p>Kitas aptarnavimas: {new Date(schedule.next_due_date).toLocaleDateString('lt-LT')}</p>
                   )}
-                  {schedule.schedule_type === 'mileage' && schedule.next_due_mileage && (
+                  {schedule.maintenance_type === 'mileage' && schedule.next_due_mileage && (
                     <p>
                       Rida: {schedule.vehicle.current_mileage?.toLocaleString()} / {schedule.next_due_mileage.toLocaleString()} km
                     </p>
                   )}
-                  {schedule.schedule_type === 'hours' && schedule.next_due_hours && (
+                  {schedule.maintenance_type === 'hours' && schedule.next_due_hours && (
                     <p>
                       Valandos: {schedule.vehicle.current_engine_hours} / {schedule.next_due_hours} mval.
                     </p>
@@ -468,11 +468,11 @@ export function MaintenanceSchedules() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Aptarnavimo tipas *</label>
                 <select
-                  value={scheduleForm.schedule_type}
+                  value={scheduleForm.maintenance_type}
                   onChange={e => setScheduleForm({
                     ...scheduleForm,
-                    schedule_type: e.target.value,
-                    interval_unit: e.target.value === 'date' ? 'days' : e.target.value === 'mileage' ? 'km' : 'hours'
+                    maintenance_type: e.target.value,
+                    interval_type: e.target.value === 'date' ? 'days' : e.target.value === 'mileage' ? 'km' : 'hours'
                   })}
                   className="w-full border rounded px-3 py-2"
                 >
@@ -497,56 +497,56 @@ export function MaintenanceSchedules() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vienetai</label>
                   <select
-                    value={scheduleForm.interval_unit}
-                    onChange={e => setScheduleForm({ ...scheduleForm, interval_unit: e.target.value })}
+                    value={scheduleForm.interval_type}
+                    onChange={e => setScheduleForm({ ...scheduleForm, interval_type: e.target.value })}
                     className="w-full border rounded px-3 py-2"
                   >
-                    {scheduleForm.schedule_type === 'date' && (
+                    {scheduleForm.maintenance_type === 'date' && (
                       <>
                         <option value="days">Dienos</option>
                         <option value="months">Mėnesiai</option>
                         <option value="years">Metai</option>
                       </>
                     )}
-                    {scheduleForm.schedule_type === 'mileage' && <option value="km">Kilometrai</option>}
-                    {scheduleForm.schedule_type === 'hours' && <option value="hours">Motovalandos</option>}
+                    {scheduleForm.maintenance_type === 'mileage' && <option value="km">Kilometrai</option>}
+                    {scheduleForm.maintenance_type === 'hours' && <option value="hours">Motovalandos</option>}
                   </select>
                 </div>
               </div>
 
-              {scheduleForm.schedule_type === 'date' && (
+              {scheduleForm.maintenance_type === 'date' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Paskutinio aptarnavimo data</label>
                   <input
                     type="date"
-                    value={scheduleForm.last_service_date}
-                    onChange={e => setScheduleForm({ ...scheduleForm, last_service_date: e.target.value })}
+                    value={scheduleForm.last_performed_date}
+                    onChange={e => setScheduleForm({ ...scheduleForm, last_performed_date: e.target.value })}
                     className="w-full border rounded px-3 py-2"
                   />
                 </div>
               )}
 
-              {scheduleForm.schedule_type === 'mileage' && (
+              {scheduleForm.maintenance_type === 'mileage' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Rida per paskutinį aptarnavimą (km)</label>
                   <input
                     type="number"
                     step="0.1"
-                    value={scheduleForm.last_service_mileage}
-                    onChange={e => setScheduleForm({ ...scheduleForm, last_service_mileage: e.target.value })}
+                    value={scheduleForm.last_performed_mileage}
+                    onChange={e => setScheduleForm({ ...scheduleForm, last_performed_mileage: e.target.value })}
                     className="w-full border rounded px-3 py-2"
                   />
                 </div>
               )}
 
-              {scheduleForm.schedule_type === 'hours' && (
+              {scheduleForm.maintenance_type === 'hours' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Motovalandos per paskutinį aptarnavimą</label>
                   <input
                     type="number"
                     step="0.1"
-                    value={scheduleForm.last_service_hours}
-                    onChange={e => setScheduleForm({ ...scheduleForm, last_service_hours: e.target.value })}
+                    value={scheduleForm.last_performed_hours}
+                    onChange={e => setScheduleForm({ ...scheduleForm, last_performed_hours: e.target.value })}
                     className="w-full border rounded px-3 py-2"
                   />
                 </div>
