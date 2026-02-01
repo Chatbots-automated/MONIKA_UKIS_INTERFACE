@@ -1,4 +1,4 @@
-import { Package, Plus, Search, Upload, Users, ArrowRight, User } from 'lucide-react';
+import { Package, Plus, Search, Upload, Users, ArrowRight, User, CornerUpLeft } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +17,7 @@ interface WarehouseStock {
 }
 
 interface ItemOnLoan {
+  item_id: string;
   issuance_id: string;
   issuance_number: string;
   issued_to: string;
@@ -29,6 +30,7 @@ interface ItemOnLoan {
   quantity_returned: number;
   quantity_outstanding: number;
   value_outstanding: number;
+  batch_id: string;
 }
 
 interface Batch {
@@ -60,13 +62,19 @@ export function EquipmentInventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('inventory');
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<WarehouseStock | null>(null);
+  const [selectedLoanItem, setSelectedLoanItem] = useState<ItemOnLoan | null>(null);
   const [issueForm, setIssueForm] = useState({
     issued_to: '',
     issued_to_name: '',
     batch_id: '',
     quantity: '1',
     expected_return_date: '',
+    notes: '',
+  });
+  const [returnForm, setReturnForm] = useState({
+    quantity: '1',
     notes: '',
   });
 
@@ -77,12 +85,52 @@ export function EquipmentInventory() {
   const loadData = async () => {
     const [stockRes, loansRes, usersRes] = await Promise.all([
       supabase.from('equipment_warehouse_stock').select('*'),
-      supabase.from('equipment_items_on_loan').select('*'),
+      supabase
+        .from('equipment_issuance_items')
+        .select(`
+          id,
+          issuance_id,
+          batch_id,
+          quantity,
+          quantity_returned,
+          unit_price,
+          equipment_issuances!inner(
+            issuance_number,
+            issue_date,
+            expected_return_date,
+            status,
+            issued_to,
+            issued_to_name,
+            issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
+          ),
+          equipment_products(name, unit_type)
+        `)
+        .in('equipment_issuances.status', ['issued', 'partial_return']),
       supabase.from('users').select('id, full_name, email').order('full_name'),
     ]);
 
     if (stockRes.data) setWarehouseStock(stockRes.data);
-    if (loansRes.data) setItemsOnLoan(loansRes.data);
+    if (loansRes.data) {
+      const formattedLoans: ItemOnLoan[] = loansRes.data
+        .filter((item: any) => parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0))
+        .map((item: any) => ({
+          item_id: item.id,
+          issuance_id: item.issuance_id,
+          issuance_number: item.equipment_issuances?.issuance_number || 'N/A',
+          issued_to: item.equipment_issuances?.issued_to || '',
+          issued_to_name: item.equipment_issuances?.issued_to_user?.full_name || item.equipment_issuances?.issued_to_name || 'N/A',
+          issue_date: item.equipment_issuances?.issue_date || '',
+          expected_return_date: item.equipment_issuances?.expected_return_date || '',
+          product_name: item.equipment_products?.name || 'N/A',
+          unit_type: item.equipment_products?.unit_type || 'pcs',
+          quantity_issued: parseFloat(item.quantity || 0),
+          quantity_returned: parseFloat(item.quantity_returned || 0),
+          quantity_outstanding: parseFloat(item.quantity || 0) - parseFloat(item.quantity_returned || 0),
+          value_outstanding: (parseFloat(item.quantity || 0) - parseFloat(item.quantity_returned || 0)) * parseFloat(item.unit_price || 0),
+          batch_id: item.batch_id,
+        }));
+      setItemsOnLoan(formattedLoans);
+    }
     if (usersRes.data) setUsers(usersRes.data);
   };
 
@@ -181,6 +229,101 @@ export function EquipmentInventory() {
     } catch (error: any) {
       console.error('Error:', error);
       alert(`Klaida išduodant prekes: ${error.message}`);
+    }
+  };
+
+  const handleOpenReturnModal = (item: ItemOnLoan) => {
+    setSelectedLoanItem(item);
+    setReturnForm({
+      quantity: item.quantity_outstanding.toString(),
+      notes: '',
+    });
+    setShowReturnModal(true);
+  };
+
+  const handleReturnItems = async () => {
+    if (!selectedLoanItem || !returnForm.quantity) {
+      alert('Prašome įvesti kiekį');
+      return;
+    }
+
+    const returnQty = parseFloat(returnForm.quantity);
+
+    if (returnQty <= 0) {
+      alert('Grąžinamas kiekis turi būti didesnis už 0');
+      return;
+    }
+
+    if (returnQty > selectedLoanItem.quantity_outstanding) {
+      alert(`Negalite grąžinti daugiau nei ${selectedLoanItem.quantity_outstanding} ${selectedLoanItem.unit_type}`);
+      return;
+    }
+
+    try {
+      const newQuantityReturned = selectedLoanItem.quantity_returned + returnQty;
+      const isFullyReturned = newQuantityReturned >= selectedLoanItem.quantity_issued;
+
+      const { error: itemError } = await supabase
+        .from('equipment_issuance_items')
+        .update({
+          quantity_returned: newQuantityReturned,
+        })
+        .eq('id', selectedLoanItem.item_id);
+
+      if (itemError) throw itemError;
+
+      const { data: allItems } = await supabase
+        .from('equipment_issuance_items')
+        .select('quantity, quantity_returned')
+        .eq('issuance_id', selectedLoanItem.issuance_id);
+
+      let newIssuanceStatus = 'returned';
+      if (allItems) {
+        const hasOutstanding = allItems.some((item: any) =>
+          parseFloat(item.quantity) > parseFloat(item.quantity_returned || 0)
+        );
+        if (hasOutstanding) {
+          newIssuanceStatus = 'partial_return';
+        }
+      }
+
+      const { error: issuanceError } = await supabase
+        .from('equipment_issuances')
+        .update({
+          status: newIssuanceStatus,
+          actual_return_date: isFullyReturned ? new Date().toISOString().split('T')[0] : null,
+        })
+        .eq('id', selectedLoanItem.issuance_id);
+
+      if (issuanceError) throw issuanceError;
+
+      const { data: batchData } = await supabase
+        .from('equipment_batches')
+        .select('qty_left')
+        .eq('id', selectedLoanItem.batch_id)
+        .single();
+
+      if (batchData) {
+        const { error: batchError } = await supabase
+          .from('equipment_batches')
+          .update({
+            qty_left: parseFloat(batchData.qty_left) + returnQty,
+          })
+          .eq('id', selectedLoanItem.batch_id);
+
+        if (batchError) throw batchError;
+      }
+
+      await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id);
+
+      alert('Prekės sėkmingai grąžintos');
+      setShowReturnModal(false);
+      setReturnForm({ quantity: '1', notes: '' });
+      setSelectedLoanItem(null);
+      loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida grąžinant prekes: ${error.message}`);
     }
   };
 
@@ -330,13 +473,22 @@ export function EquipmentInventory() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-800">
-                          {item.quantity_outstanding} {item.unit_type}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          iš {item.quantity_issued} · €{item.value_outstanding?.toFixed(2) || '0.00'}
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-800">
+                            {item.quantity_outstanding} {item.unit_type}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            iš {item.quantity_issued} · €{item.value_outstanding?.toFixed(2) || '0.00'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenReturnModal(item)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                        >
+                          <CornerUpLeft className="w-4 h-4" />
+                          Grąžinti
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -471,6 +623,87 @@ export function EquipmentInventory() {
                 className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
               >
                 Išduoti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReturnModal && selectedLoanItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">
+              Grąžinti: {selectedLoanItem.product_name}
+            </h3>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">Išduota:</span>
+                  <span className="font-medium">{selectedLoanItem.issued_to_name}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">Išduotas kiekis:</span>
+                  <span className="font-medium">{selectedLoanItem.quantity_issued} {selectedLoanItem.unit_type}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">Jau grąžinta:</span>
+                  <span className="font-medium">{selectedLoanItem.quantity_returned} {selectedLoanItem.unit_type}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold pt-2 border-t border-amber-300">
+                  <span className="text-gray-900">Likutis:</span>
+                  <span className="text-amber-700">{selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Grąžinamas kiekis ({selectedLoanItem.unit_type})
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={selectedLoanItem.quantity_outstanding}
+                  value={returnForm.quantity}
+                  onChange={e => setReturnForm({ ...returnForm, quantity: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Maksimalus kiekis: {selectedLoanItem.quantity_outstanding} {selectedLoanItem.unit_type}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Pastabos (neprivaloma)
+                </label>
+                <textarea
+                  value={returnForm.notes}
+                  onChange={e => setReturnForm({ ...returnForm, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  placeholder="Būklė, pastabos..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowReturnModal(false);
+                  setReturnForm({ quantity: '1', notes: '' });
+                  setSelectedLoanItem(null);
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleReturnItems}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Grąžinti
               </button>
             </div>
           </div>
