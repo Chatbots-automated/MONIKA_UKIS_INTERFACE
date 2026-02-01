@@ -1,0 +1,10 @@
+You are working in a Vite + React + TypeScript app that uses Supabase.
+
+Rules:
+- Always search the repo before refactors and renames.
+- Database/schema changes MUST be done via SQL migrations in supabase/migrations.
+- Never put SUPABASE_SERVICE_ROLE_KEY in frontend code or commit secrets.
+- After schema changes, regenerate types:
+  supabase gen types typescript --linked > src/types/supabase.ts
+- Keep RLS enabled; update policies when adding tables/columns.
+- Prefer small, reviewable commits.
