@@ -487,6 +487,17 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
           onLoadBatches={loadBatchesForProduct}
         />
       )}
+
+      {showWorkOrderModal && (
+        <CreateWorkOrderModal
+          vehicle={vehicle}
+          onClose={() => setShowWorkOrderModal(false)}
+          onSuccess={() => {
+            setShowWorkOrderModal(false);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1561,6 +1572,220 @@ function VisitDetailModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateWorkOrderModal({
+  vehicle,
+  onClose,
+  onSuccess,
+}: {
+  vehicle: Vehicle;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { user, logAction } = useAuth();
+  const [form, setForm] = useState({
+    order_type: 'corrective',
+    priority: 'medium',
+    description: '',
+    scheduled_date: '',
+    estimated_cost: '',
+    labor_hours: '',
+    assigned_mechanic: '',
+    notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const { data: lastOrder } = await supabase
+        .from('maintenance_work_orders')
+        .select('work_order_number')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let nextNumber = 1;
+      if (lastOrder?.work_order_number) {
+        const match = lastOrder.work_order_number.match(/WO-(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1]) + 1;
+        }
+      }
+
+      const workOrderNumber = `WO-${nextNumber.toString().padStart(6, '0')}`;
+
+      const { error } = await supabase
+        .from('maintenance_work_orders')
+        .insert({
+          vehicle_id: vehicle.id,
+          work_order_number: workOrderNumber,
+          order_type: form.order_type,
+          priority: form.priority,
+          description: form.description,
+          scheduled_date: form.scheduled_date || null,
+          estimated_cost: form.estimated_cost ? parseFloat(form.estimated_cost) : null,
+          labor_hours: form.labor_hours ? parseFloat(form.labor_hours) : null,
+          assigned_mechanic: form.assigned_mechanic || null,
+          notes: form.notes || null,
+          status: 'pending',
+        });
+
+      if (error) throw error;
+
+      await logAction('create_work_order', 'maintenance_work_orders', vehicle.id);
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error creating work order:', error);
+      alert(`Klaida: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+          <h2 className="text-xl font-bold text-gray-900">Naujas remonto darbas</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Aprašymas *
+            </label>
+            <textarea
+              value={form.description}
+              onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
+              rows={3}
+              required
+              placeholder="Trumpas darbo aprašymas"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipas *
+              </label>
+              <select
+                value={form.order_type}
+                onChange={e => setForm(prev => ({ ...prev, order_type: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="preventive">Profilaktinis</option>
+                <option value="corrective">Taisomasis</option>
+                <option value="emergency">Skubus</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Prioritetas *
+              </label>
+              <select
+                value={form.priority}
+                onChange={e => setForm(prev => ({ ...prev, priority: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="low">Žemas</option>
+                <option value="medium">Vidutinis</option>
+                <option value="high">Aukštas</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Planuojama data
+            </label>
+            <input
+              type="datetime-local"
+              value={form.scheduled_date}
+              onChange={e => setForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mechanikas
+            </label>
+            <input
+              type="text"
+              value={form.assigned_mechanic}
+              onChange={e => setForm(prev => ({ ...prev, assigned_mechanic: e.target.value }))}
+              placeholder="Atsakingas mechanikas"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Planuojama kaina (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.estimated_cost}
+                onChange={e => setForm(prev => ({ ...prev, estimated_cost: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Darbo valandos
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={form.labor_hours}
+                onChange={e => setForm(prev => ({ ...prev, labor_hours: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Pastabos
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Atšaukti
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saugoma...' : 'Sukurti'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

@@ -406,7 +406,9 @@ export function CostCentersManagement() {
                       <p className="text-center text-gray-500 py-4">Nėra priskirtų produktų</p>
                     ) : (
                       <div className="space-y-2">
-                        <h4 className="font-semibold text-gray-900 mb-3">Priskirti produktai ({centerItems.length})</h4>
+                        <h4 className="font-semibold text-gray-900 mb-3">
+                          Panaudojimo įrašai ({centerItems.length})
+                        </h4>
                         <div className="space-y-2 max-h-96 overflow-y-auto">
                           {centerItems.map((item, idx) => (
                             <div key={idx} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
