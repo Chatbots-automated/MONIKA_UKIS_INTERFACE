@@ -135,7 +135,7 @@ export function WorkOrderDetailSidebar({
         .select(`
           *,
           vehicle:vehicles(registration_number, make, model),
-          tool:equipment_tools(name),
+          tool:tools(name),
           assignee:users!maintenance_work_orders_assigned_to_fkey(full_name)
         `)
         .eq('id', workOrderId)

@@ -114,7 +114,7 @@ export function WorkOrders() {
         .select(`
           *,
           vehicle:vehicles(registration_number, make, model),
-          tool:equipment_tools(name),
+          tool:tools(name),
           assignee:users!maintenance_work_orders_assigned_to_fkey(full_name)
         `)
         .order('created_at', { ascending: false }),
@@ -124,7 +124,7 @@ export function WorkOrders() {
         .eq('is_active', true)
         .order('registration_number'),
       supabase
-        .from('equipment_tools')
+        .from('tools')
         .select('id, name')
         .eq('is_active', true)
         .order('name'),
