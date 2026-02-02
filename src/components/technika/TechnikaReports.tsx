@@ -71,11 +71,40 @@ interface VehiclePartsUsage {
   assigned_by_name: string | null;
 }
 
+interface WorkOrder {
+  id: string;
+  work_order_number: string;
+  vehicle_id: string | null;
+  description: string;
+  status: string;
+  priority: string;
+  estimated_cost: number;
+  actual_cost: number;
+  scheduled_date: string | null;
+  completed_date: string | null;
+  created_at: string;
+  assigned_to_name: string | null;
+}
+
+interface VehicleCostSummary {
+  vehicle_id: string;
+  registration_number: string;
+  make: string | null;
+  model: string | null;
+  vehicle_type: string;
+  parts_cost: number;
+  maintenance_cost: number;
+  total_cost: number;
+  parts: VehiclePartsUsage[];
+  work_orders: WorkOrder[];
+}
+
 export function TechnikaReports() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'vehicle_parts'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'vehicle_costs'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
-  const [vehiclePartsUsage, setVehiclePartsUsage] = useState<VehiclePartsUsage[]>([]);
+  const [expandedVehicle, setExpandedVehicle] = useState<string | null>(null);
+  const [vehicleCostSummary, setVehicleCostSummary] = useState<VehicleCostSummary[]>([]);
 
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
@@ -110,15 +139,68 @@ export function TechnikaReports() {
     if (data) setCategories(data);
   };
 
-  const loadVehiclePartsUsage = async () => {
-    const { data } = await supabase
+  const loadVehicleCostSummary = async () => {
+    const { data: parts } = await supabase
       .from('vehicle_parts_usage')
       .select('*')
       .gte('invoice_date', dateFilter.from)
       .lte('invoice_date', dateFilter.to)
       .order('invoice_date', { ascending: false });
 
-    if (data) setVehiclePartsUsage(data);
+    const { data: workOrders } = await supabase
+      .from('maintenance_work_orders')
+      .select(`
+        *,
+        users!maintenance_work_orders_assigned_to_fkey(full_name)
+      `)
+      .eq('order_type', 'vehicle')
+      .not('vehicle_id', 'is', null)
+      .gte('created_at', dateFilter.from)
+      .lte('created_at', dateFilter.to + 'T23:59:59')
+      .order('created_at', { ascending: false });
+
+    const { data: vehicles } = await supabase
+      .from('vehicles')
+      .select('*')
+      .order('registration_number');
+
+    if (!vehicles) return;
+
+    const vehicleCosts: VehicleCostSummary[] = vehicles.map(vehicle => {
+      const vehicleParts = parts?.filter(p => p.vehicle_id === vehicle.id) || [];
+      const vehicleWorkOrders = workOrders?.filter((wo: any) => wo.vehicle_id === vehicle.id).map((wo: any) => ({
+        id: wo.id,
+        work_order_number: wo.work_order_number,
+        vehicle_id: wo.vehicle_id,
+        description: wo.description,
+        status: wo.status,
+        priority: wo.priority,
+        estimated_cost: parseFloat(wo.estimated_cost || 0),
+        actual_cost: parseFloat(wo.actual_cost || 0),
+        scheduled_date: wo.scheduled_date,
+        completed_date: wo.completed_date,
+        created_at: wo.created_at,
+        assigned_to_name: wo.users?.full_name || null,
+      })) || [];
+
+      const partsCost = vehicleParts.reduce((sum, p) => sum + p.total_price, 0);
+      const maintenanceCost = vehicleWorkOrders.reduce((sum, wo) => sum + (wo.actual_cost || wo.estimated_cost), 0);
+
+      return {
+        vehicle_id: vehicle.id,
+        registration_number: vehicle.registration_number,
+        make: vehicle.make,
+        model: vehicle.model,
+        vehicle_type: vehicle.vehicle_type,
+        parts_cost: partsCost,
+        maintenance_cost: maintenanceCost,
+        total_cost: partsCost + maintenanceCost,
+        parts: vehicleParts,
+        work_orders: vehicleWorkOrders,
+      };
+    });
+
+    setVehicleCostSummary(vehicleCosts.filter(v => v.total_cost > 0 || v.parts.length > 0 || v.work_orders.length > 0));
   };
 
   const loadData = async () => {
@@ -129,7 +211,7 @@ export function TechnikaReports() {
         loadCategoryStats(),
         loadWorkerStats(),
         loadOverviewStats(),
-        loadVehiclePartsUsage(),
+        loadVehicleCostSummary(),
       ]);
     } catch (error) {
       console.error('Error loading reports:', error);
@@ -398,7 +480,7 @@ export function TechnikaReports() {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
-              { id: 'vehicle_parts', label: 'Transporto dalys', icon: Car },
+              { id: 'vehicle_costs', label: 'Transporto savikaina', icon: Car },
               { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -828,123 +910,206 @@ export function TechnikaReports() {
             </div>
           )}
 
-          {!loading && activeTab === 'vehicle_parts' && (
+          {!loading && activeTab === 'vehicle_costs' && (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  Šiame sąraše matote visas dalis, kurios buvo priskirtos transporto priemonėms. Galite filtruoti pagal datą ir matyti bendras išlaidas.
+                  Transporto priemonių sąnaudų suvestinė. Čia matote visas transporto priemonių išlaidas: dalis, remonto darbus ir kitus kaštus.
                 </p>
               </div>
 
-              {vehiclePartsUsage.length === 0 ? (
+              {vehicleCostSummary.length === 0 ? (
                 <div className="text-center py-12">
                   <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra priskirtų dalių</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra įrašytų išlaidų</h3>
                   <p className="text-gray-600">
-                    Pirmiausia priskirsite dalis transporto priemonėms sąskaitų skyriuje
+                    Įrašykite transporto dalių priskyrimą sąskaitose arba sukurkite remonto darbus
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {Object.entries(
-                    vehiclePartsUsage.reduce((acc, item) => {
-                      const vehicleKey = item.vehicle_id;
-                      if (!acc[vehicleKey]) {
-                        acc[vehicleKey] = {
-                          vehicle: {
-                            id: item.vehicle_id,
-                            registration_number: item.registration_number,
-                            make: item.make,
-                            model: item.model,
-                            vehicle_type: item.vehicle_type,
-                          },
-                          items: [],
-                          totalCost: 0,
-                        };
-                      }
-                      acc[vehicleKey].items.push(item);
-                      acc[vehicleKey].totalCost += item.total_price;
-                      return acc;
-                    }, {} as Record<string, any>)
-                  ).map(([vehicleId, vehicleData]) => (
-                    <div key={vehicleId} className="border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="bg-slate-600 text-white p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Car className="w-6 h-6" />
-                            <div>
-                              <h3 className="font-bold text-lg">{vehicleData.vehicle.registration_number}</h3>
-                              <p className="text-sm text-slate-200">
-                                {vehicleData.vehicle.make} {vehicleData.vehicle.model} ({vehicleData.vehicle.vehicle_type})
+                <div className="space-y-4">
+                  {vehicleCostSummary.map((vehicle) => {
+                    const isExpanded = expandedVehicle === vehicle.vehicle_id;
+                    return (
+                      <div key={vehicle.vehicle_id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setExpandedVehicle(isExpanded ? null : vehicle.vehicle_id)}
+                          className="w-full bg-slate-600 text-white p-4 hover:bg-slate-700 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {isExpanded ? (
+                                <ChevronDown className="w-5 h-5" />
+                              ) : (
+                                <ChevronRight className="w-5 h-5" />
+                              )}
+                              <Car className="w-6 h-6" />
+                              <div className="text-left">
+                                <h3 className="font-bold text-lg">{vehicle.registration_number}</h3>
+                                <p className="text-sm text-slate-200">
+                                  {vehicle.make} {vehicle.model} ({vehicle.vehicle_type})
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-slate-200">Bendros išlaidos</p>
+                              <p className="text-2xl font-bold">{vehicle.total_cost.toFixed(2)} EUR</p>
+                              <p className="text-xs text-slate-300 mt-1">
+                                Dalys: {vehicle.parts_cost.toFixed(2)} EUR | Remontas: {vehicle.maintenance_cost.toFixed(2)} EUR
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-slate-200">Bendros išlaidos</p>
-                            <p className="text-2xl font-bold">{vehicleData.totalCost.toFixed(2)} EUR</p>
-                          </div>
-                        </div>
-                      </div>
+                        </button>
 
-                      <div className="divide-y divide-gray-200">
-                        {vehicleData.items.map((item: VehiclePartsUsage, idx: number) => (
-                          <div key={idx} className="p-4 hover:bg-gray-50 transition-colors">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Package className="w-4 h-4 text-slate-600" />
-                                  <h4 className="font-semibold text-gray-900">{item.product_name || item.item_description}</h4>
-                                  {item.product_code && (
-                                    <span className="text-xs text-gray-500">({item.product_code})</span>
-                                  )}
+                        {isExpanded && (
+                          <div className="bg-gray-50">
+                            {vehicle.parts.length > 0 && (
+                              <div className="p-4 border-b border-gray-200">
+                                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                  <Package className="w-5 h-5" />
+                                  Dalys ir komponentai ({vehicle.parts.length})
+                                </h4>
+                                <div className="space-y-2">
+                                  {vehicle.parts.map((item, idx) => (
+                                    <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <h5 className="font-semibold text-gray-900 mb-1">
+                                            {item.product_name || item.item_description}
+                                            {item.product_code && (
+                                              <span className="text-xs text-gray-500 ml-2">({item.product_code})</span>
+                                            )}
+                                          </h5>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                            <div>
+                                              <span className="text-gray-600">Sąskaita:</span>
+                                              <p className="font-medium text-gray-900">{item.invoice_number}</p>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Data:</span>
+                                              <p className="font-medium text-gray-900">
+                                                {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Tiekėjas:</span>
+                                              <p className="font-medium text-gray-900">{item.supplier_name}</p>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-600">Kiekis:</span>
+                                              <p className="font-medium text-gray-900">{item.quantity}</p>
+                                            </div>
+                                          </div>
+                                          {item.assignment_notes && (
+                                            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                                              <span className="font-medium text-yellow-900">Pastaba:</span> {item.assignment_notes}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="ml-4 text-right">
+                                          <div className="text-xl font-bold text-slate-600">{item.total_price.toFixed(2)} EUR</div>
+                                          <div className="text-xs text-gray-500">{item.unit_price.toFixed(2)} EUR / vnt</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                  <div>
-                                    <span className="text-gray-600">Sąskaita:</span>
-                                    <p className="font-medium text-gray-900">{item.invoice_number}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-600">Data:</span>
-                                    <p className="font-medium text-gray-900">
-                                      {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-600">Tiekėjas:</span>
-                                    <p className="font-medium text-gray-900">{item.supplier_name}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-600">Kiekis:</span>
-                                    <p className="font-medium text-gray-900">{item.quantity}</p>
-                                  </div>
+                                <div className="mt-3 pt-3 border-t border-gray-300 text-right">
+                                  <span className="font-semibold text-gray-900">Dalių suma: </span>
+                                  <span className="text-xl font-bold text-slate-600">{vehicle.parts_cost.toFixed(2)} EUR</span>
                                 </div>
-
-                                {item.assignment_notes && (
-                                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                                    <span className="font-medium text-yellow-900">Pastaba:</span> {item.assignment_notes}
-                                  </div>
-                                )}
-
-                                {item.assigned_by_name && (
-                                  <div className="mt-2 text-xs text-gray-500">
-                                    Priskirė: {item.assigned_by_name} ({new Date(item.assigned_at).toLocaleDateString('lt-LT')})
-                                  </div>
-                                )}
                               </div>
+                            )}
 
-                              <div className="ml-4 text-right">
-                                <div className="text-sm text-gray-600">Vieneto kaina</div>
-                                <div className="text-lg font-semibold text-gray-900">{item.unit_price.toFixed(2)} EUR</div>
-                                <div className="text-sm text-gray-600 mt-2">Viso</div>
-                                <div className="text-xl font-bold text-slate-600">{item.total_price.toFixed(2)} EUR</div>
+                            {vehicle.work_orders.length > 0 && (
+                              <div className="p-4">
+                                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                  <FileText className="w-5 h-5" />
+                                  Remonto darbai ({vehicle.work_orders.length})
+                                </h4>
+                                <div className="space-y-2">
+                                  {vehicle.work_orders.map((wo) => (
+                                    <div key={wo.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <h5 className="font-semibold text-gray-900">{wo.work_order_number}</h5>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                              wo.status === 'completed'
+                                                ? 'bg-green-100 text-green-800'
+                                                : wo.status === 'in_progress'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : wo.status === 'scheduled'
+                                                ? 'bg-yellow-100 text-yellow-800'
+                                                : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                              {wo.status === 'completed' ? 'Užbaigta' :
+                                               wo.status === 'in_progress' ? 'Vykdoma' :
+                                               wo.status === 'scheduled' ? 'Suplanuota' : wo.status}
+                                            </span>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                              wo.priority === 'urgent'
+                                                ? 'bg-red-100 text-red-800'
+                                                : wo.priority === 'high'
+                                                ? 'bg-orange-100 text-orange-800'
+                                                : wo.priority === 'normal'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                              {wo.priority === 'urgent' ? 'Skubus' :
+                                               wo.priority === 'high' ? 'Aukštas' :
+                                               wo.priority === 'normal' ? 'Normalus' :
+                                               wo.priority === 'low' ? 'Žemas' : wo.priority}
+                                            </span>
+                                          </div>
+                                          <p className="text-sm text-gray-700 mb-2">{wo.description}</p>
+                                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-gray-600">
+                                            {wo.scheduled_date && (
+                                              <div>
+                                                <span>Suplanuota:</span> {new Date(wo.scheduled_date).toLocaleDateString('lt-LT')}
+                                              </div>
+                                            )}
+                                            {wo.completed_date && (
+                                              <div>
+                                                <span>Užbaigta:</span> {new Date(wo.completed_date).toLocaleDateString('lt-LT')}
+                                              </div>
+                                            )}
+                                            {wo.assigned_to_name && (
+                                              <div>
+                                                <span>Priskirta:</span> {wo.assigned_to_name}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="ml-4 text-right">
+                                          <div className="text-xl font-bold text-slate-600">
+                                            {(wo.actual_cost || wo.estimated_cost).toFixed(2)} EUR
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            {wo.actual_cost > 0 ? 'Faktinė' : 'Planuojama'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-gray-300 text-right">
+                                  <span className="font-semibold text-gray-900">Remonto suma: </span>
+                                  <span className="text-xl font-bold text-slate-600">{vehicle.maintenance_cost.toFixed(2)} EUR</span>
+                                </div>
                               </div>
-                            </div>
+                            )}
+
+                            {vehicle.parts.length === 0 && vehicle.work_orders.length === 0 && (
+                              <div className="p-4 text-center text-gray-500">
+                                Nėra įrašų šioje transporto priemonėje
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
