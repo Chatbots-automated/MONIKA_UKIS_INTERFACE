@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Plus, Edit2, Archive, TrendingUp, Package, Calendar, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Archive, TrendingUp, Package, Calendar, Trash2, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 
 interface CostCenter {
   id: string;
@@ -18,6 +18,24 @@ interface CostCenterSummary extends CostCenter {
   total_cost: number;
   first_assignment_date: string | null;
   last_assignment_date: string | null;
+}
+
+interface CostCenterItem {
+  invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  supplier_name: string;
+  product_name: string;
+  product_code: string | null;
+  unit_type: string;
+  category_name: string | null;
+  item_description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  assignment_notes: string | null;
+  assigned_at: string;
+  assigned_by_name: string | null;
 }
 
 const PRESET_COLORS = [
@@ -39,6 +57,9 @@ export function CostCentersManagement() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCenter, setEditingCenter] = useState<CostCenter | null>(null);
+  const [expandedCenter, setExpandedCenter] = useState<string | null>(null);
+  const [centerItems, setCenterItems] = useState<CostCenterItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -74,6 +95,32 @@ export function CostCentersManagement() {
       })));
     }
     setLoading(false);
+  };
+
+  const loadCenterItems = async (centerId: string) => {
+    setLoadingItems(true);
+    const { data, error } = await supabase
+      .from('cost_center_parts_usage')
+      .select('*')
+      .eq('cost_center_id', centerId)
+      .order('invoice_date', { ascending: false });
+
+    if (error) {
+      console.error('Error loading cost center items:', error);
+    } else if (data) {
+      setCenterItems(data);
+    }
+    setLoadingItems(false);
+  };
+
+  const handleToggleExpand = async (centerId: string) => {
+    if (expandedCenter === centerId) {
+      setExpandedCenter(null);
+      setCenterItems([]);
+    } else {
+      setExpandedCenter(centerId);
+      await loadCenterItems(centerId);
+    }
   };
 
   const handleOpenModal = (center?: CostCenter) => {
@@ -255,12 +302,9 @@ export function CostCentersManagement() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="space-y-4">
           {costCenters.map((center) => (
-            <div
-              key={center.id}
-              className="bg-white rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all overflow-hidden"
-            >
+            <div key={center.id} className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
               <div
                 className="h-3"
                 style={{ backgroundColor: center.color }}
@@ -281,35 +325,53 @@ export function CostCentersManagement() {
                   />
                 </div>
 
-                <div className="space-y-3 mb-4">
+                <div className="grid grid-cols-3 gap-4 mb-4">
                   <div className="flex items-center gap-2 text-sm">
                     <Package className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-600">Produktų:</span>
-                    <span className="font-semibold text-gray-900">
-                      {center.total_assignments}
-                    </span>
+                    <div>
+                      <p className="text-xs text-gray-500">Produktų</p>
+                      <p className="font-semibold text-gray-900">{center.total_assignments}</p>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 text-sm">
                     <TrendingUp className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-600">Viso išlaidų:</span>
-                    <span className="font-semibold text-gray-900">
-                      {center.total_cost.toFixed(2)} EUR
-                    </span>
+                    <div>
+                      <p className="text-xs text-gray-500">Viso išlaidų</p>
+                      <p className="font-semibold text-gray-900">{center.total_cost.toFixed(2)} EUR</p>
+                    </div>
                   </div>
 
                   {center.last_assignment_date && (
                     <div className="flex items-center gap-2 text-sm">
                       <Calendar className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-600">Pask. priskyrimas:</span>
-                      <span className="font-medium text-gray-900">
-                        {center.last_assignment_date}
-                      </span>
+                      <div>
+                        <p className="text-xs text-gray-500">Pask. priskyrimas</p>
+                        <p className="font-medium text-gray-900">{center.last_assignment_date}</p>
+                      </div>
                     </div>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+                  {center.total_assignments > 0 && (
+                    <button
+                      onClick={() => handleToggleExpand(center.id)}
+                      className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                    >
+                      {expandedCenter === center.id ? (
+                        <>
+                          <ChevronUp className="w-4 h-4" />
+                          Slėpti produktus
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4" />
+                          Rodyti produktus
+                        </>
+                      )}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenModal(center)}
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
@@ -333,6 +395,64 @@ export function CostCentersManagement() {
                     </button>
                   )}
                 </div>
+
+                {expandedCenter === center.id && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    {loadingItems ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
+                      </div>
+                    ) : centerItems.length === 0 ? (
+                      <p className="text-center text-gray-500 py-4">Nėra priskirtų produktų</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-gray-900 mb-3">Priskirti produktai ({centerItems.length})</h4>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {centerItems.map((item, idx) => (
+                            <div key={idx} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">{item.product_name}</p>
+                                  {item.product_code && (
+                                    <p className="text-xs text-gray-500">Kodas: {item.product_code}</p>
+                                  )}
+                                  {item.item_description && item.item_description !== item.product_name && (
+                                    <p className="text-xs text-gray-600 mt-1">{item.item_description}</p>
+                                  )}
+                                </div>
+                                <div className="text-right ml-4">
+                                  <p className="font-bold text-gray-900">{item.total_price.toFixed(2)} EUR</p>
+                                  <p className="text-xs text-gray-600">{item.quantity} {item.unit_type} × {item.unit_price.toFixed(2)} EUR</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-slate-300">
+                                <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-1">
+                                    <FileText className="w-3 h-3" />
+                                    <span>{item.invoice_number}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    <span>{item.invoice_date}</span>
+                                  </div>
+                                  {item.category_name && (
+                                    <span className="px-2 py-0.5 bg-slate-200 rounded text-xs">{item.category_name}</span>
+                                  )}
+                                </div>
+                                {item.supplier_name && (
+                                  <span className="text-gray-600">{item.supplier_name}</span>
+                                )}
+                              </div>
+                              {item.assignment_notes && (
+                                <p className="text-xs text-gray-600 mt-2 italic">Pastaba: {item.assignment_notes}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
