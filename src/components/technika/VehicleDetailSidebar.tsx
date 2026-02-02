@@ -132,6 +132,7 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showVisitDetailModal, setShowVisitDetailModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState<ServiceVisit | null>(null);
+  const [visitMode, setVisitMode] = useState<'edit' | 'work'>('edit');
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
 
@@ -421,8 +422,9 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
               getStatusColor={getStatusColor}
               getStatusIcon={getStatusIcon}
               onCreateVisit={() => setShowVisitModal(true)}
-              onSelectVisit={(visit) => {
+              onSelectVisit={(visit, mode) => {
                 setSelectedVisit(visit);
+                setVisitMode(mode);
                 setShowVisitDetailModal(true);
               }}
               onUpdate={loadData}
@@ -475,6 +477,7 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
           vehicle={vehicle}
           products={products}
           batches={batches}
+          mode={visitMode}
           onClose={() => {
             setShowVisitDetailModal(false);
             setSelectedVisit(null);
@@ -705,7 +708,7 @@ function VisitsTab({
   getStatusColor: (status: string) => string;
   getStatusIcon: (status: string) => JSX.Element;
   onCreateVisit: () => void;
-  onSelectVisit: (visit: ServiceVisit) => void;
+  onSelectVisit: (visit: ServiceVisit, mode: 'edit' | 'work') => void;
   onUpdate: () => void;
 }) {
   return (
@@ -731,7 +734,8 @@ function VisitsTab({
                 visit={visit}
                 getStatusColor={getStatusColor}
                 getStatusIcon={getStatusIcon}
-                onClick={() => onSelectVisit(visit)}
+                onEdit={() => onSelectVisit(visit, 'edit')}
+                onWork={() => onSelectVisit(visit, 'work')}
               />
             ))}
           </div>
@@ -751,7 +755,8 @@ function VisitsTab({
                 visit={visit}
                 getStatusColor={getStatusColor}
                 getStatusIcon={getStatusIcon}
-                onClick={() => onSelectVisit(visit)}
+                onEdit={() => onSelectVisit(visit, 'edit')}
+                onWork={() => onSelectVisit(visit, 'work')}
               />
             ))}
           </div>
@@ -771,7 +776,8 @@ function VisitsTab({
                 visit={visit}
                 getStatusColor={getStatusColor}
                 getStatusIcon={getStatusIcon}
-                onClick={() => onSelectVisit(visit)}
+                onEdit={() => onSelectVisit(visit, 'edit')}
+                onWork={() => onSelectVisit(visit, 'work')}
               />
             ))}
           </div>
@@ -791,7 +797,8 @@ function VisitsTab({
                 visit={visit}
                 getStatusColor={getStatusColor}
                 getStatusIcon={getStatusIcon}
-                onClick={() => onSelectVisit(visit)}
+                onEdit={() => onSelectVisit(visit, 'edit')}
+                onWork={() => onSelectVisit(visit, 'work')}
               />
             ))}
           </div>
@@ -812,17 +819,18 @@ function ServiceVisitCard({
   visit,
   getStatusColor,
   getStatusIcon,
-  onClick,
+  onEdit,
+  onWork,
 }: {
   visit: ServiceVisit;
   getStatusColor: (status: string) => string;
   getStatusIcon: (status: string) => JSX.Element;
-  onClick: () => void;
+  onEdit: () => void;
+  onWork: () => void;
 }) {
   return (
     <div
-      onClick={onClick}
-      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer bg-white"
+      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all bg-white"
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -871,6 +879,29 @@ function ServiceVisitCard({
       {visit.notes && (
         <p className="text-xs text-gray-600 mt-2 line-clamp-2">{visit.notes}</p>
       )}
+
+      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Edit className="w-4 h-4" />
+          Redaguoti
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onWork();
+          }}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Wrench className="w-4 h-4" />
+          Tvarkyti
+        </button>
+      </div>
     </div>
   );
 }
@@ -1389,6 +1420,7 @@ function VisitDetailModal({
   vehicle,
   products,
   batches,
+  mode,
   onClose,
   onSuccess,
   onLoadBatches,
@@ -1397,6 +1429,7 @@ function VisitDetailModal({
   vehicle: Vehicle;
   products: Product[];
   batches: Batch[];
+  mode: 'edit' | 'work';
   onClose: () => void;
   onSuccess: () => void;
   onLoadBatches: (productId: string) => void;
@@ -1444,7 +1477,14 @@ function VisitDetailModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h2 className="text-xl font-bold text-gray-900">Aptarnavimo detalės</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Aptarnavimo detalės</h2>
+            <span className={`inline-block text-xs font-medium px-2 py-1 rounded-full mt-1 ${
+              mode === 'work' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
+              {mode === 'work' ? 'Tvarkyti režimas' : 'Redaguoti režimas'}
+            </span>
+          </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -1506,7 +1546,7 @@ function VisitDetailModal({
             >
               <option value="Planuojamas">Planuojamas</option>
               <option value="Vykdomas">Vykdomas</option>
-              <option value="Baigtas">Baigtas</option>
+              {mode === 'work' && <option value="Baigtas">Baigtas</option>}
               <option value="Atsauktas">Atsauktas</option>
             </select>
           </div>
@@ -1561,12 +1601,16 @@ function VisitDetailModal({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
+                mode === 'work' && status === 'Baigtas'
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {saving ? 'Saugoma...' : (
                 <>
                   <Save className="w-4 h-4" />
-                  Išsaugoti
+                  {mode === 'work' && status === 'Baigtas' ? 'Užbaigti tvarkyma' : 'Išsaugoti'}
                 </>
               )}
             </button>
