@@ -34,14 +34,6 @@ interface Invoice {
   created_at: string;
 }
 
-interface Vehicle {
-  id: string;
-  registration_number: string;
-  make: string | null;
-  model: string | null;
-  vehicle_type: string;
-}
-
 interface Tool {
   id: string;
   name: string;
@@ -99,20 +91,17 @@ export function EquipmentInvoices() {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [savedInvoiceId, setSavedInvoiceId] = useState<string | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
-    vehicleId: string;
     toolId: string;
     costCenterId: string;
     notes: string;
   }>({
     invoiceItemId: '',
     assignmentType: '',
-    vehicleId: '',
     toolId: '',
     costCenterId: '',
     notes: '',
@@ -123,12 +112,11 @@ export function EquipmentInvoices() {
   }, []);
 
   const loadData = async () => {
-    const [suppliersRes, productsRes, categoriesRes, invoicesRes, vehiclesRes, toolsRes, costCentersRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
-      supabase.from('vehicles').select('id, registration_number, make, model, vehicle_type').eq('status', 'active').order('registration_number'),
       supabase.from('tools').select('id, name, tool_number').order('name'),
       supabase.from('cost_centers').select('id, name, description, color').eq('is_active', true).order('name'),
     ]);
@@ -137,7 +125,6 @@ export function EquipmentInvoices() {
     if (productsRes.data) setProducts(productsRes.data);
     if (categoriesRes.data) setCategories(categoriesRes.data);
     if (invoicesRes.data) setInvoices(invoicesRes.data);
-    if (vehiclesRes.data) setVehicles(vehiclesRes.data);
     if (toolsRes.data) setTools(toolsRes.data);
     if (costCentersRes.data) setCostCenters(costCentersRes.data);
   };
@@ -459,11 +446,6 @@ export function EquipmentInvoices() {
       return;
     }
 
-    if (assignmentForm.assignmentType === 'vehicle' && !assignmentForm.vehicleId) {
-      alert('Prašome pasirinkti transporto priemonę');
-      return;
-    }
-
     if (assignmentForm.assignmentType === 'tool' && !assignmentForm.toolId) {
       alert('Prašome pasirinkti įrankį');
       return;
@@ -478,7 +460,6 @@ export function EquipmentInvoices() {
       const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
         invoice_item_id: assignmentForm.invoiceItemId,
         assignment_type: assignmentForm.assignmentType,
-        vehicle_id: assignmentForm.vehicleId || null,
         tool_id: assignmentForm.toolId || null,
         cost_center_id: assignmentForm.costCenterId || null,
         notes: assignmentForm.notes || null,
@@ -497,7 +478,6 @@ export function EquipmentInvoices() {
       setAssignmentForm({
         invoiceItemId: '',
         assignmentType: '',
-        vehicleId: '',
         toolId: '',
         costCenterId: '',
         notes: '',
@@ -1344,20 +1324,6 @@ export function EquipmentInvoices() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Paskyrimo tipas</label>
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <button
-                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'vehicle', invoiceItemId: invoiceItems[0].id })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        assignmentForm.assignmentType === 'vehicle'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">Transporto priemonei</p>
-                        <p className="text-xs text-gray-500 mt-1">Traktoriui, automobiliui ir kt.</p>
-                      </div>
-                    </button>
-
-                    <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'tool', invoiceItemId: invoiceItems[0].id })}
                       className={`p-4 border-2 rounded-lg transition-all ${
                         assignmentForm.assignmentType === 'tool'
@@ -1430,24 +1396,6 @@ export function EquipmentInvoices() {
                     </div>
                   )}
                 </div>
-
-                {assignmentForm.assignmentType === 'vehicle' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite transporto priemonę</label>
-                    <select
-                      value={assignmentForm.vehicleId}
-                      onChange={(e) => setAssignmentForm({ ...assignmentForm, vehicleId: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2"
-                    >
-                      <option value="">-- Pasirinkite --</option>
-                      {vehicles.map(vehicle => (
-                        <option key={vehicle.id} value={vehicle.id}>
-                          {vehicle.registration_number} - {vehicle.make} {vehicle.model} ({vehicle.vehicle_type})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {assignmentForm.assignmentType === 'tool' && (
                   <div>
