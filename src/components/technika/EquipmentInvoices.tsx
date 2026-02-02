@@ -45,7 +45,7 @@ interface Vehicle {
 interface Tool {
   id: string;
   name: string;
-  model: string | null;
+  tool_number: string;
 }
 
 interface CostCenter {
@@ -129,7 +129,7 @@ export function EquipmentInvoices() {
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('vehicles').select('id, registration_number, make, model, vehicle_type').eq('status', 'active').order('registration_number'),
-      supabase.from('tools').select('id, name, model').eq('is_active', true).order('name'),
+      supabase.from('tools').select('id, name, tool_number').order('name'),
       supabase.from('cost_centers').select('id, name, description, color').eq('is_active', true).order('name'),
     ]);
 
@@ -1460,7 +1460,7 @@ export function EquipmentInvoices() {
                       <option value="">-- Pasirinkite --</option>
                       {tools.map(tool => (
                         <option key={tool.id} value={tool.id}>
-                          {tool.name} {tool.model ? `(${tool.model})` : ''}
+                          {tool.name} ({tool.tool_number})
                         </option>
                       ))}
                     </select>
