@@ -70,6 +70,18 @@ export function ToolsManagement() {
 
   useEffect(() => {
     loadData();
+
+    // Subscribe to realtime updates for tools
+    const toolsSubscription = supabase
+      .channel('tools-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tools' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      toolsSubscription.unsubscribe();
+    };
   }, []);
 
   const loadData = async () => {
@@ -282,11 +294,12 @@ export function ToolsManagement() {
   };
 
   const handleReturn = async (tool: Tool) => {
+    if (!confirm(`Ar tikrai norite grąžinti įrankį "${tool.name || tool.product?.name}"?`)) {
+      return;
+    }
+
     try {
-      // Debug: Log user information
-      console.log('Return - Current user:', user);
-      console.log('Return - User ID being passed:', user?.id || null);
-      console.log('Return - Tool current_holder:', tool.current_holder);
+      console.log('Return - Starting return process for tool:', tool.id);
 
       const movementData = {
         tool_id: tool.id,
@@ -296,27 +309,42 @@ export function ToolsManagement() {
         recorded_by: user?.id || null,
       };
 
-      console.log('Return - Inserting tool_movement:', movementData);
-
       const { error: movementError } = await supabase.from('tool_movements').insert(movementData);
 
-      if (movementError) throw movementError;
+      if (movementError) {
+        console.error('Movement error:', movementError);
+        throw movementError;
+      }
 
-      const { error: updateError } = await supabase
+      const { data: updatedTool, error: updateError } = await supabase
         .from('tools')
         .update({
           current_holder: null,
           is_available: true,
         })
-        .eq('id', tool.id);
+        .eq('id', tool.id)
+        .select()
+        .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw updateError;
+      }
 
-      await logAction('return_tool', { tool_id: tool.id, tool_number: tool.tool_number });
-      await loadTools();
+      console.log('Tool updated successfully:', updatedTool);
+
+      await logAction('return_tool', 'tools', tool.id, null, {
+        tool_id: tool.id,
+        tool_number: tool.tool_number,
+        from_holder: tool.current_holder
+      });
+
+      // Force immediate reload
+      await loadData();
+
       alert('Įrankis sėkmingai grąžintas');
     } catch (error: any) {
-      console.error('Error:', error);
+      console.error('Return error:', error);
       alert(`Klaida grąžinant įrankį: ${error.message}`);
     }
   };
