@@ -34,7 +34,6 @@ export function TechnicalInspectionInsurance() {
         .from('vehicles')
         .select('id, make, model, vehicle_type, registration_number, technical_inspection_due_date, insurance_expiry_date')
         .eq('created_by', user?.id)
-        .in('vehicle_type', ['cylinder', 'semi_trailer', 'car_light'])
         .order('make');
 
       if (error) throw error;
@@ -72,6 +71,9 @@ export function TechnicalInspectionInsurance() {
   };
 
   const vehicleTypeLabels: any = {
+    car: 'Automobilis',
+    truck: 'Sunkvežimis',
+    tractor: 'Traktorius',
     cylinder: 'Cilindras',
     semi_trailer: 'Puspriekabė',
     car_light: 'Lengvasis automobilis',
@@ -256,7 +258,7 @@ export function TechnicalInspectionInsurance() {
           <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-blue-800">
             <p className="font-medium mb-1">Priminimas</p>
-            <p>Šiame sąraše rodomos tik transporto priemonės, kurioms reikalinga techninė apžiūra ir draudimas: cilindrai, puspriekabės ir lengvieji automobiliai.</p>
+            <p>Šiame sąraše rodomos visos registruotos transporto priemonės. Reguliariai tikrinkite techninės apžiūros ir draudimo galiojimo terminus.</p>
           </div>
         </div>
       </div>
