@@ -10,8 +10,12 @@
     - Provides detailed cost center item tracking
 */
 
--- Create or replace vehicle_parts_usage view
-CREATE OR REPLACE VIEW public.vehicle_parts_usage AS
+-- Drop existing views to avoid column name conflicts
+DROP VIEW IF EXISTS public.vehicle_parts_usage CASCADE;
+DROP VIEW IF EXISTS public.cost_center_parts_usage CASCADE;
+
+-- Create vehicle_parts_usage view
+CREATE VIEW public.vehicle_parts_usage AS
 SELECT
   v.id as vehicle_id,
   v.registration_number,
@@ -39,8 +43,8 @@ LEFT JOIN public.users u ON u.id = eia.assigned_by
 WHERE eia.assignment_type = 'vehicle'
 ORDER BY v.registration_number, ei.invoice_date DESC;
 
--- Update cost_center_parts_usage view to include more details
-CREATE OR REPLACE VIEW public.cost_center_parts_usage AS
+-- Create cost_center_parts_usage view with detailed item tracking
+CREATE VIEW public.cost_center_parts_usage AS
 SELECT
   cc.id as cost_center_id,
   cc.name as cost_center_name,
