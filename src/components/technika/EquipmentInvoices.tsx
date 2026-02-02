@@ -48,6 +48,13 @@ interface Tool {
   model: string | null;
 }
 
+interface CostCenter {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+}
+
 interface InvoiceItem {
   id: string;
   product_id: string | null;
@@ -94,17 +101,20 @@ export function EquipmentInvoices() {
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
     vehicleId: string;
     toolId: string;
+    costCenterId: string;
     notes: string;
   }>({
     invoiceItemId: '',
     assignmentType: '',
     vehicleId: '',
     toolId: '',
+    costCenterId: '',
     notes: '',
   });
 
@@ -113,13 +123,14 @@ export function EquipmentInvoices() {
   }, []);
 
   const loadData = async () => {
-    const [suppliersRes, productsRes, categoriesRes, invoicesRes, vehiclesRes, toolsRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes, vehiclesRes, toolsRes, costCentersRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('vehicles').select('id, registration_number, make, model, vehicle_type').eq('status', 'active').order('registration_number'),
       supabase.from('tools').select('id, name, model').eq('is_active', true).order('name'),
+      supabase.from('cost_centers').select('id, name, description, color').eq('is_active', true).order('name'),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
@@ -128,6 +139,7 @@ export function EquipmentInvoices() {
     if (invoicesRes.data) setInvoices(invoicesRes.data);
     if (vehiclesRes.data) setVehicles(vehiclesRes.data);
     if (toolsRes.data) setTools(toolsRes.data);
+    if (costCentersRes.data) setCostCenters(costCentersRes.data);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -435,6 +447,7 @@ export function EquipmentInvoices() {
       assignmentType: '',
       vehicleId: '',
       toolId: '',
+      costCenterId: '',
       notes: '',
     });
     setShowAssignmentModal(true);
@@ -456,12 +469,18 @@ export function EquipmentInvoices() {
       return;
     }
 
+    if (assignmentForm.assignmentType === 'cost_center' && !assignmentForm.costCenterId) {
+      alert('Prašome pasirinkti kaštų centrą');
+      return;
+    }
+
     try {
       const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
         invoice_item_id: assignmentForm.invoiceItemId,
         assignment_type: assignmentForm.assignmentType,
         vehicle_id: assignmentForm.vehicleId || null,
         tool_id: assignmentForm.toolId || null,
+        cost_center_id: assignmentForm.costCenterId || null,
         notes: assignmentForm.notes || null,
         assigned_by: user?.id || null,
       });
@@ -480,6 +499,7 @@ export function EquipmentInvoices() {
         assignmentType: '',
         vehicleId: '',
         toolId: '',
+        costCenterId: '',
         notes: '',
       });
 
@@ -502,6 +522,7 @@ export function EquipmentInvoices() {
       assignmentType: '',
       vehicleId: '',
       toolId: '',
+      costCenterId: '',
       notes: '',
     });
 
@@ -931,9 +952,12 @@ export function EquipmentInvoices() {
                             </div>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-gray-600">Galutinė kaina:</span>{' '}
+                        <div className="grid grid-cols-2 gap-3 mt-2">
+                          <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <Edit2 className="w-4 h-4 text-emerald-700" />
+                              <label className="block text-sm font-bold text-emerald-900">Galutinė kaina (redaguojama)</label>
+                            </div>
                             <input
                               type="number"
                               step="0.01"
@@ -955,20 +979,22 @@ export function EquipmentInvoices() {
                                   handleItemEdit(index, 'price_per_unit', '');
                                 }
                               }}
-                              className="w-20 px-1 py-0.5 border-2 border-emerald-300 rounded text-xs font-semibold bg-emerald-50"
+                              className="w-full px-3 py-2 border-2 border-emerald-400 rounded-lg text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
                               placeholder="0.00"
+                              title="Galite redaguoti kainą čia - pakeitimai perskaičiuos vieneto kainą"
                             />
                           </div>
-                          <div>
-                            <span className="text-gray-600">
-                              {matchedProduct?.unit_type || 'vnt'} kaina:
-                            </span>{' '}
+                          <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                              {matchedProduct?.unit_type || 'vnt'} kaina (auto)
+                            </label>
                             <input
                               type="number"
                               step="0.0001"
                               value={getItemData(item, index).price_per_unit || ''}
                               readOnly
-                              className="w-20 px-1 py-0.5 border-2 border-blue-300 rounded text-xs font-semibold bg-blue-50"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base font-semibold bg-gray-100 cursor-not-allowed font-mono"
+                              title="Automatiškai apskaičiuojama iš galutinės kainos ir kiekio"
                             />
                           </div>
                         </div>
@@ -1316,7 +1342,7 @@ export function EquipmentInvoices() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Paskyrimo tipas</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'vehicle', invoiceItemId: invoiceItems[0].id })}
                       className={`p-4 border-2 rounded-lg transition-all ${
@@ -1373,6 +1399,36 @@ export function EquipmentInvoices() {
                       </div>
                     </button>
                   </div>
+
+                  {costCenters.length > 0 && (
+                    <div className="border-t pt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Arba kaštų centrui</label>
+                      <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                        {costCenters.map(center => (
+                          <button
+                            key={center.id}
+                            onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: center.id, invoiceItemId: invoiceItems[0].id })}
+                            className={`p-3 border-2 rounded-lg transition-all text-left ${
+                              assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === center.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div
+                                className="w-4 h-4 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: center.color }}
+                              />
+                              <p className="font-semibold text-gray-900 text-sm">{center.name}</p>
+                            </div>
+                            {center.description && (
+                              <p className="text-xs text-gray-500">{center.description}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {assignmentForm.assignmentType === 'vehicle' && (

@@ -15,7 +15,8 @@ import {
   Users,
   Box,
   Flame,
-  Star
+  Star,
+  Target
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -31,6 +32,7 @@ import { WorkerSchedules } from './technika/WorkerSchedules';
 import { ProductsManagement } from './technika/ProductsManagement';
 import { FireExtinguishersManagement } from './technika/FireExtinguishersManagement';
 import { ProductQuality } from './technika/ProductQuality';
+import { CostCentersManagement } from './technika/CostCentersManagement';
 
 interface TechnikaProps {
   onBackToModules: () => void;
@@ -40,6 +42,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Pagrindinis', icon: BarChart3 },
   { id: 'invoices', label: 'Sąskaitos', icon: FileText },
   { id: 'products', label: 'Produktai', icon: Box },
+  { id: 'cost-centers', label: 'Kaštų centrai', icon: Target },
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
@@ -75,6 +78,8 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <EquipmentInvoices />;
       case 'products':
         return <ProductsManagement />;
+      case 'cost-centers':
+        return <CostCentersManagement />;
       case 'tools':
         return <ToolsManagement />;
       case 'ppe':
