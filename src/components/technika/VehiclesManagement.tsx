@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Truck, Plus, Search, AlertTriangle, Calendar, User, Gauge, Edit, Trash2, X, Save } from 'lucide-react';
+import { VehicleDetailSidebar } from './VehicleDetailSidebar';
 
 interface Vehicle {
   id: string;
@@ -52,6 +53,7 @@ export function VehiclesManagement() {
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showReadingsModal, setShowReadingsModal] = useState(false);
   const [showBulkReadingsModal, setShowBulkReadingsModal] = useState(false);
+  const [showDetailSidebar, setShowDetailSidebar] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
@@ -477,7 +479,11 @@ export function VehiclesManagement() {
             return (
               <div
                 key={vehicle.id}
-                className={`border rounded-lg p-4 ${
+                onClick={() => {
+                  setSelectedVehicle(vehicle);
+                  setShowDetailSidebar(true);
+                }}
+                className={`border rounded-lg p-4 cursor-pointer hover:shadow-lg transition-shadow ${
                   hasWarnings ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
                 }`}
               >
@@ -544,20 +550,29 @@ export function VehiclesManagement() {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleOpenReadingsModal(vehicle)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenReadingsModal(vehicle);
+                    }}
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Gauge className="w-4 h-4" />
                     Rodmenys
                   </button>
                   <button
-                    onClick={() => handleOpenVehicleModal(vehicle)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenVehicleModal(vehicle);
+                    }}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
                   >
                     <Edit className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDeleteVehicle(vehicle)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteVehicle(vehicle);
+                    }}
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -942,6 +957,17 @@ export function VehiclesManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {showDetailSidebar && selectedVehicle && (
+        <VehicleDetailSidebar
+          vehicle={selectedVehicle}
+          onClose={() => {
+            setShowDetailSidebar(false);
+            setSelectedVehicle(null);
+          }}
+          onUpdate={loadData}
+        />
       )}
     </div>
   );
