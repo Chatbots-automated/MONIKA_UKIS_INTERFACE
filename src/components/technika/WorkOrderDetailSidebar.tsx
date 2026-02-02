@@ -221,6 +221,54 @@ export function WorkOrderDetailSidebar({
     if (data) setUsers(data);
   };
 
+  const handleFinish = async () => {
+    if (!workOrder) return;
+
+    if (parts.length === 0) {
+      if (!confirm('Nepridėjote jokių dalių. Ar tikrai norite užbaigti remonto darbą?')) {
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      const updates: any = {
+        status: 'completed',
+        assigned_to: editForm.assigned_to || null,
+        odometer_reading: editForm.odometer_reading ? parseFloat(editForm.odometer_reading) : null,
+        engine_hours: editForm.engine_hours ? parseFloat(editForm.engine_hours) : null,
+        labor_hours: editForm.labor_hours ? parseFloat(editForm.labor_hours) : null,
+        labor_cost: editForm.labor_cost ? parseFloat(editForm.labor_cost) : null,
+        parts_cost: editForm.parts_cost ? parseFloat(editForm.parts_cost) : null,
+        notes: editForm.notes || null,
+        started_date: editForm.started_date || new Date().toISOString().split('T')[0],
+        completed_date: new Date().toISOString().split('T')[0],
+      };
+
+      if (updates.labor_cost !== null && updates.parts_cost !== null) {
+        updates.total_cost = updates.labor_cost + updates.parts_cost;
+      }
+
+      const { error } = await supabase
+        .from('maintenance_work_orders')
+        .update(updates)
+        .eq('id', workOrderId);
+
+      if (error) throw error;
+
+      await logAction('complete', 'maintenance_work_orders', workOrderId, 'Užbaigtas remonto darbas');
+
+      alert('Remonto darbas sėkmingai užbaigtas!');
+      onWorkOrderUpdate();
+      onClose();
+    } catch (error) {
+      console.error('Error completing work order:', error);
+      alert('Klaida užbaigiant remonto darbą');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveChanges = async () => {
     if (!workOrder) return;
 
@@ -559,20 +607,22 @@ export function WorkOrderDetailSidebar({
           </>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Statusas *</label>
-                <select
-                  value={editForm.status}
-                  onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="pending">Laukiama</option>
-                  <option value="in_progress">Vykdoma</option>
-                  {mode === 'work' && <option value="completed">Baigta</option>}
-                  <option value="cancelled">Atšaukta</option>
-                </select>
-              </div>
+            <div className={`grid grid-cols-1 ${mode !== 'work' ? 'md:grid-cols-2' : ''} gap-4`}>
+              {mode !== 'work' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Statusas *</label>
+                  <select
+                    value={editForm.status}
+                    onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="pending">Laukiama</option>
+                    <option value="in_progress">Vykdoma</option>
+                    <option value="completed">Baigta</option>
+                    <option value="cancelled">Atšaukta</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Atsakingas</label>
@@ -588,26 +638,28 @@ export function WorkOrderDetailSidebar({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pradėta</label>
-                <input
-                  type="date"
-                  value={editForm.started_date}
-                  onChange={e => setEditForm({ ...editForm, started_date: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
+              {mode !== 'work' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pradėta</label>
+                    <input
+                      type="date"
+                      value={editForm.started_date}
+                      onChange={e => setEditForm({ ...editForm, started_date: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
 
-              {mode === 'work' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Baigta</label>
-                  <input
-                    type="date"
-                    value={editForm.completed_date}
-                    onChange={e => setEditForm({ ...editForm, completed_date: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Baigta</label>
+                    <input
+                      type="date"
+                      value={editForm.completed_date}
+                      onChange={e => setEditForm({ ...editForm, completed_date: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                </>
               )}
 
               <div>
@@ -680,14 +732,25 @@ export function WorkOrderDetailSidebar({
             </div>
 
             <div className="flex gap-2">
-              <button
-                onClick={handleSaveChanges}
-                disabled={isSaving}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                {isSaving ? 'Saugoma...' : (mode === 'work' && editForm.status === 'completed' ? 'Užbaigti' : 'Išsaugoti')}
-              </button>
+              {mode === 'work' ? (
+                <button
+                  onClick={handleFinish}
+                  disabled={isSaving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  {isSaving ? 'Užbaigiama...' : 'Užbaigti remonto darbą'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveChanges}
+                  disabled={isSaving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSaving ? 'Saugoma...' : 'Išsaugoti'}
+                </button>
+              )}
               <button
                 onClick={() => {
                   setIsEditing(false);

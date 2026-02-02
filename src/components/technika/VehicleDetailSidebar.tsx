@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { formatDateTimeLT, formatDateLT } from '../../lib/formatters';
 import { SearchableSelect } from '../SearchableSelect';
+import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
 
 interface Vehicle {
   id: string;
@@ -135,6 +136,8 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
   const [visitMode, setVisitMode] = useState<'edit' | 'work'>('edit');
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<string | null>(null);
+  const [workOrderMode, setWorkOrderMode] = useState<'edit' | 'work'>('edit');
 
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -438,6 +441,10 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
               visits={visits}
               onCreateWorkOrder={() => setShowWorkOrderModal(true)}
               onUpdate={loadData}
+              onWorkOrderClick={(workOrderId, mode) => {
+                setSelectedWorkOrder(workOrderId);
+                setWorkOrderMode(mode);
+              }}
             />
           )}
 
@@ -497,6 +504,18 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
           onClose={() => setShowWorkOrderModal(false)}
           onSuccess={() => {
             setShowWorkOrderModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {selectedWorkOrder && (
+        <WorkOrderDetailSidebar
+          workOrderId={selectedWorkOrder}
+          isOpen={true}
+          mode={workOrderMode}
+          onClose={() => setSelectedWorkOrder(null)}
+          onWorkOrderUpdate={() => {
             loadData();
           }}
         />
@@ -912,12 +931,14 @@ function WorkOrdersTab({
   visits,
   onCreateWorkOrder,
   onUpdate,
+  onWorkOrderClick,
 }: {
   vehicle: Vehicle;
   workOrders: WorkOrder[];
   visits: ServiceVisit[];
   onCreateWorkOrder: () => void;
   onUpdate: () => void;
+  onWorkOrderClick: (workOrderId: string, mode: 'edit' | 'work') => void;
 }) {
   return (
     <div className="space-y-6">
@@ -932,7 +953,11 @@ function WorkOrdersTab({
       {workOrders.length > 0 ? (
         <div className="space-y-3">
           {workOrders.map(wo => (
-            <div key={wo.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+            <div
+              key={wo.id}
+              onClick={() => onWorkOrderClick(wo.id, wo.status === 'in_progress' ? 'work' : 'edit')}
+              className="border border-gray-200 rounded-lg p-4 bg-white cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+            >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-gray-900">{wo.work_order_number}</span>
