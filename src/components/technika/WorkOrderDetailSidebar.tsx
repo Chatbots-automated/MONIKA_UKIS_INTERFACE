@@ -75,6 +75,7 @@ interface Batch {
 interface WorkOrderDetailSidebarProps {
   workOrderId: string;
   isOpen: boolean;
+  mode: 'edit' | 'work';
   onClose: () => void;
   onWorkOrderUpdate: () => void;
 }
@@ -82,6 +83,7 @@ interface WorkOrderDetailSidebarProps {
 export function WorkOrderDetailSidebar({
   workOrderId,
   isOpen,
+  mode,
   onClose,
   onWorkOrderUpdate
 }: WorkOrderDetailSidebarProps) {
@@ -428,7 +430,14 @@ export function WorkOrderDetailSidebar({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Wrench className="w-6 h-6" />
-            <h2 className="text-2xl font-bold">{workOrder.work_order_number}</h2>
+            <div>
+              <h2 className="text-2xl font-bold">{workOrder.work_order_number}</h2>
+              <span className={`inline-block text-xs font-medium px-2 py-1 rounded-full mt-1 ${
+                mode === 'work' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+              }`}>
+                {mode === 'work' ? 'Tvarkyti režimas' : 'Redaguoti režimas'}
+              </span>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -560,7 +569,7 @@ export function WorkOrderDetailSidebar({
                 >
                   <option value="pending">Laukiama</option>
                   <option value="in_progress">Vykdoma</option>
-                  <option value="completed">Baigta</option>
+                  {mode === 'work' && <option value="completed">Baigta</option>}
                   <option value="cancelled">Atšaukta</option>
                 </select>
               </div>
@@ -589,15 +598,17 @@ export function WorkOrderDetailSidebar({
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Baigta</label>
-                <input
-                  type="date"
-                  value={editForm.completed_date}
-                  onChange={e => setEditForm({ ...editForm, completed_date: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
+              {mode === 'work' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Baigta</label>
+                  <input
+                    type="date"
+                    value={editForm.completed_date}
+                    onChange={e => setEditForm({ ...editForm, completed_date: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Rida (km)</label>
@@ -675,7 +686,7 @@ export function WorkOrderDetailSidebar({
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                {isSaving ? 'Saugoma...' : 'Išsaugoti'}
+                {isSaving ? 'Saugoma...' : (mode === 'work' && editForm.status === 'completed' ? 'Užbaigti' : 'Išsaugoti')}
               </button>
               <button
                 onClick={() => {

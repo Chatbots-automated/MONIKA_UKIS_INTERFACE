@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, Eye, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
+import { Search, Edit, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
 import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
 
 interface WorkOrder {
@@ -45,6 +45,7 @@ export function WorkOrders() {
   const [filterPriority, setFilterPriority] = useState('all');
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarMode, setSidebarMode] = useState<'edit' | 'work'>('edit');
 
   useEffect(() => {
     loadData();
@@ -69,8 +70,9 @@ export function WorkOrders() {
     if (data) setWorkOrders(data as any);
   };
 
-  const handleViewDetails = (workOrder: WorkOrder) => {
+  const handleOpenSidebar = (workOrder: WorkOrder, mode: 'edit' | 'work') => {
     setSelectedWorkOrderId(workOrder.id);
+    setSidebarMode(mode);
     setShowSidebar(true);
   };
 
@@ -238,8 +240,7 @@ export function WorkOrders() {
             filteredWorkOrders.map(wo => (
               <div
                 key={wo.id}
-                className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                onClick={() => handleViewDetails(wo)}
+                className="p-6 hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-3">
@@ -306,17 +307,29 @@ export function WorkOrders() {
                     </div>
                   </div>
 
-                  {/* View Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewDetails(wo);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Peržiūrėti
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenSidebar(wo, 'edit');
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Redaguoti
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenSidebar(wo, 'work');
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <Wrench className="w-4 h-4" />
+                      Tvarkyti
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -328,6 +341,7 @@ export function WorkOrders() {
         <WorkOrderDetailSidebar
           workOrderId={selectedWorkOrderId}
           isOpen={showSidebar}
+          mode={sidebarMode}
           onClose={() => {
             setShowSidebar(false);
             setSelectedWorkOrderId(null);
