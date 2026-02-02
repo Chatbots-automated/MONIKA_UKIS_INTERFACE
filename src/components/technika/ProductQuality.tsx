@@ -58,11 +58,14 @@ export function ProductQuality() {
 
   const loadData = async () => {
     // Load products
-    const { data: productsRes } = await supabase
+    const { data: productsRes, error: productsError } = await supabase
       .from('equipment_products')
       .select('id, name, product_code, manufacturer')
       .eq('is_active', true)
       .order('name');
+
+    console.log('Loaded products:', productsRes);
+    console.log('Products error:', productsError);
 
     if (!productsRes) {
       setProducts([]);
@@ -81,11 +84,14 @@ export function ProductQuality() {
       .select('product_id, rating, review_date')
       .in('product_id', productIds as any);
 
-    const { data: schedules } = await supabase
+    const { data: schedules, error: schedulesError } = await supabase
       .from('product_quality_schedules')
       .select('id, product_id, interval_value, interval_type, next_due_date, is_active')
       .in('product_id', productIds as any)
       .eq('is_active', true);
+
+    console.log('Loaded schedules:', schedules);
+    console.log('Schedules error:', schedulesError);
 
     const reviewsByProduct: Record<string, any> = {};
     if (allReviews) {
@@ -209,6 +215,7 @@ export function ProductQuality() {
 
     try {
       const existing = products.find(p => p.id === scheduleForm.product_id)?.schedule;
+      console.log('Existing schedule:', existing);
 
       const baseDate = existing?.next_due_date
         ? new Date(existing.next_due_date)
@@ -232,8 +239,10 @@ export function ProductQuality() {
         created_by: user?.id || null,
       };
 
+      console.log('Saving schedule payload:', payload);
+
       if (existing) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('product_quality_schedules')
           .update({
             interval_value: payload.interval_value,
@@ -241,11 +250,18 @@ export function ProductQuality() {
             next_due_date: payload.next_due_date,
             is_active: true,
           })
-          .eq('id', existing.id);
+          .eq('id', existing.id)
+          .select();
 
+        console.log('Update result:', { data, error });
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('product_quality_schedules').insert(payload);
+        const { data, error } = await supabase
+          .from('product_quality_schedules')
+          .insert(payload)
+          .select();
+
+        console.log('Insert result:', { data, error });
         if (error) throw error;
       }
 
@@ -415,11 +431,11 @@ export function ProductQuality() {
                       key={value}
                       type="button"
                       onClick={() => setReviewForm({ ...reviewForm, rating: value })}
-                      className={`p-1 rounded-full ${
+                      className={`p-1 rounded-full hover:scale-110 transition-transform ${
                         reviewForm.rating >= value ? 'text-yellow-500' : 'text-gray-300'
                       }`}
                     >
-                      <Star className="w-6 h-6" />
+                      <Star className={`w-6 h-6 ${reviewForm.rating >= value ? 'fill-yellow-400' : ''}`} />
                     </button>
                   ))}
                 </div>
