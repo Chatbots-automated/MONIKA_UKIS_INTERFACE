@@ -59,7 +59,7 @@ SELECT
   eii.total_price,
   eia.notes as assignment_notes,
   eia.assigned_at,
-  u.name as assigned_by_name
+  u.full_name as assigned_by_name
 FROM public.equipment_invoice_item_assignments eia
 INNER JOIN public.equipment_invoice_items eii ON eii.id = eia.invoice_item_id
 INNER JOIN public.equipment_invoices ei ON ei.id = eii.invoice_id
@@ -87,7 +87,7 @@ SELECT
   eii.total_price,
   eia.notes as assignment_notes,
   eia.assigned_at,
-  u.name as assigned_by_name
+  u.full_name as assigned_by_name
 FROM public.equipment_invoice_item_assignments eia
 INNER JOIN public.equipment_invoice_items eii ON eii.id = eia.invoice_item_id
 INNER JOIN public.equipment_invoices ei ON ei.id = eii.invoice_id
