@@ -89,6 +89,8 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <PPEManagement />;
       case 'vehicles':
         return <VehiclesManagement />;
+      case 'technical-inspection':
+        return <TechnicalInspectionInsurance />;
       case 'fire-extinguishers':
         return <FireExtinguishersManagement />;
       case 'quality':
