@@ -51,6 +51,7 @@ export function VehiclesManagement() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showReadingsModal, setShowReadingsModal] = useState(false);
+  const [showBulkReadingsModal, setShowBulkReadingsModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
@@ -71,6 +72,10 @@ export function VehiclesManagement() {
     mileage: '',
     engine_hours: '',
   });
+  const [bulkReadingsRows, setBulkReadingsRows] = useState<
+    Array<{ vehicle_id: string; engine_hours: string; mileage: string }>
+  >([{ vehicle_id: '', engine_hours: '', mileage: '' }]);
+  const [isSavingBulkReadings, setIsSavingBulkReadings] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -238,6 +243,126 @@ export function VehiclesManagement() {
     }
   };
 
+  const handleOpenBulkReadingsModal = () => {
+    setBulkReadingsRows([{ vehicle_id: '', engine_hours: '', mileage: '' }]);
+    setShowBulkReadingsModal(true);
+  };
+
+  const handleAddBulkRow = () => {
+    setBulkReadingsRows(prev => [...prev, { vehicle_id: '', engine_hours: '', mileage: '' }]);
+  };
+
+  const handleRemoveBulkRow = (index: number) => {
+    setBulkReadingsRows(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleBulkRowChange = (index: number, field: 'vehicle_id' | 'engine_hours' | 'mileage', value: string) => {
+    setBulkReadingsRows(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveBulkReadings = async () => {
+    if (isSavingBulkReadings) return;
+
+    const trimmed = bulkReadingsRows
+      .map(r => ({ ...r, vehicle_id: r.vehicle_id.trim(), engine_hours: r.engine_hours.trim(), mileage: r.mileage.trim() }))
+      .filter(r => r.vehicle_id && (r.engine_hours || r.mileage));
+
+    if (trimmed.length === 0) {
+      alert('Prašome pasirinkti transportą ir įvesti motovalandas (ir/ar ridą)');
+      return;
+    }
+
+    // Prevent duplicates
+    const ids = trimmed.map(r => r.vehicle_id);
+    const unique = new Set(ids);
+    if (unique.size !== ids.length) {
+      alert('Tas pats transportas negali būti pasirinktas kelis kartus');
+      return;
+    }
+
+    // Validate increasing values
+    for (const row of trimmed) {
+      const v = vehicles.find(x => x.id === row.vehicle_id);
+      if (!v) continue;
+
+      const newHours = row.engine_hours !== '' ? parseFloat(row.engine_hours) : null;
+      const newMileage = row.mileage !== '' ? parseFloat(row.mileage) : null;
+
+      if (newHours !== null && Number.isNaN(newHours)) {
+        alert('Neteisingas motovalandų formatas');
+        return;
+      }
+      if (newMileage !== null && Number.isNaN(newMileage)) {
+        alert('Neteisingas ridos formatas');
+        return;
+      }
+
+      if (newHours !== null && newHours < (v.current_engine_hours || 0)) {
+        alert(`Motovalandos negali būti mažesnės nei dabartinės (${v.registration_number})`);
+        return;
+      }
+      if (newMileage !== null && newMileage < (v.current_mileage || 0)) {
+        alert(`Rida negali būti mažesnė nei dabartinė (${v.registration_number})`);
+        return;
+      }
+    }
+
+    setIsSavingBulkReadings(true);
+    try {
+      // Update vehicles one-by-one (each can have different values)
+      for (const row of trimmed) {
+        const v = vehicles.find(x => x.id === row.vehicle_id);
+        if (!v) continue;
+
+        const newHours = row.engine_hours !== '' ? parseFloat(row.engine_hours) : null;
+        const newMileage = row.mileage !== '' ? parseFloat(row.mileage) : null;
+
+        const update: any = {};
+        if (newHours !== null) update.current_engine_hours = newHours;
+        if (newMileage !== null) update.current_mileage = newMileage;
+
+        const { error } = await supabase.from('vehicles').update(update).eq('id', v.id);
+        if (error) throw error;
+
+        await logAction('bulk_update_vehicle_readings', 'vehicles', v.id, null, {
+          old_mileage: v.current_mileage,
+          new_mileage: newMileage ?? v.current_mileage,
+          old_engine_hours: v.current_engine_hours,
+          new_engine_hours: newHours ?? v.current_engine_hours,
+        });
+      }
+
+      // Optimistic local update so Planiniai aptarnavimai can reflect immediately (it reads vehicle current_engine_hours)
+      setVehicles(prev =>
+        prev.map(v => {
+          const row = trimmed.find(r => r.vehicle_id === v.id);
+          if (!row) return v;
+          const newHours = row.engine_hours !== '' ? parseFloat(row.engine_hours) : null;
+          const newMileage = row.mileage !== '' ? parseFloat(row.mileage) : null;
+          return {
+            ...v,
+            current_engine_hours: newHours ?? v.current_engine_hours,
+            current_mileage: newMileage ?? v.current_mileage,
+          };
+        })
+      );
+
+      alert('Rodmenys sėkmingai įrašyti');
+      setShowBulkReadingsModal(false);
+      setBulkReadingsRows([{ vehicle_id: '', engine_hours: '', mileage: '' }]);
+      await loadData();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    } finally {
+      setIsSavingBulkReadings(false);
+    }
+  };
+
   const handleDeleteVehicle = async (vehicle: Vehicle) => {
     if (!confirm(`Ar tikrai norite ištrinti transporto priemonę ${vehicle.registration_number}?`)) {
       return;
@@ -297,13 +422,23 @@ export function VehiclesManagement() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-800">Transporto priemonės</h3>
-          <button
-            onClick={() => handleOpenVehicleModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Pridėti transportą
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenBulkReadingsModal}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              title="Suvesti motovalandas / ridą keliems transportams"
+            >
+              <Gauge className="w-4 h-4" />
+              Suvesti motovalandas
+            </button>
+            <button
+              onClick={() => handleOpenVehicleModal()}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Pridėti transportą
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-4 mb-6">
@@ -699,6 +834,110 @@ export function VehiclesManagement() {
               >
                 <Save className="w-4 h-4" />
                 Atnaujinti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkReadingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full my-8 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Suvesti motovalandas / ridą</h3>
+              <button onClick={() => setShowBulkReadingsModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {bulkReadingsRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transportas</label>
+                    <select
+                      value={row.vehicle_id}
+                      onChange={e => handleBulkRowChange(idx, 'vehicle_id', e.target.value)}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      <option value="">Pasirinkite transportą</option>
+                      {vehicles
+                        .slice()
+                        .sort((a, b) => a.registration_number.localeCompare(b.registration_number))
+                        .map(v => (
+                          <option key={v.id} value={v.id}>
+                            {v.registration_number} - {v.make} {v.model} (dabar: {v.current_engine_hours ?? 0} mval.)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Motovalandos</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={row.engine_hours}
+                      onChange={e => handleBulkRowChange(idx, 'engine_hours', e.target.value)}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="pvz. 150"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rida (km)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={row.mileage}
+                      onChange={e => handleBulkRowChange(idx, 'mileage', e.target.value)}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="(nebūtina)"
+                    />
+                  </div>
+
+                  <div className="col-span-1">
+                    <button
+                      onClick={() => handleRemoveBulkRow(idx)}
+                      className="w-full px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      disabled={bulkReadingsRows.length === 1}
+                      title="Pašalinti"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="pt-2">
+                <button
+                  onClick={handleAddBulkRow}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-800 rounded-lg hover:bg-slate-200"
+                >
+                  <Plus className="w-4 h-4" />
+                  Pridėti eilutę
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowBulkReadingsModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveBulkReadings}
+                disabled={isSavingBulkReadings}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  isSavingBulkReadings ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                <Save className="w-4 h-4" />
+                {isSavingBulkReadings ? 'Išsaugoma...' : 'Išsaugoti'}
               </button>
             </div>
           </div>

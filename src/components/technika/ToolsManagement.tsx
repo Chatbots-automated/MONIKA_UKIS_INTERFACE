@@ -173,6 +173,7 @@ export function ToolsManagement() {
     const notesWithQty = `Kiekis: ${quantity}${checkoutForm.notes ? ` | ${checkoutForm.notes}` : ''}`;
 
     try {
+      // 1) Log tool movement (who received the tool)
       const { error: movementError } = await supabase.from('tool_movements').insert({
         tool_id: selectedTool.id,
         movement_type: 'checkout',
@@ -185,6 +186,64 @@ export function ToolsManagement() {
 
       if (movementError) throw movementError;
 
+      // 2) If tool is linked to a product, also issue quantity from Sandėlis
+      if (selectedTool.product?.name && selectedTool['product_id']) {
+        const productId = (selectedTool as any).product_id as string;
+
+        // Find oldest batch with enough quantity
+        const { data: batches, error: batchesError } = await supabase
+          .from('equipment_batches')
+          .select('id, qty_left, purchase_price')
+          .eq('product_id', productId)
+          .gt('qty_left', 0)
+          .order('created_at', { ascending: true });
+
+        if (batchesError) throw batchesError;
+
+        const batch = batches?.find(b => parseFloat(b.qty_left as any) >= quantity);
+        if (!batch) {
+          alert('Nepakanka šio įrankio atsargų sandėlyje');
+          throw new Error('Not enough stock in equipment_batches for this tool product');
+        }
+
+        const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
+
+        const { data: issuance, error: issuanceError } = await supabase
+          .from('equipment_issuances')
+          .insert({
+            issuance_number: issuanceNumber,
+            issued_to: checkoutForm.holder_id,
+            issued_by: user?.id || null,
+            issue_date: new Date().toISOString().split('T')[0],
+            status: 'issued',
+            notes: checkoutForm.notes || null,
+            created_by: user?.id || null,
+          })
+          .select()
+          .single();
+
+        if (issuanceError) throw issuanceError;
+
+        const { error: itemError } = await supabase
+          .from('equipment_issuance_items')
+          .insert({
+            issuance_id: issuance.id,
+            batch_id: batch.id,
+            product_id: productId,
+            quantity,
+            unit_price: batch.purchase_price,
+          });
+
+        if (itemError) throw itemError;
+
+        await logAction('issue_tool_from_stock', 'equipment_issuances', issuance.id, null, {
+          tool_id: selectedTool.id,
+          product_id: productId,
+          quantity,
+        });
+      }
+
+      // 3) Mark this tool as issued to the holder (but still allow further issues from the card)
       const { error: updateError } = await supabase
         .from('tools')
         .update({
@@ -196,9 +255,11 @@ export function ToolsManagement() {
 
       if (updateError) throw updateError;
 
+      // Do NOT mark tool as fully unavailable, since we may still have remaining stock
       await logAction('checkout_tool', 'tools', selectedTool.id, null, {
         tool_number: selectedTool.tool_number,
-        holder_id: checkoutForm.holder_id
+        holder_id: checkoutForm.holder_id,
+        quantity,
       });
 
       setShowCheckoutModal(false);
@@ -249,9 +310,32 @@ export function ToolsManagement() {
     }
 
     try {
-      const { error } = await supabase.from('tools').insert({
+      // If no existing product was selected, automatically create one so the tool appears in Produktai
+      let productId = newToolForm.product_id || '';
+
+      if (!productId) {
+        const { data: createdProduct, error: productError } = await supabase
+          .from('equipment_products')
+          .insert({
+            name: newToolForm.name,
+            unit_type: 'pcs', // default; can be refined later in Produktai
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (productError) throw productError;
+        productId = createdProduct.id;
+
+        await logAction('add_equipment_product_from_tool', {
+          product_id: createdProduct.id,
+          product_name: createdProduct.name,
+        });
+      }
+
+      const { error: toolError } = await supabase.from('tools').insert({
         name: newToolForm.name || null,
-        product_id: newToolForm.product_id || null,
+        product_id: productId,
         tool_number: newToolForm.tool_number,
         serial_number: newToolForm.serial_number || null,
         type: newToolForm.type,
@@ -261,9 +345,9 @@ export function ToolsManagement() {
         is_available: true,
       });
 
-      if (error) throw error;
+      if (toolError) throw toolError;
 
-      await logAction('add_tool', { tool_number: newToolForm.tool_number });
+      await logAction('add_tool', { tool_number: newToolForm.tool_number, product_id: productId });
       setShowAddModal(false);
       setNewToolForm({
         name: '',
@@ -382,12 +466,20 @@ export function ToolsManagement() {
                   Išduoti
                 </button>
               ) : (
-                <button
-                  onClick={() => handleReturn(tool)}
-                  className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                >
-                  Grąžinti
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleOpenCheckoutModal(tool)}
+                    className="flex-1 px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm"
+                  >
+                    Išduoti dar
+                  </button>
+                  <button
+                    onClick={() => handleReturn(tool)}
+                    className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                  >
+                    Grąžinti
+                  </button>
+                </div>
               )}
             </div>
           ))}

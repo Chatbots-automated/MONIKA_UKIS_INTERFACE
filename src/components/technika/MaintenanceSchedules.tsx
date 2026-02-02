@@ -78,6 +78,7 @@ export function MaintenanceSchedules() {
   });
   const [products, setProducts] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [isSavingService, setIsSavingService] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -157,6 +158,10 @@ export function MaintenanceSchedules() {
       }
 
       return { next_due_date: nextDate.toISOString().split('T')[0] };
+    } else if (form.maintenance_type === 'date') {
+      // If user hasn't provided a baseline (last performed), treat schedule as due immediately.
+      const today = new Date();
+      return { next_due_date: today.toISOString().split('T')[0] };
     } else if (form.maintenance_type === 'mileage' && form.last_performed_mileage) {
       const lastMileage = parseFloat(form.last_performed_mileage);
       return { next_due_mileage: lastMileage + intervalValue };
@@ -300,13 +305,122 @@ export function MaintenanceSchedules() {
   };
 
   const handleSaveService = async () => {
+    if (isSavingService) return;
+
     if (!servicingSchedule || !serviceForm.service_date) {
       alert('Prašome užpildyti privalomas laukas');
       return;
     }
 
+    // Validate mileage/hours based on maintenance type
+    if (servicingSchedule.maintenance_type === 'mileage' && !serviceForm.current_mileage) {
+      alert('Prašome įvesti dabartinę ridą');
+      return;
+    }
+    if (servicingSchedule.maintenance_type === 'hours' && !serviceForm.current_hours) {
+      alert('Prašome įvesti dabartines motovalandas');
+      return;
+    }
+
+    setIsSavingService(true);
+
     try {
+      const newMileage = serviceForm.current_mileage ? parseFloat(serviceForm.current_mileage) : null;
+      const newHours = serviceForm.current_hours ? parseFloat(serviceForm.current_hours) : null;
+      const serviceDate = serviceForm.service_date;
+
+      // STEP 1: Calculate next due date based on maintenance type
+      const scheduleUpdate: any = {
+        last_performed_date: serviceDate,
+      };
+
+      if (servicingSchedule.maintenance_type === 'date') {
+        const serviceDateObj = new Date(serviceDate);
+        const nextDate = new Date(serviceDateObj);
+        
+        // Calculate next due date based on interval
+        const intervalValue = servicingSchedule.interval_value || 0;
+        
+        if (intervalValue > 0) {
+          if (servicingSchedule.interval_type === 'days') {
+            nextDate.setDate(nextDate.getDate() + intervalValue);
+          } else if (servicingSchedule.interval_type === 'months') {
+            nextDate.setMonth(nextDate.getMonth() + intervalValue);
+          } else if (servicingSchedule.interval_type === 'years') {
+            nextDate.setFullYear(nextDate.getFullYear() + intervalValue);
+          }
+        } else {
+          // If interval is 0, set to 1 year from now
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+        }
+        
+        scheduleUpdate.next_due_date = nextDate.toISOString().split('T')[0];
+        // Clear mileage/hours fields for date-based maintenance
+        scheduleUpdate.last_performed_mileage = null;
+        scheduleUpdate.last_performed_hours = null;
+        scheduleUpdate.next_due_mileage = null;
+        scheduleUpdate.next_due_hours = null;
+      } else if (servicingSchedule.maintenance_type === 'mileage' && newMileage !== null) {
+        scheduleUpdate.last_performed_mileage = newMileage;
+        scheduleUpdate.next_due_mileage = newMileage + servicingSchedule.interval_value;
+        // Clear date fields for mileage-based maintenance
+        scheduleUpdate.next_due_date = null;
+        scheduleUpdate.last_performed_hours = null;
+        scheduleUpdate.next_due_hours = null;
+      } else if (servicingSchedule.maintenance_type === 'hours' && newHours !== null) {
+        scheduleUpdate.last_performed_hours = newHours;
+        scheduleUpdate.next_due_hours = newHours + servicingSchedule.interval_value;
+        // Clear date fields for hours-based maintenance
+        scheduleUpdate.next_due_date = null;
+        scheduleUpdate.last_performed_mileage = null;
+        scheduleUpdate.next_due_mileage = null;
+      }
+
+      // STEP 2: Update vehicle if mileage/hours provided
+      if (newMileage !== null || newHours !== null) {
+        const vehicleUpdate: any = {};
+        if (newMileage !== null) vehicleUpdate.current_mileage = newMileage;
+        if (newHours !== null) vehicleUpdate.current_engine_hours = newHours;
+
+        const { error: vehicleError } = await supabase
+          .from('vehicles')
+          .update(vehicleUpdate)
+          .eq('id', servicingSchedule.vehicle_id);
+
+        if (vehicleError) throw vehicleError;
+      }
+
+      // STEP 3: Update schedule - THIS IS THE KEY UPDATE
+      const { error: scheduleError, data: updatedSchedule } = await supabase
+        .from('maintenance_schedules')
+        .update(scheduleUpdate)
+        .eq('id', servicingSchedule.id)
+        .select(`
+          *,
+          vehicle:vehicles(registration_number, make, model, current_mileage, current_engine_hours)
+        `)
+        .single();
+
+      if (scheduleError) {
+        console.error('Schedule update failed:', scheduleError);
+        throw new Error(`Klaida atnaujinant grafiką: ${scheduleError.message}`);
+      }
+
+      if (!updatedSchedule) {
+        throw new Error('Grafikas nebuvo atnaujintas');
+      }
+
+      console.log('✅ Schedule updated:', {
+        id: updatedSchedule.id,
+        last_performed_date: updatedSchedule.last_performed_date,
+        next_due_date: updatedSchedule.next_due_date,
+        next_due_mileage: updatedSchedule.next_due_mileage,
+        next_due_hours: updatedSchedule.next_due_hours,
+      });
+
+      // STEP 4: Create work order
       const { data: woNumber } = await supabase.rpc('generate_work_order_number');
+      const completedDateTimestamp = new Date(serviceDate + 'T00:00:00').toISOString();
 
       const { data: workOrder, error: workOrderError } = await supabase
         .from('maintenance_work_orders')
@@ -314,10 +428,12 @@ export function MaintenanceSchedules() {
           work_order_number: woNumber,
           schedule_id: servicingSchedule.id,
           vehicle_id: servicingSchedule.vehicle_id,
-          order_type: 'scheduled',
+          order_type: 'planned',
           priority: 'medium',
           status: 'completed',
-          completed_date: serviceForm.service_date,
+          completed_date: completedDateTimestamp,
+          odometer_reading: newMileage,
+          engine_hours: newHours,
           description: `${servicingSchedule.schedule_name} - ${servicingSchedule.vehicle.registration_number}`,
           notes: serviceForm.notes || null,
           created_by: user?.id,
@@ -327,6 +443,7 @@ export function MaintenanceSchedules() {
 
       if (workOrderError) throw workOrderError;
 
+      // STEP 5: Handle items (optional)
       for (const item of serviceForm.items) {
         if (item.product_id && item.batch_id && parseFloat(item.quantity) > 0) {
           const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
@@ -338,7 +455,7 @@ export function MaintenanceSchedules() {
               issued_to: null,
               issued_to_name: `Aptarnavimas: ${servicingSchedule.vehicle.registration_number}`,
               issued_by: user?.id,
-              issue_date: serviceForm.service_date,
+              issue_date: serviceDate,
               status: 'issued',
               notes: `Naudota aptarnavime: ${workOrder.work_order_number}`,
               created_by: user?.id,
@@ -348,7 +465,6 @@ export function MaintenanceSchedules() {
 
           if (issuanceError) throw issuanceError;
 
-          const selectedProduct = products.find(p => p.product_id === item.product_id);
           const selectedBatch = batches.find(b => b.id === item.batch_id);
 
           const { error: itemError } = await supabase
@@ -365,77 +481,101 @@ export function MaintenanceSchedules() {
         }
       }
 
-      const newMileage = serviceForm.current_mileage ? parseFloat(serviceForm.current_mileage) : null;
-      const newHours = serviceForm.current_hours ? parseFloat(serviceForm.current_hours) : null;
-
-      await supabase
-        .from('vehicles')
-        .update({
-          current_mileage: newMileage || servicingSchedule.vehicle.current_mileage,
-          current_engine_hours: newHours || servicingSchedule.vehicle.current_engine_hours,
-        })
-        .eq('id', servicingSchedule.vehicle_id);
-
-      const updateData: any = {
-        last_performed_date: serviceForm.service_date,
-      };
-
-      if (servicingSchedule.maintenance_type === 'mileage' && newMileage) {
-        updateData.last_performed_mileage = newMileage;
-        updateData.next_due_mileage = newMileage + servicingSchedule.interval_value;
-      } else if (servicingSchedule.maintenance_type === 'hours' && newHours) {
-        updateData.last_performed_hours = newHours;
-        updateData.next_due_hours = newHours + servicingSchedule.interval_value;
-      } else if (servicingSchedule.maintenance_type === 'date') {
-        const nextDate = new Date(serviceForm.service_date);
-        if (servicingSchedule.interval_type === 'days') {
-          nextDate.setDate(nextDate.getDate() + servicingSchedule.interval_value);
-        } else if (servicingSchedule.interval_type === 'months') {
-          nextDate.setMonth(nextDate.getMonth() + servicingSchedule.interval_value);
-        } else if (servicingSchedule.interval_type === 'years') {
-          nextDate.setFullYear(nextDate.getFullYear() + servicingSchedule.interval_value);
-        }
-        updateData.next_due_date = nextDate.toISOString().split('T')[0];
-      }
-
-      await supabase
-        .from('maintenance_schedules')
-        .update(updateData)
-        .eq('id', servicingSchedule.id);
-
       await logAction('complete_maintenance', 'maintenance_work_orders', workOrder.id);
 
-      alert('Aptarnavimas sėkmingai įrašytas');
+      // STEP 6: Optimistically update the schedule in state immediately
+      setSchedules(prevSchedules => 
+        prevSchedules.map(s => 
+          s.id === servicingSchedule.id 
+            ? { ...s, ...scheduleUpdate, vehicle: updatedSchedule.vehicle }
+            : s
+        )
+      );
+
+      // Close modal
       setShowServiceModal(false);
       setServicingSchedule(null);
-      loadData();
+      
+      alert('Aptarnavimas sėkmingai įrašytas');
+      
+      // Refresh data from server to ensure consistency
+      await loadData();
+      
     } catch (error: any) {
-      console.error('Error:', error);
-      alert(`Klaida: ${error.message}`);
+      console.error('❌ Error completing service:', error);
+      alert(`Klaida: ${error.message || 'Nežinoma klaida'}`);
+    } finally {
+      setIsSavingService(false);
     }
   };
 
   const getProgressPercentage = (schedule: MaintenanceSchedule) => {
-    if (schedule.maintenance_type === 'date' && schedule.last_performed_date && schedule.next_due_date) {
-      const lastDate = new Date(schedule.last_performed_date).getTime();
+    if (schedule.maintenance_type === 'date') {
+      // If we don't have next_due_date yet, it's effectively due (needs first service)
+      if (!schedule.next_due_date) return 100;
+      
       const nextDate = new Date(schedule.next_due_date).getTime();
       const now = Date.now();
-
-      const progress = ((now - lastDate) / (nextDate - lastDate)) * 100;
-      return Math.min(Math.max(progress, 0), 100);
-    } else if (schedule.maintenance_type === 'mileage' && schedule.last_performed_mileage && schedule.next_due_mileage) {
-      const progress = ((schedule.vehicle.current_mileage - schedule.last_performed_mileage) /
+      
+      // If next_due_date is in the future, we're not due yet
+      if (nextDate > now) {
+        // Calculate progress based on last_performed_date if available
+        if (schedule.last_performed_date) {
+          const lastDate = new Date(schedule.last_performed_date).getTime();
+          if (nextDate <= lastDate) return 100;
+          const progress = ((now - lastDate) / (nextDate - lastDate)) * 100;
+          return Math.min(Math.max(progress, 0), 100);
+        }
+        return 0; // Not started yet
+      }
+      // If next_due_date is today or in the past, we're due
+      return 100;
+    } 
+    
+    if (schedule.maintenance_type === 'mileage') {
+      // If we don't have thresholds yet, it's due (needs first service)
+      if (schedule.next_due_mileage === null || schedule.last_performed_mileage === null) return 100;
+      
+      if (schedule.next_due_mileage <= schedule.last_performed_mileage) return 100;
+      
+      const currentMileage = schedule.vehicle?.current_mileage || schedule.last_performed_mileage;
+      const progress = ((currentMileage - schedule.last_performed_mileage) /
         (schedule.next_due_mileage - schedule.last_performed_mileage)) * 100;
       return Math.min(Math.max(progress, 0), 100);
-    } else if (schedule.maintenance_type === 'hours' && schedule.last_performed_hours && schedule.next_due_hours) {
-      const progress = ((schedule.vehicle.current_engine_hours - schedule.last_performed_hours) /
+    } 
+    
+    if (schedule.maintenance_type === 'hours') {
+      // If we don't have thresholds yet, it's due (needs first service)
+      if (schedule.next_due_hours === null || schedule.last_performed_hours === null) return 100;
+      
+      if (schedule.next_due_hours <= schedule.last_performed_hours) return 100;
+      
+      const currentHours = schedule.vehicle?.current_engine_hours || schedule.last_performed_hours;
+      const progress = ((currentHours - schedule.last_performed_hours) /
         (schedule.next_due_hours - schedule.last_performed_hours)) * 100;
       return Math.min(Math.max(progress, 0), 100);
     }
+    
     return 0;
   };
 
   const isDueOrOverdue = (schedule: MaintenanceSchedule) => {
+    // Direct check: if next_due_date is today or in the past, we're due
+    if (schedule.maintenance_type === 'date') {
+      // If no next_due_date yet, treat as due (needs first service)
+      if (!schedule.next_due_date) return true;
+      const nextDate = new Date(schedule.next_due_date);
+      nextDate.setHours(23, 59, 59, 999); // End of day
+      return nextDate.getTime() <= Date.now();
+    }
+    
+    // For mileage/hours, use progress calculation
+    if (schedule.maintenance_type === 'mileage' && (schedule.next_due_mileage === null || schedule.last_performed_mileage === null)) {
+      return true;
+    }
+    if (schedule.maintenance_type === 'hours' && (schedule.next_due_hours === null || schedule.last_performed_hours === null)) {
+      return true;
+    }
     const progress = getProgressPercentage(schedule);
     return progress >= 100;
   };
@@ -810,28 +950,34 @@ export function MaintenanceSchedules() {
                     className="w-full border rounded px-3 py-2"
                   />
                 </div>
-                {servicingSchedule.maintenance_type === 'mileage' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Dabartinė rida (km)</label>
-                    <input
-                      type="number"
-                      value={serviceForm.current_mileage}
-                      onChange={(e) => setServiceForm({ ...serviceForm, current_mileage: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                )}
-                {servicingSchedule.maintenance_type === 'hours' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Dabartinės motovalandos</label>
-                    <input
-                      type="number"
-                      value={serviceForm.current_hours}
-                      onChange={(e) => setServiceForm({ ...serviceForm, current_hours: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dabartinė rida (km) {servicingSchedule.maintenance_type === 'mileage' && '*'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={serviceForm.current_mileage}
+                    onChange={(e) => setServiceForm({ ...serviceForm, current_mileage: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder={servicingSchedule.vehicle.current_mileage?.toString() || '0'}
+                    required={servicingSchedule.maintenance_type === 'mileage'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dabartinės motovalandos {servicingSchedule.maintenance_type === 'hours' && '*'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={serviceForm.current_hours}
+                    onChange={(e) => setServiceForm({ ...serviceForm, current_hours: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder={servicingSchedule.vehicle.current_engine_hours?.toString() || '0'}
+                    required={servicingSchedule.maintenance_type === 'hours'}
+                  />
+                </div>
               </div>
 
               <div>
@@ -929,10 +1075,15 @@ export function MaintenanceSchedules() {
               </button>
               <button
                 onClick={handleSaveService}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                disabled={isSavingService}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  isSavingService
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
               >
                 <CheckCircle className="w-4 h-4" />
-                Užbaigti aptarnavimą
+                {isSavingService ? 'Išsaugoma...' : 'Užbaigti aptarnavimą'}
               </button>
             </div>
           </div>

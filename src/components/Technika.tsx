@@ -13,7 +13,9 @@ import {
   ArrowLeft,
   Settings,
   Users,
-  Box
+  Box,
+  Flame,
+  Star
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -27,6 +29,8 @@ import { EquipmentInventory } from './technika/EquipmentInventory';
 import { TechnikaReports } from './technika/TechnikaReports';
 import { WorkerSchedules } from './technika/WorkerSchedules';
 import { ProductsManagement } from './technika/ProductsManagement';
+import { FireExtinguishersManagement } from './technika/FireExtinguishersManagement';
+import { ProductQuality } from './technika/ProductQuality';
 
 interface TechnikaProps {
   onBackToModules: () => void;
@@ -39,6 +43,8 @@ const menuItems = [
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
+  { id: 'fire-extinguishers', label: 'Gesintuvai', icon: Flame },
+  { id: 'quality', label: 'Kokybės įvertinimas', icon: Star },
   { id: 'work-orders', label: 'Neplaniniai aptarnavimai', icon: ClipboardList },
   { id: 'schedules', label: 'Planiniai aptarnavimai', icon: Calendar },
   { id: 'worker-schedules', label: 'Darbuotojų grafikai', icon: Users },
@@ -75,6 +81,10 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <PPEManagement />;
       case 'vehicles':
         return <VehiclesManagement />;
+      case 'fire-extinguishers':
+        return <FireExtinguishersManagement />;
+      case 'quality':
+        return <ProductQuality />;
       case 'work-orders':
         return <WorkOrders />;
       case 'schedules':
