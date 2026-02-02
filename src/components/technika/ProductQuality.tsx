@@ -76,11 +76,10 @@ export function ProductQuality() {
       return;
     }
 
-    const { data: reviewsAgg } = await supabase
+    const { data: allReviews } = await supabase
       .from('product_quality_reviews')
-      .select('product_id, avg(rating) as avg_rating, count(*) as reviews_count, max(review_date) as last_review_date')
-      .in('product_id', productIds as any)
-      .group('product_id');
+      .select('product_id, rating, review_date')
+      .in('product_id', productIds as any);
 
     const { data: schedules } = await supabase
       .from('product_quality_schedules')
@@ -89,9 +88,27 @@ export function ProductQuality() {
       .eq('is_active', true);
 
     const reviewsByProduct: Record<string, any> = {};
-    reviewsAgg?.forEach((r: any) => {
-      reviewsByProduct[r.product_id] = r;
-    });
+    if (allReviews) {
+      allReviews.forEach((review: any) => {
+        if (!reviewsByProduct[review.product_id]) {
+          reviewsByProduct[review.product_id] = {
+            product_id: review.product_id,
+            ratings: [],
+            review_dates: []
+          };
+        }
+        reviewsByProduct[review.product_id].ratings.push(review.rating);
+        reviewsByProduct[review.product_id].review_dates.push(review.review_date);
+      });
+
+      Object.keys(reviewsByProduct).forEach(productId => {
+        const data = reviewsByProduct[productId];
+        const ratings = data.ratings;
+        data.avg_rating = ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length;
+        data.reviews_count = ratings.length;
+        data.last_review_date = data.review_dates.sort().reverse()[0];
+      });
+    }
 
     const scheduleByProduct: Record<string, any> = {};
     schedules?.forEach((s: any) => {
