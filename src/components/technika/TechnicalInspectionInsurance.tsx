@@ -5,10 +5,11 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface Vehicle {
   id: string;
-  name: string;
-  type: string;
+  make: string;
+  model: string;
+  vehicle_type: string;
   registration_number: string | null;
-  ta_expiry_date: string | null;
+  technical_inspection_due_date: string | null;
   insurance_expiry_date: string | null;
 }
 
@@ -31,10 +32,10 @@ export function TechnicalInspectionInsurance() {
       setLoading(true);
       const { data, error } = await supabase
         .from('vehicles')
-        .select('id, name, type, registration_number, ta_expiry_date, insurance_expiry_date')
-        .eq('user_id', user?.id)
-        .in('type', ['cylinder', 'semi_trailer', 'car_light'])
-        .order('name');
+        .select('id, make, model, vehicle_type, registration_number, technical_inspection_due_date, insurance_expiry_date')
+        .eq('created_by', user?.id)
+        .in('vehicle_type', ['cylinder', 'semi_trailer', 'car_light'])
+        .order('make');
 
       if (error) throw error;
       setVehicles(data || []);
@@ -77,7 +78,7 @@ export function TechnicalInspectionInsurance() {
   };
 
   const filteredVehicles = vehicles.filter((vehicle) => {
-    const taDays = getDaysUntil(vehicle.ta_expiry_date);
+    const taDays = getDaysUntil(vehicle.technical_inspection_due_date);
     const insuranceDays = getDaysUntil(vehicle.insurance_expiry_date);
 
     switch (filter) {
@@ -95,12 +96,12 @@ export function TechnicalInspectionInsurance() {
   const stats = {
     total: vehicles.length,
     needsRenewal: vehicles.filter((v) => {
-      const taDays = getDaysUntil(v.ta_expiry_date);
+      const taDays = getDaysUntil(v.technical_inspection_due_date);
       const insuranceDays = getDaysUntil(v.insurance_expiry_date);
       return (taDays !== null && taDays <= 60 && taDays >= 0) || (insuranceDays !== null && insuranceDays <= 60 && insuranceDays >= 0);
     }).length,
     expired: vehicles.filter((v) => {
-      const taDays = getDaysUntil(v.ta_expiry_date);
+      const taDays = getDaysUntil(v.technical_inspection_due_date);
       const insuranceDays = getDaysUntil(v.insurance_expiry_date);
       return (taDays !== null && taDays < 0) || (insuranceDays !== null && insuranceDays < 0);
     }).length,
@@ -193,19 +194,19 @@ export function TechnicalInspectionInsurance() {
               </thead>
               <tbody>
                 {filteredVehicles.map((vehicle) => {
-                  const taDays = getDaysUntil(vehicle.ta_expiry_date);
+                  const taDays = getDaysUntil(vehicle.technical_inspection_due_date);
                   const insuranceDays = getDaysUntil(vehicle.insurance_expiry_date);
                   const taColor = getStatusColor(taDays);
                   const insuranceColor = getStatusColor(insuranceDays);
 
                   return (
                     <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium text-gray-900">{vehicle.name}</td>
-                      <td className="py-3 px-4 text-gray-600">{vehicleTypeLabels[vehicle.type] || vehicle.type}</td>
+                      <td className="py-3 px-4 font-medium text-gray-900">{vehicle.make} {vehicle.model}</td>
+                      <td className="py-3 px-4 text-gray-600">{vehicleTypeLabels[vehicle.vehicle_type] || vehicle.vehicle_type}</td>
                       <td className="py-3 px-4 text-gray-600">{vehicle.registration_number || '-'}</td>
                       <td className="py-3 px-4 text-gray-600">
-                        {vehicle.ta_expiry_date
-                          ? new Date(vehicle.ta_expiry_date).toLocaleDateString('lt-LT')
+                        {vehicle.technical_inspection_due_date
+                          ? new Date(vehicle.technical_inspection_due_date).toLocaleDateString('lt-LT')
                           : '-'
                         }
                       </td>
