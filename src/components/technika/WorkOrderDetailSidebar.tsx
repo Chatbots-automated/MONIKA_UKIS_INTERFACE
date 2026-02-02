@@ -134,6 +134,12 @@ export function WorkOrderDetailSidebar({
     }
   }, [newPart.product_id]);
 
+  useEffect(() => {
+    if (mode === 'work') {
+      setIsEditing(true);
+    }
+  }, [mode]);
+
   const loadWorkOrderDetails = async () => {
     const [workOrderRes, partsRes] = await Promise.all([
       supabase
@@ -597,13 +603,15 @@ export function WorkOrderDetailSidebar({
               </div>
             )}
 
-            <button
-              onClick={() => setIsEditing(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-            >
-              <Wrench className="w-4 h-4" />
-              Redaguoti
-            </button>
+            {mode !== 'work' && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+                Redaguoti
+              </button>
+            )}
           </>
         ) : (
           <>
