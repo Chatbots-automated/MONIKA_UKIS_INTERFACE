@@ -279,7 +279,7 @@ export function ToolsManagement() {
         movement_type: 'return',
         from_holder: tool.current_holder,
         movement_date: new Date().toISOString(),
-        recorded_by: user?.id,
+        recorded_by: user?.id || null,
       });
 
       if (movementError) throw movementError;
