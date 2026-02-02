@@ -114,6 +114,9 @@ export function WorkOrderDetailSidebar({
     notes: '',
   });
 
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [bulkQuantities, setBulkQuantities] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (isOpen && workOrderId) {
       loadWorkOrderDetails();
@@ -141,7 +144,7 @@ export function WorkOrderDetailSidebar({
         .eq('id', workOrderId)
         .single(),
       supabase
-        .from('maintenance_work_order_parts')
+        .from('work_order_parts')
         .select(`
           *,
           product:equipment_products(name, code, unit_type)
@@ -267,7 +270,7 @@ export function WorkOrderDetailSidebar({
       const batch = batches.find(b => b.id === newPart.batch_id);
 
       const { error } = await supabase
-        .from('maintenance_work_order_parts')
+        .from('work_order_parts')
         .insert({
           work_order_id: workOrderId,
           product_id: newPart.product_id,
@@ -279,9 +282,61 @@ export function WorkOrderDetailSidebar({
 
       if (error) throw error;
 
-      await logAction('create', 'maintenance_work_order_parts', workOrderId, `Pridėta dalis: ${product?.product_name}`);
+      await logAction('create', 'work_order_parts', workOrderId, `Pridėta dalis: ${product?.product_name}`);
 
       setShowAddPart(false);
+      setNewPart({
+        product_id: '',
+        batch_id: '',
+        quantity_used: '',
+        notes: '',
+      });
+      setSelectedProducts([]);
+      setBulkQuantities({});
+      loadWorkOrderDetails();
+      onWorkOrderUpdate();
+    } catch (error: any) {
+      console.error('Error adding part:', error);
+      alert(error.message || 'Klaida pridedant dalį');
+    }
+  };
+
+  const handleBulkAddParts = async () => {
+    if (selectedProducts.length === 0) {
+      alert('Prašome pasirinkti bent vieną produktą');
+      return;
+    }
+
+    const missingQuantities = selectedProducts.filter(pid => !bulkQuantities[pid] || parseFloat(bulkQuantities[pid]) <= 0);
+    if (missingQuantities.length > 0) {
+      alert('Prašome įvesti kiekius visiems pasirinkt produktams');
+      return;
+    }
+
+    try {
+      const partsToInsert = selectedProducts.map(productId => {
+        const product = products.find(p => p.product_id === productId);
+        return {
+          work_order_id: workOrderId,
+          product_id: productId,
+          batch_id: null,
+          quantity_used: parseFloat(bulkQuantities[productId]),
+          cost_per_unit: null,
+          notes: null,
+        };
+      });
+
+      const { error } = await supabase
+        .from('work_order_parts')
+        .insert(partsToInsert);
+
+      if (error) throw error;
+
+      await logAction('create', 'work_order_parts', workOrderId, `Pridėtos dalys: ${selectedProducts.length} vnt.`);
+
+      setShowAddPart(false);
+      setSelectedProducts([]);
+      setBulkQuantities({});
       setNewPart({
         product_id: '',
         batch_id: '',
@@ -291,9 +346,23 @@ export function WorkOrderDetailSidebar({
       loadWorkOrderDetails();
       onWorkOrderUpdate();
     } catch (error: any) {
-      console.error('Error adding part:', error);
-      alert(error.message || 'Klaida pridedant dalį');
+      console.error('Error adding parts:', error);
+      alert(error.message || 'Klaida pridedant dalis');
     }
+  };
+
+  const toggleProductSelection = (productId: string) => {
+    setSelectedProducts(prev => {
+      if (prev.includes(productId)) {
+        const newSelected = prev.filter(id => id !== productId);
+        const newQuantities = { ...bulkQuantities };
+        delete newQuantities[productId];
+        setBulkQuantities(newQuantities);
+        return newSelected;
+      } else {
+        return [...prev, productId];
+      }
+    });
   };
 
   const handleDeletePart = async (partId: string) => {
@@ -301,13 +370,13 @@ export function WorkOrderDetailSidebar({
 
     try {
       const { error } = await supabase
-        .from('maintenance_work_order_parts')
+        .from('work_order_parts')
         .delete()
         .eq('id', partId);
 
       if (error) throw error;
 
-      await logAction('delete', 'maintenance_work_order_parts', partId, 'Ištrinta dalis');
+      await logAction('delete', 'work_order_parts', partId, 'Ištrinta dalis');
       loadWorkOrderDetails();
       onWorkOrderUpdate();
     } catch (error) {
@@ -674,13 +743,15 @@ export function WorkOrderDetailSidebar({
 
           {showAddPart && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">Pridėti dalį</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Pridėti dalis</h3>
                   <button
                     onClick={() => {
                       setShowAddPart(false);
                       setNewPart({ product_id: '', batch_id: '', quantity_used: '', notes: '' });
+                      setSelectedProducts([]);
+                      setBulkQuantities({});
                     }}
                     className="text-gray-400 hover:text-gray-600"
                   >
@@ -689,72 +760,80 @@ export function WorkOrderDetailSidebar({
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Produktas *</label>
-                    <SearchableSelect
-                      options={products.map(p => ({
-                        value: p.product_id,
-                        label: `${p.product_name}${p.product_code ? ` (${p.product_code})` : ''} - ${p.total_qty} ${p.unit_type}`
-                      }))}
-                      value={newPart.product_id}
-                      onChange={value => setNewPart({ ...newPart, product_id: value, batch_id: '' })}
-                      placeholder="Ieškoti produkto..."
-                    />
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600">Pasirinkite produktus ir įveskite jų kiekius</p>
                   </div>
 
-                  {newPart.product_id && batches.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Partija</label>
-                      <select
-                        value={newPart.batch_id}
-                        onChange={e => setNewPart({ ...newPart, batch_id: e.target.value })}
-                        className="w-full border rounded px-3 py-2"
+                  <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-4">
+                    {products.map(product => (
+                      <div
+                        key={product.product_id}
+                        className={`border rounded-lg p-3 transition-colors ${
+                          selectedProducts.includes(product.product_id)
+                            ? 'border-slate-500 bg-slate-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
                       >
-                        <option value="">Pasirinkti partiją</option>
-                        {batches.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.batch_number} - {b.quantity_left} vnt. {b.unit_cost && `(${b.unit_cost.toFixed(2)} EUR/vnt.)`}
-                          </option>
-                        ))}
-                      </select>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedProducts.includes(product.product_id)}
+                            onChange={() => toggleProductSelection(product.product_id)}
+                            className="mt-1 w-4 h-4 text-slate-600 rounded focus:ring-slate-500"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{product.product_name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {product.product_code && `Kodas: ${product.product_code} • `}
+                                  Likutis: {product.total_qty} {product.unit_type}
+                                </p>
+                              </div>
+                            </div>
+
+                            {selectedProducts.includes(product.product_id) && (
+                              <div className="mt-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={bulkQuantities[product.product_id] || ''}
+                                  onChange={e => setBulkQuantities({ ...bulkQuantities, [product.product_id]: e.target.value })}
+                                  className="w-full border rounded px-3 py-2 text-sm"
+                                  placeholder={`Kiekis (${product.unit_type})`}
+                                  autoFocus
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedProducts.length > 0 && (
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-gray-700">
+                        Pasirinkta produktų: <span className="text-slate-600 font-bold">{selectedProducts.length}</span>
+                      </p>
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={newPart.quantity_used}
-                      onChange={e => setNewPart({ ...newPart, quantity_used: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
-                    <textarea
-                      value={newPart.notes}
-                      onChange={e => setNewPart({ ...newPart, notes: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                      placeholder="Papildomos pastabos..."
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pt-4 border-t">
                     <button
-                      onClick={handleAddPart}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      onClick={handleBulkAddParts}
+                      disabled={selectedProducts.length === 0}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Save className="w-4 h-4" />
-                      Pridėti
+                      Pridėti ({selectedProducts.length})
                     </button>
                     <button
                       onClick={() => {
                         setShowAddPart(false);
                         setNewPart({ product_id: '', batch_id: '', quantity_used: '', notes: '' });
+                        setSelectedProducts([]);
+                        setBulkQuantities({});
                       }}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
                     >
