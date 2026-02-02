@@ -125,7 +125,7 @@ SELECT
   COUNT(DISTINCT vsv.id) FILTER (WHERE vsv.status = 'Baigtas') as total_services,
   COUNT(DISTINCT mwo.id) FILTER (WHERE mwo.status = 'completed') as total_work_orders,
   SUM(vsv.actual_cost) as total_service_cost,
-  SUM(mwo.actual_cost) as total_work_order_cost,
+  SUM(mwo.total_cost) as total_work_order_cost,
   MAX(vsv.visit_datetime) FILTER (WHERE vsv.status = 'Baigtas') as last_service_date,
   SUM(vsv.labor_hours) as total_labor_hours
 FROM vehicles v
