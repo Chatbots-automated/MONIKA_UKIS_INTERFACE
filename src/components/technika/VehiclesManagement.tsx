@@ -412,10 +412,13 @@ export function VehiclesManagement() {
     tractor: 'Traktorius',
     truck: 'Sunkvežimis',
     car: 'Automobilis',
+    car_light: 'Lengvasis automobilis',
     harvester: 'Kombainas',
     sprayer: 'Purkštuvas',
     loader: 'Krautuvas',
     trailer: 'Priekaba',
+    semi_trailer: 'Puspriekabė',
+    cylinder: 'Cilindras',
     other: 'Kita',
   };
 

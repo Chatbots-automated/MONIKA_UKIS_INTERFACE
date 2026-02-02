@@ -16,7 +16,8 @@ import {
   Box,
   Flame,
   Star,
-  Target
+  Target,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -24,6 +25,7 @@ import { EquipmentInvoices } from './technika/EquipmentInvoices';
 import { ToolsManagement } from './technika/ToolsManagement';
 import { PPEManagement } from './technika/PPEManagement';
 import { VehiclesManagement } from './technika/VehiclesManagement';
+import { TechnicalInspectionInsurance } from './technika/TechnicalInspectionInsurance';
 import { WorkOrders } from './technika/WorkOrders';
 import { MaintenanceSchedules } from './technika/MaintenanceSchedules';
 import { EquipmentInventory } from './technika/EquipmentInventory';
@@ -46,6 +48,7 @@ const menuItems = [
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
+  { id: 'technical-inspection', label: 'Techninės ir draudimai', icon: Shield },
   { id: 'fire-extinguishers', label: 'Gesintuvai', icon: Flame },
   { id: 'quality', label: 'Kokybės įvertinimas', icon: Star },
   { id: 'schedules', label: 'Planiniai aptarnavimai', icon: Calendar },
