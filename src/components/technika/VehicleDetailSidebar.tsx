@@ -1441,6 +1441,136 @@ function VisitDetailModal({
   const [laborHours, setLaborHours] = useState(visit.labor_hours?.toString() || '');
   const [saving, setSaving] = useState(false);
 
+  // Parts management
+  const [visitParts, setVisitParts] = useState<VisitPart[]>([]);
+  const [loadingParts, setLoadingParts] = useState(false);
+  const [newPart, setNewPart] = useState({
+    product_id: '',
+    batch_id: '',
+    quantity_used: '',
+    cost_per_unit: '',
+    notes: ''
+  });
+
+  useEffect(() => {
+    if (mode === 'work') {
+      loadVisitParts();
+    }
+  }, [visit.id, mode]);
+
+  const loadVisitParts = async () => {
+    setLoadingParts(true);
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_visit_parts')
+        .select(`
+          *,
+          product:products(name, code)
+        `)
+        .eq('visit_id', visit.id);
+
+      if (error) throw error;
+      setVisitParts(data || []);
+    } catch (error: any) {
+      console.error('Error loading visit parts:', error);
+    } finally {
+      setLoadingParts(false);
+    }
+  };
+
+  const handleAddPart = async () => {
+    if (!newPart.product_id || !newPart.batch_id || !newPart.quantity_used) {
+      alert('Užpildykite visus privalomus laukelius');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_visit_parts')
+        .insert({
+          visit_id: visit.id,
+          product_id: newPart.product_id,
+          batch_id: newPart.batch_id,
+          quantity_used: parseFloat(newPart.quantity_used),
+          cost_per_unit: newPart.cost_per_unit ? parseFloat(newPart.cost_per_unit) : null,
+          notes: newPart.notes || null,
+        })
+        .select(`
+          *,
+          product:products(name, code)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      setVisitParts(prev => [...prev, data]);
+      setNewPart({
+        product_id: '',
+        batch_id: '',
+        quantity_used: '',
+        cost_per_unit: '',
+        notes: ''
+      });
+    } catch (error: any) {
+      console.error('Error adding part:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleRemovePart = async (partId: string) => {
+    if (!confirm('Ar tikrai norite pašalinti šią dalį?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('vehicle_visit_parts')
+        .delete()
+        .eq('id', partId);
+
+      if (error) throw error;
+      setVisitParts(prev => prev.filter(p => p.id !== partId));
+    } catch (error: any) {
+      console.error('Error removing part:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (visitParts.length === 0) {
+      if (!confirm('Nepridėjote jokių dalių. Ar tikrai norite užbaigti aptarnavimą?')) {
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      // Update visit status to completed
+      const updates: any = {
+        status: 'Baigtas',
+        notes: notes || null,
+        actual_cost: actualCost ? parseFloat(actualCost) : null,
+        labor_hours: laborHours ? parseFloat(laborHours) : null,
+        completed_at: new Date().toISOString(),
+        completed_by: user?.id,
+      };
+
+      const { error: visitError } = await supabase
+        .from('vehicle_service_visits')
+        .update(updates)
+        .eq('id', visit.id);
+
+      if (visitError) throw visitError;
+
+      await logAction('complete_service_visit', 'vehicle_service_visits', visit.id);
+      alert('Aptarnavimas sėkmingai užbaigtas!');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error finishing visit:', error);
+      alert(`Klaida: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -1535,21 +1665,23 @@ function VisitDetailModal({
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Statusas
-            </label>
-            <select
-              value={status}
-              onChange={e => setStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="Planuojamas">Planuojamas</option>
-              <option value="Vykdomas">Vykdomas</option>
-              {mode === 'work' && <option value="Baigtas">Baigtas</option>}
-              <option value="Atsauktas">Atsauktas</option>
-            </select>
-          </div>
+          {mode !== 'work' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Statusas
+              </label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="Planuojamas">Planuojamas</option>
+                <option value="Vykdomas">Vykdomas</option>
+                <option value="Baigtas">Baigtas</option>
+                <option value="Atsauktas">Atsauktas</option>
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1590,6 +1722,141 @@ function VisitDetailModal({
             />
           </div>
 
+          {mode === 'work' && (
+            <div className="border-t border-gray-200 pt-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Panaudotos dalys / medžiagos
+              </h3>
+
+              {loadingParts ? (
+                <p className="text-gray-500 text-center py-4">Kraunama...</p>
+              ) : (
+                <>
+                  {visitParts.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {visitParts.map(part => (
+                        <div key={part.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">
+                              {part.product?.name || 'Nežinomas produktas'}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Kiekis: {part.quantity_used}
+                              {part.cost_per_unit && ` | Kaina: ${part.cost_per_unit}€`}
+                            </p>
+                            {part.notes && (
+                              <p className="text-xs text-gray-500 mt-1">{part.notes}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleRemovePart(part.id)}
+                            className="ml-3 p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                    <h4 className="font-medium text-blue-900">Pridėti dalį</h4>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Produktas *
+                      </label>
+                      <SearchableSelect
+                        options={products.map(p => ({ value: p.id, label: `${p.name} (${p.code})` }))}
+                        value={newPart.product_id}
+                        onChange={(value) => {
+                          setNewPart(prev => ({ ...prev, product_id: value, batch_id: '' }));
+                          onLoadBatches(value);
+                        }}
+                        placeholder="Pasirinkite produktą"
+                      />
+                    </div>
+
+                    {newPart.product_id && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Partija *
+                        </label>
+                        <select
+                          value={newPart.batch_id}
+                          onChange={(e) => {
+                            const selectedBatch = batches.find(b => b.id === e.target.value);
+                            setNewPart(prev => ({
+                              ...prev,
+                              batch_id: e.target.value,
+                              cost_per_unit: selectedBatch?.cost_per_unit?.toString() || ''
+                            }));
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Pasirinkite partiją</option>
+                          {batches.map(batch => (
+                            <option key={batch.id} value={batch.id}>
+                              {batch.batch_number} - Likutis: {batch.qty_left}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Kiekis *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={newPart.quantity_used}
+                          onChange={(e) => setNewPart(prev => ({ ...prev, quantity_used: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Kaina vnt. (€)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={newPart.cost_per_unit}
+                          onChange={(e) => setNewPart(prev => ({ ...prev, cost_per_unit: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Pastabos
+                      </label>
+                      <input
+                        type="text"
+                        value={newPart.notes}
+                        onChange={(e) => setNewPart(prev => ({ ...prev, notes: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleAddPart}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Pridėti dalį
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -1598,22 +1865,33 @@ function VisitDetailModal({
             >
               Atšaukti
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
-                mode === 'work' && status === 'Baigtas'
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {saving ? 'Saugoma...' : (
-                <>
-                  <Save className="w-4 h-4" />
-                  {mode === 'work' && status === 'Baigtas' ? 'Užbaigti tvarkyma' : 'Išsaugoti'}
-                </>
-              )}
-            </button>
+            {mode === 'work' ? (
+              <button
+                onClick={handleFinish}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving ? 'Užbaigiama...' : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    Užbaigti aptarnavimą
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving ? 'Saugoma...' : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Išsaugoti
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
