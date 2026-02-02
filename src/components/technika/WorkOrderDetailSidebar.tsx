@@ -46,8 +46,9 @@ interface WorkOrderPart {
   work_order_id: string;
   product_id: string;
   batch_id: string | null;
-  quantity_used: number;
-  cost_per_unit: number | null;
+  quantity: number;
+  unit_price: number | null;
+  total_price: number | null;
   notes: string | null;
   product_name: string;
   product_code: string | null;
@@ -175,8 +176,9 @@ export function WorkOrderDetailSidebar({
         work_order_id: p.work_order_id,
         product_id: p.product_id,
         batch_id: p.batch_id,
-        quantity_used: p.quantity_used,
-        cost_per_unit: p.cost_per_unit,
+        quantity: p.quantity,
+        unit_price: p.unit_price,
+        total_price: p.total_price,
         notes: p.notes,
         product_name: p.product?.name || 'Unknown',
         product_code: p.product?.code || null,
@@ -268,6 +270,9 @@ export function WorkOrderDetailSidebar({
     try {
       const product = products.find(p => p.product_id === newPart.product_id);
       const batch = batches.find(b => b.id === newPart.batch_id);
+      const quantity = parseFloat(newPart.quantity_used);
+      const unitPrice = batch?.unit_cost || 0;
+      const totalPrice = quantity * unitPrice;
 
       const { error } = await supabase
         .from('work_order_parts')
@@ -275,8 +280,9 @@ export function WorkOrderDetailSidebar({
           work_order_id: workOrderId,
           product_id: newPart.product_id,
           batch_id: newPart.batch_id || null,
-          quantity_used: parseFloat(newPart.quantity_used),
-          cost_per_unit: batch?.unit_cost || null,
+          quantity: quantity,
+          unit_price: unitPrice,
+          total_price: totalPrice,
           notes: newPart.notes || null,
         });
 
@@ -315,13 +321,14 @@ export function WorkOrderDetailSidebar({
 
     try {
       const partsToInsert = selectedProducts.map(productId => {
-        const product = products.find(p => p.product_id === productId);
+        const quantity = parseFloat(bulkQuantities[productId]);
         return {
           work_order_id: workOrderId,
           product_id: productId,
           batch_id: null,
-          quantity_used: parseFloat(bulkQuantities[productId]),
-          cost_per_unit: null,
+          quantity: quantity,
+          unit_price: 0,
+          total_price: 0,
           notes: null,
         };
       });
@@ -720,11 +727,11 @@ export function WorkOrderDetailSidebar({
                       <p className="font-medium text-gray-900">{part.product_name}</p>
                       {part.product_code && <p className="text-sm text-gray-600">Kodas: {part.product_code}</p>}
                       <p className="text-sm text-gray-700 mt-1">
-                        Kiekis: {part.quantity_used} {part.unit_type}
+                        Kiekis: {part.quantity} {part.unit_type}
                       </p>
-                      {part.cost_per_unit && (
+                      {part.total_price !== null && part.total_price > 0 && (
                         <p className="text-sm text-gray-700">
-                          Kaina: {(part.quantity_used * part.cost_per_unit).toFixed(2)} EUR
+                          Kaina: {part.total_price.toFixed(2)} EUR
                         </p>
                       )}
                       {part.notes && <p className="text-sm text-gray-600 mt-1">{part.notes}</p>}
