@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Upload, FileText, X, Check, AlertCircle, Eye, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2 } from 'lucide-react';
+import { Upload, FileText, X, Check, AlertCircle, Eye, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2 } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -34,6 +34,33 @@ interface Invoice {
   created_at: string;
 }
 
+interface Vehicle {
+  id: string;
+  registration_number: string;
+  make: string | null;
+  model: string | null;
+  vehicle_type: string;
+}
+
+interface Tool {
+  id: string;
+  name: string;
+  model: string | null;
+}
+
+interface InvoiceItem {
+  id: string;
+  product_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  product?: {
+    name: string;
+    product_code: string | null;
+  };
+}
+
 export function EquipmentInvoices() {
   const { logAction, user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -62,22 +89,45 @@ export function EquipmentInvoices() {
     min_stock_level: '0',
   });
 
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [savedInvoiceId, setSavedInvoiceId] = useState<string | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [assignmentForm, setAssignmentForm] = useState<{
+    invoiceItemId: string;
+    assignmentType: string;
+    vehicleId: string;
+    toolId: string;
+    notes: string;
+  }>({
+    invoiceItemId: '',
+    assignmentType: '',
+    vehicleId: '',
+    toolId: '',
+    notes: '',
+  });
+
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [suppliersRes, productsRes, categoriesRes, invoicesRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes, vehiclesRes, toolsRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
+      supabase.from('vehicles').select('id, registration_number, make, model, vehicle_type').eq('status', 'active').order('registration_number'),
+      supabase.from('tools').select('id, name, model').eq('is_active', true).order('name'),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
     if (productsRes.data) setProducts(productsRes.data);
     if (categoriesRes.data) setCategories(categoriesRes.data);
     if (invoicesRes.data) setInvoices(invoicesRes.data);
+    if (vehiclesRes.data) setVehicles(vehiclesRes.data);
+    if (toolsRes.data) setTools(toolsRes.data);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -306,6 +356,8 @@ export function EquipmentInvoices() {
 
       if (invoiceError) throw invoiceError;
 
+      const savedItems: InvoiceItem[] = [];
+
       for (const [index, item] of (invoiceData.items || []).entries()) {
         const product = matchedProducts.get(index);
         if (!product) continue;
@@ -333,28 +385,128 @@ export function EquipmentInvoices() {
           .select()
           .single();
 
-        await supabase.from('equipment_invoice_items').insert({
-          invoice_id: invoice.id,
-          line_no: itemData.line_no || index + 1,
-          product_id: product.id,
-          description: itemData.description,
-          quantity,
-          unit_price: unitPrice,
-          total_price: totalPrice,
-          batch_id: batch?.id,
-        });
+        const { data: savedItem } = await supabase
+          .from('equipment_invoice_items')
+          .insert({
+            invoice_id: invoice.id,
+            line_no: itemData.line_no || index + 1,
+            product_id: product.id,
+            description: itemData.description,
+            quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            batch_id: batch?.id,
+          })
+          .select('id, product_id, description, quantity, unit_price, total_price')
+          .single();
+
+        if (savedItem) {
+          savedItems.push({
+            ...savedItem,
+            product: {
+              name: product.name,
+              product_code: product.product_code,
+            },
+          });
+        }
       }
 
       await logAction('confirm_equipment_invoice', { invoice_id: invoice.id });
+
+      setSavedInvoiceId(invoice.id);
+      setInvoiceItems(savedItems);
       setUploadStatus('idle');
       setInvoiceData(null);
       setSelectedFile(null);
       setPdfUrl(null);
+
+      setShowAssignmentModal(true);
+
       loadData();
-      alert('Sąskaita sėkmingai įrašyta');
     } catch (error: any) {
       console.error('Error:', error);
       alert('Klaida: ' + error.message);
+    }
+  };
+
+  const handleOpenAssignmentModal = (item: InvoiceItem) => {
+    setAssignmentForm({
+      invoiceItemId: item.id,
+      assignmentType: '',
+      vehicleId: '',
+      toolId: '',
+      notes: '',
+    });
+    setShowAssignmentModal(true);
+  };
+
+  const handleSaveAssignment = async () => {
+    if (!assignmentForm.invoiceItemId || !assignmentForm.assignmentType) {
+      alert('Prašome pasirinkti paskyrimo tipą');
+      return;
+    }
+
+    if (assignmentForm.assignmentType === 'vehicle' && !assignmentForm.vehicleId) {
+      alert('Prašome pasirinkti transporto priemonę');
+      return;
+    }
+
+    if (assignmentForm.assignmentType === 'tool' && !assignmentForm.toolId) {
+      alert('Prašome pasirinkti įrankį');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
+        invoice_item_id: assignmentForm.invoiceItemId,
+        assignment_type: assignmentForm.assignmentType,
+        vehicle_id: assignmentForm.vehicleId || null,
+        tool_id: assignmentForm.toolId || null,
+        notes: assignmentForm.notes || null,
+        assigned_by: user?.id || null,
+      });
+
+      if (error) throw error;
+
+      await logAction('assign_equipment_item', 'equipment_invoice_item_assignments', undefined, null, {
+        invoice_item_id: assignmentForm.invoiceItemId,
+        assignment_type: assignmentForm.assignmentType,
+      });
+
+      setInvoiceItems(prev => prev.filter(item => item.id !== assignmentForm.invoiceItemId));
+
+      setAssignmentForm({
+        invoiceItemId: '',
+        assignmentType: '',
+        vehicleId: '',
+        toolId: '',
+        notes: '',
+      });
+
+      if (invoiceItems.length <= 1) {
+        setShowAssignmentModal(false);
+        alert('Visi produktai priskirti sėkmingai!');
+      } else {
+        alert('Produktas priskirtas');
+      }
+    } catch (error: any) {
+      console.error('Error assigning item:', error);
+      alert('Klaida: ' + error.message);
+    }
+  };
+
+  const handleSkipAssignment = () => {
+    setInvoiceItems(prev => prev.filter(item => item.id !== assignmentForm.invoiceItemId));
+    setAssignmentForm({
+      invoiceItemId: '',
+      assignmentType: '',
+      vehicleId: '',
+      toolId: '',
+      notes: '',
+    });
+
+    if (invoiceItems.length <= 1) {
+      setShowAssignmentModal(false);
     }
   };
 
@@ -1112,6 +1264,181 @@ export function EquipmentInvoices() {
                 Sukurti produktą
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignmentModal && invoiceItems.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                Priskirti produktus ({invoiceItems.length} liko)
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAssignmentModal(false);
+                  setInvoiceItems([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                Priskiriate produktus transporto priemonėms, įrankiams ar bendrai fermai. Tai leis sekti kiekvieno objekto dalių naudojimą ir išlaidas.
+              </p>
+            </div>
+
+            {invoiceItems[0] && (
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Package className="w-5 h-5 text-slate-600" />
+                    <h4 className="font-semibold text-gray-900">
+                      {invoiceItems[0].product?.name || invoiceItems[0].description}
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm text-gray-600">
+                    <div>
+                      <span className="font-medium">Kiekis:</span> {invoiceItems[0].quantity}
+                    </div>
+                    <div>
+                      <span className="font-medium">Kaina:</span> {invoiceItems[0].unit_price.toFixed(2)}
+                    </div>
+                    <div>
+                      <span className="font-medium">Viso:</span> {invoiceItems[0].total_price.toFixed(2)} EUR
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Paskyrimo tipas</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'vehicle', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'vehicle'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Transporto priemonei</p>
+                        <p className="text-xs text-gray-500 mt-1">Traktoriui, automobiliui ir kt.</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'tool', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'tool'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Įrankiui/Įrangai</p>
+                        <p className="text-xs text-gray-500 mt-1">Melžimo įrangai, generatoriui ir kt.</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'building', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'building'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Pastatui</p>
+                        <p className="text-xs text-gray-500 mt-1">Tvartui, sandėliui ir kt.</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'general_farm', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'general_farm'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Bendrai fermai</p>
+                        <p className="text-xs text-gray-500 mt-1">Bendros paskirties dalys</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {assignmentForm.assignmentType === 'vehicle' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite transporto priemonę</label>
+                    <select
+                      value={assignmentForm.vehicleId}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, vehicleId: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2"
+                    >
+                      <option value="">-- Pasirinkite --</option>
+                      {vehicles.map(vehicle => (
+                        <option key={vehicle.id} value={vehicle.id}>
+                          {vehicle.registration_number} - {vehicle.make} {vehicle.model} ({vehicle.vehicle_type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {assignmentForm.assignmentType === 'tool' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite įrankį/įrangą</label>
+                    <select
+                      value={assignmentForm.toolId}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, toolId: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2"
+                    >
+                      <option value="">-- Pasirinkite --</option>
+                      {tools.map(tool => (
+                        <option key={tool.id} value={tool.id}>
+                          {tool.name} {tool.model ? `(${tool.model})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos (neprivaloma)</label>
+                  <textarea
+                    value={assignmentForm.notes}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, notes: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                    rows={2}
+                    placeholder="Pvz.: Keitimas po gedimo, planinis keitimas..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={handleSkipAssignment}
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Praleisti šį produktą
+                  </button>
+                  <button
+                    onClick={handleSaveAssignment}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    Priskirti
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

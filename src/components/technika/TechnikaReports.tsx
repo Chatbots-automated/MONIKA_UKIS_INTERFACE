@@ -15,7 +15,8 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownRight,
-  Filter
+  Filter,
+  Car
 } from 'lucide-react';
 
 interface ProductHistory {
@@ -50,10 +51,31 @@ interface WorkerStats {
   outstanding_items: any[];
 }
 
+interface VehiclePartsUsage {
+  vehicle_id: string;
+  registration_number: string;
+  make: string | null;
+  model: string | null;
+  vehicle_type: string;
+  invoice_number: string;
+  invoice_date: string;
+  supplier_name: string;
+  product_name: string;
+  product_code: string | null;
+  item_description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  assignment_notes: string | null;
+  assigned_at: string;
+  assigned_by_name: string | null;
+}
+
 export function TechnikaReports() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'vehicle_parts'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [vehiclePartsUsage, setVehiclePartsUsage] = useState<VehiclePartsUsage[]>([]);
 
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
@@ -88,6 +110,17 @@ export function TechnikaReports() {
     if (data) setCategories(data);
   };
 
+  const loadVehiclePartsUsage = async () => {
+    const { data } = await supabase
+      .from('vehicle_parts_usage')
+      .select('*')
+      .gte('invoice_date', dateFilter.from)
+      .lte('invoice_date', dateFilter.to)
+      .order('invoice_date', { ascending: false });
+
+    if (data) setVehiclePartsUsage(data);
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -96,6 +129,7 @@ export function TechnikaReports() {
         loadCategoryStats(),
         loadWorkerStats(),
         loadOverviewStats(),
+        loadVehiclePartsUsage(),
       ]);
     } catch (error) {
       console.error('Error loading reports:', error);
@@ -364,6 +398,7 @@ export function TechnikaReports() {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
+              { id: 'vehicle_parts', label: 'Transporto dalys', icon: Car },
               { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -790,6 +825,128 @@ export function TechnikaReports() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'vehicle_parts' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  Šiame sąraše matote visas dalis, kurios buvo priskirtos transporto priemonėms. Galite filtruoti pagal datą ir matyti bendras išlaidas.
+                </p>
+              </div>
+
+              {vehiclePartsUsage.length === 0 ? (
+                <div className="text-center py-12">
+                  <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra priskirtų dalių</h3>
+                  <p className="text-gray-600">
+                    Pirmiausia priskirsite dalis transporto priemonėms sąskaitų skyriuje
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {Object.entries(
+                    vehiclePartsUsage.reduce((acc, item) => {
+                      const vehicleKey = item.vehicle_id;
+                      if (!acc[vehicleKey]) {
+                        acc[vehicleKey] = {
+                          vehicle: {
+                            id: item.vehicle_id,
+                            registration_number: item.registration_number,
+                            make: item.make,
+                            model: item.model,
+                            vehicle_type: item.vehicle_type,
+                          },
+                          items: [],
+                          totalCost: 0,
+                        };
+                      }
+                      acc[vehicleKey].items.push(item);
+                      acc[vehicleKey].totalCost += item.total_price;
+                      return acc;
+                    }, {} as Record<string, any>)
+                  ).map(([vehicleId, vehicleData]) => (
+                    <div key={vehicleId} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-slate-600 text-white p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Car className="w-6 h-6" />
+                            <div>
+                              <h3 className="font-bold text-lg">{vehicleData.vehicle.registration_number}</h3>
+                              <p className="text-sm text-slate-200">
+                                {vehicleData.vehicle.make} {vehicleData.vehicle.model} ({vehicleData.vehicle.vehicle_type})
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-slate-200">Bendros išlaidos</p>
+                            <p className="text-2xl font-bold">{vehicleData.totalCost.toFixed(2)} EUR</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-gray-200">
+                        {vehicleData.items.map((item: VehiclePartsUsage, idx: number) => (
+                          <div key={idx} className="p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Package className="w-4 h-4 text-slate-600" />
+                                  <h4 className="font-semibold text-gray-900">{item.product_name || item.item_description}</h4>
+                                  {item.product_code && (
+                                    <span className="text-xs text-gray-500">({item.product_code})</span>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                  <div>
+                                    <span className="text-gray-600">Sąskaita:</span>
+                                    <p className="font-medium text-gray-900">{item.invoice_number}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">Data:</span>
+                                    <p className="font-medium text-gray-900">
+                                      {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">Tiekėjas:</span>
+                                    <p className="font-medium text-gray-900">{item.supplier_name}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">Kiekis:</span>
+                                    <p className="font-medium text-gray-900">{item.quantity}</p>
+                                  </div>
+                                </div>
+
+                                {item.assignment_notes && (
+                                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                                    <span className="font-medium text-yellow-900">Pastaba:</span> {item.assignment_notes}
+                                  </div>
+                                )}
+
+                                {item.assigned_by_name && (
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    Priskirė: {item.assigned_by_name} ({new Date(item.assigned_at).toLocaleDateString('lt-LT')})
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="ml-4 text-right">
+                                <div className="text-sm text-gray-600">Vieneto kaina</div>
+                                <div className="text-lg font-semibold text-gray-900">{item.unit_price.toFixed(2)} EUR</div>
+                                <div className="text-sm text-gray-600 mt-2">Viso</div>
+                                <div className="text-xl font-bold text-slate-600">{item.total_price.toFixed(2)} EUR</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
