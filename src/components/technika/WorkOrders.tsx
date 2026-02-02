@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, Edit, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
+import { Search, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
 import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
 
 interface WorkOrder {
@@ -309,16 +309,6 @@ export function WorkOrders() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenSidebar(wo, 'edit');
-                      }}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Edit className="w-4 h-4" />
-                      Redaguoti
-                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
