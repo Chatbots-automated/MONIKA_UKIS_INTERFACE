@@ -148,7 +148,7 @@ export function WorkOrderDetailSidebar({
         .from('work_order_parts')
         .select(`
           *,
-          product:equipment_products(name, code, unit_type)
+          product:equipment_products(name, product_code, unit_type)
         `)
         .eq('work_order_id', workOrderId)
     ]);
@@ -181,7 +181,7 @@ export function WorkOrderDetailSidebar({
         total_price: p.total_price,
         notes: p.notes,
         product_name: p.product?.name || 'Unknown',
-        product_code: p.product?.code || null,
+        product_code: p.product?.product_code || null,
         unit_type: p.product?.unit_type || null,
       }));
       setParts(formattedParts);
