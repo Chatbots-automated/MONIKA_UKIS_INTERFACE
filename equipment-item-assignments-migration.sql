@@ -74,7 +74,7 @@ CREATE OR REPLACE VIEW public.tool_parts_usage AS
 SELECT
   t.id as tool_id,
   t.name as tool_name,
-  t.model,
+  t.type as tool_type,
   t.serial_number,
   ei.invoice_number,
   ei.invoice_date,
