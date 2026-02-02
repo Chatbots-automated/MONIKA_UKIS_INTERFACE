@@ -27,24 +27,6 @@ interface MaintenanceSchedule {
   };
 }
 
-interface WorkOrder {
-  id: string;
-  work_order_number: string;
-  vehicle_id: string | null;
-  tool_id: string | null;
-  order_type: string;
-  priority: string;
-  description: string;
-  scheduled_date: string | null;
-  status: string;
-  notes: string | null;
-  vehicle: {
-    registration_number: string;
-    make: string;
-    model: string;
-  } | null;
-}
-
 interface ScheduleForm {
   schedule_name: string;
   vehicle_id: string;
@@ -69,7 +51,6 @@ interface Vehicle {
 export function MaintenanceSchedules() {
   const { user, logAction } = useAuth();
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -104,7 +85,7 @@ export function MaintenanceSchedules() {
   }, []);
 
   const loadData = async () => {
-    const [schedulesRes, workOrdersRes, vehiclesRes, productsRes] = await Promise.all([
+    const [schedulesRes, vehiclesRes, productsRes] = await Promise.all([
       supabase
         .from('maintenance_schedules')
         .select(`
@@ -112,22 +93,6 @@ export function MaintenanceSchedules() {
           vehicle:vehicles(registration_number, make, model, current_mileage, current_engine_hours)
         `)
         .eq('is_active', true)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('maintenance_work_orders')
-        .select(`
-          id,
-          work_order_number,
-          vehicle_id,
-          tool_id,
-          order_type,
-          priority,
-          description,
-          scheduled_date,
-          status,
-          notes,
-          vehicle:vehicles(registration_number, make, model)
-        `)
         .order('created_at', { ascending: false }),
       supabase
         .from('vehicles')
@@ -142,7 +107,6 @@ export function MaintenanceSchedules() {
     ]);
 
     if (schedulesRes.data) setSchedules(schedulesRes.data as any);
-    if (workOrdersRes.data) setWorkOrders(workOrdersRes.data as any);
     if (vehiclesRes.data) setVehicles(vehiclesRes.data);
     if (productsRes.data) setProducts(productsRes.data);
   };
@@ -767,76 +731,11 @@ export function MaintenanceSchedules() {
           })}
         </div>
 
-        {filteredSchedules.length === 0 && workOrders.length === 0 && (
+        {filteredSchedules.length === 0 && (
           <div className="text-center py-12">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">Grafikų ir remonto darbų nerasta</p>
+            <p className="text-gray-500">Grafikų nerasta</p>
           </div>
-        )}
-
-        {workOrders.length > 0 && (
-          <>
-            <div className="mt-6 mb-3">
-              <h4 className="text-md font-semibold text-gray-700">Remonto darbai</h4>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {workOrders.map(wo => {
-                const statusColors = {
-                  pending: 'border-gray-300 bg-gray-50',
-                  in_progress: 'border-blue-300 bg-blue-50',
-                  completed: 'border-green-300 bg-green-50',
-                  cancelled: 'border-red-300 bg-red-50',
-                };
-                const statusLabels = {
-                  pending: 'Laukiama',
-                  in_progress: 'Vykdoma',
-                  completed: 'Baigta',
-                  cancelled: 'Atšaukta',
-                };
-                const priorityColors = {
-                  low: 'bg-gray-100 text-gray-700',
-                  medium: 'bg-blue-100 text-blue-700',
-                  high: 'bg-orange-100 text-orange-700',
-                  critical: 'bg-red-100 text-red-700',
-                };
-                const priorityLabels = {
-                  low: 'Žemas',
-                  medium: 'Vidutinis',
-                  high: 'Aukštas',
-                  critical: 'Kritinis',
-                };
-
-                return (
-                  <div
-                    key={wo.id}
-                    className={`border rounded-lg p-4 ${statusColors[wo.status as keyof typeof statusColors] || 'border-gray-200'}`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800 mb-1">{wo.work_order_number}</h4>
-                        {wo.vehicle && (
-                          <p className="text-sm text-gray-600">
-                            {wo.vehicle.registration_number} - {wo.vehicle.make} {wo.vehicle.model}
-                          </p>
-                        )}
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${priorityColors[wo.priority as keyof typeof priorityColors] || 'bg-gray-100 text-gray-700'}`}>
-                        {priorityLabels[wo.priority as keyof typeof priorityLabels] || wo.priority}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-sm text-gray-600 mb-3">
-                      <p className="font-medium">{wo.description}</p>
-                      <p>Statusas: {statusLabels[wo.status as keyof typeof statusLabels] || wo.status}</p>
-                      {wo.scheduled_date && (
-                        <p>Planuojama: {new Date(wo.scheduled_date).toLocaleDateString('lt-LT')}</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
         )}
       </div>
 

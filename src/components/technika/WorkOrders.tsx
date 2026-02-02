@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { ClipboardList, Plus, Search, Eye, Edit, Trash2, X, Save, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
 
 interface WorkOrder {
   id: string;
@@ -84,6 +85,8 @@ export function WorkOrders() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [viewingWorkOrder, setViewingWorkOrder] = useState<WorkOrder | null>(null);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [workOrderForm, setWorkOrderForm] = useState<WorkOrderForm>({
     vehicle_id: '',
     tool_id: '',
@@ -307,8 +310,8 @@ export function WorkOrders() {
   };
 
   const handleViewDetails = (workOrder: WorkOrder) => {
-    setViewingWorkOrder(workOrder);
-    setShowDetailsModal(true);
+    setSelectedWorkOrderId(workOrder.id);
+    setShowSidebar(true);
   };
 
   const filteredWorkOrders = workOrders.filter(wo => {
@@ -379,13 +382,13 @@ export function WorkOrders() {
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-800">Neplaniniai aptarnavimai</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Remonto darbai</h3>
           <button
             onClick={() => handleOpenWorkOrderModal()}
             className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Naujas aptarnavimas
+            Naujas remonto darbas
           </button>
         </div>
 
@@ -924,6 +927,18 @@ export function WorkOrders() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedWorkOrderId && (
+        <WorkOrderDetailSidebar
+          workOrderId={selectedWorkOrderId}
+          isOpen={showSidebar}
+          onClose={() => {
+            setShowSidebar(false);
+            setSelectedWorkOrderId(null);
+          }}
+          onWorkOrderUpdate={loadData}
+        />
       )}
     </div>
   );
