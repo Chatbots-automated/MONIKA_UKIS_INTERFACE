@@ -120,47 +120,53 @@ export function TechnicalInspectionInsurance() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-100 text-sm font-medium">Iš viso</p>
-              <p className="text-3xl font-bold mt-1">{stats.total}</p>
+              <p className="text-gray-500 text-sm font-medium">Iš viso</p>
+              <p className="text-3xl font-semibold text-gray-900 mt-1">{stats.total}</p>
             </div>
-            <Shield className="w-12 h-12 text-blue-200 opacity-80" />
+            <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
+              <Shield className="w-6 h-6 text-gray-400" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-amber-100 text-sm font-medium">Reikia atnaujinti</p>
-              <p className="text-3xl font-bold mt-1">{stats.needsRenewal}</p>
+              <p className="text-gray-500 text-sm font-medium">Reikia atnaujinti</p>
+              <p className="text-3xl font-semibold text-gray-900 mt-1">{stats.needsRenewal}</p>
             </div>
-            <Calendar className="w-12 h-12 text-amber-200 opacity-80" />
+            <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-amber-600" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-red-100 text-sm font-medium">Pasibaigę</p>
-              <p className="text-3xl font-bold mt-1">{stats.expired}</p>
+              <p className="text-gray-500 text-sm font-medium">Pasibaigę</p>
+              <p className="text-3xl font-semibold text-gray-900 mt-1">{stats.expired}</p>
             </div>
-            <AlertTriangle className="w-12 h-12 text-red-200 opacity-80" />
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-800">Techninės apžiūros ir draudimai</h3>
+          <h3 className="text-base font-semibold text-gray-900">Techninės apžiūros ir draudimai</h3>
 
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500" />
+            <Filter className="w-4 h-4 text-gray-400" />
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value as FilterType)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
             >
               <option value="all">Visi ({vehicles.length})</option>
               <option value="ta_soon">TA baigiasi netrukus</option>
@@ -172,8 +178,8 @@ export function TechnicalInspectionInsurance() {
 
         {filteredVehicles.length === 0 ? (
           <div className="text-center py-12">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <p className="text-gray-500">
+            <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 text-sm">
               {filter === 'all'
                 ? 'Nėra registruotų transporto priemonių'
                 : 'Nerasta transporto priemonių pagal pasirinktą filtrą'
@@ -184,14 +190,14 @@ export function TechnicalInspectionInsurance() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Pavadinimas</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Tipas</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Valst. numeris</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">TA galiojimas</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">TA būklė</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Draudimo galiojimas</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Draudimo būklė</th>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Pavadinimas</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Tipas</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Valst. numeris</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">TA galiojimas</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">TA būklė</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Draudimo galiojimas</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Draudimo būklė</th>
                 </tr>
               </thead>
               <tbody>
@@ -202,43 +208,43 @@ export function TechnicalInspectionInsurance() {
                   const insuranceColor = getStatusColor(insuranceDays);
 
                   return (
-                    <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium text-gray-900">{vehicle.make} {vehicle.model}</td>
-                      <td className="py-3 px-4 text-gray-600">{vehicleTypeLabels[vehicle.vehicle_type] || vehicle.vehicle_type}</td>
-                      <td className="py-3 px-4 text-gray-600">{vehicle.registration_number || '-'}</td>
-                      <td className="py-3 px-4 text-gray-600">
+                    <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="py-3.5 px-4 font-medium text-gray-900">{vehicle.make} {vehicle.model}</td>
+                      <td className="py-3.5 px-4 text-gray-600 text-sm">{vehicleTypeLabels[vehicle.vehicle_type] || vehicle.vehicle_type}</td>
+                      <td className="py-3.5 px-4 text-gray-600 text-sm">{vehicle.registration_number || '-'}</td>
+                      <td className="py-3.5 px-4 text-gray-600 text-sm">
                         {vehicle.technical_inspection_due_date
                           ? new Date(vehicle.technical_inspection_due_date).toLocaleDateString('lt-LT')
                           : '-'
                         }
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            taColor === 'red' ? 'bg-red-100 text-red-800' :
-                            taColor === 'orange' ? 'bg-orange-100 text-orange-800' :
-                            taColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                            taColor === 'green' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
+                          className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
+                            taColor === 'red' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            taColor === 'orange' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                            taColor === 'yellow' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            taColor === 'green' ? 'bg-green-50 text-green-700 border border-green-200' :
+                            'bg-gray-50 text-gray-700 border border-gray-200'
                           }`}
                         >
                           {getStatusText(taDays)}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-gray-600">
+                      <td className="py-3.5 px-4 text-gray-600 text-sm">
                         {vehicle.insurance_expiry_date
                           ? new Date(vehicle.insurance_expiry_date).toLocaleDateString('lt-LT')
                           : '-'
                         }
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            insuranceColor === 'red' ? 'bg-red-100 text-red-800' :
-                            insuranceColor === 'orange' ? 'bg-orange-100 text-orange-800' :
-                            insuranceColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                            insuranceColor === 'green' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
+                          className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
+                            insuranceColor === 'red' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            insuranceColor === 'orange' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                            insuranceColor === 'yellow' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            insuranceColor === 'green' ? 'bg-green-50 text-green-700 border border-green-200' :
+                            'bg-gray-50 text-gray-700 border border-gray-200'
                           }`}
                         >
                           {getStatusText(insuranceDays)}
@@ -253,10 +259,10 @@ export function TechnicalInspectionInsurance() {
         )}
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-800">
+          <Shield className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-gray-600">
             <p className="font-medium mb-1">Priminimas</p>
             <p>Šiame sąraše rodomos visos registruotos transporto priemonės. Reguliariai tikrinkite techninės apžiūros ir draudimo galiojimo terminus.</p>
           </div>
