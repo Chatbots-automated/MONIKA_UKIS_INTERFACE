@@ -1,41 +1,78 @@
-# Fix Public Access Foreign Key Errors
+# Fix Tool Movements Foreign Key Errors
 
 ## Problem
-When accessing the app from a public URL (without authentication), the following errors occurred:
-1. `insert or update on table "vehicles" violates foreign key constraint "vehicles_created_by_fkey"`
-2. `insert or update on table "tool_movements" violates foreign key constraint "tool_movements_recorded_by_fkey"`
+When trying to checkout or return tools (Įrankiai tab), the following error occurs:
+```
+insert or update on table "tool_movements" violates foreign key constraint "tool_movements_recorded_by_fkey"
+Error: Key is not present in table "users"
+```
+
+This happens even when the user is authenticated and logged in.
 
 ## Root Cause
-The code was passing `undefined` for `recorded_by` field when no user was authenticated, but the database foreign key constraints require either a valid user ID or explicitly `null`.
+The error "Key is not present in table 'users'" means the user ID being passed doesn't exist in the `public.users` table. This could happen if:
+1. The user session has an invalid or stale user ID
+2. The user was created in Supabase Auth (`auth.users`) but not synced to `public.users`
+3. There's a mismatch between the stored user ID and the database records
 
 ## Fixes Applied
 
 ### 1. Code Changes (Already Applied)
-Fixed `ToolsManagement.tsx` to use `user?.id || null` instead of just `user?.id`:
-- Line 184: `recorded_by: user?.id || null` (in checkout function)
-- Line 282: `recorded_by: user?.id || null` (in return function)
+- Added debug logging to `ToolsManagement.tsx` to track what user IDs are being passed
+- Updated to use `user?.id || null` to ensure null is passed when no user exists
+- The console will now show detailed information about the user and IDs being used
 
-### 2. Database Changes (Manual Step Required)
-The database foreign key constraints need to be updated to properly handle NULL values with `ON DELETE SET NULL`.
+### 2. Database Fix (Manual Step Required)
 
-**To apply the database fix, run:**
+**Run this command to fix the foreign key constraints:**
 ```bash
-node fix-tool-movements-constraints.cjs
+node fix-foreign-keys-direct.cjs
 ```
 
-This will:
-- Drop existing `tool_movements_recorded_by_fkey` constraint
-- Recreate it with `ON DELETE SET NULL` to allow NULL values
-- Do the same for `tool_movements_to_holder_fkey`
+This script will:
+- Drop and recreate `tool_movements_recorded_by_fkey` with `ON DELETE SET NULL`
+- Drop and recreate `tool_movements_to_holder_fkey` with `ON DELETE SET NULL`
+- Drop and recreate `tool_movements_from_holder_fkey` with `ON DELETE SET NULL`
+- Verify the `vehicles_created_by_fkey` constraint
 
-## Verification
-After running the script:
-1. Try accessing the Transportas tab from a public URL
-2. Try accessing the Įrankiai tab from a public URL
-3. Both should work without foreign key errors
+**Note:** You need to add `DATABASE_URL` to your `.env` file:
+```
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+```
 
-## Technical Details
-The foreign key constraints were pointing to `public.users` table but didn't have proper NULL handling. When accessing without authentication:
-- `user?.id` returns `undefined` in JavaScript
-- PostgreSQL foreign keys reject `undefined` but accept `null`
-- Solution: Use `user?.id || null` to ensure `null` is passed when no user is authenticated
+Get this from Supabase Dashboard → Project Settings → Database → Connection String (URI)
+
+## Debugging Steps
+
+### 1. Check the Browser Console
+After building and deploying, try to checkout a tool and check the browser console. You should see:
+```
+Current user: {id: "...", email: "...", role: "..."}
+User ID being passed: "..."
+Checkout form holder_id: "..."
+Inserting tool_movement: {...}
+```
+
+This will tell us what user ID is being used and if it matches what's in the database.
+
+### 2. Check Database Users
+Run this to verify users in the database:
+```bash
+node check-user-id.cjs
+```
+
+This will show:
+- All users in `public.users` table
+- Foreign key constraints and their settings
+- Recent tool movements
+
+## Expected Solution
+
+After running the fix script, the foreign key constraints will allow NULL values and properly handle cases where:
+- User is not logged in (NULL is allowed)
+- User is logged in but ID doesn't match (SET NULL on delete)
+
+If the error persists after applying the database fix, the debug logging will help us identify if the issue is with:
+- The user ID being passed (check console logs)
+- The users table not having the correct records
+- A sync issue between auth and the users table

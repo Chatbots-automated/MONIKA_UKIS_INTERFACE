@@ -173,8 +173,13 @@ export function ToolsManagement() {
     const notesWithQty = `Kiekis: ${quantity}${checkoutForm.notes ? ` | ${checkoutForm.notes}` : ''}`;
 
     try {
+      // Debug: Log user information
+      console.log('Current user:', user);
+      console.log('User ID being passed:', user?.id || null);
+      console.log('Checkout form holder_id:', checkoutForm.holder_id);
+
       // 1) Log tool movement (who received the tool)
-      const { error: movementError } = await supabase.from('tool_movements').insert({
+      const movementData = {
         tool_id: selectedTool.id,
         movement_type: 'checkout',
         to_holder: checkoutForm.holder_id,
@@ -182,7 +187,11 @@ export function ToolsManagement() {
         movement_date: new Date().toISOString(),
         notes: notesWithQty,
         recorded_by: user?.id || null,
-      });
+      };
+
+      console.log('Inserting tool_movement:', movementData);
+
+      const { error: movementError } = await supabase.from('tool_movements').insert(movementData);
 
       if (movementError) throw movementError;
 
@@ -274,13 +283,22 @@ export function ToolsManagement() {
 
   const handleReturn = async (tool: Tool) => {
     try {
-      const { error: movementError } = await supabase.from('tool_movements').insert({
+      // Debug: Log user information
+      console.log('Return - Current user:', user);
+      console.log('Return - User ID being passed:', user?.id || null);
+      console.log('Return - Tool current_holder:', tool.current_holder);
+
+      const movementData = {
         tool_id: tool.id,
         movement_type: 'return',
         from_holder: tool.current_holder,
         movement_date: new Date().toISOString(),
         recorded_by: user?.id || null,
-      });
+      };
+
+      console.log('Return - Inserting tool_movement:', movementData);
+
+      const { error: movementError } = await supabase.from('tool_movements').insert(movementData);
 
       if (movementError) throw movementError;
 
