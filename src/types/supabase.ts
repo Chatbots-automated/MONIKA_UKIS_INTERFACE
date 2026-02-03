@@ -7,6 +7,11 @@
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -646,6 +651,71 @@ export type Database = {
           },
         ]
       }
+      cost_centers: {
+        Row: {
+          color: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_centers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cost_centers_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["cost_center_id"]
+          },
+          {
+            foreignKeyName: "cost_centers_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_summary"
+            referencedColumns: ["cost_center_id"]
+          },
+          {
+            foreignKeyName: "cost_centers_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "cost_centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_doses: {
         Row: {
           administered_by: string | null
@@ -898,6 +968,13 @@ export type Database = {
             foreignKeyName: "equipment_batches_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["invoice_id"]
+          },
+          {
+            foreignKeyName: "equipment_batches_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
           },
@@ -907,6 +984,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_locations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_batches_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "equipment_batches_product_id_fkey"
@@ -956,6 +1040,123 @@ export type Database = {
           },
         ]
       }
+      equipment_invoice_item_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          assignment_type: string
+          cost_center_id: string | null
+          created_at: string
+          id: string
+          invoice_item_id: string
+          notes: string | null
+          tool_id: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          assignment_type: string
+          cost_center_id?: string | null
+          created_at?: string
+          id?: string
+          invoice_item_id: string
+          notes?: string | null
+          tool_id?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          assignment_type?: string
+          cost_center_id?: string | null
+          created_at?: string
+          id?: string
+          invoice_item_id?: string
+          notes?: string | null
+          tool_id?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["cost_center_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_summary"
+            referencedColumns: ["cost_center_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_invoice_item_id_fkey"
+            columns: ["invoice_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_invoice_item_id_fkey"
+            columns: ["invoice_item_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoice_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tool_parts_usage"
+            referencedColumns: ["tool_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_item_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       equipment_invoice_items: {
         Row: {
           batch_id: string | null
@@ -1001,8 +1202,22 @@ export type Database = {
             foreignKeyName: "equipment_invoice_items_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["invoice_id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "equipment_invoice_items_product_id_fkey"
@@ -1134,6 +1349,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_items_on_loan"
             referencedColumns: ["issuance_id"]
+          },
+          {
+            foreignKeyName: "equipment_issuance_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "equipment_issuance_items_product_id_fkey"
@@ -1390,6 +1612,99 @@ export type Database = {
           vat_code?: string | null
         }
         Relationships: []
+      }
+      fire_extinguishers: {
+        Row: {
+          capacity: string | null
+          created_at: string | null
+          created_by: string | null
+          expiry_date: string
+          id: string
+          is_active: boolean | null
+          last_inspection_date: string | null
+          location_id: string | null
+          next_inspection_date: string | null
+          notes: string | null
+          placement_type: string
+          serial_number: string
+          status: string | null
+          type: string | null
+          updated_at: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          capacity?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          expiry_date: string
+          id?: string
+          is_active?: boolean | null
+          last_inspection_date?: string | null
+          location_id?: string | null
+          next_inspection_date?: string | null
+          notes?: string | null
+          placement_type: string
+          serial_number: string
+          status?: string | null
+          type?: string | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          capacity?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          expiry_date?: string
+          id?: string
+          is_active?: boolean | null
+          last_inspection_date?: string | null
+          location_id?: string | null
+          next_inspection_date?: string | null
+          notes?: string | null
+          placement_type?: string
+          serial_number?: string
+          status?: string | null
+          type?: string | null
+          updated_at?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fire_extinguishers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fire_extinguishers_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fire_extinguishers_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "fire_extinguishers_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "fire_extinguishers_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gea_daily: {
         Row: {
@@ -2240,6 +2555,20 @@ export type Database = {
             foreignKeyName: "maintenance_schedules_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
@@ -2247,12 +2576,14 @@ export type Database = {
       }
       maintenance_work_orders: {
         Row: {
+          assigned_mechanic: string | null
           assigned_to: string | null
           completed_date: string | null
           created_at: string | null
           created_by: string | null
           description: string
           engine_hours: number | null
+          estimated_cost: number | null
           id: string
           labor_cost: number | null
           labor_hours: number | null
@@ -2263,6 +2594,7 @@ export type Database = {
           priority: string | null
           schedule_id: string | null
           scheduled_date: string | null
+          service_visit_id: string | null
           started_date: string | null
           status: string | null
           tool_id: string | null
@@ -2271,12 +2603,14 @@ export type Database = {
           work_order_number: string
         }
         Insert: {
+          assigned_mechanic?: string | null
           assigned_to?: string | null
           completed_date?: string | null
           created_at?: string | null
           created_by?: string | null
           description: string
           engine_hours?: number | null
+          estimated_cost?: number | null
           id?: string
           labor_cost?: number | null
           labor_hours?: number | null
@@ -2287,6 +2621,7 @@ export type Database = {
           priority?: string | null
           schedule_id?: string | null
           scheduled_date?: string | null
+          service_visit_id?: string | null
           started_date?: string | null
           status?: string | null
           tool_id?: string | null
@@ -2295,12 +2630,14 @@ export type Database = {
           work_order_number: string
         }
         Update: {
+          assigned_mechanic?: string | null
           assigned_to?: string | null
           completed_date?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string
           engine_hours?: number | null
+          estimated_cost?: number | null
           id?: string
           labor_cost?: number | null
           labor_hours?: number | null
@@ -2311,6 +2648,7 @@ export type Database = {
           priority?: string | null
           schedule_id?: string | null
           scheduled_date?: string | null
+          service_visit_id?: string | null
           started_date?: string | null
           status?: string | null
           tool_id?: string | null
@@ -2341,11 +2679,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "maintenance_work_orders_service_visit_id_fkey"
+            columns: ["service_visit_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_work_orders_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tool_parts_usage"
+            referencedColumns: ["tool_id"]
+          },
+          {
             foreignKeyName: "maintenance_work_orders_tool_id_fkey"
             columns: ["tool_id"]
             isOneToOne: false
             referencedRelation: "tools"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_work_orders_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "maintenance_work_orders_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
           },
           {
             foreignKeyName: "maintenance_work_orders_vehicle_id_fkey"
@@ -3103,6 +3469,13 @@ export type Database = {
             foreignKeyName: "ppe_issuance_records_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "ppe_issuance_records_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "equipment_products"
             referencedColumns: ["id"]
           },
@@ -3161,11 +3534,145 @@ export type Database = {
             foreignKeyName: "ppe_items_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "ppe_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "equipment_products"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "ppe_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_warehouse_stock"
+            referencedColumns: ["product_id"]
+          },
+        ]
+      }
+      product_quality_reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          product_id: string
+          rating: number
+          review_date: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          product_id: string
+          rating: number
+          review_date?: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          product_id?: string
+          rating?: number
+          review_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_quality_reviews_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_quality_reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "product_quality_reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_quality_reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_warehouse_stock"
+            referencedColumns: ["product_id"]
+          },
+        ]
+      }
+      product_quality_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          interval_type: string
+          interval_value: number
+          is_active: boolean
+          last_checked_date: string | null
+          next_due_date: string | null
+          notes: string | null
+          product_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          interval_type: string
+          interval_value: number
+          is_active?: boolean
+          last_checked_date?: string | null
+          next_due_date?: string | null
+          notes?: string | null
+          product_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          interval_type?: string
+          interval_value?: number
+          is_active?: boolean
+          last_checked_date?: string | null
+          next_due_date?: string | null
+          notes?: string | null
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_quality_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_quality_schedules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "product_quality_schedules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_quality_schedules_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "equipment_warehouse_stock"
@@ -3646,6 +4153,13 @@ export type Database = {
             foreignKeyName: "tool_movements_tool_id_fkey"
             columns: ["tool_id"]
             isOneToOne: false
+            referencedRelation: "tool_parts_usage"
+            referencedColumns: ["tool_id"]
+          },
+          {
+            foreignKeyName: "tool_movements_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
             referencedRelation: "tools"
             referencedColumns: ["id"]
           },
@@ -3723,6 +4237,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_locations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tools_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "tools_product_id_fkey"
@@ -4459,6 +4980,20 @@ export type Database = {
             foreignKeyName: "vehicle_assignments_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
@@ -4508,6 +5043,20 @@ export type Database = {
           vehicle_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "vehicle_documents_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_documents_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
           {
             foreignKeyName: "vehicle_documents_vehicle_id_fkey"
             columns: ["vehicle_id"]
@@ -4568,7 +5117,216 @@ export type Database = {
             foreignKeyName: "vehicle_fuel_records_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_fuel_records_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_fuel_records_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
             referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_service_visits: {
+        Row: {
+          actual_cost: number | null
+          completed_at: string | null
+          completed_by: string | null
+          cost_estimate: number | null
+          created_at: string | null
+          created_by: string | null
+          engine_hours: number | null
+          id: string
+          labor_hours: number | null
+          mechanic_name: string | null
+          next_visit_date: string | null
+          next_visit_required: boolean | null
+          notes: string | null
+          odometer_reading: number | null
+          procedures: string[] | null
+          status: string
+          vehicle_id: string
+          visit_datetime: string
+          visit_type: string
+        }
+        Insert: {
+          actual_cost?: number | null
+          completed_at?: string | null
+          completed_by?: string | null
+          cost_estimate?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          engine_hours?: number | null
+          id?: string
+          labor_hours?: number | null
+          mechanic_name?: string | null
+          next_visit_date?: string | null
+          next_visit_required?: boolean | null
+          notes?: string | null
+          odometer_reading?: number | null
+          procedures?: string[] | null
+          status?: string
+          vehicle_id: string
+          visit_datetime: string
+          visit_type?: string
+        }
+        Update: {
+          actual_cost?: number | null
+          completed_at?: string | null
+          completed_by?: string | null
+          cost_estimate?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          engine_hours?: number | null
+          id?: string
+          labor_hours?: number | null
+          mechanic_name?: string | null
+          next_visit_date?: string | null
+          next_visit_required?: boolean | null
+          notes?: string | null
+          odometer_reading?: number | null
+          procedures?: string[] | null
+          status?: string
+          vehicle_id?: string
+          visit_datetime?: string
+          visit_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_service_visits_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_service_visits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_service_visits_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_parts_usage"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_service_visits_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_history"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_service_visits_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_visit_parts: {
+        Row: {
+          batch_id: string | null
+          cost_per_unit: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          product_id: string
+          quantity_used: number
+          visit_id: string
+        }
+        Insert: {
+          batch_id?: string | null
+          cost_per_unit?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id: string
+          quantity_used: number
+          visit_id: string
+        }
+        Update: {
+          batch_id?: string | null
+          cost_per_unit?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id?: string
+          quantity_used?: number
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_visit_parts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "stock_by_batch"
+            referencedColumns: ["batch_id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "vw_vet_drug_journal"
+            referencedColumns: ["batch_id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "stock_by_batch"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "stock_by_product"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "vehicle_visit_parts_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_service_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -4587,6 +5345,9 @@ export type Database = {
           insurance_policy_number: string | null
           insurance_provider: string | null
           is_active: boolean | null
+          last_service_date: string | null
+          last_service_hours: number | null
+          last_service_mileage: number | null
           make: string | null
           model: string | null
           notes: string | null
@@ -4613,6 +5374,9 @@ export type Database = {
           insurance_policy_number?: string | null
           insurance_provider?: string | null
           is_active?: boolean | null
+          last_service_date?: string | null
+          last_service_hours?: number | null
+          last_service_mileage?: number | null
           make?: string | null
           model?: string | null
           notes?: string | null
@@ -4639,6 +5403,9 @@ export type Database = {
           insurance_policy_number?: string | null
           insurance_provider?: string | null
           is_active?: boolean | null
+          last_service_date?: string | null
+          last_service_hours?: number | null
+          last_service_mileage?: number | null
           make?: string | null
           model?: string | null
           notes?: string | null
@@ -4769,6 +5536,13 @@ export type Database = {
             foreignKeyName: "work_order_parts_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "cost_center_parts_usage"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "work_order_parts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "equipment_products"
             referencedColumns: ["id"]
           },
@@ -4889,6 +5663,46 @@ export type Database = {
           next_visit?: never
           species?: string | null
           tag_no?: string | null
+        }
+        Relationships: []
+      }
+      cost_center_parts_usage: {
+        Row: {
+          assigned_at: string | null
+          assigned_by_name: string | null
+          assignment_notes: string | null
+          category_name: string | null
+          cost_center_color: string | null
+          cost_center_description: string | null
+          cost_center_id: string | null
+          cost_center_name: string | null
+          invoice_date: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          item_description: string | null
+          item_id: string | null
+          product_code: string | null
+          product_id: string | null
+          product_name: string | null
+          quantity: number | null
+          supplier_name: string | null
+          total_price: number | null
+          unit_price: number | null
+          unit_type: string | null
+        }
+        Relationships: []
+      }
+      cost_center_summary: {
+        Row: {
+          color: string | null
+          cost_center_id: string | null
+          cost_center_name: string | null
+          description: string | null
+          first_assignment_date: string | null
+          is_active: boolean | null
+          last_assignment_date: string | null
+          total_assignments: number | null
+          total_cost: number | null
         }
         Relationships: []
       }
@@ -5202,6 +6016,27 @@ export type Database = {
         }
         Relationships: []
       }
+      tool_parts_usage: {
+        Row: {
+          assigned_at: string | null
+          assigned_by_name: string | null
+          assignment_notes: string | null
+          invoice_date: string | null
+          invoice_number: string | null
+          item_description: string | null
+          product_code: string | null
+          product_name: string | null
+          quantity: number | null
+          serial_number: string | null
+          supplier_name: string | null
+          tool_id: string | null
+          tool_name: string | null
+          tool_type: string | null
+          total_price: number | null
+          unit_price: number | null
+        }
+        Relationships: []
+      }
       treatment_history_view: {
         Row: {
           animal_condition: string | null
@@ -5309,6 +6144,43 @@ export type Database = {
             referencedColumns: ["animal_id"]
           },
         ]
+      }
+      vehicle_parts_usage: {
+        Row: {
+          assigned_at: string | null
+          assigned_by_name: string | null
+          assignment_notes: string | null
+          invoice_date: string | null
+          invoice_number: string | null
+          item_description: string | null
+          make: string | null
+          model: string | null
+          product_code: string | null
+          product_name: string | null
+          quantity: number | null
+          registration_number: string | null
+          supplier_name: string | null
+          total_price: number | null
+          unit_price: number | null
+          vehicle_id: string | null
+          vehicle_type: string | null
+        }
+        Relationships: []
+      }
+      vehicle_service_history: {
+        Row: {
+          last_service_date: string | null
+          make: string | null
+          model: string | null
+          registration_number: string | null
+          total_labor_hours: number | null
+          total_service_cost: number | null
+          total_services: number | null
+          total_work_order_cost: number | null
+          total_work_orders: number | null
+          vehicle_id: string | null
+        }
+        Relationships: []
       }
       vet_analytics_summary: {
         Row: {
@@ -6847,4 +7719,3 @@ export const Constants = {
     },
   },
 } as const
-
