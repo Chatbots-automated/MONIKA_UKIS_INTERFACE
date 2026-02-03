@@ -8,3 +8,5 @@ Rules:
   supabase gen types typescript --linked > src/types/supabase.ts
 - Keep RLS enabled; update policies when adding tables/columns.
 - Prefer small, reviewable commits.
+- When making schema changes, make the SQL file in the supabase/migrations folder and I will apply it via the Supabase Dashboard SQL Editor. The SQL file must always be in the supabase/migrations folder.
+- When making schema changes, don't waste time on making the .MD files, just make the SQL files without the .MD files.

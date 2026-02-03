@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
--- \restrict IybmcjSxeoZfEYgQaD86gCLXfi0rtXWgfMKg77xw29nSlvrorqo9jcpmhJzg0GR
+-- \restrict 5B0YaDDevb1SzvPox8nhPpS1ggKgfDEcxmZTn8CfbWQT2TLWgw4u4R4Koo5M4kL
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.6
@@ -1583,6 +1583,42 @@ $$;
 ALTER FUNCTION "public"."handle_updated_at"() OWNER TO "postgres";
 
 --
+-- Name: handle_vehicle_visit_part_stock(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."handle_vehicle_visit_part_stock"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+  v_batch_qty_left numeric;
+  v_product_name text;
+BEGIN
+  SELECT b.qty_left, p.name INTO v_batch_qty_left, v_product_name
+  FROM batches b
+  JOIN products p ON p.id = b.product_id
+  WHERE b.id = NEW.batch_id;
+
+  IF v_batch_qty_left IS NULL THEN
+    RAISE EXCEPTION 'Partija nerasta';
+  END IF;
+
+  IF v_batch_qty_left < NEW.quantity_used THEN
+    RAISE EXCEPTION 'Nepakankamos atsargos produktui "%". Reikalinga: %, Turima: %',
+      v_product_name, NEW.quantity_used, v_batch_qty_left;
+  END IF;
+
+  UPDATE batches
+  SET qty_left = qty_left - NEW.quantity_used
+  WHERE id = NEW.batch_id;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_vehicle_visit_part_stock"() OWNER TO "postgres";
+
+--
 -- Name: import_milk_data("jsonb"); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2459,6 +2495,24 @@ $$;
 ALTER FUNCTION "public"."restore_equipment_stock"() OWNER TO "postgres";
 
 --
+-- Name: restore_vehicle_visit_part_stock(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."restore_vehicle_visit_part_stock"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  UPDATE batches
+  SET qty_left = qty_left + OLD.quantity_used
+  WHERE id = OLD.batch_id;
+  RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."restore_vehicle_visit_part_stock"() OWNER TO "postgres";
+
+--
 -- Name: set_work_order_number_trigger(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2769,6 +2823,38 @@ COMMENT ON FUNCTION "public"."update_batch_qty_left"() IS 'Automatically updates
 
 
 --
+-- Name: update_cost_center_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_cost_center_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_cost_center_updated_at"() OWNER TO "postgres";
+
+--
+-- Name: update_fire_extinguishers_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_fire_extinguishers_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_fire_extinguishers_updated_at"() OWNER TO "postgres";
+
+--
 -- Name: update_hoof_records_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2812,6 +2898,8 @@ CREATE OR REPLACE FUNCTION "public"."update_schedule_on_work_order_complete"() R
     AS $$
 DECLARE
   v_schedule RECORD;
+  v_vehicle_mileage numeric;
+  v_vehicle_hours numeric;
 BEGIN
   -- Handle INSERT (when work order is created as 'completed')
   IF TG_OP = 'INSERT' AND NEW.status = 'completed' AND NEW.schedule_id IS NOT NULL THEN
@@ -2820,37 +2908,65 @@ BEGIN
     FROM maintenance_schedules
     WHERE id = NEW.schedule_id;
 
+    -- Get vehicle readings (prefer work order values, fallback to vehicle current values)
+    SELECT 
+      COALESCE(NEW.odometer_reading, current_mileage),
+      COALESCE(NEW.engine_hours, current_engine_hours)
+    INTO v_vehicle_mileage, v_vehicle_hours
+    FROM vehicles
+    WHERE id = v_schedule.vehicle_id;
+
     -- Update last_performed_date and calculate next_due_date
     UPDATE maintenance_schedules
     SET
-      last_performed_date = COALESCE(NEW.completed_date, NEW.created_at, NOW()),
+      last_performed_date = COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE),
       -- Calculate next_due_date based on interval_type
+      -- Handle 0 or negative intervals by setting to 1 year from now
       next_due_date = CASE
-        WHEN v_schedule.interval_type = 'date' THEN
-          (COALESCE(NEW.completed_date, NEW.created_at, NOW()) + (v_schedule.interval_value || ' days')::interval)::date
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'days' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + (v_schedule.interval_value || ' days')::interval)::date
+          END
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'months' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + (v_schedule.interval_value || ' months')::interval)::date
+          END
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'years' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, NEW.created_at::date, CURRENT_DATE) + (v_schedule.interval_value || ' years')::interval)::date
+          END
         ELSE
           v_schedule.next_due_date -- Keep existing for mileage/hours
       END,
       -- Update mileage if applicable
       last_performed_mileage = CASE
-        WHEN v_schedule.interval_type = 'mileage' THEN
-          (SELECT current_mileage FROM vehicles WHERE id = v_schedule.vehicle_id)
+        WHEN v_schedule.maintenance_type = 'mileage' AND v_vehicle_mileage IS NOT NULL THEN
+          v_vehicle_mileage
         ELSE v_schedule.last_performed_mileage
       END,
       next_due_mileage = CASE
-        WHEN v_schedule.interval_type = 'mileage' THEN
-          (SELECT current_mileage FROM vehicles WHERE id = v_schedule.vehicle_id) + v_schedule.interval_value
+        WHEN v_schedule.maintenance_type = 'mileage' AND v_vehicle_mileage IS NOT NULL THEN
+          v_vehicle_mileage + v_schedule.interval_value
         ELSE v_schedule.next_due_mileage
       END,
-      -- Update hours if applicable
+      -- Update hours if applicable (FIXED: use current_engine_hours instead of current_hours)
       last_performed_hours = CASE
-        WHEN v_schedule.interval_type = 'hours' THEN
-          (SELECT current_hours FROM vehicles WHERE id = v_schedule.vehicle_id)
+        WHEN v_schedule.maintenance_type = 'hours' AND v_vehicle_hours IS NOT NULL THEN
+          v_vehicle_hours
         ELSE v_schedule.last_performed_hours
       END,
       next_due_hours = CASE
-        WHEN v_schedule.interval_type = 'hours' THEN
-          (SELECT current_hours FROM vehicles WHERE id = v_schedule.vehicle_id) + v_schedule.interval_value
+        WHEN v_schedule.maintenance_type = 'hours' AND v_vehicle_hours IS NOT NULL THEN
+          v_vehicle_hours + v_schedule.interval_value
         ELSE v_schedule.next_due_hours
       END
     WHERE id = NEW.schedule_id;
@@ -2865,37 +2981,65 @@ BEGIN
     FROM maintenance_schedules
     WHERE id = NEW.schedule_id;
 
+    -- Get vehicle readings (prefer work order values, fallback to vehicle current values)
+    SELECT 
+      COALESCE(NEW.odometer_reading, current_mileage),
+      COALESCE(NEW.engine_hours, current_engine_hours)
+    INTO v_vehicle_mileage, v_vehicle_hours
+    FROM vehicles
+    WHERE id = v_schedule.vehicle_id;
+
     -- Update last_performed_date and calculate next_due_date
     UPDATE maintenance_schedules
     SET
-      last_performed_date = COALESCE(NEW.completed_date, NOW()),
+      last_performed_date = COALESCE(NEW.completed_date::date, CURRENT_DATE),
       -- Calculate next_due_date based on interval_type
+      -- Handle 0 or negative intervals by setting to 1 year from now
       next_due_date = CASE
-        WHEN v_schedule.interval_type = 'date' THEN
-          (COALESCE(NEW.completed_date, NOW()) + (v_schedule.interval_value || ' days')::interval)::date
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'days' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + (v_schedule.interval_value || ' days')::interval)::date
+          END
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'months' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + (v_schedule.interval_value || ' months')::interval)::date
+          END
+        WHEN v_schedule.maintenance_type = 'date' AND v_schedule.interval_type = 'years' THEN
+          CASE 
+            WHEN v_schedule.interval_value <= 0 THEN
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + '1 year'::interval)::date
+            ELSE
+              (COALESCE(NEW.completed_date::date, CURRENT_DATE) + (v_schedule.interval_value || ' years')::interval)::date
+          END
         ELSE
           v_schedule.next_due_date -- Keep existing for mileage/hours
       END,
       -- Update mileage if applicable
       last_performed_mileage = CASE
-        WHEN v_schedule.interval_type = 'mileage' THEN
-          (SELECT current_mileage FROM vehicles WHERE id = v_schedule.vehicle_id)
+        WHEN v_schedule.maintenance_type = 'mileage' AND v_vehicle_mileage IS NOT NULL THEN
+          v_vehicle_mileage
         ELSE v_schedule.last_performed_mileage
       END,
       next_due_mileage = CASE
-        WHEN v_schedule.interval_type = 'mileage' THEN
-          (SELECT current_mileage FROM vehicles WHERE id = v_schedule.vehicle_id) + v_schedule.interval_value
+        WHEN v_schedule.maintenance_type = 'mileage' AND v_vehicle_mileage IS NOT NULL THEN
+          v_vehicle_mileage + v_schedule.interval_value
         ELSE v_schedule.next_due_mileage
       END,
-      -- Update hours if applicable
+      -- Update hours if applicable (FIXED: use current_engine_hours instead of current_hours)
       last_performed_hours = CASE
-        WHEN v_schedule.interval_type = 'hours' THEN
-          (SELECT current_hours FROM vehicles WHERE id = v_schedule.vehicle_id)
+        WHEN v_schedule.maintenance_type = 'hours' AND v_vehicle_hours IS NOT NULL THEN
+          v_vehicle_hours
         ELSE v_schedule.last_performed_hours
       END,
       next_due_hours = CASE
-        WHEN v_schedule.interval_type = 'hours' THEN
-          (SELECT current_hours FROM vehicles WHERE id = v_schedule.vehicle_id) + v_schedule.interval_value
+        WHEN v_schedule.maintenance_type = 'hours' AND v_vehicle_hours IS NOT NULL THEN
+          v_vehicle_hours + v_schedule.interval_value
         ELSE v_schedule.next_due_hours
       END
     WHERE id = NEW.schedule_id;
@@ -2975,6 +3119,29 @@ $$;
 
 
 ALTER FUNCTION "public"."update_user_password"("p_user_id" "uuid", "p_password" "text") OWNER TO "postgres";
+
+--
+-- Name: update_vehicle_last_service(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_vehicle_last_service"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF NEW.status = 'Baigtas' AND (OLD.status IS NULL OR OLD.status != 'Baigtas') THEN
+    UPDATE vehicles
+    SET
+      last_service_date = NEW.visit_datetime,
+      last_service_mileage = COALESCE(NEW.odometer_reading, last_service_mileage),
+      last_service_hours = COALESCE(NEW.engine_hours, last_service_hours)
+    WHERE id = NEW.vehicle_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_vehicle_last_service"() OWNER TO "postgres";
 
 --
 -- Name: update_work_order_costs(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4021,6 +4188,214 @@ CREATE TABLE IF NOT EXISTS "public"."biocide_usage" (
 ALTER TABLE "public"."biocide_usage" OWNER TO "postgres";
 
 --
+-- Name: cost_centers; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."cost_centers" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "color" "text" DEFAULT '#3B82F6'::"text" NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "parent_id" "uuid"
+);
+
+
+ALTER TABLE "public"."cost_centers" OWNER TO "postgres";
+
+--
+-- Name: equipment_categories; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_categories" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "parent_category_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."equipment_categories" OWNER TO "postgres";
+
+--
+-- Name: equipment_invoice_item_assignments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_invoice_item_assignments" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "invoice_item_id" "uuid" NOT NULL,
+    "assignment_type" "text" NOT NULL,
+    "vehicle_id" "uuid",
+    "tool_id" "uuid",
+    "notes" "text",
+    "assigned_by" "uuid",
+    "assigned_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cost_center_id" "uuid",
+    CONSTRAINT "equipment_invoice_item_assignments_assignment_type_check" CHECK (("assignment_type" = ANY (ARRAY['vehicle'::"text", 'tool'::"text", 'building'::"text", 'general_farm'::"text", 'cost_center'::"text"])))
+);
+
+
+ALTER TABLE "public"."equipment_invoice_item_assignments" OWNER TO "postgres";
+
+--
+-- Name: equipment_invoice_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_invoice_items" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "invoice_id" "uuid",
+    "line_no" integer,
+    "product_id" "uuid",
+    "description" "text",
+    "quantity" numeric NOT NULL,
+    "unit_price" numeric NOT NULL,
+    "total_price" numeric NOT NULL,
+    "vat_rate" numeric DEFAULT 21,
+    "batch_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."equipment_invoice_items" OWNER TO "postgres";
+
+--
+-- Name: equipment_invoices; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_invoices" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "invoice_number" "text" NOT NULL,
+    "invoice_date" "date" NOT NULL,
+    "supplier_id" "uuid",
+    "supplier_name" "text",
+    "total_net" numeric DEFAULT 0,
+    "total_vat" numeric DEFAULT 0,
+    "total_gross" numeric DEFAULT 0,
+    "currency" "text" DEFAULT 'EUR'::"text",
+    "status" "text" DEFAULT 'received'::"text",
+    "pdf_url" "text",
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."equipment_invoices" OWNER TO "postgres";
+
+--
+-- Name: equipment_products; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_products" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "category_id" "uuid",
+    "product_code" "text",
+    "unit_type" "text" DEFAULT 'pcs'::"text",
+    "manufacturer" "text",
+    "model_number" "text",
+    "min_stock_level" numeric DEFAULT 0,
+    "is_active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."equipment_products" OWNER TO "postgres";
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."users" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "email" "text" NOT NULL,
+    "password_hash" "text" NOT NULL,
+    "role" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "last_login" timestamp with time zone,
+    "full_name" "text" DEFAULT ''::"text" NOT NULL,
+    "is_frozen" boolean DEFAULT false NOT NULL,
+    "frozen_at" timestamp with time zone,
+    "frozen_by" "uuid",
+    CONSTRAINT "users_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'vet'::"text", 'tech'::"text", 'viewer'::"text"])))
+);
+
+
+ALTER TABLE "public"."users" OWNER TO "postgres";
+
+--
+-- Name: cost_center_parts_usage; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."cost_center_parts_usage" AS
+ SELECT "cc"."id" AS "cost_center_id",
+    "cc"."name" AS "cost_center_name",
+    "cc"."description" AS "cost_center_description",
+    "cc"."color" AS "cost_center_color",
+    "ei"."id" AS "invoice_id",
+    "ei"."invoice_number",
+    "ei"."invoice_date",
+    "ei"."supplier_name",
+    "ep"."id" AS "product_id",
+    "ep"."name" AS "product_name",
+    "ep"."product_code",
+    "ep"."unit_type",
+    "ec"."name" AS "category_name",
+    "eii"."id" AS "item_id",
+    "eii"."description" AS "item_description",
+    "eii"."quantity",
+    "eii"."unit_price",
+    "eii"."total_price",
+    "eia"."notes" AS "assignment_notes",
+    "eia"."assigned_at",
+    "u"."full_name" AS "assigned_by_name"
+   FROM (((((("public"."equipment_invoice_item_assignments" "eia"
+     JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
+     JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("ep"."id" = "eii"."product_id")))
+     LEFT JOIN "public"."equipment_categories" "ec" ON (("ec"."id" = "ep"."category_id")))
+     LEFT JOIN "public"."cost_centers" "cc" ON (("cc"."id" = "eia"."cost_center_id")))
+     LEFT JOIN "public"."users" "u" ON (("u"."id" = "eia"."assigned_by")))
+  WHERE ("eia"."assignment_type" = 'cost_center'::"text")
+  ORDER BY "cc"."name", "ei"."invoice_date" DESC;
+
+
+ALTER VIEW "public"."cost_center_parts_usage" OWNER TO "postgres";
+
+--
+-- Name: cost_center_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."cost_center_summary" AS
+ SELECT "cc"."id" AS "cost_center_id",
+    "cc"."name" AS "cost_center_name",
+    "cc"."description",
+    "cc"."color",
+    "cc"."is_active",
+    "count"(DISTINCT "eia"."id") AS "total_assignments",
+    COALESCE("sum"("eii"."total_price"), (0)::numeric) AS "total_cost",
+    "min"("ei"."invoice_date") AS "first_assignment_date",
+    "max"("ei"."invoice_date") AS "last_assignment_date"
+   FROM ((("public"."cost_centers" "cc"
+     LEFT JOIN "public"."equipment_invoice_item_assignments" "eia" ON ((("eia"."cost_center_id" = "cc"."id") AND ("eia"."assignment_type" = 'cost_center'::"text"))))
+     LEFT JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
+     LEFT JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+  WHERE ("cc"."is_active" = true)
+  GROUP BY "cc"."id", "cc"."name", "cc"."description", "cc"."color", "cc"."is_active"
+  ORDER BY "cc"."name";
+
+
+ALTER VIEW "public"."cost_center_summary" OWNER TO "postgres";
+
+--
 -- Name: course_doses; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -4140,66 +4515,6 @@ CREATE TABLE IF NOT EXISTS "public"."equipment_batches" (
 ALTER TABLE "public"."equipment_batches" OWNER TO "postgres";
 
 --
--- Name: equipment_categories; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."equipment_categories" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "name" "text" NOT NULL,
-    "description" "text",
-    "parent_category_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."equipment_categories" OWNER TO "postgres";
-
---
--- Name: equipment_invoice_items; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."equipment_invoice_items" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "invoice_id" "uuid",
-    "line_no" integer,
-    "product_id" "uuid",
-    "description" "text",
-    "quantity" numeric NOT NULL,
-    "unit_price" numeric NOT NULL,
-    "total_price" numeric NOT NULL,
-    "vat_rate" numeric DEFAULT 21,
-    "batch_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."equipment_invoice_items" OWNER TO "postgres";
-
---
--- Name: equipment_invoices; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."equipment_invoices" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "invoice_number" "text" NOT NULL,
-    "invoice_date" "date" NOT NULL,
-    "supplier_id" "uuid",
-    "supplier_name" "text",
-    "total_net" numeric DEFAULT 0,
-    "total_vat" numeric DEFAULT 0,
-    "total_gross" numeric DEFAULT 0,
-    "currency" "text" DEFAULT 'EUR'::"text",
-    "status" "text" DEFAULT 'received'::"text",
-    "pdf_url" "text",
-    "notes" "text",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid"
-);
-
-
-ALTER TABLE "public"."equipment_invoices" OWNER TO "postgres";
-
---
 -- Name: equipment_issuance_items; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -4242,50 +4557,6 @@ CREATE TABLE IF NOT EXISTS "public"."equipment_issuances" (
 
 
 ALTER TABLE "public"."equipment_issuances" OWNER TO "postgres";
-
---
--- Name: equipment_products; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."equipment_products" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "name" "text" NOT NULL,
-    "description" "text",
-    "category_id" "uuid",
-    "product_code" "text",
-    "unit_type" "text" DEFAULT 'pcs'::"text",
-    "manufacturer" "text",
-    "model_number" "text",
-    "min_stock_level" numeric DEFAULT 0,
-    "is_active" boolean DEFAULT true,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid"
-);
-
-
-ALTER TABLE "public"."equipment_products" OWNER TO "postgres";
-
---
--- Name: users; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."users" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "email" "text" NOT NULL,
-    "password_hash" "text" NOT NULL,
-    "role" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "last_login" timestamp with time zone,
-    "full_name" "text" DEFAULT ''::"text" NOT NULL,
-    "is_frozen" boolean DEFAULT false NOT NULL,
-    "frozen_at" timestamp with time zone,
-    "frozen_by" "uuid",
-    CONSTRAINT "users_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'vet'::"text", 'tech'::"text", 'viewer'::"text"])))
-);
-
-
-ALTER TABLE "public"."users" OWNER TO "postgres";
 
 --
 -- Name: equipment_items_on_loan; Type: VIEW; Schema: public; Owner: postgres
@@ -4397,6 +4668,35 @@ CREATE OR REPLACE VIEW "public"."equipment_warehouse_stock" AS
 
 
 ALTER VIEW "public"."equipment_warehouse_stock" OWNER TO "postgres";
+
+--
+-- Name: fire_extinguishers; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."fire_extinguishers" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "serial_number" "text" NOT NULL,
+    "placement_type" "text" NOT NULL,
+    "location_id" "uuid",
+    "vehicle_id" "uuid",
+    "capacity" "text",
+    "type" "text",
+    "expiry_date" "date" NOT NULL,
+    "last_inspection_date" "date",
+    "next_inspection_date" "date",
+    "status" "text" DEFAULT 'active'::"text",
+    "notes" "text",
+    "is_active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    CONSTRAINT "fire_extinguishers_placement_check" CHECK (((("placement_type" = 'indoors'::"text") AND ("location_id" IS NOT NULL) AND ("vehicle_id" IS NULL)) OR (("placement_type" = 'transport'::"text") AND ("vehicle_id" IS NOT NULL) AND ("location_id" IS NULL)))),
+    CONSTRAINT "fire_extinguishers_placement_type_check" CHECK (("placement_type" = ANY (ARRAY['indoors'::"text", 'transport'::"text"]))),
+    CONSTRAINT "fire_extinguishers_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'expired'::"text", 'in_service'::"text", 'retired'::"text"])))
+);
+
+
+ALTER TABLE "public"."fire_extinguishers" OWNER TO "postgres";
 
 --
 -- Name: gea_daily; Type: TABLE; Schema: public; Owner: postgres
@@ -4841,6 +5141,9 @@ CREATE TABLE IF NOT EXISTS "public"."maintenance_work_orders" (
     "created_at" timestamp with time zone DEFAULT "now"(),
     "created_by" "uuid",
     "schedule_id" "uuid",
+    "service_visit_id" "uuid",
+    "assigned_mechanic" "text",
+    "estimated_cost" numeric,
     CONSTRAINT "maintenance_work_orders_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'in_progress'::"text", 'completed'::"text", 'cancelled'::"text"])))
 );
 
@@ -5224,6 +5527,46 @@ CREATE TABLE IF NOT EXISTS "public"."ppe_items" (
 ALTER TABLE "public"."ppe_items" OWNER TO "postgres";
 
 --
+-- Name: product_quality_reviews; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."product_quality_reviews" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "product_id" "uuid" NOT NULL,
+    "rating" integer NOT NULL,
+    "review_date" "date" DEFAULT CURRENT_DATE NOT NULL,
+    "comment" "text",
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "product_quality_reviews_rating_check" CHECK ((("rating" >= 1) AND ("rating" <= 5)))
+);
+
+
+ALTER TABLE "public"."product_quality_reviews" OWNER TO "postgres";
+
+--
+-- Name: product_quality_schedules; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."product_quality_schedules" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "product_id" "uuid" NOT NULL,
+    "interval_value" integer NOT NULL,
+    "interval_type" "text" NOT NULL,
+    "last_checked_date" "date",
+    "next_due_date" "date",
+    "notes" "text",
+    "is_active" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid",
+    CONSTRAINT "product_quality_schedules_interval_type_check" CHECK (("interval_type" = ANY (ARRAY['days'::"text", 'months'::"text", 'years'::"text"]))),
+    CONSTRAINT "product_quality_schedules_interval_value_check" CHECK (("interval_value" > 0))
+);
+
+
+ALTER TABLE "public"."product_quality_schedules" OWNER TO "postgres";
+
+--
 -- Name: products; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -5501,6 +5844,39 @@ CREATE TABLE IF NOT EXISTS "public"."tools" (
 
 
 ALTER TABLE "public"."tools" OWNER TO "postgres";
+
+--
+-- Name: tool_parts_usage; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."tool_parts_usage" AS
+ SELECT "t"."id" AS "tool_id",
+    "t"."name" AS "tool_name",
+    "t"."type" AS "tool_type",
+    "t"."serial_number",
+    "ei"."invoice_number",
+    "ei"."invoice_date",
+    "ei"."supplier_name",
+    "ep"."name" AS "product_name",
+    "ep"."product_code",
+    "eii"."description" AS "item_description",
+    "eii"."quantity",
+    "eii"."unit_price",
+    "eii"."total_price",
+    "eia"."notes" AS "assignment_notes",
+    "eia"."assigned_at",
+    "u"."full_name" AS "assigned_by_name"
+   FROM ((((("public"."equipment_invoice_item_assignments" "eia"
+     JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
+     JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("ep"."id" = "eii"."product_id")))
+     LEFT JOIN "public"."tools" "t" ON (("t"."id" = "eia"."tool_id")))
+     LEFT JOIN "public"."users" "u" ON (("u"."id" = "eia"."assigned_by")))
+  WHERE ("eia"."assignment_type" = 'tool'::"text")
+  ORDER BY "t"."name", "ei"."invoice_date" DESC;
+
+
+ALTER VIEW "public"."tool_parts_usage" OWNER TO "postgres";
 
 --
 -- Name: treatment_courses; Type: TABLE; Schema: public; Owner: postgres
@@ -5829,11 +6205,121 @@ CREATE TABLE IF NOT EXISTS "public"."vehicles" (
     "notes" "text",
     "is_active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid"
+    "created_by" "uuid",
+    "last_service_date" timestamp with time zone,
+    "last_service_mileage" numeric(10,2),
+    "last_service_hours" numeric(10,2)
 );
 
 
 ALTER TABLE "public"."vehicles" OWNER TO "postgres";
+
+--
+-- Name: vehicle_parts_usage; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."vehicle_parts_usage" AS
+ SELECT "v"."id" AS "vehicle_id",
+    "v"."registration_number",
+    "v"."make",
+    "v"."model",
+    "v"."vehicle_type",
+    "ei"."invoice_number",
+    "ei"."invoice_date",
+    "ei"."supplier_name",
+    "ep"."name" AS "product_name",
+    "ep"."product_code",
+    "eii"."description" AS "item_description",
+    "eii"."quantity",
+    "eii"."unit_price",
+    "eii"."total_price",
+    "eia"."notes" AS "assignment_notes",
+    "eia"."assigned_at",
+    "u"."full_name" AS "assigned_by_name"
+   FROM ((((("public"."equipment_invoice_item_assignments" "eia"
+     JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
+     JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("ep"."id" = "eii"."product_id")))
+     LEFT JOIN "public"."vehicles" "v" ON (("v"."id" = "eia"."vehicle_id")))
+     LEFT JOIN "public"."users" "u" ON (("u"."id" = "eia"."assigned_by")))
+  WHERE ("eia"."assignment_type" = 'vehicle'::"text")
+  ORDER BY "v"."registration_number", "ei"."invoice_date" DESC;
+
+
+ALTER VIEW "public"."vehicle_parts_usage" OWNER TO "postgres";
+
+--
+-- Name: vehicle_service_visits; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."vehicle_service_visits" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "vehicle_id" "uuid" NOT NULL,
+    "visit_datetime" timestamp with time zone NOT NULL,
+    "visit_type" "text" DEFAULT 'planinis'::"text" NOT NULL,
+    "procedures" "text"[] DEFAULT ARRAY[]::"text"[],
+    "odometer_reading" numeric(10,2),
+    "engine_hours" numeric(10,2),
+    "status" "text" DEFAULT 'Planuojamas'::"text" NOT NULL,
+    "notes" "text",
+    "mechanic_name" "text",
+    "next_visit_required" boolean DEFAULT false,
+    "next_visit_date" timestamp with time zone,
+    "cost_estimate" numeric(10,2),
+    "actual_cost" numeric(10,2),
+    "labor_hours" numeric(10,2),
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    "completed_at" timestamp with time zone,
+    "completed_by" "uuid",
+    CONSTRAINT "valid_status" CHECK (("status" = ANY (ARRAY['Planuojamas'::"text", 'Vykdomas'::"text", 'Baigtas'::"text", 'Atsauktas'::"text"]))),
+    CONSTRAINT "valid_visit_type" CHECK (("visit_type" = ANY (ARRAY['planinis'::"text", 'neplaninis'::"text"])))
+);
+
+
+ALTER TABLE "public"."vehicle_service_visits" OWNER TO "postgres";
+
+--
+-- Name: vehicle_service_history; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."vehicle_service_history" AS
+ SELECT "v"."id" AS "vehicle_id",
+    "v"."registration_number",
+    "v"."make",
+    "v"."model",
+    "count"(DISTINCT "vsv"."id") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text")) AS "total_services",
+    "count"(DISTINCT "mwo"."id") FILTER (WHERE ("mwo"."status" = 'completed'::"text")) AS "total_work_orders",
+    "sum"("vsv"."actual_cost") AS "total_service_cost",
+    "sum"("mwo"."total_cost") AS "total_work_order_cost",
+    "max"("vsv"."visit_datetime") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text")) AS "last_service_date",
+    "sum"("vsv"."labor_hours") AS "total_labor_hours"
+   FROM (("public"."vehicles" "v"
+     LEFT JOIN "public"."vehicle_service_visits" "vsv" ON (("v"."id" = "vsv"."vehicle_id")))
+     LEFT JOIN "public"."maintenance_work_orders" "mwo" ON (("v"."id" = "mwo"."vehicle_id")))
+  GROUP BY "v"."id", "v"."registration_number", "v"."make", "v"."model";
+
+
+ALTER VIEW "public"."vehicle_service_history" OWNER TO "postgres";
+
+--
+-- Name: vehicle_visit_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."vehicle_visit_parts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "visit_id" "uuid" NOT NULL,
+    "product_id" "uuid" NOT NULL,
+    "batch_id" "uuid",
+    "quantity_used" numeric(10,3) NOT NULL,
+    "cost_per_unit" numeric(10,2),
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."vehicle_visit_parts" OWNER TO "postgres";
 
 --
 -- Name: vet_analytics_summary; Type: VIEW; Schema: public; Owner: postgres
@@ -7076,6 +7562,22 @@ ALTER TABLE ONLY "public"."biocide_usage"
 
 
 --
+-- Name: cost_centers cost_centers_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_centers"
+    ADD CONSTRAINT "cost_centers_name_key" UNIQUE ("name");
+
+
+--
+-- Name: cost_centers cost_centers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_centers"
+    ADD CONSTRAINT "cost_centers_pkey" PRIMARY KEY ("id");
+
+
+--
 -- Name: course_doses course_doses_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -7113,6 +7615,14 @@ ALTER TABLE ONLY "public"."equipment_batches"
 
 ALTER TABLE ONLY "public"."equipment_categories"
     ADD CONSTRAINT "equipment_categories_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -7201,6 +7711,22 @@ ALTER TABLE ONLY "public"."equipment_suppliers"
 
 ALTER TABLE ONLY "public"."equipment_suppliers"
     ADD CONSTRAINT "equipment_suppliers_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."fire_extinguishers"
+    ADD CONSTRAINT "fire_extinguishers_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_serial_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."fire_extinguishers"
+    ADD CONSTRAINT "fire_extinguishers_serial_number_key" UNIQUE ("serial_number");
 
 
 --
@@ -7412,6 +7938,22 @@ ALTER TABLE ONLY "public"."ppe_items"
 
 
 --
+-- Name: product_quality_reviews product_quality_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_reviews"
+    ADD CONSTRAINT "product_quality_reviews_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: product_quality_schedules product_quality_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_schedules"
+    ADD CONSTRAINT "product_quality_schedules_pkey" PRIMARY KEY ("id");
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -7601,6 +8143,22 @@ ALTER TABLE ONLY "public"."vehicle_documents"
 
 ALTER TABLE ONLY "public"."vehicle_fuel_records"
     ADD CONSTRAINT "vehicle_fuel_records_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: vehicle_service_visits vehicle_service_visits_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_service_visits"
+    ADD CONSTRAINT "vehicle_service_visits_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: vehicle_visit_parts vehicle_visit_parts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_visit_parts"
+    ADD CONSTRAINT "vehicle_visit_parts_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -7813,6 +8371,27 @@ CREATE INDEX "idx_batches_package_size" ON "public"."batches" USING "btree" ("pa
 
 
 --
+-- Name: idx_cost_centers_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_centers_active" ON "public"."cost_centers" USING "btree" ("is_active") WHERE ("is_active" = true);
+
+
+--
+-- Name: idx_cost_centers_name; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_centers_name" ON "public"."cost_centers" USING "btree" ("name");
+
+
+--
+-- Name: idx_cost_centers_parent_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_centers_parent_id" ON "public"."cost_centers" USING "btree" ("parent_id");
+
+
+--
 -- Name: idx_course_doses_course; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -7890,6 +8469,41 @@ CREATE INDEX "idx_equipment_issuances_status" ON "public"."equipment_issuances" 
 
 
 --
+-- Name: idx_equipment_item_assignments_cost_center; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_equipment_item_assignments_cost_center" ON "public"."equipment_invoice_item_assignments" USING "btree" ("cost_center_id") WHERE ("cost_center_id" IS NOT NULL);
+
+
+--
+-- Name: idx_equipment_item_assignments_invoice_item; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_equipment_item_assignments_invoice_item" ON "public"."equipment_invoice_item_assignments" USING "btree" ("invoice_item_id");
+
+
+--
+-- Name: idx_equipment_item_assignments_tool; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_equipment_item_assignments_tool" ON "public"."equipment_invoice_item_assignments" USING "btree" ("tool_id") WHERE ("tool_id" IS NOT NULL);
+
+
+--
+-- Name: idx_equipment_item_assignments_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_equipment_item_assignments_type" ON "public"."equipment_invoice_item_assignments" USING "btree" ("assignment_type");
+
+
+--
+-- Name: idx_equipment_item_assignments_vehicle; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_equipment_item_assignments_vehicle" ON "public"."equipment_invoice_item_assignments" USING "btree" ("vehicle_id") WHERE ("vehicle_id" IS NOT NULL);
+
+
+--
 -- Name: idx_equipment_stock_movements_batch_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -7901,6 +8515,48 @@ CREATE INDEX "idx_equipment_stock_movements_batch_id" ON "public"."equipment_sto
 --
 
 CREATE INDEX "idx_equipment_stock_movements_created_at" ON "public"."equipment_stock_movements" USING "btree" ("created_at" DESC);
+
+
+--
+-- Name: idx_fire_extinguishers_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_active" ON "public"."fire_extinguishers" USING "btree" ("is_active");
+
+
+--
+-- Name: idx_fire_extinguishers_expiry_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_expiry_date" ON "public"."fire_extinguishers" USING "btree" ("expiry_date");
+
+
+--
+-- Name: idx_fire_extinguishers_location; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_location" ON "public"."fire_extinguishers" USING "btree" ("location_id");
+
+
+--
+-- Name: idx_fire_extinguishers_placement_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_placement_type" ON "public"."fire_extinguishers" USING "btree" ("placement_type");
+
+
+--
+-- Name: idx_fire_extinguishers_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_status" ON "public"."fire_extinguishers" USING "btree" ("status");
+
+
+--
+-- Name: idx_fire_extinguishers_vehicle; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_fire_extinguishers_vehicle" ON "public"."fire_extinguishers" USING "btree" ("vehicle_id");
 
 
 --
@@ -8240,6 +8896,27 @@ CREATE INDEX "idx_milk_weights_session" ON "public"."milk_weights" USING "btree"
 
 
 --
+-- Name: idx_product_quality_reviews_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_product_quality_reviews_date" ON "public"."product_quality_reviews" USING "btree" ("review_date");
+
+
+--
+-- Name: idx_product_quality_reviews_product; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_product_quality_reviews_product" ON "public"."product_quality_reviews" USING "btree" ("product_id");
+
+
+--
+-- Name: idx_product_quality_schedule_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "idx_product_quality_schedule_unique" ON "public"."product_quality_schedules" USING "btree" ("product_id") WHERE ("is_active" = true);
+
+
+--
 -- Name: idx_products_package_weight; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -8366,6 +9043,48 @@ CREATE INDEX "idx_vaccinations_date" ON "public"."vaccinations" USING "btree" ("
 
 
 --
+-- Name: idx_vehicle_documents_expiry_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_documents_expiry_date" ON "public"."vehicle_documents" USING "btree" ("expiry_date");
+
+
+--
+-- Name: idx_vehicle_documents_vehicle_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_documents_vehicle_id" ON "public"."vehicle_documents" USING "btree" ("vehicle_id");
+
+
+--
+-- Name: idx_vehicle_service_visits_datetime; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_service_visits_datetime" ON "public"."vehicle_service_visits" USING "btree" ("visit_datetime");
+
+
+--
+-- Name: idx_vehicle_service_visits_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_service_visits_status" ON "public"."vehicle_service_visits" USING "btree" ("status");
+
+
+--
+-- Name: idx_vehicle_service_visits_vehicle_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_service_visits_vehicle_id" ON "public"."vehicle_service_visits" USING "btree" ("vehicle_id");
+
+
+--
+-- Name: idx_vehicle_visit_parts_visit_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_vehicle_visit_parts_visit_id" ON "public"."vehicle_visit_parts" USING "btree" ("visit_id");
+
+
+--
 -- Name: idx_work_orders_schedule; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -8447,6 +9166,13 @@ CREATE OR REPLACE TRIGGER "auto_process_visit_medications" BEFORE UPDATE ON "pub
 --
 
 CREATE OR REPLACE TRIGGER "deduct_parts_from_inventory" AFTER INSERT ON "public"."work_order_parts" FOR EACH ROW EXECUTE FUNCTION "public"."deduct_work_order_parts"();
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "fire_extinguishers_updated_at" BEFORE UPDATE ON "public"."fire_extinguishers" FOR EACH ROW EXECUTE FUNCTION "public"."update_fire_extinguishers_updated_at"();
 
 
 --
@@ -8828,6 +9554,34 @@ CREATE OR REPLACE TRIGGER "trigger_update_shared_notepad_updated_at" BEFORE UPDA
 
 
 --
+-- Name: vehicle_service_visits trigger_update_vehicle_last_service; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "trigger_update_vehicle_last_service" AFTER INSERT OR UPDATE ON "public"."vehicle_service_visits" FOR EACH ROW EXECUTE FUNCTION "public"."update_vehicle_last_service"();
+
+
+--
+-- Name: vehicle_visit_parts trigger_vehicle_visit_part_stock_deduction; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "trigger_vehicle_visit_part_stock_deduction" BEFORE INSERT ON "public"."vehicle_visit_parts" FOR EACH ROW EXECUTE FUNCTION "public"."handle_vehicle_visit_part_stock"();
+
+
+--
+-- Name: vehicle_visit_parts trigger_vehicle_visit_part_stock_restoration; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "trigger_vehicle_visit_part_stock_restoration" BEFORE DELETE ON "public"."vehicle_visit_parts" FOR EACH ROW EXECUTE FUNCTION "public"."restore_vehicle_visit_part_stock"();
+
+
+--
+-- Name: cost_centers update_cost_center_updated_at_trigger; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "update_cost_center_updated_at_trigger" BEFORE UPDATE ON "public"."cost_centers" FOR EACH ROW EXECUTE FUNCTION "public"."update_cost_center_updated_at"();
+
+
+--
 -- Name: work_order_labor update_costs_on_labor; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -8975,6 +9729,22 @@ ALTER TABLE ONLY "public"."biocide_usage"
 
 
 --
+-- Name: cost_centers cost_centers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_centers"
+    ADD CONSTRAINT "cost_centers_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: cost_centers cost_centers_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_centers"
+    ADD CONSTRAINT "cost_centers_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."cost_centers"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: course_doses course_doses_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -9052,6 +9822,46 @@ ALTER TABLE ONLY "public"."equipment_batches"
 
 ALTER TABLE ONLY "public"."equipment_categories"
     ADD CONSTRAINT "equipment_categories_parent_category_id_fkey" FOREIGN KEY ("parent_category_id") REFERENCES "public"."equipment_categories"("id");
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_assigned_by_fkey" FOREIGN KEY ("assigned_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_cost_center_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_cost_center_id_fkey" FOREIGN KEY ("cost_center_id") REFERENCES "public"."cost_centers"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_invoice_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_invoice_item_id_fkey" FOREIGN KEY ("invoice_item_id") REFERENCES "public"."equipment_invoice_items"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_tool_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_tool_id_fkey" FOREIGN KEY ("tool_id") REFERENCES "public"."tools"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: equipment_invoice_item_assignments equipment_invoice_item_assignments_vehicle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."equipment_invoice_item_assignments"
+    ADD CONSTRAINT "equipment_invoice_item_assignments_vehicle_id_fkey" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE SET NULL;
 
 
 --
@@ -9164,6 +9974,30 @@ ALTER TABLE ONLY "public"."equipment_stock_movements"
 
 ALTER TABLE ONLY "public"."equipment_suppliers"
     ADD CONSTRAINT "equipment_suppliers_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."fire_extinguishers"
+    ADD CONSTRAINT "fire_extinguishers_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."fire_extinguishers"
+    ADD CONSTRAINT "fire_extinguishers_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."equipment_locations"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_vehicle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."fire_extinguishers"
+    ADD CONSTRAINT "fire_extinguishers_vehicle_id_fkey" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE SET NULL;
 
 
 --
@@ -9327,6 +10161,14 @@ ALTER TABLE ONLY "public"."maintenance_work_orders"
 
 
 --
+-- Name: maintenance_work_orders maintenance_work_orders_service_visit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."maintenance_work_orders"
+    ADD CONSTRAINT "maintenance_work_orders_service_visit_id_fkey" FOREIGN KEY ("service_visit_id") REFERENCES "public"."vehicle_service_visits"("id");
+
+
+--
 -- Name: maintenance_work_orders maintenance_work_orders_tool_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -9487,6 +10329,38 @@ ALTER TABLE ONLY "public"."ppe_items"
 
 
 --
+-- Name: product_quality_reviews product_quality_reviews_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_reviews"
+    ADD CONSTRAINT "product_quality_reviews_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: product_quality_reviews product_quality_reviews_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_reviews"
+    ADD CONSTRAINT "product_quality_reviews_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "public"."equipment_products"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: product_quality_schedules product_quality_schedules_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_schedules"
+    ADD CONSTRAINT "product_quality_schedules_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: product_quality_schedules product_quality_schedules_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."product_quality_schedules"
+    ADD CONSTRAINT "product_quality_schedules_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "public"."equipment_products"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: shared_notepad shared_notepad_last_edited_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -9539,7 +10413,7 @@ ALTER TABLE ONLY "public"."teat_status"
 --
 
 ALTER TABLE ONLY "public"."tool_movements"
-    ADD CONSTRAINT "tool_movements_from_holder_fkey" FOREIGN KEY ("from_holder") REFERENCES "public"."users"("id");
+    ADD CONSTRAINT "tool_movements_from_holder_fkey" FOREIGN KEY ("from_holder") REFERENCES "public"."users"("id") ON DELETE SET NULL;
 
 
 --
@@ -9555,7 +10429,7 @@ ALTER TABLE ONLY "public"."tool_movements"
 --
 
 ALTER TABLE ONLY "public"."tool_movements"
-    ADD CONSTRAINT "tool_movements_recorded_by_fkey" FOREIGN KEY ("recorded_by") REFERENCES "public"."users"("id");
+    ADD CONSTRAINT "tool_movements_recorded_by_fkey" FOREIGN KEY ("recorded_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
 
 
 --
@@ -9563,7 +10437,7 @@ ALTER TABLE ONLY "public"."tool_movements"
 --
 
 ALTER TABLE ONLY "public"."tool_movements"
-    ADD CONSTRAINT "tool_movements_to_holder_fkey" FOREIGN KEY ("to_holder") REFERENCES "public"."users"("id");
+    ADD CONSTRAINT "tool_movements_to_holder_fkey" FOREIGN KEY ("to_holder") REFERENCES "public"."users"("id") ON DELETE SET NULL;
 
 
 --
@@ -9799,6 +10673,62 @@ ALTER TABLE ONLY "public"."vehicle_fuel_records"
 
 
 --
+-- Name: vehicle_service_visits vehicle_service_visits_completed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_service_visits"
+    ADD CONSTRAINT "vehicle_service_visits_completed_by_fkey" FOREIGN KEY ("completed_by") REFERENCES "public"."users"("id");
+
+
+--
+-- Name: vehicle_service_visits vehicle_service_visits_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_service_visits"
+    ADD CONSTRAINT "vehicle_service_visits_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
+
+
+--
+-- Name: vehicle_service_visits vehicle_service_visits_vehicle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_service_visits"
+    ADD CONSTRAINT "vehicle_service_visits_vehicle_id_fkey" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: vehicle_visit_parts vehicle_visit_parts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_visit_parts"
+    ADD CONSTRAINT "vehicle_visit_parts_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."batches"("id");
+
+
+--
+-- Name: vehicle_visit_parts vehicle_visit_parts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_visit_parts"
+    ADD CONSTRAINT "vehicle_visit_parts_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id");
+
+
+--
+-- Name: vehicle_visit_parts vehicle_visit_parts_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_visit_parts"
+    ADD CONSTRAINT "vehicle_visit_parts_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id");
+
+
+--
+-- Name: vehicle_visit_parts vehicle_visit_parts_visit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."vehicle_visit_parts"
+    ADD CONSTRAINT "vehicle_visit_parts_visit_id_fkey" FOREIGN KEY ("visit_id") REFERENCES "public"."vehicle_service_visits"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: vehicles vehicles_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -9991,6 +10921,13 @@ CREATE POLICY "Allow all inserts" ON "public"."teat_status" FOR INSERT WITH CHEC
 
 
 --
+-- Name: cost_centers Allow all operations on cost_centers; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Allow all operations on cost_centers" ON "public"."cost_centers" USING (true) WITH CHECK (true);
+
+
+--
 -- Name: equipment_batches Allow all operations on equipment_batches; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -10002,6 +10939,13 @@ CREATE POLICY "Allow all operations on equipment_batches" ON "public"."equipment
 --
 
 CREATE POLICY "Allow all operations on equipment_categories" ON "public"."equipment_categories" USING (true) WITH CHECK (true);
+
+
+--
+-- Name: equipment_invoice_item_assignments Allow all operations on equipment_invoice_item_assignments; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Allow all operations on equipment_invoice_item_assignments" ON "public"."equipment_invoice_item_assignments" USING (true) WITH CHECK (true);
 
 
 --
@@ -10093,6 +11037,20 @@ CREATE POLICY "Allow all operations on ppe_issuance_records" ON "public"."ppe_is
 --
 
 CREATE POLICY "Allow all operations on ppe_items" ON "public"."ppe_items" USING (true) WITH CHECK (true);
+
+
+--
+-- Name: product_quality_reviews Allow all operations on product_quality_reviews; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Allow all operations on product_quality_reviews" ON "public"."product_quality_reviews" USING (true) WITH CHECK (true);
+
+
+--
+-- Name: product_quality_schedules Allow all operations on product_quality_schedules; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Allow all operations on product_quality_schedules" ON "public"."product_quality_schedules" USING (true) WITH CHECK (true);
 
 
 --
@@ -10432,6 +11390,34 @@ CREATE POLICY "Users can create medication schedules" ON "public"."course_medica
 
 
 --
+-- Name: vehicle_service_visits Users can create service visits; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can create service visits" ON "public"."vehicle_service_visits" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_documents Users can create vehicle documents; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can create vehicle documents" ON "public"."vehicle_documents" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_visit_parts Users can create visit parts; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can create visit parts" ON "public"."vehicle_visit_parts" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM ("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
+  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
+
+
+--
 -- Name: hoof_records Users can delete hoof records; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -10474,6 +11460,15 @@ CREATE POLICY "Users can delete protocols" ON "public"."synchronization_protocol
 
 
 --
+-- Name: vehicle_service_visits Users can delete service visits; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can delete service visits" ON "public"."vehicle_service_visits" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
+
+
+--
 -- Name: synchronization_steps Users can delete steps; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -10485,6 +11480,25 @@ CREATE POLICY "Users can delete steps" ON "public"."synchronization_steps" FOR D
 --
 
 CREATE POLICY "Users can delete synchronizations" ON "public"."animal_synchronizations" FOR DELETE USING (true);
+
+
+--
+-- Name: vehicle_documents Users can delete vehicle documents; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can delete vehicle documents" ON "public"."vehicle_documents" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_visit_parts Users can delete visit parts; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can delete visit parts" ON "public"."vehicle_visit_parts" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM ("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
+  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -10649,6 +11663,17 @@ CREATE POLICY "Users can update quality tests" ON "public"."milk_quality_tests" 
 
 
 --
+-- Name: vehicle_service_visits Users can update service visits; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can update service visits" ON "public"."vehicle_service_visits" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id")))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
+
+
+--
 -- Name: synchronization_steps Users can update steps; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -10660,6 +11685,30 @@ CREATE POLICY "Users can update steps" ON "public"."synchronization_steps" FOR U
 --
 
 CREATE POLICY "Users can update synchronizations" ON "public"."animal_synchronizations" FOR UPDATE USING (true) WITH CHECK (true);
+
+
+--
+-- Name: vehicle_documents Users can update vehicle documents; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can update vehicle documents" ON "public"."vehicle_documents" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id")))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_visit_parts Users can update visit parts; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can update visit parts" ON "public"."vehicle_visit_parts" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM ("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
+  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id")))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM ("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
+  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -10726,6 +11775,34 @@ CREATE POLICY "Users can view quality tests" ON "public"."milk_quality_tests" FO
 
 
 --
+-- Name: vehicle_service_visits Users can view service visits for their vehicles; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can view service visits for their vehicles" ON "public"."vehicle_service_visits" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_documents Users can view vehicle documents; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can view vehicle documents" ON "public"."vehicle_documents" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."vehicles"
+  WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
+
+
+--
+-- Name: vehicle_visit_parts Users can view visit parts; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can view visit parts" ON "public"."vehicle_visit_parts" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM ("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
+  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
+
+
+--
 -- Name: animal_synchronizations; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -10742,6 +11819,12 @@ ALTER TABLE "public"."animal_visits" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."batch_waste_tracking" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cost_centers; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."cost_centers" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: course_doses; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10766,6 +11849,12 @@ ALTER TABLE "public"."equipment_batches" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."equipment_categories" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: equipment_invoice_item_assignments; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."equipment_invoice_item_assignments" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: equipment_invoice_items; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10814,6 +11903,40 @@ ALTER TABLE "public"."equipment_stock_movements" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."equipment_suppliers" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: fire_extinguishers; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."fire_extinguishers" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: fire_extinguishers fire_extinguishers_delete_policy; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "fire_extinguishers_delete_policy" ON "public"."fire_extinguishers" FOR DELETE USING (true);
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_insert_policy; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "fire_extinguishers_insert_policy" ON "public"."fire_extinguishers" FOR INSERT WITH CHECK (true);
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_select_policy; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "fire_extinguishers_select_policy" ON "public"."fire_extinguishers" FOR SELECT USING (true);
+
+
+--
+-- Name: fire_extinguishers fire_extinguishers_update_policy; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "fire_extinguishers_update_policy" ON "public"."fire_extinguishers" FOR UPDATE USING (true) WITH CHECK (true);
+
 
 --
 -- Name: hoof_condition_codes; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10886,6 +12009,18 @@ ALTER TABLE "public"."ppe_issuance_records" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."ppe_items" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: product_quality_reviews; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."product_quality_reviews" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: product_quality_schedules; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."product_quality_schedules" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: shared_notepad; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10970,6 +12105,18 @@ ALTER TABLE "public"."vehicle_documents" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."vehicle_fuel_records" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: vehicle_service_visits; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."vehicle_service_visits" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: vehicle_visit_parts; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE "public"."vehicle_visit_parts" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: vehicles; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -11315,6 +12462,15 @@ GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "handle_vehicle_visit_part_stock"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."handle_vehicle_visit_part_stock"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_vehicle_visit_part_stock"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_vehicle_visit_part_stock"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "import_milk_data"("p_scraped_data" "jsonb"); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11441,6 +12597,15 @@ GRANT ALL ON FUNCTION "public"."restore_equipment_stock"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "restore_vehicle_visit_part_stock"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."restore_vehicle_visit_part_stock"() TO "anon";
+GRANT ALL ON FUNCTION "public"."restore_vehicle_visit_part_stock"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."restore_vehicle_visit_part_stock"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "set_work_order_number_trigger"(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11513,6 +12678,24 @@ GRANT ALL ON FUNCTION "public"."update_batch_qty_left"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "update_cost_center_updated_at"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "update_fire_extinguishers_updated_at"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_fire_extinguishers_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_fire_extinguishers_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_fire_extinguishers_updated_at"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "update_hoof_records_updated_at"(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11573,6 +12756,15 @@ GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."update_user_password"("p_user_id" "uuid", "p_password" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_user_password"("p_user_id" "uuid", "p_password" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_user_password"("p_user_id" "uuid", "p_password" "text") TO "service_role";
+
+
+--
+-- Name: FUNCTION "update_vehicle_last_service"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_vehicle_last_service"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_vehicle_last_service"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_vehicle_last_service"() TO "service_role";
 
 
 --
@@ -11738,6 +12930,87 @@ GRANT ALL ON TABLE "public"."biocide_usage" TO "service_role";
 
 
 --
+-- Name: TABLE "cost_centers"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_centers" TO "anon";
+GRANT ALL ON TABLE "public"."cost_centers" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_centers" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_categories"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_categories" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_categories" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_categories" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_invoice_item_assignments"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_invoice_item_assignments" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_invoice_item_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_invoice_item_assignments" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_invoice_items"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_invoices"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_invoices" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_invoices" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_invoices" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_products"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_products" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_products" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_products" TO "service_role";
+
+
+--
+-- Name: TABLE "users"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."users" TO "anon";
+GRANT ALL ON TABLE "public"."users" TO "authenticated";
+GRANT ALL ON TABLE "public"."users" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_center_parts_usage"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "anon";
+GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_center_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_center_summary" TO "anon";
+GRANT ALL ON TABLE "public"."cost_center_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_center_summary" TO "service_role";
+
+
+--
 -- Name: TABLE "course_doses"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11774,33 +13047,6 @@ GRANT ALL ON TABLE "public"."equipment_batches" TO "service_role";
 
 
 --
--- Name: TABLE "equipment_categories"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."equipment_categories" TO "anon";
-GRANT ALL ON TABLE "public"."equipment_categories" TO "authenticated";
-GRANT ALL ON TABLE "public"."equipment_categories" TO "service_role";
-
-
---
--- Name: TABLE "equipment_invoice_items"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "anon";
-GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "authenticated";
-GRANT ALL ON TABLE "public"."equipment_invoice_items" TO "service_role";
-
-
---
--- Name: TABLE "equipment_invoices"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."equipment_invoices" TO "anon";
-GRANT ALL ON TABLE "public"."equipment_invoices" TO "authenticated";
-GRANT ALL ON TABLE "public"."equipment_invoices" TO "service_role";
-
-
---
 -- Name: TABLE "equipment_issuance_items"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11816,24 +13062,6 @@ GRANT ALL ON TABLE "public"."equipment_issuance_items" TO "service_role";
 GRANT ALL ON TABLE "public"."equipment_issuances" TO "anon";
 GRANT ALL ON TABLE "public"."equipment_issuances" TO "authenticated";
 GRANT ALL ON TABLE "public"."equipment_issuances" TO "service_role";
-
-
---
--- Name: TABLE "equipment_products"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."equipment_products" TO "anon";
-GRANT ALL ON TABLE "public"."equipment_products" TO "authenticated";
-GRANT ALL ON TABLE "public"."equipment_products" TO "service_role";
-
-
---
--- Name: TABLE "users"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."users" TO "anon";
-GRANT ALL ON TABLE "public"."users" TO "authenticated";
-GRANT ALL ON TABLE "public"."users" TO "service_role";
 
 
 --
@@ -11879,6 +13107,15 @@ GRANT ALL ON TABLE "public"."equipment_suppliers" TO "service_role";
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "anon";
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "authenticated";
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "service_role";
+
+
+--
+-- Name: TABLE "fire_extinguishers"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."fire_extinguishers" TO "anon";
+GRANT ALL ON TABLE "public"."fire_extinguishers" TO "authenticated";
+GRANT ALL ON TABLE "public"."fire_extinguishers" TO "service_role";
 
 
 --
@@ -12125,6 +13362,24 @@ GRANT ALL ON TABLE "public"."ppe_items" TO "service_role";
 
 
 --
+-- Name: TABLE "product_quality_reviews"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."product_quality_reviews" TO "anon";
+GRANT ALL ON TABLE "public"."product_quality_reviews" TO "authenticated";
+GRANT ALL ON TABLE "public"."product_quality_reviews" TO "service_role";
+
+
+--
+-- Name: TABLE "product_quality_schedules"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."product_quality_schedules" TO "anon";
+GRANT ALL ON TABLE "public"."product_quality_schedules" TO "authenticated";
+GRANT ALL ON TABLE "public"."product_quality_schedules" TO "service_role";
+
+
+--
 -- Name: TABLE "products"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12224,6 +13479,15 @@ GRANT ALL ON TABLE "public"."tools" TO "service_role";
 
 
 --
+-- Name: TABLE "tool_parts_usage"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."tool_parts_usage" TO "anon";
+GRANT ALL ON TABLE "public"."tool_parts_usage" TO "authenticated";
+GRANT ALL ON TABLE "public"."tool_parts_usage" TO "service_role";
+
+
+--
 -- Name: TABLE "treatment_courses"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12311,6 +13575,42 @@ GRANT ALL ON TABLE "public"."vehicle_fuel_records" TO "service_role";
 GRANT ALL ON TABLE "public"."vehicles" TO "anon";
 GRANT ALL ON TABLE "public"."vehicles" TO "authenticated";
 GRANT ALL ON TABLE "public"."vehicles" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_parts_usage"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_service_visits"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_service_history"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_service_history" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_service_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_service_history" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_visit_parts"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "service_role";
 
 
 --
@@ -12611,5 +13911,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict IybmcjSxeoZfEYgQaD86gCLXfi0rtXWgfMKg77xw29nSlvrorqo9jcpmhJzg0GR
+-- \unrestrict 5B0YaDDevb1SzvPox8nhPpS1ggKgfDEcxmZTn8CfbWQT2TLWgw4u4R4Koo5M4kL
 

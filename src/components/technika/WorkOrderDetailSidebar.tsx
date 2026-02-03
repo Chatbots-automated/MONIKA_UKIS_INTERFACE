@@ -69,7 +69,7 @@ interface Batch {
   batch_number: string;
   quantity_left: number;
   expiry_date: string | null;
-  unit_cost: number | null;
+  purchase_price: number | null;
 }
 
 interface WorkOrderDetailSidebarProps {
@@ -207,15 +207,19 @@ export function WorkOrderDetailSidebar({
   };
 
   const loadBatches = async (productId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('equipment_batches')
-      .select('id, product_id, batch_number, quantity_left, expiry_date, unit_cost')
+      .select('id, product_id, batch_number, quantity_left, expiry_date, purchase_price')
       .eq('product_id', productId)
       .gt('quantity_left', 0)
       .order('expiry_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
 
-    if (data) setBatches(data);
+    if (error) {
+      console.error('Error loading batches:', error);
+    } else {
+      setBatches(data);
+    }
   };
 
   const loadUsers = async () => {
@@ -245,15 +249,11 @@ export function WorkOrderDetailSidebar({
         engine_hours: editForm.engine_hours ? parseFloat(editForm.engine_hours) : null,
         labor_hours: editForm.labor_hours ? parseFloat(editForm.labor_hours) : null,
         labor_cost: editForm.labor_cost ? parseFloat(editForm.labor_cost) : null,
-        parts_cost: editForm.parts_cost ? parseFloat(editForm.parts_cost) : null,
+        // parts_cost and total_cost are auto-calculated by triggers
         notes: editForm.notes || null,
         started_date: editForm.started_date || new Date().toISOString().split('T')[0],
         completed_date: new Date().toISOString().split('T')[0],
       };
-
-      if (updates.labor_cost !== null && updates.parts_cost !== null) {
-        updates.total_cost = updates.labor_cost + updates.parts_cost;
-      }
 
       const { error } = await supabase
         .from('maintenance_work_orders')
@@ -287,15 +287,13 @@ export function WorkOrderDetailSidebar({
         engine_hours: editForm.engine_hours ? parseFloat(editForm.engine_hours) : null,
         labor_hours: editForm.labor_hours ? parseFloat(editForm.labor_hours) : null,
         labor_cost: editForm.labor_cost ? parseFloat(editForm.labor_cost) : null,
-        parts_cost: editForm.parts_cost ? parseFloat(editForm.parts_cost) : null,
+        // parts_cost is auto-calculated by trigger, don't manually set it
         notes: editForm.notes || null,
         started_date: editForm.started_date || null,
         completed_date: editForm.completed_date || null,
       };
 
-      if (updates.labor_cost !== null && updates.parts_cost !== null) {
-        updates.total_cost = updates.labor_cost + updates.parts_cost;
-      }
+      // total_cost is also auto-calculated by trigger
 
       const { error } = await supabase
         .from('maintenance_work_orders')
@@ -327,7 +325,7 @@ export function WorkOrderDetailSidebar({
       const product = products.find(p => p.product_id === newPart.product_id);
       const batch = batches.find(b => b.id === newPart.batch_id);
       const quantity = parseFloat(newPart.quantity_used);
-      const unitPrice = batch?.unit_cost || 0;
+      const unitPrice = batch?.purchase_price || 0;
       const totalPrice = quantity * unitPrice;
 
       const { error } = await supabase
@@ -376,15 +374,33 @@ export function WorkOrderDetailSidebar({
     }
 
     try {
+      // Get batches for all selected products
+      const { data: allBatches, error: batchError } = await supabase
+        .from('equipment_batches')
+        .select('id, product_id, purchase_price, qty_left')
+        .in('product_id', selectedProducts)
+        .gt('qty_left', 0)
+        .order('expiry_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
+
+      if (batchError) throw batchError;
+
       const partsToInsert = selectedProducts.map(productId => {
         const quantity = parseFloat(bulkQuantities[productId]);
+        // Find first available batch for this product
+        const batch = allBatches?.find(b => b.product_id === productId && b.qty_left >= quantity);
+        const unitPrice = batch?.purchase_price || 0;
+        const totalPrice = quantity * unitPrice;
+
+        console.log(`Product ${productId}: batch=${batch?.id}, price=${unitPrice}, total=${totalPrice}`);
+
         return {
           work_order_id: workOrderId,
           product_id: productId,
-          batch_id: null,
+          batch_id: batch?.id || null,
           quantity: quantity,
-          unit_price: 0,
-          total_price: 0,
+          unit_price: unitPrice,
+          total_price: totalPrice,
           notes: null,
         };
       });
@@ -707,15 +723,13 @@ export function WorkOrderDetailSidebar({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dalių kaina (EUR)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editForm.parts_cost}
-                  onChange={e => setEditForm({ ...editForm, parts_cost: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="0.00"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dalių kaina (EUR)
+                  <span className="ml-2 text-xs text-gray-500 font-normal">(Apskaičiuojama automatiškai)</span>
+                </label>
+                <div className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-700">
+                  {editForm.parts_cost || '0.00'}
+                </div>
               </div>
             </div>
 

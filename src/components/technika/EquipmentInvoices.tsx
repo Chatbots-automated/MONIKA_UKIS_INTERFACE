@@ -96,19 +96,25 @@ export function EquipmentInvoices() {
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
+    vehicleId: string;
     toolId: string;
     costCenterId: string;
     notes: string;
   }>({
     invoiceItemId: '',
     assignmentType: '',
+    vehicleId: '',
     toolId: '',
     costCenterId: '',
     notes: '',
   });
 
+  const [unassignedItems, setUnassignedItems] = useState<any[]>([]);
+  const [showUnassignedSection, setShowUnassignedSection] = useState(false);
+
   useEffect(() => {
     loadData();
+    loadUnassignedItems();
   }, []);
 
   const loadData = async () => {
@@ -127,6 +133,19 @@ export function EquipmentInvoices() {
     if (invoicesRes.data) setInvoices(invoicesRes.data);
     if (toolsRes.data) setTools(toolsRes.data);
     if (costCentersRes.data) setCostCenters(costCentersRes.data);
+  };
+
+  const loadUnassignedItems = async () => {
+    const { data, error } = await supabase
+      .from('equipment_unassigned_invoice_items')
+      .select('*')
+      .order('invoice_date', { ascending: false });
+
+    if (error) {
+      console.error('Error loading unassigned items:', error);
+    } else if (data) {
+      setUnassignedItems(data);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -460,6 +479,7 @@ export function EquipmentInvoices() {
       const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
         invoice_item_id: assignmentForm.invoiceItemId,
         assignment_type: assignmentForm.assignmentType,
+        vehicle_id: assignmentForm.vehicleId || null,
         tool_id: assignmentForm.toolId || null,
         cost_center_id: assignmentForm.costCenterId || null,
         notes: assignmentForm.notes || null,
@@ -474,10 +494,14 @@ export function EquipmentInvoices() {
       });
 
       setInvoiceItems(prev => prev.filter(item => item.id !== assignmentForm.invoiceItemId));
+      
+      // Reload unassigned items
+      await loadUnassignedItems();
 
       setAssignmentForm({
         invoiceItemId: '',
         assignmentType: '',
+        vehicleId: '',
         toolId: '',
         costCenterId: '',
         notes: '',
@@ -495,7 +519,7 @@ export function EquipmentInvoices() {
     }
   };
 
-  const handleSkipAssignment = () => {
+  const handleSkipAssignment = async () => {
     setInvoiceItems(prev => prev.filter(item => item.id !== assignmentForm.invoiceItemId));
     setAssignmentForm({
       invoiceItemId: '',
@@ -506,6 +530,9 @@ export function EquipmentInvoices() {
       notes: '',
     });
 
+    // Reload unassigned items
+    await loadUnassignedItems();
+
     if (invoiceItems.length <= 1) {
       setShowAssignmentModal(false);
     }
@@ -513,6 +540,90 @@ export function EquipmentInvoices() {
 
   return (
     <div className="space-y-6">
+      {/* Unassigned Items Section */}
+      {unassignedItems.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+              <h3 className="text-lg font-semibold text-gray-800">
+                Nepriskirti produktai ({unassignedItems.length})
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowUnassignedSection(!showUnassignedSection)}
+              className="text-sm text-amber-700 hover:text-amber-800 font-medium"
+            >
+              {showUnassignedSection ? 'Slėpti' : 'Rodyti'}
+            </button>
+          </div>
+
+          {showUnassignedSection && (
+            <div className="space-y-3">
+              {unassignedItems.map((item) => (
+                <div key={item.item_id} className="bg-white border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Package className="w-5 h-5 text-gray-600" />
+                        <h4 className="font-semibold text-gray-900">{item.product_name}</h4>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-sm text-gray-600 mb-2">
+                        <div>
+                          <span className="font-medium">Sąskaita:</span> {item.invoice_number}
+                        </div>
+                        <div>
+                          <span className="font-medium">Data:</span> {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                        </div>
+                        <div>
+                          <span className="font-medium">Kiekis:</span> {item.quantity}
+                        </div>
+                        <div>
+                          <span className="font-medium">Suma:</span> {item.total_price.toFixed(2)} EUR
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        <span className="font-medium">Tiekėjas:</span> {item.supplier_name}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Set up assignment form and show modal
+                        setAssignmentForm({
+                          invoiceItemId: item.item_id,
+                          assignmentType: '',
+                          vehicleId: '',
+                          toolId: '',
+                          costCenterId: '',
+                          notes: '',
+                        });
+                        setInvoiceItems([{
+                          id: item.item_id,
+                          product_id: item.product_id,
+                          description: item.product_name,
+                          quantity: item.quantity,
+                          unit_price: item.unit_price,
+                          total_price: item.total_price,
+                          product: {
+                            name: item.product_name,
+                            product_code: item.product_code,
+                          }
+                        }]);
+                        setShowAssignmentModal(true);
+                      }}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Priskirti
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Nauja sąskaita</h3>
 

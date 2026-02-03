@@ -52,7 +52,7 @@ interface WorkerStats {
 }
 
 export function TechnikaReports() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
@@ -74,11 +74,44 @@ export function TechnikaReports() {
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [categories, setCategories] = useState<any[]>([]);
+  
+  // Farm equipment cost data
+  const [farmEquipmentOverview, setFarmEquipmentOverview] = useState<any[]>([]);
+  const [farmEquipmentDetails, setFarmEquipmentDetails] = useState<any[]>([]);
+  const [expandedEquipment, setExpandedEquipment] = useState<string | null>(null);
+  const [farmEquipmentStats, setFarmEquipmentStats] = useState({
+    totalCost: 0,
+    totalServices: 0,
+    totalPartsUsed: 0,
+    equipmentCount: 0,
+  });
+
+  // Vehicle maintenance cost data
+  const [vehicleCostSummary, setVehicleCostSummary] = useState<any[]>([]);
+  const [vehicleWorkOrders, setVehicleWorkOrders] = useState<any[]>([]);
+  const [vehicleServiceVisits, setVehicleServiceVisits] = useState<any[]>([]);
+  const [expandedVehicle, setExpandedVehicle] = useState<string | null>(null);
+  const [vehicleCostStats, setVehicleCostStats] = useState({
+    totalCost: 0,
+    totalWorkOrders: 0,
+    totalServiceVisits: 0,
+    totalPartsUsed: 0,
+    vehicleCount: 0,
+  });
 
   useEffect(() => {
     loadCategories();
     loadData();
   }, [dateFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'farm-equipment') {
+      loadFarmEquipmentData();
+    }
+    if (activeTab === 'vehicle-maintenance') {
+      loadVehicleMaintenanceData();
+    }
+  }, [activeTab, dateFilter]);
 
   const loadCategories = async () => {
     const { data } = await supabase
@@ -305,6 +338,95 @@ export function TechnikaReports() {
     });
   };
 
+  const loadFarmEquipmentData = async () => {
+    setLoading(true);
+    try {
+      // Load equipment overview
+      const { data: overview } = await supabase
+        .from('farm_equipment_cost_overview')
+        .select('*')
+        .order('total_cost', { ascending: false });
+
+      if (overview) {
+        setFarmEquipmentOverview(overview);
+        
+        const stats = {
+          totalCost: overview.reduce((sum, eq) => sum + parseFloat(eq.total_cost || 0), 0),
+          totalServices: overview.reduce((sum, eq) => sum + (eq.total_services || 0), 0),
+          totalPartsUsed: overview.reduce((sum, eq) => sum + (eq.total_parts_used || 0), 0),
+          equipmentCount: overview.length,
+        };
+        setFarmEquipmentStats(stats);
+      }
+
+      // Load all service details
+      const { data: details } = await supabase
+        .from('farm_equipment_service_details')
+        .select('*')
+        .gte('service_date', dateFilter.from)
+        .lte('service_date', dateFilter.to)
+        .order('service_date', { ascending: false });
+
+      if (details) {
+        setFarmEquipmentDetails(details);
+      }
+    } catch (error) {
+      console.error('Error loading farm equipment data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadVehicleMaintenanceData = async () => {
+    setLoading(true);
+    try {
+      // Load vehicle cost summary
+      const { data: summary } = await supabase
+        .from('vehicle_maintenance_cost_summary')
+        .select('*')
+        .order('grand_total_cost', { ascending: false });
+
+      if (summary) {
+        setVehicleCostSummary(summary);
+        
+        const stats = {
+          totalCost: summary.reduce((sum, v) => sum + parseFloat(v.grand_total_cost || 0), 0),
+          totalWorkOrders: summary.reduce((sum, v) => sum + (v.completed_work_orders || 0), 0),
+          totalServiceVisits: summary.reduce((sum, v) => sum + (v.completed_service_visits || 0), 0),
+          totalPartsUsed: summary.reduce((sum, v) => sum + (v.total_parts_used || 0), 0),
+          vehicleCount: summary.filter(v => v.total_completed_activities > 0).length,
+        };
+        setVehicleCostStats(stats);
+      }
+
+      // Load work order details
+      const { data: workOrders } = await supabase
+        .from('vehicle_work_order_details')
+        .select('*')
+        .gte('completed_date', dateFilter.from)
+        .lte('completed_date', dateFilter.to)
+        .eq('status', 'completed')
+        .order('completed_date', { ascending: false });
+
+      if (workOrders) setVehicleWorkOrders(workOrders);
+
+      // Load service visit details
+      const { data: visits } = await supabase
+        .from('vehicle_service_visit_details')
+        .select('*')
+        .gte('visit_datetime', dateFilter.from)
+        .lte('visit_datetime', dateFilter.to)
+        .eq('status', 'Baigtas')
+        .order('visit_datetime', { ascending: false });
+
+      if (visits) setVehicleServiceVisits(visits);
+    } catch (error) {
+      console.error('Error loading vehicle maintenance data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const exportToCSV = (data: any[], filename: string) => {
     if (data.length === 0) return;
 
@@ -364,6 +486,8 @@ export function TechnikaReports() {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
+              { id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign },
+              { id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car },
               { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -789,6 +913,425 @@ export function TechnikaReports() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'farm-equipment' && (
+            <div className="space-y-6">
+              {/* Stats Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard
+                  title="Įrangos vienetų"
+                  value={farmEquipmentStats.equipmentCount.toString()}
+                  icon={Car}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Iš viso aptarnavimų"
+                  value={farmEquipmentStats.totalServices.toString()}
+                  icon={Calendar}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Panaudotų produktų"
+                  value={farmEquipmentStats.totalPartsUsed.toString()}
+                  icon={Package}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Bendra savikaina"
+                  value={`€${farmEquipmentStats.totalCost.toFixed(2)}`}
+                  icon={DollarSign}
+                  trend="neutral"
+                />
+              </div>
+
+              {/* Equipment List */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Įrangos aptarnavimų suvestinė</h3>
+                  <button
+                    onClick={() => exportToCSV(farmEquipmentOverview, 'farm_equipment_costs')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Download className="w-4 h-4" />
+                    Eksportuoti CSV
+                  </button>
+                </div>
+
+                {farmEquipmentOverview.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra duomenų</h3>
+                    <p className="text-gray-600">
+                      Dar nebuvo atlikta jokių aptarnavimų su produktų naudojimu
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {farmEquipmentOverview.map((equipment) => (
+                      <div key={equipment.equipment_id} className="bg-white border rounded-lg">
+                        <button
+                          onClick={() => setExpandedEquipment(
+                            expandedEquipment === equipment.equipment_id ? null : equipment.equipment_id
+                          )}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            {expandedEquipment === equipment.equipment_id ? (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            )}
+                            <div className="text-left">
+                              <h4 className="font-semibold text-gray-900">{equipment.equipment_name}</h4>
+                              <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                {equipment.location && (
+                                  <span>📍 {equipment.location}</span>
+                                )}
+                                {equipment.category && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                                    {equipment.category}
+                                  </span>
+                                )}
+                                <span>{equipment.active_items} komponentų</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="text-right">
+                              <p className="text-gray-600">Aptarnavimai</p>
+                              <p className="font-semibold text-gray-900">{equipment.total_services}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Produktai</p>
+                              <p className="font-semibold text-gray-900">{equipment.total_parts_used}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Savikaina</p>
+                              <p className="font-bold text-green-600">€{parseFloat(equipment.total_cost || 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </button>
+
+                        {expandedEquipment === equipment.equipment_id && (
+                          <div className="border-t p-4 bg-gray-50">
+                            <h5 className="font-semibold text-gray-900 mb-3">Aptarnavimų detalės</h5>
+                            <div className="space-y-2">
+                              {farmEquipmentDetails
+                                .filter(d => d.equipment_id === equipment.equipment_id)
+                                .reduce((acc: any[], detail) => {
+                                  // Group by service_record_id
+                                  const existing = acc.find(item => item.service_record_id === detail.service_record_id);
+                                  if (existing) {
+                                    if (detail.part_id) {
+                                      existing.parts.push(detail);
+                                    }
+                                  } else {
+                                    acc.push({
+                                      service_record_id: detail.service_record_id,
+                                      service_date: detail.service_date,
+                                      item_name: detail.item_name,
+                                      service_notes: detail.service_notes,
+                                      performed_by_name: detail.performed_by_name,
+                                      parts: detail.part_id ? [detail] : [],
+                                    });
+                                  }
+                                  return acc;
+                                }, [])
+                                .map((service: any) => (
+                                  <div key={service.service_record_id} className="bg-white rounded-lg p-3 border">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div>
+                                        <p className="font-medium text-gray-900">{service.item_name}</p>
+                                        <p className="text-sm text-gray-600">
+                                          📅 {service.service_date}
+                                          {service.performed_by_name && ` | 👤 ${service.performed_by_name}`}
+                                        </p>
+                                        {service.service_notes && (
+                                          <p className="text-xs text-gray-500 mt-1 italic">{service.service_notes}</p>
+                                        )}
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-sm text-gray-600">Savikaina</p>
+                                        <p className="font-bold text-green-600">
+                                          €{service.parts.reduce((sum: number, p: any) => 
+                                            sum + parseFloat(p.part_total_cost || 0), 0
+                                          ).toFixed(2)}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {service.parts.length > 0 && (
+                                      <div className="mt-2 pt-2 border-t">
+                                        <p className="text-xs font-semibold text-gray-700 mb-2">Panaudoti produktai:</p>
+                                        <div className="space-y-1">
+                                          {service.parts.map((part: any) => (
+                                            <div key={part.part_id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                                              <span className="text-gray-700">
+                                                {part.product_name}
+                                                {part.product_code && ` (${part.product_code})`}
+                                                {part.batch_number && ` - Partija: ${part.batch_number}`}
+                                              </span>
+                                              <span className="font-medium text-gray-900">
+                                                {part.quantity_used} {part.unit_type} × €{parseFloat(part.unit_price || 0).toFixed(2)} = €{parseFloat(part.part_total_cost || 0).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {service.parts.length === 0 && (
+                                      <p className="text-xs text-gray-500 italic mt-2">Produktai nenaudoti</p>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'vehicle-maintenance' && (
+            <div className="space-y-6">
+              {/* Stats Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <StatCard
+                  title="Transporto priemonių"
+                  value={vehicleCostStats.vehicleCount.toString()}
+                  icon={Car}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Remonto darbų"
+                  value={vehicleCostStats.totalWorkOrders.toString()}
+                  icon={Package}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Aptarnavimų"
+                  value={vehicleCostStats.totalServiceVisits.toString()}
+                  icon={Calendar}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Panaudotų dalių"
+                  value={vehicleCostStats.totalPartsUsed.toString()}
+                  icon={Package}
+                  trend="neutral"
+                />
+                <StatCard
+                  title="Bendra savikaina"
+                  value={`€${vehicleCostStats.totalCost.toFixed(2)}`}
+                  icon={DollarSign}
+                  trend="neutral"
+                />
+              </div>
+
+              {/* Vehicle List */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Transporto priemonių taisymų suvestinė</h3>
+                  <button
+                    onClick={() => exportToCSV(vehicleCostSummary, 'vehicle_maintenance_costs')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Download className="w-4 h-4" />
+                    Eksportuoti CSV
+                  </button>
+                </div>
+
+                {vehicleCostSummary.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nėra duomenų</h3>
+                    <p className="text-gray-600">
+                      Dar nebuvo atlikta jokių remontų ar aptarnavimų
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {vehicleCostSummary.map((vehicle) => (
+                      <div key={vehicle.vehicle_id} className="bg-white border rounded-lg">
+                        <button
+                          onClick={() => setExpandedVehicle(
+                            expandedVehicle === vehicle.vehicle_id ? null : vehicle.vehicle_id
+                          )}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            {expandedVehicle === vehicle.vehicle_id ? (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            )}
+                            <div className="text-left">
+                              <h4 className="font-semibold text-gray-900">{vehicle.registration_number}</h4>
+                              <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                <span>{vehicle.make} {vehicle.model}</span>
+                                {vehicle.year && <span>{vehicle.year} m.</span>}
+                                {vehicle.vin && <span className="text-xs">VIN: {vehicle.vin}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="text-right">
+                              <p className="text-gray-600">Remonto darbai</p>
+                              <p className="font-semibold text-gray-900">{vehicle.completed_work_orders}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Aptarnavimai</p>
+                              <p className="font-semibold text-gray-900">{vehicle.completed_service_visits}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Dalys</p>
+                              <p className="font-semibold text-gray-900">{vehicle.total_parts_used}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Savikaina</p>
+                              <p className="font-bold text-green-600">€{parseFloat(vehicle.grand_total_cost || 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </button>
+
+                        {expandedVehicle === vehicle.vehicle_id && (
+                          <div className="border-t p-4 bg-gray-50">
+                            <h5 className="font-semibold text-gray-900 mb-3">Remontų ir aptarnavimų detalės</h5>
+                            
+                            {/* Work Orders */}
+                            {vehicleWorkOrders.filter(wo => wo.vehicle_id === vehicle.vehicle_id).length > 0 && (
+                              <div className="mb-4">
+                                <h6 className="text-sm font-semibold text-gray-700 mb-2">Remonto darbai</h6>
+                                <div className="space-y-2">
+                                  {vehicleWorkOrders
+                                    .filter(wo => wo.vehicle_id === vehicle.vehicle_id)
+                                    .map((workOrder) => (
+                                      <div key={workOrder.work_order_id} className="bg-white rounded-lg p-3 border">
+                                        <div className="flex items-start justify-between mb-2">
+                                          <div>
+                                            <p className="font-medium text-gray-900">{workOrder.work_order_number}</p>
+                                            <p className="text-sm text-gray-600">
+                                              📅 {workOrder.completed_date}
+                                              {workOrder.assigned_to && ` | 👤 ${workOrder.assigned_to}`}
+                                            </p>
+                                            <p className="text-sm text-gray-700 mt-1">{workOrder.description}</p>
+                                            {workOrder.notes && (
+                                              <p className="text-xs text-gray-500 mt-1 italic">{workOrder.notes}</p>
+                                            )}
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="text-sm text-gray-600">Savikaina</p>
+                                            <p className="font-bold text-green-600">€{parseFloat(workOrder.total_cost || 0).toFixed(2)}</p>
+                                            {workOrder.labor_cost > 0 && (
+                                              <p className="text-xs text-gray-500">Darbas: €{parseFloat(workOrder.labor_cost).toFixed(2)}</p>
+                                            )}
+                                            {workOrder.parts_cost > 0 && (
+                                              <p className="text-xs text-gray-500">Dalys: €{parseFloat(workOrder.parts_cost).toFixed(2)}</p>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {workOrder.parts_used && workOrder.parts_used.length > 0 && (
+                                          <div className="mt-2 pt-2 border-t">
+                                            <p className="text-xs font-semibold text-gray-700 mb-2">Panaudoti produktai:</p>
+                                            <div className="space-y-1">
+                                              {workOrder.parts_used.map((part: any) => (
+                                                <div key={part.part_id} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded">
+                                                  <div>
+                                                    <span className="font-medium">{part.product_name}</span>
+                                                    {part.product_code && <span className="text-gray-500 ml-2">({part.product_code})</span>}
+                                                    {part.batch_number && <span className="text-gray-500 ml-2">Partija: {part.batch_number}</span>}
+                                                  </div>
+                                                  <div className="flex items-center gap-3">
+                                                    <span className="text-gray-600">{part.quantity} × €{parseFloat(part.unit_price || 0).toFixed(2)}</span>
+                                                    <span className="font-semibold text-green-600">€{parseFloat(part.total_price || 0).toFixed(2)}</span>
+                                                  </div>
+                                                  {part.supplier_name && (
+                                                    <span className="text-gray-500 text-xs">🏢 {part.supplier_name}</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Service Visits */}
+                            {vehicleServiceVisits.filter(v => v.vehicle_id === vehicle.vehicle_id).length > 0 && (
+                              <div>
+                                <h6 className="text-sm font-semibold text-gray-700 mb-2">Aptarnavimai</h6>
+                                <div className="space-y-2">
+                                  {vehicleServiceVisits
+                                    .filter(v => v.vehicle_id === vehicle.vehicle_id)
+                                    .map((visit) => (
+                                      <div key={visit.visit_id} className="bg-white rounded-lg p-3 border">
+                                        <div className="flex items-start justify-between mb-2">
+                                          <div>
+                                            <p className="font-medium text-gray-900">{visit.visit_type === 'planinis' ? 'Planinis aptarnavimas' : 'Neplaninis aptarnavimas'}</p>
+                                            <p className="text-sm text-gray-600">
+                                              📅 {new Date(visit.visit_datetime).toLocaleDateString('lt-LT')}
+                                              {visit.mechanic_name && ` | 👤 ${visit.mechanic_name}`}
+                                            </p>
+                                            {visit.procedures && visit.procedures.length > 0 && (
+                                              <p className="text-sm text-gray-700 mt-1">Procedūros: {visit.procedures.join(', ')}</p>
+                                            )}
+                                            {visit.notes && (
+                                              <p className="text-xs text-gray-500 mt-1 italic">{visit.notes}</p>
+                                            )}
+                                          </div>
+                                          <div className="text-right">
+                                            {visit.actual_cost > 0 && (
+                                              <>
+                                                <p className="text-sm text-gray-600">Savikaina</p>
+                                                <p className="font-bold text-green-600">€{parseFloat(visit.actual_cost).toFixed(2)}</p>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {visit.parts_used && visit.parts_used.length > 0 && (
+                                          <div className="mt-2 pt-2 border-t">
+                                            <p className="text-xs font-semibold text-gray-700 mb-2">Panaudoti produktai:</p>
+                                            <div className="space-y-1">
+                                              {visit.parts_used.map((part: any) => (
+                                                <div key={part.part_id} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded">
+                                                  <span className="font-medium">{part.product_name}</span>
+                                                  <div className="flex items-center gap-3">
+                                                    <span className="text-gray-600">{part.quantity_used} × €{parseFloat(part.cost_per_unit || 0).toFixed(2)}</span>
+                                                    <span className="font-semibold text-green-600">€{parseFloat(part.total_cost || 0).toFixed(2)}</span>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {vehicleWorkOrders.filter(wo => wo.vehicle_id === vehicle.vehicle_id).length === 0 && 
+                             vehicleServiceVisits.filter(v => v.vehicle_id === vehicle.vehicle_id).length === 0 && (
+                              <p className="text-center text-gray-500 py-4">Nėra užbaigtų darbų pasirinktu laikotarpiu</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

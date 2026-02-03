@@ -613,7 +613,7 @@ export function MaintenanceSchedules() {
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-800">Planiniai aptarnavimai</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Planiniai technikos aptarnavimai</h3>
         </div>
 
         <div className="flex flex-wrap gap-4 mb-6">

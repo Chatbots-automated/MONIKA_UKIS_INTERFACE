@@ -23,6 +23,9 @@ interface CostCenterSummary extends CostCenter {
 }
 
 interface CostCenterItem {
+  cost_center_id: string;
+  cost_center_name: string;
+  cost_center_color: string;
   invoice_id: string;
   invoice_number: string;
   invoice_date: string;
@@ -60,8 +63,11 @@ export function CostCentersManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingCenter, setEditingCenter] = useState<CostCenter | null>(null);
   const [expandedCenter, setExpandedCenter] = useState<string | null>(null);
+  const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [centerItems, setCenterItems] = useState<CostCenterItem[]>([]);
+  const [childItems, setChildItems] = useState<CostCenterItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [loadingChildItems, setLoadingChildItems] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -122,10 +128,32 @@ export function CostCentersManagement() {
 
   const loadCenterItems = async (centerId: string) => {
     setLoadingItems(true);
+    
+    // Find the center to check if it has children
+    const centerMap = new Map<string, CostCenterSummary>();
+    const flattenCenters = (centers: CostCenterSummary[]) => {
+      centers.forEach(c => {
+        centerMap.set(c.id, c);
+        if (c.children) {
+          flattenCenters(c.children);
+        }
+      });
+    };
+    flattenCenters(costCenters);
+    
+    const center = centerMap.get(centerId);
+    const centerIds = [centerId];
+    
+    // If this center has children, include their IDs too
+    if (center?.children && center.children.length > 0) {
+      center.children.forEach(child => centerIds.push(child.id));
+    }
+    
+    // Fetch products for this center and all its children
     const { data, error } = await supabase
       .from('cost_center_parts_usage')
       .select('*')
-      .eq('cost_center_id', centerId)
+      .in('cost_center_id', centerIds)
       .order('invoice_date', { ascending: false });
 
     if (error) {
@@ -143,6 +171,32 @@ export function CostCentersManagement() {
     } else {
       setExpandedCenter(centerId);
       await loadCenterItems(centerId);
+    }
+  };
+
+  const loadChildItems = async (childId: string) => {
+    setLoadingChildItems(true);
+    const { data, error } = await supabase
+      .from('cost_center_parts_usage')
+      .select('*')
+      .eq('cost_center_id', childId)
+      .order('invoice_date', { ascending: false });
+
+    if (error) {
+      console.error('Error loading child cost center items:', error);
+    } else if (data) {
+      setChildItems(data);
+    }
+    setLoadingChildItems(false);
+  };
+
+  const handleToggleChildExpand = async (childId: string) => {
+    if (expandedChild === childId) {
+      setExpandedChild(null);
+      setChildItems([]);
+    } else {
+      setExpandedChild(childId);
+      await loadChildItems(childId);
     }
   };
 
@@ -338,29 +392,34 @@ export function CostCentersManagement() {
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {costCenters.map((center) => (
-            <div key={center.id} className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
-              <div
-                className="h-3"
-                style={{ backgroundColor: center.color }}
-              />
-              <div className="p-6">
+            <div key={center.id}>
+              {/* Parent Cost Center */}
+              <div className="bg-white rounded-lg border-2 border-gray-300 p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      {center.name}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div
+                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: center.color }}
+                      />
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {center.name}
+                      </h3>
+                      {center.children && center.children.length > 0 && (
+                        <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                          {center.children.length} subcentr{center.children.length === 1 ? 'as' : 'ai'}
+                        </span>
+                      )}
+                    </div>
                     {center.description && (
-                      <p className="text-sm text-gray-600">{center.description}</p>
+                      <p className="text-xs text-gray-500 ml-6">{center.description}</p>
                     )}
                   </div>
-                  <div
-                    className="w-8 h-8 rounded-full flex-shrink-0 ml-3"
-                    style={{ backgroundColor: center.color }}
-                  />
                 </div>
 
+                {/* Parent Statistics */}
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div className="flex items-center gap-2 text-sm">
                     <Package className="w-4 h-4 text-gray-500" />
@@ -389,6 +448,149 @@ export function CostCentersManagement() {
                   )}
                 </div>
 
+                {/* Child Cost Centers - Inside parent */}
+                {center.children && center.children.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {center.children.map((child) => (
+                      <div 
+                        key={child.id} 
+                        className="ml-4 bg-gray-50 rounded-lg border-2 border-gray-200 p-3"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2 flex-1">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: child.color }}
+                            />
+                            <div className="flex-1">
+                              <h5 className="font-medium text-gray-800 text-sm">{child.name}</h5>
+                              {child.description && (
+                                <p className="text-xs text-gray-500 mt-0.5 ml-5">{child.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-2 text-sm ml-5">
+                          <div className="flex items-center gap-2">
+                            <Package className="w-3 h-3 text-gray-500" />
+                            <span className="text-gray-600 text-xs">{child.total_assignments} produktų</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-3 h-3 text-gray-500" />
+                            <span className="text-gray-600 text-xs">{child.total_cost.toFixed(2)} EUR</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 ml-5">
+                          {child.total_assignments > 0 && (
+                            <button
+                              onClick={() => handleToggleChildExpand(child.id)}
+                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors text-xs font-medium"
+                            >
+                              {expandedChild === child.id ? (
+                                <>
+                                  <ChevronUp className="w-3 h-3" />
+                                  Slėpti
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-3 h-3" />
+                                  Produktai
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleOpenModal(child)}
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-white border text-gray-700 rounded hover:bg-gray-50 transition-colors text-xs font-medium"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            Redaguoti
+                          </button>
+                          {child.total_assignments === 0 ? (
+                            <button
+                              onClick={() => handleDelete(child)}
+                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-xs font-medium"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleArchive(child)}
+                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors text-xs font-medium"
+                            >
+                              <Archive className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Child Items Display */}
+                        {expandedChild === child.id && (
+                          <div className="mt-3 pt-3 border-t border-gray-300 ml-5">
+                            {loadingChildItems ? (
+                              <div className="flex items-center justify-center py-4">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-600"></div>
+                              </div>
+                            ) : childItems.length === 0 ? (
+                              <p className="text-center text-gray-500 text-xs py-2">Nėra priskirtų produktų</p>
+                            ) : (
+                              <div className="space-y-2">
+                                <h5 className="font-semibold text-gray-800 text-xs mb-2">
+                                  Panaudojimo įrašai ({childItems.length})
+                                </h5>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                  {childItems.map((item, idx) => (
+                                    <div key={idx} className="bg-white rounded-lg p-2 border border-slate-200">
+                                      <div className="flex items-start justify-between mb-1">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-gray-900 text-xs">{item.product_name}</p>
+                                          {item.product_code && (
+                                            <p className="text-xs text-gray-500">Kodas: {item.product_code}</p>
+                                          )}
+                                          {item.item_description && item.item_description !== item.product_name && (
+                                            <p className="text-xs text-gray-600 mt-0.5">{item.item_description}</p>
+                                          )}
+                                        </div>
+                                        <div className="text-right ml-2">
+                                          <p className="font-bold text-gray-900 text-xs">{item.total_price.toFixed(2)} EUR</p>
+                                          <p className="text-xs text-gray-600">{item.quantity} {item.unit_type} × {item.unit_price.toFixed(2)} EUR</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-slate-200">
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-1">
+                                            <FileText className="w-3 h-3" />
+                                            <span>{item.invoice_number}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" />
+                                            <span>{item.invoice_date}</span>
+                                          </div>
+                                          {item.category_name && (
+                                            <span className="px-1.5 py-0.5 bg-slate-200 rounded text-xs">{item.category_name}</span>
+                                          )}
+                                        </div>
+                                        {item.supplier_name && (
+                                          <span className="text-gray-600 text-xs">{item.supplier_name}</span>
+                                        )}
+                                      </div>
+                                      {item.assignment_notes && (
+                                        <p className="text-xs text-gray-600 mt-1 italic">Pastaba: {item.assignment_notes}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Parent Actions */}
                 <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
                   <button
                     onClick={() => handleOpenChildModal(center)}
@@ -421,7 +623,7 @@ export function CostCentersManagement() {
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  {center.total_assignments === 0 ? (
+                  {center.total_assignments === 0 && (!center.children || center.children.length === 0) ? (
                     <button
                       onClick={() => handleDelete(center)}
                       className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
@@ -437,65 +639,6 @@ export function CostCentersManagement() {
                     </button>
                   )}
                 </div>
-
-                {/* Child Cost Centers */}
-                {center.children && center.children.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Subkaštų centrai:</h4>
-                    {center.children.map((child) => (
-                      <div key={child.id} className="ml-4 pl-4 border-l-4 bg-gray-50 rounded-lg p-4" style={{ borderLeftColor: child.color }}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 flex-1">
-                            <div
-                              className="w-6 h-6 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: child.color }}
-                            />
-                            <div>
-                              <h5 className="font-semibold text-gray-900">{child.name}</h5>
-                              {child.description && (
-                                <p className="text-xs text-gray-600 mt-0.5">{child.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
-                          <div className="flex items-center gap-2">
-                            <Package className="w-3 h-3 text-gray-500" />
-                            <span className="text-gray-600">{child.total_assignments} produktų</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-3 h-3 text-gray-500" />
-                            <span className="text-gray-600">{child.total_cost.toFixed(2)} EUR</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleOpenModal(child)}
-                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-white text-gray-700 rounded border hover:bg-gray-50 transition-colors text-xs font-medium"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            Redaguoti
-                          </button>
-                          {child.total_assignments === 0 ? (
-                            <button
-                              onClick={() => handleDelete(child)}
-                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-xs font-medium"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleArchive(child)}
-                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors text-xs font-medium"
-                            >
-                              <Archive className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 {expandedCenter === center.id && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -515,7 +658,20 @@ export function CostCentersManagement() {
                             <div key={idx} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex-1">
-                                  <p className="font-medium text-gray-900">{item.product_name}</p>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="font-medium text-gray-900">{item.product_name}</p>
+                                    {item.cost_center_id !== center.id && (
+                                      <div className="flex items-center gap-1">
+                                        <div 
+                                          className="w-2 h-2 rounded-full" 
+                                          style={{ backgroundColor: item.cost_center_color }}
+                                        />
+                                        <span className="text-xs text-gray-600 italic">
+                                          ({item.cost_center_name})
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
                                   {item.product_code && (
                                     <p className="text-xs text-gray-500">Kodas: {item.product_code}</p>
                                   )}

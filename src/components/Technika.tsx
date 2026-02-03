@@ -17,7 +17,8 @@ import {
   Flame,
   Star,
   Target,
-  Shield
+  Shield,
+  FolderKanban
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -28,10 +29,12 @@ import { VehiclesManagement } from './technika/VehiclesManagement';
 import { TechnicalInspectionInsurance } from './technika/TechnicalInspectionInsurance';
 import { WorkOrders } from './technika/WorkOrders';
 import { MaintenanceSchedules } from './technika/MaintenanceSchedules';
+import { FarmEquipmentMaintenance } from './technika/FarmEquipmentMaintenance';
 import { EquipmentInventory } from './technika/EquipmentInventory';
 import { TechnikaReports } from './technika/TechnikaReports';
 import { WorkerSchedules } from './technika/WorkerSchedules';
 import { ProductsManagement } from './technika/ProductsManagement';
+import Kaupiniai from './Kaupiniai';
 import { FireExtinguishersManagement } from './technika/FireExtinguishersManagement';
 import { ProductQuality } from './technika/ProductQuality';
 import { CostCentersManagement } from './technika/CostCentersManagement';
@@ -45,13 +48,15 @@ const menuItems = [
   { id: 'invoices', label: 'Sąskaitos', icon: FileText },
   { id: 'products', label: 'Produktai', icon: Box },
   { id: 'cost-centers', label: 'Kaštų centrai', icon: Target },
+  { id: 'kaupiniai', label: 'Kaupiniai', icon: FolderKanban },
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
   { id: 'technical-inspection', label: 'Techninės ir draudimai', icon: Shield },
   { id: 'fire-extinguishers', label: 'Gesintuvai', icon: Flame },
   { id: 'quality', label: 'Kokybės įvertinimas', icon: Star },
-  { id: 'schedules', label: 'Planiniai aptarnavimai', icon: Calendar },
+  { id: 'schedules', label: 'Planiniai technikos aptarnavimai', icon: Calendar },
+  { id: 'farm-equipment', label: 'Fermos įrangos aptarnavimai', icon: Settings },
   { id: 'work-orders', label: 'Remonto darbai', icon: ClipboardList },
   { id: 'worker-schedules', label: 'Darbuotojų grafikai', icon: Users },
   { id: 'inventory', label: 'Sandėlis', icon: Package },
@@ -99,6 +104,10 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <WorkOrders />;
       case 'schedules':
         return <MaintenanceSchedules />;
+      case 'farm-equipment':
+        return <FarmEquipmentMaintenance />;
+      case 'kaupiniai':
+        return <Kaupiniai />;
       case 'worker-schedules':
         return <WorkerSchedules />;
       case 'inventory':
