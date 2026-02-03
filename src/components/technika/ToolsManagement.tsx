@@ -12,6 +12,7 @@ interface Tool {
   serial_number: string;
   is_available: boolean;
   current_holder: string | null;
+  product_id: string | null;
   notes: string;
   product: {
     name: string;
@@ -208,8 +209,8 @@ export function ToolsManagement() {
       if (movementError) throw movementError;
 
       // 2) If tool is linked to a product, also issue quantity from Sandėlis
-      if (selectedTool.product?.name && selectedTool['product_id']) {
-        const productId = (selectedTool as any).product_id as string;
+      if (selectedTool.product?.name && selectedTool.product_id) {
+        const productId = selectedTool.product_id;
 
         // Find oldest batch with enough quantity
         const { data: batches, error: batchesError } = await supabase
@@ -314,6 +315,82 @@ export function ToolsManagement() {
       if (movementError) {
         console.error('Movement error:', movementError);
         throw movementError;
+      }
+
+      // If tool has a product_id, find and mark the corresponding equipment_issuance as returned
+      if (tool.product_id) {
+        const productId = tool.product_id;
+
+        // Find the most recent issuance for this product and holder that's still active
+        const { data: issuanceItems, error: issuanceError } = await supabase
+          .from('equipment_issuance_items')
+          .select(`
+            id,
+            issuance_id,
+            quantity,
+            quantity_returned,
+            equipment_issuances!inner(
+              id,
+              status,
+              issued_to,
+              issue_date
+            )
+          `)
+          .eq('product_id', productId)
+          .eq('equipment_issuances.issued_to', tool.current_holder)
+          .in('equipment_issuances.status', ['issued', 'partial_return'])
+          .order('equipment_issuances.issue_date', { ascending: false })
+          .limit(1);
+
+        if (issuanceError) {
+          console.error('Error finding issuance:', issuanceError);
+        } else if (issuanceItems && issuanceItems.length > 0) {
+          const item = issuanceItems[0];
+          const issuanceData = (item as any).equipment_issuances;
+
+          // Mark the full quantity as returned
+          const { error: updateItemError } = await supabase
+            .from('equipment_issuance_items')
+            .update({
+              quantity_returned: item.quantity,
+            })
+            .eq('id', item.id);
+
+          if (updateItemError) {
+            console.error('Error updating issuance item:', updateItemError);
+          }
+
+          // Check if all items in this issuance are now returned
+          const { data: allItems } = await supabase
+            .from('equipment_issuance_items')
+            .select('quantity, quantity_returned')
+            .eq('issuance_id', item.issuance_id);
+
+          let newStatus = 'returned';
+          if (allItems) {
+            const hasOutstanding = allItems.some((i: any) =>
+              parseFloat(i.quantity) > parseFloat(i.quantity_returned || 0)
+            );
+            if (hasOutstanding) {
+              newStatus = 'partial_return';
+            }
+          }
+
+          // Update the issuance status
+          const { error: updateIssuanceError } = await supabase
+            .from('equipment_issuances')
+            .update({
+              status: newStatus,
+              actual_return_date: newStatus === 'returned' ? new Date().toISOString().split('T')[0] : null,
+            })
+            .eq('id', item.issuance_id);
+
+          if (updateIssuanceError) {
+            console.error('Error updating issuance:', updateIssuanceError);
+          } else {
+            console.log(`Marked equipment issuance ${item.issuance_id} as ${newStatus}`);
+          }
+        }
       }
 
       const { data: updatedTool, error: updateError } = await supabase
