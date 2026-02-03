@@ -101,7 +101,7 @@ export function ToolsManagement() {
         notes
       `).order('tool_number'),
       supabase.from('equipment_products').select('id, name').eq('is_active', true).order('name'),
-      supabase.from('equipment_locations').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('equipment_locations').select('id, name').order('name'),
       supabase.from('users').select('id, full_name').order('full_name'),
     ]);
 
@@ -321,74 +321,78 @@ export function ToolsManagement() {
       if (tool.product_id) {
         const productId = tool.product_id;
 
-        // Find the most recent issuance for this product and holder that's still active
-        const { data: issuanceItems, error: issuanceError } = await supabase
-          .from('equipment_issuance_items')
-          .select(`
-            id,
-            issuance_id,
-            quantity,
-            quantity_returned,
-            equipment_issuances!inner(
-              id,
-              status,
-              issued_to,
-              issue_date
-            )
-          `)
-          .eq('product_id', productId)
-          .eq('equipment_issuances.issued_to', tool.current_holder)
-          .in('equipment_issuances.status', ['issued', 'partial_return'])
-          .order('equipment_issuances.issue_date', { ascending: false })
-          .limit(1);
+        // First find the most recent active issuance for this holder
+        const { data: issuances, error: issuanceError } = await supabase
+          .from('equipment_issuances')
+          .select('id, status, issue_date')
+          .eq('issued_to', tool.current_holder)
+          .in('status', ['issued', 'partial_return'])
+          .order('issue_date', { ascending: false })
+          .limit(10);
 
         if (issuanceError) {
-          console.error('Error finding issuance:', issuanceError);
-        } else if (issuanceItems && issuanceItems.length > 0) {
-          const item = issuanceItems[0];
-          const issuanceData = (item as any).equipment_issuances;
+          console.error('Error finding issuances:', issuanceError);
+        } else if (issuances && issuances.length > 0) {
+          // Now find the item in these issuances that matches the product
+          let foundItem = null;
+          for (const issuance of issuances) {
+            const { data: items } = await supabase
+              .from('equipment_issuance_items')
+              .select('id, issuance_id, quantity, quantity_returned')
+              .eq('issuance_id', issuance.id)
+              .eq('product_id', productId);
 
-          // Mark the full quantity as returned
-          const { error: updateItemError } = await supabase
-            .from('equipment_issuance_items')
-            .update({
-              quantity_returned: item.quantity,
-            })
-            .eq('id', item.id);
-
-          if (updateItemError) {
-            console.error('Error updating issuance item:', updateItemError);
-          }
-
-          // Check if all items in this issuance are now returned
-          const { data: allItems } = await supabase
-            .from('equipment_issuance_items')
-            .select('quantity, quantity_returned')
-            .eq('issuance_id', item.issuance_id);
-
-          let newStatus = 'returned';
-          if (allItems) {
-            const hasOutstanding = allItems.some((i: any) =>
-              parseFloat(i.quantity) > parseFloat(i.quantity_returned || 0)
-            );
-            if (hasOutstanding) {
-              newStatus = 'partial_return';
+            if (items && items.length > 0) {
+              foundItem = items[0];
+              break;
             }
           }
 
-          // Update the issuance status
-          const { error: updateIssuanceError } = await supabase
-            .from('equipment_issuances')
-            .update({
-              status: newStatus,
-              actual_return_date: newStatus === 'returned' ? new Date().toISOString().split('T')[0] : null,
-            })
-            .eq('id', item.issuance_id);
+          if (foundItem) {
+            const item = foundItem;
 
-          if (updateIssuanceError) {
-            console.error('Error updating issuance:', updateIssuanceError);
-          } else {
-            console.log(`Marked equipment issuance ${item.issuance_id} as ${newStatus}`);
+            // Mark the full quantity as returned
+            const { error: updateItemError } = await supabase
+              .from('equipment_issuance_items')
+              .update({
+                quantity_returned: item.quantity,
+              })
+              .eq('id', item.id);
+
+            if (updateItemError) {
+              console.error('Error updating issuance item:', updateItemError);
+            }
+
+            // Check if all items in this issuance are now returned
+            const { data: allItems } = await supabase
+              .from('equipment_issuance_items')
+              .select('quantity, quantity_returned')
+              .eq('issuance_id', item.issuance_id);
+
+            let newStatus = 'returned';
+            if (allItems) {
+              const hasOutstanding = allItems.some((i: any) =>
+                parseFloat(i.quantity) > parseFloat(i.quantity_returned || 0)
+              );
+              if (hasOutstanding) {
+                newStatus = 'partial_return';
+              }
+            }
+
+            // Update the issuance status
+            const { error: updateIssuanceError } = await supabase
+              .from('equipment_issuances')
+              .update({
+                status: newStatus,
+                actual_return_date: newStatus === 'returned' ? new Date().toISOString().split('T')[0] : null,
+              })
+              .eq('id', item.issuance_id);
+
+            if (updateIssuanceError) {
+              console.error('Error updating issuance:', updateIssuanceError);
+            } else {
+              console.log(`Marked equipment issuance ${item.issuance_id} as ${newStatus}`);
+            }
           }
         }
       }
