@@ -83,6 +83,24 @@ export function EquipmentInventory() {
 
   useEffect(() => {
     loadData();
+
+    // Subscribe to realtime updates
+    const subscription = supabase
+      .channel('equipment-inventory-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_issuances' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_issuance_items' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tools' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadData = async () => {
@@ -291,8 +309,14 @@ export function EquipmentInventory() {
       return;
     }
 
+    if (!confirm(`Ar tikrai norite grąžinti "${selectedLoanItem.product_name}"?`)) {
+      return;
+    }
+
     try {
       if (selectedLoanItem.item_type === 'tool') {
+        console.log('Returning tool:', selectedLoanItem.item_id);
+
         await supabase
           .from('tool_movements')
           .insert({
@@ -304,17 +328,35 @@ export function EquipmentInventory() {
             recorded_by: user?.id || null,
           });
 
-        const { error: toolError } = await supabase
+        const { data: updatedTool, error: toolError } = await supabase
           .from('tools')
           .update({
             is_available: true,
             current_holder: null,
           })
-          .eq('id', selectedLoanItem.item_id);
+          .eq('id', selectedLoanItem.item_id)
+          .select()
+          .single();
 
-        if (toolError) throw toolError;
+        if (toolError) {
+          console.error('Tool update error:', toolError);
+          throw toolError;
+        }
 
-        await logAction('return_tool', 'tools', selectedLoanItem.item_id);
+        console.log('Tool returned successfully:', updatedTool);
+
+        await logAction('return_tool', 'tools', selectedLoanItem.item_id, null, {
+          tool_number: selectedLoanItem.tool_number,
+          from_holder: selectedLoanItem.issued_to
+        });
+
+        setShowReturnModal(false);
+        setSelectedLoanItem(null);
+        setReturnForm({ quantity: '1', notes: '' });
+
+        // Force immediate reload
+        await loadData();
+
         alert('Įrankis sėkmingai grąžintas');
       } else {
         if (!returnForm.quantity) {
@@ -371,14 +413,20 @@ export function EquipmentInventory() {
 
         if (issuanceError) throw issuanceError;
 
-        await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id);
+        await logAction('return_equipment', 'equipment_issuances', selectedLoanItem.issuance_id, null, {
+          product_name: selectedLoanItem.product_name,
+          quantity: returnQty
+        });
+
+        setShowReturnModal(false);
+        setReturnForm({ quantity: '1', notes: '' });
+        setSelectedLoanItem(null);
+
+        // Force immediate reload
+        await loadData();
+
         alert('Prekės sėkmingai grąžintos');
       }
-
-      setShowReturnModal(false);
-      setReturnForm({ quantity: '1', notes: '' });
-      setSelectedLoanItem(null);
-      loadData();
     } catch (error: any) {
       console.error('Error:', error);
       alert(`Klaida grąžinant: ${error.message}`);
