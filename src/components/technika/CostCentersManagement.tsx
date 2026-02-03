@@ -8,6 +8,7 @@ interface CostCenter {
   name: string;
   description: string | null;
   color: string;
+  parent_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -18,6 +19,7 @@ interface CostCenterSummary extends CostCenter {
   total_cost: number;
   first_assignment_date: string | null;
   last_assignment_date: string | null;
+  children?: CostCenterSummary[];
 }
 
 interface CostCenterItem {
@@ -64,7 +66,9 @@ export function CostCentersManagement() {
     name: '',
     description: '',
     color: '#3B82F6',
+    parent_id: null as string | null,
   });
+  const [creatingChildFor, setCreatingChildFor] = useState<string | null>(null);
 
   useEffect(() => {
     loadCostCenters();
@@ -80,11 +84,12 @@ export function CostCentersManagement() {
     if (error) {
       console.error('Error loading cost centers:', error);
     } else if (data) {
-      setCostCenters(data.map(row => ({
+      const centers: CostCenterSummary[] = data.map(row => ({
         id: row.cost_center_id,
         name: row.cost_center_name,
         description: row.description,
         color: row.color,
+        parent_id: row.parent_id || null,
         is_active: row.is_active,
         total_assignments: row.total_assignments || 0,
         total_cost: parseFloat(row.total_cost) || 0,
@@ -92,7 +97,25 @@ export function CostCentersManagement() {
         last_assignment_date: row.last_assignment_date,
         created_at: '',
         updated_at: '',
-      })));
+        children: [],
+      }));
+
+      // Build hierarchy
+      const centerMap = new Map<string, CostCenterSummary>();
+      centers.forEach(c => centerMap.set(c.id, c));
+
+      const rootCenters: CostCenterSummary[] = [];
+      centers.forEach(center => {
+        if (center.parent_id && centerMap.has(center.parent_id)) {
+          const parent = centerMap.get(center.parent_id)!;
+          if (!parent.children) parent.children = [];
+          parent.children.push(center);
+        } else {
+          rootCenters.push(center);
+        }
+      });
+
+      setCostCenters(rootCenters);
     }
     setLoading(false);
   };
@@ -123,32 +146,42 @@ export function CostCentersManagement() {
     }
   };
 
-  const handleOpenModal = (center?: CostCenter) => {
+  const handleOpenModal = (center?: CostCenter, parentId?: string | null) => {
     if (center) {
       setEditingCenter(center);
       setFormData({
         name: center.name,
         description: center.description || '',
         color: center.color,
+        parent_id: center.parent_id,
       });
+      setCreatingChildFor(null);
     } else {
       setEditingCenter(null);
       setFormData({
         name: '',
         description: '',
         color: '#3B82F6',
+        parent_id: parentId || null,
       });
+      setCreatingChildFor(parentId || null);
     }
     setShowModal(true);
+  };
+
+  const handleOpenChildModal = (parentCenter: CostCenter) => {
+    handleOpenModal(undefined, parentCenter.id);
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingCenter(null);
+    setCreatingChildFor(null);
     setFormData({
       name: '',
       description: '',
       color: '#3B82F6',
+      parent_id: null,
     });
   };
 
@@ -166,6 +199,7 @@ export function CostCentersManagement() {
             name: formData.name,
             description: formData.description || null,
             color: formData.color,
+            parent_id: formData.parent_id,
           })
           .eq('id', editingCenter.id);
 
@@ -183,6 +217,7 @@ export function CostCentersManagement() {
             name: formData.name,
             description: formData.description || null,
             color: formData.color,
+            parent_id: formData.parent_id,
             created_by: user?.id,
           });
 
@@ -190,9 +225,10 @@ export function CostCentersManagement() {
 
         await logAction('create', 'cost_centers', undefined, null, {
           name: formData.name,
+          parent_id: formData.parent_id,
         });
 
-        alert('Kaštų centras sukurtas');
+        alert(formData.parent_id ? 'Subkaštų centras sukurtas' : 'Kaštų centras sukurtas');
       }
 
       handleCloseModal();
@@ -354,6 +390,13 @@ export function CostCentersManagement() {
                 </div>
 
                 <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => handleOpenChildModal(center)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Subcentras
+                  </button>
                   {center.total_assignments > 0 && (
                     <button
                       onClick={() => handleToggleExpand(center.id)}
@@ -362,12 +405,12 @@ export function CostCentersManagement() {
                       {expandedCenter === center.id ? (
                         <>
                           <ChevronUp className="w-4 h-4" />
-                          Slėpti produktus
+                          Slėpti
                         </>
                       ) : (
                         <>
                           <ChevronDown className="w-4 h-4" />
-                          Rodyti produktus
+                          Produktai
                         </>
                       )}
                     </button>
@@ -377,7 +420,6 @@ export function CostCentersManagement() {
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
                   >
                     <Edit2 className="w-4 h-4" />
-                    Redaguoti
                   </button>
                   {center.total_assignments === 0 ? (
                     <button
@@ -395,6 +437,65 @@ export function CostCentersManagement() {
                     </button>
                   )}
                 </div>
+
+                {/* Child Cost Centers */}
+                {center.children && center.children.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Subkaštų centrai:</h4>
+                    {center.children.map((child) => (
+                      <div key={child.id} className="ml-4 pl-4 border-l-4 bg-gray-50 rounded-lg p-4" style={{ borderLeftColor: child.color }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 flex-1">
+                            <div
+                              className="w-6 h-6 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: child.color }}
+                            />
+                            <div>
+                              <h5 className="font-semibold text-gray-900">{child.name}</h5>
+                              {child.description && (
+                                <p className="text-xs text-gray-600 mt-0.5">{child.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Package className="w-3 h-3 text-gray-500" />
+                            <span className="text-gray-600">{child.total_assignments} produktų</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-3 h-3 text-gray-500" />
+                            <span className="text-gray-600">{child.total_cost.toFixed(2)} EUR</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleOpenModal(child)}
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-white text-gray-700 rounded border hover:bg-gray-50 transition-colors text-xs font-medium"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            Redaguoti
+                          </button>
+                          {child.total_assignments === 0 ? (
+                            <button
+                              onClick={() => handleDelete(child)}
+                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-xs font-medium"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleArchive(child)}
+                              className="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors text-xs font-medium"
+                            >
+                              <Archive className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {expandedCenter === center.id && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -465,7 +566,7 @@ export function CostCentersManagement() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-6">
-              {editingCenter ? 'Redaguoti kaštų centrą' : 'Naujas kaštų centras'}
+              {editingCenter ? 'Redaguoti kaštų centrą' : creatingChildFor ? 'Naujas subkaštų centras' : 'Naujas kaštų centras'}
             </h3>
 
             <div className="space-y-4">
@@ -494,6 +595,30 @@ export function CostCentersManagement() {
                   placeholder="Kaštų centro aprašymas..."
                 />
               </div>
+
+              {!creatingChildFor && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pagrindinis centras (nebūtinas)
+                  </label>
+                  <select
+                    value={formData.parent_id || ''}
+                    onChange={(e) => setFormData({ ...formData, parent_id: e.target.value || null })}
+                    className="w-full border rounded-lg px-3 py-2"
+                    disabled={creatingChildFor !== null}
+                  >
+                    <option value="">Nėra - tai pagrindinis centras</option>
+                    {costCenters.map((center) => (
+                      <option key={center.id} value={center.id} disabled={editingCenter?.id === center.id}>
+                        {center.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Pasirinkite pagrindinį centrą, kad šis būtų jo subcentras
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -118,7 +118,7 @@ export function EquipmentInvoices() {
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('tools').select('id, name, tool_number').order('name'),
-      supabase.from('cost_centers').select('id, name, description, color').eq('is_active', true).order('name'),
+      supabase.from('cost_centers').select('id, name, description, color, parent_id').eq('is_active', true).order('name'),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
@@ -1370,27 +1370,50 @@ export function EquipmentInvoices() {
                     <div className="border-t pt-3">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Arba kaštų centrui</label>
                       <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto">
-                        {costCenters.map(center => (
-                          <button
-                            key={center.id}
-                            onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: center.id, invoiceItemId: invoiceItems[0].id })}
-                            className={`p-3 border-2 rounded-lg transition-all text-left ${
-                              assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === center.id
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 mb-1">
-                              <div
-                                className="w-4 h-4 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: center.color }}
-                              />
-                              <p className="font-semibold text-gray-900 text-sm">{center.name}</p>
-                            </div>
-                            {center.description && (
-                              <p className="text-xs text-gray-500">{center.description}</p>
-                            )}
-                          </button>
+                        {costCenters.filter(c => !c.parent_id).map(center => (
+                          <div key={center.id} className="space-y-2">
+                            <button
+                              onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: center.id, invoiceItemId: invoiceItems[0].id })}
+                              className={`w-full p-3 border-2 rounded-lg transition-all text-left ${
+                                assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === center.id
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-300 hover:border-gray-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <div
+                                  className="w-4 h-4 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: center.color }}
+                                />
+                                <p className="font-semibold text-gray-900 text-sm">{center.name}</p>
+                              </div>
+                              {center.description && (
+                                <p className="text-xs text-gray-500">{center.description}</p>
+                              )}
+                            </button>
+                            {costCenters.filter(child => child.parent_id === center.id).map(child => (
+                              <button
+                                key={child.id}
+                                onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: child.id, invoiceItemId: invoiceItems[0].id })}
+                                className={`w-full ml-4 p-2 border-2 rounded-lg transition-all text-left ${
+                                  assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === child.id
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-3 h-3 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: child.color }}
+                                  />
+                                  <p className="font-medium text-gray-800 text-xs">{child.name}</p>
+                                </div>
+                                {child.description && (
+                                  <p className="text-xs text-gray-500 mt-1 ml-5">{child.description}</p>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         ))}
                       </div>
                     </div>
