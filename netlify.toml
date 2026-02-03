@@ -6,14 +6,10 @@
   
   # Directory with the built files
   publish = "dist"
-  
-  # Build environment
-  environment = { NODE_VERSION = "18" }
 
-# Production environment variables
-# IMPORTANT: Add your actual values in Netlify Dashboard > Site Settings > Environment Variables
+# Environment variables (including Node version and Supabase config)
 [build.environment]
-  # Supabase Configuration
+  NODE_VERSION = "18"
   VITE_SUPABASE_URL = "https://olxnahsxvyiadknybagt.supabase.co"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9seG5haHN4dnlpYWRrbnliYWd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3NzE3ODYsImV4cCI6MjA2ODM0Nzc4Nn0.VWlE-VheDuyTNvvA59sjlNWOtWh4jN-phWoTCSR7VVU"
 
