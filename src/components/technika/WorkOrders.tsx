@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Search, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
 import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
+import { MaintenanceCalendar } from './MaintenanceCalendar';
 
 interface WorkOrder {
   id: string;
@@ -46,6 +47,7 @@ export function WorkOrders() {
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<'edit' | 'work'>('edit');
+  const [showCalendar, setShowCalendar] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -149,8 +151,53 @@ export function WorkOrders() {
     cancelled: filteredWorkOrders.filter(wo => wo.status === 'cancelled'),
   };
 
+  // Prepare calendar events from work orders
+  const calendarEvents = workOrders
+    .filter(wo => wo.scheduled_date && wo.status !== 'completed' && wo.status !== 'cancelled')
+    .map(wo => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const scheduledDate = new Date(wo.scheduled_date!);
+      scheduledDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.ceil((scheduledDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      let status: 'overdue' | 'today' | 'upcoming' | 'ok';
+      if (wo.status === 'in_progress') {
+        status = 'today';
+      } else if (daysDiff < 0) {
+        status = 'overdue';
+      } else if (daysDiff === 0) {
+        status = 'today';
+      } else if (daysDiff <= 7) {
+        status = 'upcoming';
+      } else {
+        status = 'ok';
+      }
+
+      const title = wo.vehicle?.registration_number || wo.tool?.name || 'Darbas';
+      const priorityLabel = priorityLabels[wo.priority] || wo.priority;
+
+      return {
+        id: wo.id,
+        title,
+        date: wo.scheduled_date!,
+        status,
+        type: `${wo.work_order_number} - ${priorityLabel}`,
+        details: `${wo.description} (${orderTypeLabels[wo.order_type]})`,
+        onClick: () => handleOpenSidebar(wo, 'work'),
+      };
+    });
+
   return (
     <div className="space-y-6">
+      {/* Calendar */}
+      {showCalendar && (
+        <MaintenanceCalendar
+          events={calendarEvents}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <StatCard

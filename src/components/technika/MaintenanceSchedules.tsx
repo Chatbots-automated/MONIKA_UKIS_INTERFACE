@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Calendar, Plus, Search, Edit, Trash2, X, Save, AlertTriangle, CheckCircle } from 'lucide-react';
+import { MaintenanceCalendar } from './MaintenanceCalendar';
 
 interface MaintenanceSchedule {
   id: string;
@@ -58,6 +59,7 @@ export function MaintenanceSchedules() {
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [servicingSchedule, setServicingSchedule] = useState<MaintenanceSchedule | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<MaintenanceSchedule | null>(null);
+  const [showCalendar, setShowCalendar] = useState(true);
   const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({
     schedule_name: '',
     vehicle_id: '',
@@ -609,8 +611,54 @@ export function MaintenanceSchedules() {
     hours: 'mval.',
   };
 
+  // Prepare calendar events
+  const calendarEvents = schedules
+    .filter(s => s.next_due_date)
+    .map(schedule => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(schedule.next_due_date!);
+      dueDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      let status: 'overdue' | 'today' | 'upcoming' | 'ok';
+      if (daysDiff < 0) {
+        status = 'overdue';
+      } else if (daysDiff === 0) {
+        status = 'today';
+      } else if (daysDiff <= 14) {
+        status = 'upcoming';
+      } else {
+        status = 'ok';
+      }
+
+      return {
+        id: schedule.id,
+        title: schedule.vehicle.registration_number,
+        date: schedule.next_due_date!,
+        status,
+        type: schedule.schedule_name,
+        details: `${schedule.vehicle.make} ${schedule.vehicle.model} - ${schedule.schedule_name}`,
+        onClick: () => {
+          if (status === 'overdue' || status === 'today') {
+            handleOpenServiceModal(schedule);
+          } else {
+            handleOpenScheduleModal(schedule);
+          }
+        },
+      };
+    });
+
   return (
     <div className="space-y-6">
+      {/* Calendar */}
+      {showCalendar && (
+        <MaintenanceCalendar
+          events={calendarEvents}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-800">Planiniai technikos aptarnavimai</h3>

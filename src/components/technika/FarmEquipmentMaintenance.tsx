@@ -5,6 +5,7 @@ import {
   Plus, Edit2, Trash2, AlertTriangle, CheckCircle, 
   Clock, Calendar, ChevronDown, ChevronRight, Settings 
 } from 'lucide-react';
+import { MaintenanceCalendar } from './MaintenanceCalendar';
 
 interface FarmEquipment {
   id: string;
@@ -97,6 +98,8 @@ export function FarmEquipmentMaintenance() {
   const [priorityItems, setPriorityItems] = useState<FarmEquipmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedEquipment, setExpandedEquipment] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(true);
+  const [allItems, setAllItems] = useState<FarmEquipmentItem[]>([]);
   
   // Modals
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
@@ -146,6 +149,7 @@ export function FarmEquipmentMaintenance() {
   useEffect(() => {
     loadEquipment();
     loadPriorityItems();
+    loadAllItems();
   }, []);
 
   useEffect(() => {
@@ -194,6 +198,19 @@ export function FarmEquipmentMaintenance() {
       console.error('Error loading priority items:', error);
     } else if (data) {
       setPriorityItems(data);
+    }
+  };
+
+  const loadAllItems = async () => {
+    const { data, error } = await supabase
+      .from('farm_equipment_items_detail')
+      .select('*')
+      .order('next_service_date');
+
+    if (error) {
+      console.error('Error loading all items:', error);
+    } else if (data) {
+      setAllItems(data);
     }
   };
 
@@ -545,6 +562,7 @@ export function FarmEquipmentMaintenance() {
       setServiceParts([]);
       loadEquipment();
       loadPriorityItems();
+      loadAllItems();
       if (expandedEquipment) {
         loadItems(expandedEquipment);
       }
@@ -625,8 +643,48 @@ export function FarmEquipmentMaintenance() {
     );
   }
 
+  // Prepare calendar events
+  const calendarEvents = allItems
+    .filter(item => item.next_service_date)
+    .map(item => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(item.next_service_date!);
+      dueDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      let status: 'overdue' | 'today' | 'upcoming' | 'ok';
+      if (daysDiff < 0) {
+        status = 'overdue';
+      } else if (daysDiff === 0) {
+        status = 'today';
+      } else if (daysDiff <= item.reminder_days_before) {
+        status = 'upcoming';
+      } else {
+        status = 'ok';
+      }
+
+      return {
+        id: item.id,
+        title: item.equipment_name,
+        date: item.next_service_date!,
+        status,
+        type: item.item_name,
+        details: `${item.equipment_name} - ${item.item_name}${item.equipment_location ? ` (${item.equipment_location})` : ''}`,
+        onClick: () => handleOpenServiceModal(item),
+      };
+    });
+
   return (
     <div className="space-y-6">
+      {/* Calendar */}
+      {showCalendar && (
+        <MaintenanceCalendar
+          events={calendarEvents}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Fermos įrangos aptarnavimai</h2>
