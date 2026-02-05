@@ -69,6 +69,7 @@ interface GeaDaily {
   calved_on: string | null;
   lact_days: number | null;
   inseminated_on: string | null;
+  kada_versiuosis: string | null;
   snapshot_date: string;
   source: string;
   created_at: string;

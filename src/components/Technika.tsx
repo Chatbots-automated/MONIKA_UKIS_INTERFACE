@@ -38,6 +38,8 @@ import Kaupiniai from './Kaupiniai';
 import { FireExtinguishersManagement } from './technika/FireExtinguishersManagement';
 import { ProductQuality } from './technika/ProductQuality';
 import { CostCentersManagement } from './technika/CostCentersManagement';
+import { ReminderNotification } from './technika/ReminderNotification';
+import { ReminderCalendarView } from './technika/ReminderCalendarView';
 
 interface TechnikaProps {
   onBackToModules: () => void;
@@ -66,6 +68,7 @@ const menuItems = [
 export function Technika({ onBackToModules }: TechnikaProps) {
   const [currentView, setCurrentView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showReminderCalendar, setShowReminderCalendar] = useState(false);
   const { user, signOut } = useAuth();
 
   const currentMenuItem = menuItems.find(item => item.id === currentView);
@@ -230,6 +233,14 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         {/* Content area */}
         <div className="p-6">{renderContent()}</div>
       </div>
+
+      {/* Reminder Notification (floating) */}
+      <ReminderNotification onViewAll={() => setShowReminderCalendar(true)} />
+
+      {/* Reminder Calendar View (modal) */}
+      {showReminderCalendar && (
+        <ReminderCalendarView onClose={() => setShowReminderCalendar(false)} />
+      )}
     </div>
   );
 }
