@@ -153,7 +153,6 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
   const [rawGeaData, setRawGeaData] = useState<any>(null); // Store raw new GEA data for full display
   const [loading, setLoading] = useState(true);
   const [prevStatus, setPrevStatus] = useState<string | null>(null);
-  const [expandedSection, setExpandedSection] = useState<string | null>('ataskaita1'); // Default to first section
 
   useEffect(() => {
     loadGeaData();
@@ -344,7 +343,14 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
             <div className="flex items-center gap-3">
               <Milk className="w-6 h-6 text-white" />
               <div>
-                <h3 className="font-bold text-white text-lg">GEA Duomenys</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-white text-lg">GEA Duomenys</h3>
+                  {rawGeaData.cow_number && (
+                    <span className="bg-white/20 text-white text-sm font-bold px-2 py-0.5 rounded">
+                      Kaklo Nr: {rawGeaData.cow_number}
+                    </span>
+                  )}
+                </div>
                 <p className="text-blue-100 text-xs">Importuota: {formatDateLT(rawGeaData.import_created_at)}</p>
               </div>
             </div>
@@ -369,55 +375,17 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
           </div>
         )}
 
-        {/* Section Tabs */}
-        <div className="bg-white border-b border-gray-200 px-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setExpandedSection('ataskaita1')}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
-                expandedSection === 'ataskaita1'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              1-oji Ataskaita
-              <span className="ml-2 text-xs opacity-75">(Veršingumas)</span>
-            </button>
-            <button
-              onClick={() => setExpandedSection('ataskaita2')}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
-                expandedSection === 'ataskaita2'
-                  ? 'border-purple-600 text-purple-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              2-oji Ataskaita
-              <span className="ml-2 text-xs opacity-75">(Melžimas)</span>
-            </button>
-            <button
-              onClick={() => setExpandedSection('ataskaita3')}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
-                expandedSection === 'ataskaita3'
-                  ? 'border-orange-600 text-orange-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              3-oji Ataskaita
-              <span className="ml-2 text-xs opacity-75">(Speniai/Veisimas)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-5">
+        {/* All Sections - Scrollable */}
+        <div className="p-4 space-y-4 max-h-[600px] overflow-y-auto">
           {/* 1-oji Ataskaita - Pregnancy & Lactation */}
-          {expandedSection === 'ataskaita1' && (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <h4 className="font-bold text-blue-900 text-sm mb-3 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  Veršingumo ir Laktacijos Duomenys
-                </h4>
+          <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="bg-blue-600 rounded-full p-1.5">
+                <Calendar className="w-4 h-4 text-white" />
+              </div>
+              <h4 className="font-bold text-blue-900">1-oji Ataskaita: Veršingumas ir Laktacija</h4>
+            </div>
+            <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white rounded-lg p-3 border border-blue-100">
                     <span className="text-xs text-gray-500 block mb-1">Ausies Nr.</span>
@@ -472,18 +440,18 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                     </span>
                   </div>
                 </div>
-              </div>
             </div>
-          )}
+          </div>
 
           {/* 2-oji Ataskaita - Milking Data */}
-          {expandedSection === 'ataskaita2' && (
-            <div className="space-y-4">
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <h4 className="font-bold text-purple-900 text-sm mb-3 flex items-center gap-2">
-                  <Milk className="w-4 h-4" />
-                  Melžimo Duomenys
-                </h4>
+          <div className="bg-purple-50 border-l-4 border-purple-600 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="bg-purple-600 rounded-full p-1.5">
+                <Milk className="w-4 h-4 text-white" />
+              </div>
+              <h4 className="font-bold text-purple-900">2-oji Ataskaita: Melžimas</h4>
+            </div>
+            <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="bg-white rounded-lg p-3 border border-purple-100">
                     <span className="text-xs text-gray-500 block mb-1">Genetinė vertė</span>
@@ -547,18 +515,18 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                     </div>
                   </div>
                 )}
-              </div>
             </div>
-          )}
+          </div>
 
           {/* 3-oji Ataskaita - Teat & Insemination */}
-          {expandedSection === 'ataskaita3' && (
-            <div className="space-y-4">
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <h4 className="font-bold text-orange-900 text-sm mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Spenių ir Veisimo Duomenys
-                </h4>
+          <div className="bg-orange-50 border-l-4 border-orange-600 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="bg-orange-600 rounded-full p-1.5">
+                <AlertCircle className="w-4 h-4 text-white" />
+              </div>
+              <h4 className="font-bold text-orange-900">3-oji Ataskaita: Speniai ir Veisimas</h4>
+            </div>
+            <div className="space-y-3">
                 
                 {/* Teat Status */}
                 <div className="bg-white rounded-lg p-3 border border-orange-100 mb-4">
@@ -621,9 +589,8 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                     </div>
                   </div>
                 </div>
-              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     );
