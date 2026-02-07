@@ -199,11 +199,12 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
       }
 
       // Try new GEA system first (gea_daily_cows_joined view)
-      console.log('🔍 Querying gea_daily_cows_joined for cow_number:', animalData.tag_no);
+      // NOTE: cow_number is the collar number, ear_number is the tag_no!
+      console.log('🔍 Querying gea_daily_cows_joined for ear_number:', animalData.tag_no);
       const { data: newGeaData, error: newGeaError } = await supabase
         .from('gea_daily_cows_joined')
         .select('*')
-        .eq('cow_number', animalData.tag_no)
+        .eq('ear_number', animalData.tag_no)
         .order('import_created_at', { ascending: false })
         .limit(1)
         .maybeSingle();

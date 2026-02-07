@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
--- \restrict 5B0YaDDevb1SzvPox8nhPpS1ggKgfDEcxmZTn8CfbWQT2TLWgw4u4R4Koo5M4kL
+-- \restrict EDzbElkTtxG1psRHPqQpMZabDhk04uJCqa6r8p21rBLGO6uIp9JU6uOXYNewSPq
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.6
@@ -32,7 +32,7 @@ ALTER SCHEMA "public" OWNER TO "pg_database_owner";
 -- Name: SCHEMA "public"; Type: COMMENT; Schema: -; Owner: pg_database_owner
 --
 
-COMMENT ON SCHEMA "public" IS 'standard public schema';
+COMMENT ON SCHEMA "public" IS 'Old gea_daily table dropped on 2026-02-04. Use new GEA system with gea_daily_upload() RPC.';
 
 
 --
@@ -488,6 +488,31 @@ ALTER FUNCTION "public"."calculate_milk_loss_for_synchronization"("p_animal_id" 
 
 COMMENT ON FUNCTION "public"."calculate_milk_loss_for_synchronization"("p_animal_id" "uuid", "p_sync_id" "uuid") IS 'Calculates total milk loss and financial impact for an animal synchronization period';
 
+
+--
+-- Name: calculate_next_service_date("date", integer, "text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text") RETURNS "date"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+BEGIN
+  IF p_last_service_date IS NULL THEN
+    RETURN NULL;
+  END IF;
+  
+  RETURN CASE p_interval_type
+    WHEN 'days' THEN p_last_service_date + (p_interval_value || ' days')::interval
+    WHEN 'weeks' THEN p_last_service_date + (p_interval_value || ' weeks')::interval
+    WHEN 'months' THEN p_last_service_date + (p_interval_value || ' months')::interval
+    WHEN 'years' THEN p_last_service_date + (p_interval_value || ' years')::interval
+    ELSE NULL
+  END;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text") OWNER TO "postgres";
 
 --
 -- Name: calculate_received_qty(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -1125,6 +1150,63 @@ $$;
 ALTER FUNCTION "public"."deduct_equipment_stock"() OWNER TO "postgres";
 
 --
+-- Name: deduct_farm_equipment_service_stock(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."deduct_farm_equipment_service_stock"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_qty_left numeric;
+  v_batch_number text;
+BEGIN
+  -- Get current batch info
+  SELECT qty_left, batch_number
+  INTO v_qty_left, v_batch_number
+  FROM equipment_batches
+  WHERE id = NEW.batch_id
+  FOR UPDATE;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Batch % not found', NEW.batch_id;
+  END IF;
+  
+  -- Check if sufficient stock
+  IF v_qty_left < NEW.quantity_used THEN
+    RAISE EXCEPTION 'Insufficient stock in batch %. Available: %, Required: %',
+      v_batch_number, v_qty_left, NEW.quantity_used;
+  END IF;
+  
+  -- Deduct from batch
+  UPDATE equipment_batches
+  SET qty_left = qty_left - NEW.quantity_used
+  WHERE id = NEW.batch_id;
+  
+  -- Log movement
+  INSERT INTO equipment_stock_movements (
+    batch_id,
+    movement_type,
+    quantity,
+    reference_table,
+    reference_id,
+    notes
+  ) VALUES (
+    NEW.batch_id,
+    'issue',
+    NEW.quantity_used,
+    'farm_equipment_service_parts',
+    NEW.id,
+    'Used in farm equipment maintenance'
+  );
+  
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."deduct_farm_equipment_service_stock"() OWNER TO "postgres";
+
+--
 -- Name: deduct_sync_step_medication(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1319,6 +1401,222 @@ $$;
 
 
 ALTER FUNCTION "public"."freeze_user"("p_user_id" "uuid", "p_admin_id" "uuid") OWNER TO "postgres";
+
+--
+-- Name: gea_daily_upload("jsonb"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."gea_daily_upload"("payload" "jsonb") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_import_id uuid;
+
+  v_meta jsonb := coalesce(payload->'meta', '{}'::jsonb);
+  v_counts jsonb := coalesce(v_meta->'counts', '{}'::jsonb);
+  v_markers jsonb := coalesce(v_meta->'markers', '{}'::jsonb);
+
+  v_at1 jsonb := coalesce(payload->'ataskaita1', '[]'::jsonb);
+  v_at2 jsonb := coalesce(payload->'ataskaita2', '[]'::jsonb);
+  v_at3 jsonb := coalesce(payload->'ataskaita3', '[]'::jsonb);
+
+  v_count1 int := coalesce(nullif(v_counts->>'ataskaita1','')::int, jsonb_array_length(v_at1));
+  v_count2 int := coalesce(nullif(v_counts->>'ataskaita2','')::int, jsonb_array_length(v_at2));
+  v_count3 int := coalesce(nullif(v_counts->>'ataskaita3','')::int, jsonb_array_length(v_at3));
+
+  v_user uuid := auth.uid();
+begin
+  -- Create import batch
+  insert into public.gea_daily_imports (
+    created_by,
+    marker_i1, marker_i2, marker_i3,
+    count_ataskaita1, count_ataskaita2, count_ataskaita3
+  )
+  values (
+    v_user,
+    nullif(v_markers->>'i1','')::int,
+    nullif(v_markers->>'i2','')::int,
+    nullif(v_markers->>'i3','')::int,
+    v_count1, v_count2, v_count3
+  )
+  returning id into v_import_id;
+
+  -- ---------------- AT1 ----------------
+  if jsonb_typeof(v_at1) = 'array' and jsonb_array_length(v_at1) > 0 then
+    insert into public.gea_daily_ataskaita1 (
+      import_id,
+      cow_number, ear_number, cow_state, group_number,
+      pregnant_since, lactation_days, inseminated_at, pregnant_days,
+      next_pregnancy_date, days_until_waiting_pregnancy,
+      raw
+    )
+    select
+      v_import_id,
+      nullif(btrim(x->>'cow_number'), ''),
+      nullif(btrim(x->>'ear_number'), ''),
+      nullif(btrim(x->>'cow_state'), ''),
+      nullif(btrim(x->>'group_number'), ''),
+      public.safe_date(x->>'pregnant_since'),
+      public.safe_int(x->>'lactation_days'),
+      public.safe_date(x->>'inseminated_at'),
+      public.safe_int(x->>'pregnant_days'),
+      public.safe_date(x->>'next_pregnancy_date'),
+      public.safe_int(x->>'days_until_waiting_pregnancy'),
+      x
+    from jsonb_array_elements(v_at1) as x
+    where coalesce(nullif(btrim(x->>'cow_number'), ''), '') <> ''
+    on conflict (import_id, cow_number) do update
+      set ear_number = excluded.ear_number,
+          cow_state = excluded.cow_state,
+          group_number = excluded.group_number,
+          pregnant_since = excluded.pregnant_since,
+          lactation_days = excluded.lactation_days,
+          inseminated_at = excluded.inseminated_at,
+          pregnant_days = excluded.pregnant_days,
+          next_pregnancy_date = excluded.next_pregnancy_date,
+          days_until_waiting_pregnancy = excluded.days_until_waiting_pregnancy,
+          raw = excluded.raw;
+  end if;
+
+  -- ---------------- AT2 ----------------
+  -- IMPORTANT: we precompute numeric fields via safe_numeric in a CTE.
+  -- This prevents ANY implicit numeric casting from touching "******".
+  if jsonb_typeof(v_at2) = 'array' and jsonb_array_length(v_at2) > 0 then
+
+    with src as (
+      select x
+      from jsonb_array_elements(v_at2) as x
+      where coalesce(nullif(btrim(x->>'cow_number'), ''), '') <> ''
+    ),
+    norm as (
+      select
+        x,
+        nullif(btrim(x->>'cow_number'), '') as cow_number,
+        nullif(btrim(x->>'genetic_worth'), '') as genetic_worth,
+        nullif(btrim(x->>'blood_line'), '') as blood_line,
+
+        public.safe_numeric(x->>'avg_milk_prod_weight') as avg_milk_prod_weight,
+        public.safe_bool_lt(x->>'produce_milk') as produce_milk,
+
+        public.safe_date(x->>'last_milking_date') as last_milking_date,
+        nullif(btrim(x->>'last_milking_time'), '') as last_milking_time,
+        public.safe_numeric(x->>'last_milking_weight') as last_milking_weight,
+
+        (
+          select coalesce(jsonb_agg(m) filter (where m is not null), '[]'::jsonb)
+          from (
+            values
+              (case when coalesce(x->>'milking_date_1','')<>'' or coalesce(x->>'milking_time_1','')<>'' or coalesce(x->>'milking_weight_1','')<>'' then
+                jsonb_build_object('idx',1,'date',public.safe_date(x->>'milking_date_1'),'time',nullif(btrim(x->>'milking_time_1'),''),'weight',public.safe_numeric(x->>'milking_weight_1')) end),
+              (case when coalesce(x->>'milking_date_2','')<>'' or coalesce(x->>'milking_time_2','')<>'' or coalesce(x->>'milking_weight_2','')<>'' then
+                jsonb_build_object('idx',2,'date',public.safe_date(x->>'milking_date_2'),'time',nullif(btrim(x->>'milking_time_2'),''),'weight',public.safe_numeric(x->>'milking_weight_2')) end),
+              (case when coalesce(x->>'milking_date_3','')<>'' or coalesce(x->>'milking_time_3','')<>'' or coalesce(x->>'milking_weight_3','')<>'' then
+                jsonb_build_object('idx',3,'date',public.safe_date(x->>'milking_date_3'),'time',nullif(btrim(x->>'milking_time_3'),''),'weight',public.safe_numeric(x->>'milking_weight_3')) end),
+              (case when coalesce(x->>'milking_date_4','')<>'' or coalesce(x->>'milking_time_4','')<>'' or coalesce(x->>'milking_weight_4','')<>'' then
+                jsonb_build_object('idx',4,'date',public.safe_date(x->>'milking_date_4'),'time',nullif(btrim(x->>'milking_time_4'),''),'weight',public.safe_numeric(x->>'milking_weight_4')) end),
+              (case when coalesce(x->>'milking_date_5','')<>'' or coalesce(x->>'milking_time_5','')<>'' or coalesce(x->>'milking_weight_5','')<>'' then
+                jsonb_build_object('idx',5,'date',public.safe_date(x->>'milking_date_5'),'time',nullif(btrim(x->>'milking_time_5'),''),'weight',public.safe_numeric(x->>'milking_weight_5')) end),
+              (case when coalesce(x->>'milking_date_6','')<>'' or coalesce(x->>'milking_time_6','')<>'' or coalesce(x->>'milking_weight_6','')<>'' then
+                jsonb_build_object('idx',6,'date',public.safe_date(x->>'milking_date_6'),'time',nullif(btrim(x->>'milking_time_6'),''),'weight',public.safe_numeric(x->>'milking_weight_6')) end),
+              (case when coalesce(x->>'milking_date_7','')<>'' or coalesce(x->>'milking_time_7','')<>'' or coalesce(x->>'milking_weight_7','')<>'' then
+                jsonb_build_object('idx',7,'date',public.safe_date(x->>'milking_date_7'),'time',nullif(btrim(x->>'milking_time_7'),''),'weight',public.safe_numeric(x->>'milking_weight_7')) end),
+              (case when coalesce(x->>'milking_date_8','')<>'' or coalesce(x->>'milking_time_8','')<>'' or coalesce(x->>'milking_weight_8','')<>'' then
+                jsonb_build_object('idx',8,'date',public.safe_date(x->>'milking_date_8'),'time',nullif(btrim(x->>'milking_time_8'),''),'weight',public.safe_numeric(x->>'milking_weight_8')) end),
+              (case when coalesce(x->>'milking_date_9','')<>'' or coalesce(x->>'milking_time_9','')<>'' or coalesce(x->>'milking_weight_9','')<>'' then
+                jsonb_build_object('idx',9,'date',public.safe_date(x->>'milking_date_9'),'time',nullif(btrim(x->>'milking_time_9'),''),'weight',public.safe_numeric(x->>'milking_weight_9')) end)
+          ) as t(m)
+        ) as milkings
+      from src
+    )
+    insert into public.gea_daily_ataskaita2 (
+      import_id,
+      cow_number, genetic_worth, blood_line, avg_milk_prod_weight, produce_milk,
+      last_milking_date, last_milking_time, last_milking_weight,
+      milkings,
+      raw
+    )
+    select
+      v_import_id,
+      n.cow_number,
+      n.genetic_worth,
+      n.blood_line,
+      n.avg_milk_prod_weight,
+      n.produce_milk,
+      n.last_milking_date,
+      n.last_milking_time,
+      n.last_milking_weight,
+      n.milkings,
+      n.x
+    from norm n
+    on conflict (import_id, cow_number) do update
+      set genetic_worth = excluded.genetic_worth,
+          blood_line = excluded.blood_line,
+          avg_milk_prod_weight = excluded.avg_milk_prod_weight,
+          produce_milk = excluded.produce_milk,
+          last_milking_date = excluded.last_milking_date,
+          last_milking_time = excluded.last_milking_time,
+          last_milking_weight = excluded.last_milking_weight,
+          milkings = excluded.milkings,
+          raw = excluded.raw;
+
+  end if;
+
+  -- ---------------- AT3 ----------------
+  if jsonb_typeof(v_at3) = 'array' and jsonb_array_length(v_at3) > 0 then
+    insert into public.gea_daily_ataskaita3 (
+      import_id,
+      cow_number,
+      teat_missing_right_back,
+      teat_missing_back_left,
+      teat_missing_front_left,
+      teat_missing_front_right,
+      insemination_count,
+      bull_1, bull_2, bull_3,
+      lactation_number,
+      raw
+    )
+    select
+      v_import_id,
+      nullif(btrim(x->>'cow_number'), ''),
+      public.safe_bool_lt(x->>'teat_missing_right_back'),
+      public.safe_bool_lt(x->>'teat_missing_back_left'),
+      public.safe_bool_lt(x->>'teat_missing_front_left'),
+      public.safe_bool_lt(x->>'teat_missing_front_right'),
+      public.safe_int(x->>'insemination_count'),
+      nullif(btrim(x->>'bull_1'), ''),
+      nullif(btrim(x->>'bull_2'), ''),
+      nullif(btrim(x->>'bull_3'), ''),
+      public.safe_int(x->>'lactation_number'),
+      x
+    from jsonb_array_elements(v_at3) as x
+    where coalesce(nullif(btrim(x->>'cow_number'), ''), '') <> ''
+    on conflict (import_id, cow_number) do update
+      set teat_missing_right_back = excluded.teat_missing_right_back,
+          teat_missing_back_left = excluded.teat_missing_back_left,
+          teat_missing_front_left = excluded.teat_missing_front_left,
+          teat_missing_front_right = excluded.teat_missing_front_right,
+          insemination_count = excluded.insemination_count,
+          bull_1 = excluded.bull_1,
+          bull_2 = excluded.bull_2,
+          bull_3 = excluded.bull_3,
+          lactation_number = excluded.lactation_number,
+          raw = excluded.raw;
+  end if;
+
+  return jsonb_build_object(
+    'import_id', v_import_id,
+    'counts', jsonb_build_object(
+      'ataskaita1', v_count1,
+      'ataskaita2', v_count2,
+      'ataskaita3', v_count3
+    )
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."gea_daily_upload"("payload" "jsonb") OWNER TO "postgres";
 
 --
 -- Name: generate_equipment_issuance_number(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2513,6 +2811,125 @@ $$;
 ALTER FUNCTION "public"."restore_vehicle_visit_part_stock"() OWNER TO "postgres";
 
 --
+-- Name: safe_bool_lt("text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."safe_bool_lt"("p" "text") RETURNS boolean
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare s text;
+begin
+  s := lower(btrim(coalesce(p,'')));
+  if s in ('taip','yes','true','1','y') then return true; end if;
+  if s in ('ne','no','false','0','n') then return false; end if;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."safe_bool_lt"("p" "text") OWNER TO "postgres";
+
+--
+-- Name: safe_date("text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."safe_date"("p" "text") RETURNS "date"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare d date;
+begin
+  if p is null then return null; end if;
+  p := btrim(p);
+  if p = '' then return null; end if;
+
+  -- ISO first
+  begin
+    d := p::date;
+    return d;
+  exception when others then null;
+  end;
+
+  -- Common formats
+  begin d := to_date(p, 'DD.MM.YYYY'); return d; exception when others then null; end;
+  begin d := to_date(p, 'YYYY.MM.DD'); return d; exception when others then null; end;
+  begin d := to_date(p, 'DD/MM/YYYY'); return d; exception when others then null; end;
+  begin d := to_date(p, 'MM/DD/YYYY'); return d; exception when others then null; end;
+
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."safe_date"("p" "text") OWNER TO "postgres";
+
+--
+-- Name: safe_int("text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."safe_int"("p" "text") RETURNS integer
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $_$
+declare s text;
+begin
+  if p is null then return null; end if;
+  s := btrim(p);
+  if s = '' then return null; end if;
+
+  if s ~ '^\*+$' then return null; end if;
+  if lower(s) in ('na','n/a','null','none','-') then return null; end if;
+
+  s := regexp_replace(s, '[^0-9\-]', '', 'g');
+  if s = '' or s = '-' then return null; end if;
+
+  begin
+    return s::int;
+  exception when others then
+    return null;
+  end;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."safe_int"("p" "text") OWNER TO "postgres";
+
+--
+-- Name: safe_numeric("text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."safe_numeric"("p" "text") RETURNS numeric
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $_$
+declare s text;
+begin
+  if p is null then return null; end if;
+  s := btrim(p);
+  if s = '' then return null; end if;
+
+  -- hard kill GEA placeholders like ****** (your exact bug)
+  if s ~ '^\*+$' then return null; end if;
+  if lower(s) in ('na','n/a','null','none','-') then return null; end if;
+
+  -- allow comma decimals
+  s := replace(s, ',', '.');
+
+  -- keep digits, dot, minus
+  s := regexp_replace(s, '[^0-9\.\-]', '', 'g');
+
+  -- avoid edge cases
+  if s = '' or s = '-' or s = '.' or s = '-.' then return null; end if;
+
+  begin
+    return s::numeric;
+  exception when others then
+    return null;
+  end;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."safe_numeric"("p" "text") OWNER TO "postgres";
+
+--
 -- Name: set_work_order_number_trigger(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2823,6 +3240,22 @@ COMMENT ON FUNCTION "public"."update_batch_qty_left"() IS 'Automatically updates
 
 
 --
+-- Name: update_cost_accumulation_project_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_cost_accumulation_project_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_cost_accumulation_project_updated_at"() OWNER TO "postgres";
+
+--
 -- Name: update_cost_center_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2837,6 +3270,27 @@ $$;
 
 
 ALTER FUNCTION "public"."update_cost_center_updated_at"() OWNER TO "postgres";
+
+--
+-- Name: update_farm_equipment_item_next_service_date(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_farm_equipment_item_next_service_date"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.next_service_date := calculate_next_service_date(
+    NEW.last_service_date,
+    NEW.service_interval_value,
+    NEW.service_interval_type
+  );
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_farm_equipment_item_next_service_date"() OWNER TO "postgres";
 
 --
 -- Name: update_fire_extinguishers_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2888,6 +3342,26 @@ $$;
 
 
 ALTER FUNCTION "public"."update_last_login"("p_user_id" "uuid") OWNER TO "postgres";
+
+--
+-- Name: update_last_service_date_on_new_record(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."update_last_service_date_on_new_record"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  UPDATE public.farm_equipment_items
+  SET last_service_date = NEW.service_date
+  WHERE id = NEW.farm_equipment_item_id
+    AND (last_service_date IS NULL OR NEW.service_date > last_service_date);
+  
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_last_service_date_on_new_record"() OWNER TO "postgres";
 
 --
 -- Name: update_schedule_on_work_order_complete(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4188,6 +4662,150 @@ CREATE TABLE IF NOT EXISTS "public"."biocide_usage" (
 ALTER TABLE "public"."biocide_usage" OWNER TO "postgres";
 
 --
+-- Name: cost_accumulation_documents; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."cost_accumulation_documents" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "file_name" "text" NOT NULL,
+    "file_path" "text",
+    "file_url" "text",
+    "file_size" bigint,
+    "mime_type" "text",
+    "document_type" "text" DEFAULT 'invoice'::"text",
+    "upload_date" timestamp with time zone DEFAULT "now"(),
+    "uploaded_by" "uuid",
+    "supplier_name" "text",
+    "supplier_code" "text",
+    "invoice_number" "text",
+    "invoice_date" "date",
+    "due_date" "date",
+    "currency" "text" DEFAULT 'EUR'::"text",
+    "total_net" numeric(15,2),
+    "total_vat" numeric(15,2),
+    "total_gross" numeric(15,2),
+    "vat_rate" numeric(5,2),
+    "webhook_response" "jsonb",
+    "processing_status" "text" DEFAULT 'pending'::"text",
+    "processing_error" "text",
+    "processed_at" timestamp with time zone,
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "cost_accumulation_documents_document_type_check" CHECK (("document_type" = ANY (ARRAY['invoice'::"text", 'receipt'::"text", 'contract'::"text", 'estimate'::"text", 'other'::"text"]))),
+    CONSTRAINT "cost_accumulation_documents_processing_status_check" CHECK (("processing_status" = ANY (ARRAY['pending'::"text", 'processing'::"text", 'completed'::"text", 'failed'::"text"])))
+);
+
+
+ALTER TABLE "public"."cost_accumulation_documents" OWNER TO "postgres";
+
+--
+-- Name: cost_accumulation_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."cost_accumulation_items" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "document_id" "uuid",
+    "line_no" integer,
+    "sku" "text",
+    "description" "text" NOT NULL,
+    "quantity" numeric(15,3),
+    "unit" "text",
+    "unit_price" numeric(15,2),
+    "net_amount" numeric(15,2),
+    "vat_rate" numeric(5,2),
+    "vat_amount" numeric(15,2),
+    "gross_amount" numeric(15,2) NOT NULL,
+    "category" "text",
+    "batch_number" "text",
+    "expiry_date" "date",
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."cost_accumulation_items" OWNER TO "postgres";
+
+--
+-- Name: cost_accumulation_projects; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."cost_accumulation_projects" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "start_date" "date",
+    "end_date" "date",
+    "status" "text" DEFAULT 'active'::"text",
+    "budget_estimate" numeric(15,2),
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "is_active" boolean DEFAULT true,
+    CONSTRAINT "cost_accumulation_projects_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'completed'::"text", 'on_hold'::"text", 'cancelled'::"text"])))
+);
+
+
+ALTER TABLE "public"."cost_accumulation_projects" OWNER TO "postgres";
+
+--
+-- Name: cost_accumulation_project_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."cost_accumulation_project_summary" AS
+ SELECT "p"."id",
+    "p"."name",
+    "p"."description",
+    "p"."start_date",
+    "p"."end_date",
+    "p"."status",
+    "p"."budget_estimate",
+    "p"."notes",
+    "p"."created_at",
+    COALESCE("doc_stats"."total_documents", (0)::bigint) AS "total_documents",
+    COALESCE("doc_stats"."processed_documents", (0)::bigint) AS "processed_documents",
+    COALESCE("doc_stats"."failed_documents", (0)::bigint) AS "failed_documents",
+    COALESCE("doc_stats"."total_net", (0)::numeric) AS "total_net",
+    COALESCE("doc_stats"."total_vat", (0)::numeric) AS "total_vat",
+    COALESCE("doc_stats"."total_gross", (0)::numeric) AS "total_gross",
+    COALESCE("item_stats"."items_total_net", (0)::numeric) AS "items_total_net",
+    COALESCE("item_stats"."items_total_vat", (0)::numeric) AS "items_total_vat",
+    COALESCE("item_stats"."items_total_gross", (0)::numeric) AS "items_total_gross",
+    COALESCE("item_stats"."total_items", (0)::bigint) AS "total_items",
+        CASE
+            WHEN (("p"."budget_estimate" IS NOT NULL) AND ("p"."budget_estimate" > (0)::numeric)) THEN ((COALESCE("doc_stats"."total_gross", (0)::numeric) / "p"."budget_estimate") * (100)::numeric)
+            ELSE NULL::numeric
+        END AS "budget_used_percentage",
+        CASE
+            WHEN ("p"."budget_estimate" IS NOT NULL) THEN ("p"."budget_estimate" - COALESCE("doc_stats"."total_gross", (0)::numeric))
+            ELSE NULL::numeric
+        END AS "budget_remaining"
+   FROM (("public"."cost_accumulation_projects" "p"
+     LEFT JOIN ( SELECT "cost_accumulation_documents"."project_id",
+            "count"(*) AS "total_documents",
+            "count"(*) FILTER (WHERE ("cost_accumulation_documents"."processing_status" = 'completed'::"text")) AS "processed_documents",
+            "count"(*) FILTER (WHERE ("cost_accumulation_documents"."processing_status" = 'failed'::"text")) AS "failed_documents",
+            "sum"("cost_accumulation_documents"."total_net") AS "total_net",
+            "sum"("cost_accumulation_documents"."total_vat") AS "total_vat",
+            "sum"("cost_accumulation_documents"."total_gross") AS "total_gross"
+           FROM "public"."cost_accumulation_documents"
+          GROUP BY "cost_accumulation_documents"."project_id") "doc_stats" ON (("p"."id" = "doc_stats"."project_id")))
+     LEFT JOIN ( SELECT "cost_accumulation_items"."project_id",
+            "count"(*) AS "total_items",
+            "sum"("cost_accumulation_items"."net_amount") AS "items_total_net",
+            "sum"("cost_accumulation_items"."vat_amount") AS "items_total_vat",
+            "sum"("cost_accumulation_items"."gross_amount") AS "items_total_gross"
+           FROM "public"."cost_accumulation_items"
+          GROUP BY "cost_accumulation_items"."project_id") "item_stats" ON (("p"."id" = "item_stats"."project_id")))
+  WHERE ("p"."is_active" = true);
+
+
+ALTER VIEW "public"."cost_accumulation_project_summary" OWNER TO "postgres";
+
+--
 -- Name: cost_centers; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -4205,21 +4823,6 @@ CREATE TABLE IF NOT EXISTS "public"."cost_centers" (
 
 
 ALTER TABLE "public"."cost_centers" OWNER TO "postgres";
-
---
--- Name: equipment_categories; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."equipment_categories" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "name" "text" NOT NULL,
-    "description" "text",
-    "parent_category_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."equipment_categories" OWNER TO "postgres";
 
 --
 -- Name: equipment_invoice_item_assignments; Type: TABLE; Schema: public; Owner: postgres
@@ -4286,6 +4889,46 @@ CREATE TABLE IF NOT EXISTS "public"."equipment_invoices" (
 
 
 ALTER TABLE "public"."equipment_invoices" OWNER TO "postgres";
+
+--
+-- Name: cost_center_direct_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."cost_center_direct_summary" AS
+ SELECT "cc"."id" AS "cost_center_id",
+    "cc"."name" AS "cost_center_name",
+    "cc"."description",
+    "cc"."color",
+    "cc"."parent_id",
+    "cc"."is_active",
+    "count"(DISTINCT "eia"."id") AS "direct_assignments",
+    COALESCE("sum"("eii"."total_price"), (0)::numeric) AS "direct_cost",
+    "min"("ei"."invoice_date") AS "first_assignment_date",
+    "max"("ei"."invoice_date") AS "last_assignment_date"
+   FROM ((("public"."cost_centers" "cc"
+     LEFT JOIN "public"."equipment_invoice_item_assignments" "eia" ON ((("eia"."cost_center_id" = "cc"."id") AND ("eia"."assignment_type" = 'cost_center'::"text"))))
+     LEFT JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
+     LEFT JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+  WHERE ("cc"."is_active" = true)
+  GROUP BY "cc"."id", "cc"."name", "cc"."description", "cc"."color", "cc"."parent_id", "cc"."is_active";
+
+
+ALTER VIEW "public"."cost_center_direct_summary" OWNER TO "postgres";
+
+--
+-- Name: equipment_categories; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."equipment_categories" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "parent_category_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."equipment_categories" OWNER TO "postgres";
 
 --
 -- Name: equipment_products; Type: TABLE; Schema: public; Owner: postgres
@@ -4371,26 +5014,66 @@ CREATE OR REPLACE VIEW "public"."cost_center_parts_usage" AS
 ALTER VIEW "public"."cost_center_parts_usage" OWNER TO "postgres";
 
 --
+-- Name: cost_center_summary_with_children; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."cost_center_summary_with_children" AS
+ WITH RECURSIVE "cost_center_hierarchy" AS (
+         SELECT "cost_center_direct_summary"."cost_center_id",
+            "cost_center_direct_summary"."parent_id",
+            "cost_center_direct_summary"."cost_center_id" AS "root_id",
+            "cost_center_direct_summary"."direct_assignments",
+            "cost_center_direct_summary"."direct_cost"
+           FROM "public"."cost_center_direct_summary"
+        UNION ALL
+         SELECT "cch"."parent_id" AS "cost_center_id",
+            "parent"."parent_id",
+            "cch"."root_id",
+            "cch"."direct_assignments",
+            "cch"."direct_cost"
+           FROM ("cost_center_hierarchy" "cch"
+             JOIN "public"."cost_centers" "parent" ON (("parent"."id" = "cch"."parent_id")))
+          WHERE ("cch"."parent_id" IS NOT NULL)
+        ), "aggregated_totals" AS (
+         SELECT "cost_center_hierarchy"."cost_center_id",
+            "sum"("cost_center_hierarchy"."direct_assignments") AS "total_assignments",
+            "sum"("cost_center_hierarchy"."direct_cost") AS "total_cost"
+           FROM "cost_center_hierarchy"
+          GROUP BY "cost_center_hierarchy"."cost_center_id"
+        )
+ SELECT "cds"."cost_center_id",
+    "cds"."cost_center_name",
+    "cds"."description",
+    "cds"."color",
+    "cds"."parent_id",
+    "cds"."is_active",
+    COALESCE("at"."total_assignments", ("cds"."direct_assignments")::numeric) AS "total_assignments",
+    COALESCE("at"."total_cost", "cds"."direct_cost") AS "total_cost",
+    "cds"."first_assignment_date",
+    "cds"."last_assignment_date"
+   FROM ("public"."cost_center_direct_summary" "cds"
+     LEFT JOIN "aggregated_totals" "at" ON (("at"."cost_center_id" = "cds"."cost_center_id")))
+  ORDER BY "cds"."cost_center_name";
+
+
+ALTER VIEW "public"."cost_center_summary_with_children" OWNER TO "postgres";
+
+--
 -- Name: cost_center_summary; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE OR REPLACE VIEW "public"."cost_center_summary" AS
- SELECT "cc"."id" AS "cost_center_id",
-    "cc"."name" AS "cost_center_name",
-    "cc"."description",
-    "cc"."color",
-    "cc"."is_active",
-    "count"(DISTINCT "eia"."id") AS "total_assignments",
-    COALESCE("sum"("eii"."total_price"), (0)::numeric) AS "total_cost",
-    "min"("ei"."invoice_date") AS "first_assignment_date",
-    "max"("ei"."invoice_date") AS "last_assignment_date"
-   FROM ((("public"."cost_centers" "cc"
-     LEFT JOIN "public"."equipment_invoice_item_assignments" "eia" ON ((("eia"."cost_center_id" = "cc"."id") AND ("eia"."assignment_type" = 'cost_center'::"text"))))
-     LEFT JOIN "public"."equipment_invoice_items" "eii" ON (("eii"."id" = "eia"."invoice_item_id")))
-     LEFT JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
-  WHERE ("cc"."is_active" = true)
-  GROUP BY "cc"."id", "cc"."name", "cc"."description", "cc"."color", "cc"."is_active"
-  ORDER BY "cc"."name";
+ SELECT "cost_center_id",
+    "cost_center_name",
+    "description",
+    "color",
+    "parent_id",
+    "is_active",
+    "total_assignments",
+    "total_cost",
+    "first_assignment_date",
+    "last_assignment_date"
+   FROM "public"."cost_center_summary_with_children";
 
 
 ALTER VIEW "public"."cost_center_summary" OWNER TO "postgres";
@@ -4645,6 +5328,44 @@ CREATE TABLE IF NOT EXISTS "public"."equipment_suppliers" (
 ALTER TABLE "public"."equipment_suppliers" OWNER TO "postgres";
 
 --
+-- Name: equipment_unassigned_invoice_items; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."equipment_unassigned_invoice_items" AS
+ SELECT "eii"."id" AS "item_id",
+    "eii"."invoice_id",
+    "eii"."line_no",
+    "eii"."product_id",
+    "eii"."description",
+    "eii"."quantity",
+    "eii"."unit_price",
+    "eii"."total_price",
+    "eii"."vat_rate",
+    "eii"."created_at" AS "item_created_at",
+    "ei"."invoice_number",
+    "ei"."invoice_date",
+    "ei"."supplier_name",
+    "ei"."supplier_id",
+    "ep"."name" AS "product_name",
+    "ep"."product_code",
+    "ep"."unit_type",
+    "ec"."name" AS "category_name",
+    ( SELECT "count"(*) AS "count"
+           FROM "public"."equipment_invoice_item_assignments"
+          WHERE ("equipment_invoice_item_assignments"."invoice_item_id" = "eii"."id")) AS "assignment_count"
+   FROM ((("public"."equipment_invoice_items" "eii"
+     JOIN "public"."equipment_invoices" "ei" ON (("ei"."id" = "eii"."invoice_id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("ep"."id" = "eii"."product_id")))
+     LEFT JOIN "public"."equipment_categories" "ec" ON (("ec"."id" = "ep"."category_id")))
+  WHERE (NOT (EXISTS ( SELECT 1
+           FROM "public"."equipment_invoice_item_assignments" "eia"
+          WHERE ("eia"."invoice_item_id" = "eii"."id"))))
+  ORDER BY "ei"."invoice_date" DESC, "eii"."line_no";
+
+
+ALTER VIEW "public"."equipment_unassigned_invoice_items" OWNER TO "postgres";
+
+--
 -- Name: equipment_warehouse_stock; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -4668,6 +5389,257 @@ CREATE OR REPLACE VIEW "public"."equipment_warehouse_stock" AS
 
 
 ALTER VIEW "public"."equipment_warehouse_stock" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."farm_equipment" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "location" "text",
+    "category" "text",
+    "is_active" boolean DEFAULT true NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."farm_equipment" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."farm_equipment_items" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "farm_equipment_id" "uuid" NOT NULL,
+    "item_name" "text" NOT NULL,
+    "description" "text",
+    "service_interval_value" integer NOT NULL,
+    "service_interval_type" "text" NOT NULL,
+    "reminder_days_before" integer DEFAULT 14 NOT NULL,
+    "last_service_date" "date",
+    "next_service_date" "date",
+    "is_active" boolean DEFAULT true NOT NULL,
+    "notes" "text",
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "farm_equipment_items_service_interval_type_check" CHECK (("service_interval_type" = ANY (ARRAY['days'::"text", 'weeks'::"text", 'months'::"text", 'years'::"text"])))
+);
+
+
+ALTER TABLE "public"."farm_equipment_items" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_service_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."farm_equipment_service_parts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "service_record_id" "uuid" NOT NULL,
+    "batch_id" "uuid" NOT NULL,
+    "product_id" "uuid" NOT NULL,
+    "quantity_used" numeric NOT NULL,
+    "unit_price" numeric,
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid",
+    CONSTRAINT "farm_equipment_service_parts_quantity_used_check" CHECK (("quantity_used" > (0)::numeric))
+);
+
+
+ALTER TABLE "public"."farm_equipment_service_parts" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_service_records; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."farm_equipment_service_records" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "farm_equipment_item_id" "uuid" NOT NULL,
+    "service_date" "date" NOT NULL,
+    "performed_by" "uuid",
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."farm_equipment_service_records" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_cost_overview; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."farm_equipment_cost_overview" AS
+ SELECT "fe"."id" AS "equipment_id",
+    "fe"."name" AS "equipment_name",
+    "fe"."location",
+    "fe"."category",
+    "fe"."description",
+    "count"(DISTINCT "fei"."id") AS "total_items",
+    "count"(DISTINCT "fei"."id") FILTER (WHERE ("fei"."is_active" = true)) AS "active_items",
+    "count"(DISTINCT "fsr"."id") AS "total_services",
+    "count"(DISTINCT "fsp"."id") AS "total_parts_used",
+    COALESCE("sum"(("fsp"."quantity_used" * "fsp"."unit_price")), (0)::numeric) AS "total_cost",
+    COALESCE("avg"(("fsp"."quantity_used" * "fsp"."unit_price")), (0)::numeric) AS "avg_service_cost",
+    "min"("fsr"."service_date") AS "first_service_date",
+    "max"("fsr"."service_date") AS "last_service_date"
+   FROM ((("public"."farm_equipment" "fe"
+     LEFT JOIN "public"."farm_equipment_items" "fei" ON (("fei"."farm_equipment_id" = "fe"."id")))
+     LEFT JOIN "public"."farm_equipment_service_records" "fsr" ON (("fsr"."farm_equipment_item_id" = "fei"."id")))
+     LEFT JOIN "public"."farm_equipment_service_parts" "fsp" ON (("fsp"."service_record_id" = "fsr"."id")))
+  WHERE ("fe"."is_active" = true)
+  GROUP BY "fe"."id", "fe"."name", "fe"."location", "fe"."category", "fe"."description"
+  ORDER BY COALESCE("sum"(("fsp"."quantity_used" * "fsp"."unit_price")), (0)::numeric) DESC;
+
+
+ALTER VIEW "public"."farm_equipment_cost_overview" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_items_detail; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."farm_equipment_items_detail" AS
+ SELECT "fei"."id",
+    "fei"."farm_equipment_id",
+    "fe"."name" AS "equipment_name",
+    "fe"."location" AS "equipment_location",
+    "fe"."category" AS "equipment_category",
+    "fei"."item_name",
+    "fei"."description",
+    "fei"."service_interval_value",
+    "fei"."service_interval_type",
+    "fei"."reminder_days_before",
+    "fei"."last_service_date",
+    "fei"."next_service_date",
+    "fei"."is_active",
+    "fei"."notes",
+        CASE
+            WHEN ("fei"."next_service_date" IS NULL) THEN NULL::integer
+            ELSE ("fei"."next_service_date" - CURRENT_DATE)
+        END AS "days_until_service",
+        CASE
+            WHEN ("fei"."next_service_date" IS NULL) THEN 'not_scheduled'::"text"
+            WHEN ("fei"."next_service_date" < CURRENT_DATE) THEN 'overdue'::"text"
+            WHEN (("fei"."next_service_date" >= CURRENT_DATE) AND ("fei"."next_service_date" <= (CURRENT_DATE + "fei"."reminder_days_before"))) THEN 'upcoming'::"text"
+            ELSE 'ok'::"text"
+        END AS "service_status",
+    ( SELECT "count"(*) AS "count"
+           FROM "public"."farm_equipment_service_records"
+          WHERE ("farm_equipment_service_records"."farm_equipment_item_id" = "fei"."id")) AS "service_count",
+    "fei"."created_at",
+    "fei"."updated_at"
+   FROM ("public"."farm_equipment_items" "fei"
+     JOIN "public"."farm_equipment" "fe" ON (("fe"."id" = "fei"."farm_equipment_id")))
+  WHERE ("fei"."is_active" = true)
+  ORDER BY "fei"."next_service_date", "fe"."name", "fei"."item_name";
+
+
+ALTER VIEW "public"."farm_equipment_items_detail" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_service_cost_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."farm_equipment_service_cost_summary" AS
+ SELECT "fe"."id" AS "equipment_id",
+    "fe"."name" AS "equipment_name",
+    "fe"."location" AS "equipment_location",
+    "fe"."category" AS "equipment_category",
+    "fei"."id" AS "item_id",
+    "fei"."item_name",
+    "fei"."service_interval_value",
+    "fei"."service_interval_type",
+    "count"(DISTINCT "fsr"."id") AS "total_services",
+    "min"("fsr"."service_date") AS "first_service_date",
+    "max"("fsr"."service_date") AS "last_service_date",
+    "count"(DISTINCT "fsp"."id") AS "total_parts_used",
+    COALESCE("sum"(("fsp"."quantity_used" * "fsp"."unit_price")), (0)::numeric) AS "total_parts_cost",
+    ( SELECT "farm_equipment_service_records"."service_date"
+           FROM "public"."farm_equipment_service_records"
+          WHERE ("farm_equipment_service_records"."farm_equipment_item_id" = "fei"."id")
+          ORDER BY "farm_equipment_service_records"."service_date" DESC
+         LIMIT 1) AS "latest_service_date"
+   FROM ((("public"."farm_equipment" "fe"
+     JOIN "public"."farm_equipment_items" "fei" ON (("fei"."farm_equipment_id" = "fe"."id")))
+     LEFT JOIN "public"."farm_equipment_service_records" "fsr" ON (("fsr"."farm_equipment_item_id" = "fei"."id")))
+     LEFT JOIN "public"."farm_equipment_service_parts" "fsp" ON (("fsp"."service_record_id" = "fsr"."id")))
+  WHERE (("fe"."is_active" = true) AND ("fei"."is_active" = true))
+  GROUP BY "fe"."id", "fe"."name", "fe"."location", "fe"."category", "fei"."id", "fei"."item_name", "fei"."service_interval_value", "fei"."service_interval_type"
+  ORDER BY COALESCE("sum"(("fsp"."quantity_used" * "fsp"."unit_price")), (0)::numeric) DESC;
+
+
+ALTER VIEW "public"."farm_equipment_service_cost_summary" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_service_details; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."farm_equipment_service_details" AS
+ SELECT "fsr"."id" AS "service_record_id",
+    "fsr"."service_date",
+    "fsr"."notes" AS "service_notes",
+    "fe"."id" AS "equipment_id",
+    "fe"."name" AS "equipment_name",
+    "fe"."location" AS "equipment_location",
+    "fe"."category" AS "equipment_category",
+    "fei"."id" AS "item_id",
+    "fei"."item_name",
+    "fsp"."id" AS "part_id",
+    "ep"."name" AS "product_name",
+    "ep"."product_code",
+    "ep"."unit_type",
+    "fsp"."quantity_used",
+    "fsp"."unit_price",
+    ("fsp"."quantity_used" * "fsp"."unit_price") AS "part_total_cost",
+    "fsp"."notes" AS "part_notes",
+    "eb"."batch_number",
+    "u"."full_name" AS "performed_by_name",
+    "fsr"."created_at"
+   FROM (((((("public"."farm_equipment_service_records" "fsr"
+     JOIN "public"."farm_equipment_items" "fei" ON (("fei"."id" = "fsr"."farm_equipment_item_id")))
+     JOIN "public"."farm_equipment" "fe" ON (("fe"."id" = "fei"."farm_equipment_id")))
+     LEFT JOIN "public"."farm_equipment_service_parts" "fsp" ON (("fsp"."service_record_id" = "fsr"."id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("ep"."id" = "fsp"."product_id")))
+     LEFT JOIN "public"."equipment_batches" "eb" ON (("eb"."id" = "fsp"."batch_id")))
+     LEFT JOIN "public"."users" "u" ON (("u"."id" = "fsr"."performed_by")))
+  WHERE ("fe"."is_active" = true)
+  ORDER BY "fsr"."service_date" DESC, "fsr"."created_at" DESC;
+
+
+ALTER VIEW "public"."farm_equipment_service_details" OWNER TO "postgres";
+
+--
+-- Name: farm_equipment_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."farm_equipment_summary" AS
+ SELECT "fe"."id",
+    "fe"."name",
+    "fe"."description",
+    "fe"."location",
+    "fe"."category",
+    "fe"."is_active",
+    "count"("fei"."id") AS "total_items",
+    "count"("fei"."id") FILTER (WHERE ("fei"."is_active" = true)) AS "active_items",
+    "count"("fei"."id") FILTER (WHERE ("fei"."next_service_date" < CURRENT_DATE)) AS "overdue_items",
+    "count"("fei"."id") FILTER (WHERE (("fei"."next_service_date" >= CURRENT_DATE) AND ("fei"."next_service_date" <= (CURRENT_DATE + "fei"."reminder_days_before")))) AS "upcoming_items",
+    "min"("fei"."next_service_date") AS "next_service_due",
+    "fe"."created_at",
+    "fe"."updated_at"
+   FROM ("public"."farm_equipment" "fe"
+     LEFT JOIN "public"."farm_equipment_items" "fei" ON (("fei"."farm_equipment_id" = "fe"."id")))
+  WHERE ("fe"."is_active" = true)
+  GROUP BY "fe"."id", "fe"."name", "fe"."description", "fe"."location", "fe"."category", "fe"."is_active", "fe"."created_at", "fe"."updated_at"
+  ORDER BY "fe"."name";
+
+
+ALTER VIEW "public"."farm_equipment_summary" OWNER TO "postgres";
 
 --
 -- Name: fire_extinguishers; Type: TABLE; Schema: public; Owner: postgres
@@ -4699,68 +5671,162 @@ CREATE TABLE IF NOT EXISTS "public"."fire_extinguishers" (
 ALTER TABLE "public"."fire_extinguishers" OWNER TO "postgres";
 
 --
--- Name: gea_daily; Type: TABLE; Schema: public; Owner: postgres
+-- Name: gea_daily_ataskaita1; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE IF NOT EXISTS "public"."gea_daily" (
-    "id" bigint NOT NULL,
-    "animal_id" "uuid" NOT NULL,
-    "tag_no" "text" NOT NULL,
-    "collar_no" integer,
-    "statusas" "text",
-    "grupe" integer,
-    "milk_avg" numeric,
-    "m1_date" "date",
-    "m1_time" time without time zone,
-    "m1_qty" numeric,
-    "m2_date" "date",
-    "m2_time" time without time zone,
-    "m2_qty" numeric,
-    "m3_date" "date",
-    "m3_time" time without time zone,
-    "m3_qty" numeric,
-    "m4_date" "date",
-    "m4_time" time without time zone,
-    "m4_qty" numeric,
-    "m5_date" "date",
-    "m5_time" time without time zone,
-    "m5_qty" numeric,
-    "in_milk" boolean,
-    "calved_on" "date",
-    "lact_days" integer,
-    "inseminated_on" "date",
-    "snapshot_date" "date" NOT NULL,
-    "source" "text" DEFAULT 'gea'::"text",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "veisline_verte" "text",
-    "liko_iki_apsiversiavimo" integer,
-    "versingumas_dienomis" integer,
-    "kada_versiuosis" "text",
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+CREATE TABLE IF NOT EXISTS "public"."gea_daily_ataskaita1" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "import_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cow_number" "text" NOT NULL,
+    "ear_number" "text",
+    "cow_state" "text",
+    "group_number" "text",
+    "pregnant_since" "date",
+    "lactation_days" integer,
+    "inseminated_at" "date",
+    "pregnant_days" integer,
+    "next_pregnancy_date" "date",
+    "days_until_waiting_pregnancy" integer,
+    "raw" "jsonb"
 );
 
 
-ALTER TABLE "public"."gea_daily" OWNER TO "postgres";
+ALTER TABLE "public"."gea_daily_ataskaita1" OWNER TO "postgres";
 
 --
--- Name: gea_daily_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: gea_daily_ataskaita2; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE IF NOT EXISTS "public"."gea_daily_id_seq"
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+CREATE TABLE IF NOT EXISTS "public"."gea_daily_ataskaita2" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "import_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cow_number" "text" NOT NULL,
+    "genetic_worth" "text",
+    "blood_line" "text",
+    "avg_milk_prod_weight" numeric,
+    "produce_milk" boolean,
+    "last_milking_date" "date",
+    "last_milking_time" "text",
+    "last_milking_weight" numeric,
+    "milkings" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
+    "raw" "jsonb"
+);
 
 
-ALTER SEQUENCE "public"."gea_daily_id_seq" OWNER TO "postgres";
+ALTER TABLE "public"."gea_daily_ataskaita2" OWNER TO "postgres";
 
 --
--- Name: gea_daily_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: gea_daily_ataskaita3; Type: TABLE; Schema: public; Owner: postgres
 --
 
-ALTER SEQUENCE "public"."gea_daily_id_seq" OWNED BY "public"."gea_daily"."id";
+CREATE TABLE IF NOT EXISTS "public"."gea_daily_ataskaita3" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "import_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cow_number" "text" NOT NULL,
+    "teat_missing_right_back" boolean,
+    "teat_missing_back_left" boolean,
+    "teat_missing_front_left" boolean,
+    "teat_missing_front_right" boolean,
+    "insemination_count" integer,
+    "bull_1" "text",
+    "bull_2" "text",
+    "bull_3" "text",
+    "lactation_number" integer,
+    "raw" "jsonb"
+);
+
+
+ALTER TABLE "public"."gea_daily_ataskaita3" OWNER TO "postgres";
+
+--
+-- Name: gea_daily_imports; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."gea_daily_imports" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid",
+    "source_filename" "text",
+    "source_sha256" "text",
+    "source_size_bytes" bigint,
+    "marker_i1" integer,
+    "marker_i2" integer,
+    "marker_i3" integer,
+    "count_ataskaita1" integer DEFAULT 0 NOT NULL,
+    "count_ataskaita2" integer DEFAULT 0 NOT NULL,
+    "count_ataskaita3" integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE "public"."gea_daily_imports" OWNER TO "postgres";
+
+--
+-- Name: gea_daily_cows_joined; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."gea_daily_cows_joined" AS
+ WITH "all_cows" AS (
+         SELECT DISTINCT "combined"."import_id",
+            "combined"."cow_number"
+           FROM ( SELECT "gea_daily_ataskaita1"."import_id",
+                    "gea_daily_ataskaita1"."cow_number"
+                   FROM "public"."gea_daily_ataskaita1"
+                UNION
+                 SELECT "gea_daily_ataskaita2"."import_id",
+                    "gea_daily_ataskaita2"."cow_number"
+                   FROM "public"."gea_daily_ataskaita2"
+                UNION
+                 SELECT "gea_daily_ataskaita3"."import_id",
+                    "gea_daily_ataskaita3"."cow_number"
+                   FROM "public"."gea_daily_ataskaita3") "combined"
+        )
+ SELECT "i"."id" AS "import_id",
+    "i"."created_at" AS "import_created_at",
+    "ac"."cow_number",
+    "a1"."ear_number",
+    "a1"."cow_state",
+    "a1"."group_number",
+    "a1"."pregnant_since",
+    "a1"."lactation_days",
+    "a1"."inseminated_at",
+    "a1"."pregnant_days",
+    "a1"."next_pregnancy_date",
+    "a1"."days_until_waiting_pregnancy",
+    "a2"."genetic_worth",
+    "a2"."blood_line",
+    "a2"."avg_milk_prod_weight",
+    "a2"."produce_milk",
+    "a2"."last_milking_date",
+    "a2"."last_milking_time",
+    "a2"."last_milking_weight",
+    "a2"."milkings",
+    "a3"."teat_missing_right_back",
+    "a3"."teat_missing_back_left",
+    "a3"."teat_missing_front_left",
+    "a3"."teat_missing_front_right",
+    "a3"."insemination_count",
+    "a3"."bull_1",
+    "a3"."bull_2",
+    "a3"."bull_3",
+    "a3"."lactation_number"
+   FROM (((("all_cows" "ac"
+     JOIN "public"."gea_daily_imports" "i" ON (("i"."id" = "ac"."import_id")))
+     LEFT JOIN "public"."gea_daily_ataskaita1" "a1" ON ((("a1"."import_id" = "ac"."import_id") AND ("a1"."cow_number" = "ac"."cow_number"))))
+     LEFT JOIN "public"."gea_daily_ataskaita2" "a2" ON ((("a2"."import_id" = "ac"."import_id") AND ("a2"."cow_number" = "ac"."cow_number"))))
+     LEFT JOIN "public"."gea_daily_ataskaita3" "a3" ON ((("a3"."import_id" = "ac"."import_id") AND ("a3"."cow_number" = "ac"."cow_number"))))
+  ORDER BY "i"."created_at" DESC, "ac"."cow_number";
+
+
+ALTER VIEW "public"."gea_daily_cows_joined" OWNER TO "postgres";
+
+--
+-- Name: VIEW "gea_daily_cows_joined"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON VIEW "public"."gea_daily_cows_joined" IS 'Joined view of all three GEA ataskaita tables. Fixed to show all cows regardless of which tables have data.';
 
 
 --
@@ -6133,6 +7199,166 @@ CREATE TABLE IF NOT EXISTS "public"."vehicle_assignments" (
 ALTER TABLE "public"."vehicle_assignments" OWNER TO "postgres";
 
 --
+-- Name: vehicle_service_visits; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."vehicle_service_visits" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "vehicle_id" "uuid" NOT NULL,
+    "visit_datetime" timestamp with time zone NOT NULL,
+    "visit_type" "text" DEFAULT 'planinis'::"text" NOT NULL,
+    "procedures" "text"[] DEFAULT ARRAY[]::"text"[],
+    "odometer_reading" numeric(10,2),
+    "engine_hours" numeric(10,2),
+    "status" "text" DEFAULT 'Planuojamas'::"text" NOT NULL,
+    "notes" "text",
+    "mechanic_name" "text",
+    "next_visit_required" boolean DEFAULT false,
+    "next_visit_date" timestamp with time zone,
+    "cost_estimate" numeric(10,2),
+    "actual_cost" numeric(10,2),
+    "labor_hours" numeric(10,2),
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    "completed_at" timestamp with time zone,
+    "completed_by" "uuid",
+    CONSTRAINT "valid_status" CHECK (("status" = ANY (ARRAY['Planuojamas'::"text", 'Vykdomas'::"text", 'Baigtas'::"text", 'Atsauktas'::"text"]))),
+    CONSTRAINT "valid_visit_type" CHECK (("visit_type" = ANY (ARRAY['planinis'::"text", 'neplaninis'::"text"])))
+);
+
+
+ALTER TABLE "public"."vehicle_service_visits" OWNER TO "postgres";
+
+--
+-- Name: vehicle_visit_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."vehicle_visit_parts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "visit_id" "uuid" NOT NULL,
+    "product_id" "uuid" NOT NULL,
+    "batch_id" "uuid",
+    "quantity_used" numeric(10,3) NOT NULL,
+    "cost_per_unit" numeric(10,2),
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."vehicle_visit_parts" OWNER TO "postgres";
+
+--
+-- Name: vehicles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."vehicles" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "registration_number" "text" NOT NULL,
+    "vehicle_type" "text" NOT NULL,
+    "make" "text",
+    "model" "text",
+    "year" integer,
+    "vin" "text",
+    "purchase_date" "date",
+    "purchase_price" numeric,
+    "current_mileage" numeric DEFAULT 0,
+    "current_engine_hours" numeric DEFAULT 0,
+    "fuel_type" "text",
+    "tank_capacity" numeric,
+    "insurance_provider" "text",
+    "insurance_policy_number" "text",
+    "insurance_expiry_date" "date",
+    "technical_inspection_due_date" "date",
+    "status" "text" DEFAULT 'active'::"text",
+    "assigned_to" "uuid",
+    "home_location_id" "uuid",
+    "notes" "text",
+    "is_active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    "last_service_date" timestamp with time zone,
+    "last_service_mileage" numeric(10,2),
+    "last_service_hours" numeric(10,2)
+);
+
+
+ALTER TABLE "public"."vehicles" OWNER TO "postgres";
+
+--
+-- Name: work_order_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."work_order_parts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "work_order_id" "uuid",
+    "product_id" "uuid",
+    "batch_id" "uuid",
+    "quantity" numeric NOT NULL,
+    "unit_price" numeric NOT NULL,
+    "total_price" numeric NOT NULL,
+    "notes" "text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."work_order_parts" OWNER TO "postgres";
+
+--
+-- Name: vehicle_maintenance_cost_summary; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."vehicle_maintenance_cost_summary" AS
+ SELECT "v"."id" AS "vehicle_id",
+    "v"."registration_number",
+    "v"."make",
+    "v"."model",
+    "v"."year",
+    "v"."vin",
+    "count"(DISTINCT "mwo"."id") FILTER (WHERE ("mwo"."status" = 'completed'::"text")) AS "completed_work_orders",
+    COALESCE("sum"("mwo"."labor_cost") FILTER (WHERE ("mwo"."status" = 'completed'::"text")), (0)::numeric) AS "total_labor_cost",
+    COALESCE("sum"("mwo"."parts_cost") FILTER (WHERE ("mwo"."status" = 'completed'::"text")), (0)::numeric) AS "total_work_order_parts_cost",
+    COALESCE("sum"("mwo"."total_cost") FILTER (WHERE ("mwo"."status" = 'completed'::"text")), (0)::numeric) AS "total_work_order_cost",
+    "count"(DISTINCT "vsv"."id") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text")) AS "completed_service_visits",
+    COALESCE("sum"("vsv"."actual_cost") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text")), (0)::numeric) AS "total_service_cost",
+    "count"(DISTINCT "wop"."id") AS "total_work_order_parts",
+    COALESCE("sum"("wop"."total_price"), (0)::numeric) AS "work_order_parts_value",
+    "count"(DISTINCT "vvp"."id") AS "total_visit_parts",
+    COALESCE("sum"(("vvp"."quantity_used" * COALESCE("vvp"."cost_per_unit", (0)::numeric))), (0)::numeric) AS "visit_parts_value",
+    ("count"(DISTINCT "mwo"."id") FILTER (WHERE ("mwo"."status" = 'completed'::"text")) + "count"(DISTINCT "vsv"."id") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text"))) AS "total_completed_activities",
+    ("count"(DISTINCT "wop"."id") + "count"(DISTINCT "vvp"."id")) AS "total_parts_used",
+    (COALESCE("sum"("mwo"."total_cost") FILTER (WHERE ("mwo"."status" = 'completed'::"text")), (0)::numeric) + COALESCE("sum"("vsv"."actual_cost") FILTER (WHERE ("vsv"."status" = 'Baigtas'::"text")), (0)::numeric)) AS "grand_total_cost"
+   FROM (((("public"."vehicles" "v"
+     LEFT JOIN "public"."maintenance_work_orders" "mwo" ON (("v"."id" = "mwo"."vehicle_id")))
+     LEFT JOIN "public"."vehicle_service_visits" "vsv" ON (("v"."id" = "vsv"."vehicle_id")))
+     LEFT JOIN "public"."work_order_parts" "wop" ON (("mwo"."id" = "wop"."work_order_id")))
+     LEFT JOIN "public"."vehicle_visit_parts" "vvp" ON (("vsv"."id" = "vvp"."visit_id")))
+  WHERE ("v"."is_active" = true)
+  GROUP BY "v"."id", "v"."registration_number", "v"."make", "v"."model", "v"."year", "v"."vin";
+
+
+ALTER VIEW "public"."vehicle_maintenance_cost_summary" OWNER TO "postgres";
+
+--
+-- Name: vehicle_cost_overview; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."vehicle_cost_overview" AS
+ SELECT "count"(DISTINCT "vehicle_id") AS "total_vehicles",
+    "count"(DISTINCT "vehicle_id") FILTER (WHERE ("total_completed_activities" > 0)) AS "vehicles_with_maintenance",
+    "sum"("completed_work_orders") AS "total_work_orders",
+    "sum"("completed_service_visits") AS "total_service_visits",
+    "sum"("total_parts_used") AS "total_parts",
+    "sum"("grand_total_cost") AS "total_cost",
+    "avg"("grand_total_cost") FILTER (WHERE ("total_completed_activities" > 0)) AS "avg_cost_per_vehicle",
+    "sum"("total_labor_cost") AS "total_labor",
+    "sum"(("work_order_parts_value" + "visit_parts_value")) AS "total_parts_cost"
+   FROM "public"."vehicle_maintenance_cost_summary";
+
+
+ALTER VIEW "public"."vehicle_cost_overview" OWNER TO "postgres";
+
+--
 -- Name: vehicle_documents; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -6178,43 +7404,6 @@ CREATE TABLE IF NOT EXISTS "public"."vehicle_fuel_records" (
 ALTER TABLE "public"."vehicle_fuel_records" OWNER TO "postgres";
 
 --
--- Name: vehicles; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."vehicles" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "registration_number" "text" NOT NULL,
-    "vehicle_type" "text" NOT NULL,
-    "make" "text",
-    "model" "text",
-    "year" integer,
-    "vin" "text",
-    "purchase_date" "date",
-    "purchase_price" numeric,
-    "current_mileage" numeric DEFAULT 0,
-    "current_engine_hours" numeric DEFAULT 0,
-    "fuel_type" "text",
-    "tank_capacity" numeric,
-    "insurance_provider" "text",
-    "insurance_policy_number" "text",
-    "insurance_expiry_date" "date",
-    "technical_inspection_due_date" "date",
-    "status" "text" DEFAULT 'active'::"text",
-    "assigned_to" "uuid",
-    "home_location_id" "uuid",
-    "notes" "text",
-    "is_active" boolean DEFAULT true,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid",
-    "last_service_date" timestamp with time zone,
-    "last_service_mileage" numeric(10,2),
-    "last_service_hours" numeric(10,2)
-);
-
-
-ALTER TABLE "public"."vehicles" OWNER TO "postgres";
-
---
 -- Name: vehicle_parts_usage; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -6249,37 +7438,6 @@ CREATE OR REPLACE VIEW "public"."vehicle_parts_usage" AS
 ALTER VIEW "public"."vehicle_parts_usage" OWNER TO "postgres";
 
 --
--- Name: vehicle_service_visits; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."vehicle_service_visits" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "vehicle_id" "uuid" NOT NULL,
-    "visit_datetime" timestamp with time zone NOT NULL,
-    "visit_type" "text" DEFAULT 'planinis'::"text" NOT NULL,
-    "procedures" "text"[] DEFAULT ARRAY[]::"text"[],
-    "odometer_reading" numeric(10,2),
-    "engine_hours" numeric(10,2),
-    "status" "text" DEFAULT 'Planuojamas'::"text" NOT NULL,
-    "notes" "text",
-    "mechanic_name" "text",
-    "next_visit_required" boolean DEFAULT false,
-    "next_visit_date" timestamp with time zone,
-    "cost_estimate" numeric(10,2),
-    "actual_cost" numeric(10,2),
-    "labor_hours" numeric(10,2),
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid",
-    "completed_at" timestamp with time zone,
-    "completed_by" "uuid",
-    CONSTRAINT "valid_status" CHECK (("status" = ANY (ARRAY['Planuojamas'::"text", 'Vykdomas'::"text", 'Baigtas'::"text", 'Atsauktas'::"text"]))),
-    CONSTRAINT "valid_visit_type" CHECK (("visit_type" = ANY (ARRAY['planinis'::"text", 'neplaninis'::"text"])))
-);
-
-
-ALTER TABLE "public"."vehicle_service_visits" OWNER TO "postgres";
-
---
 -- Name: vehicle_service_history; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -6303,23 +7461,71 @@ CREATE OR REPLACE VIEW "public"."vehicle_service_history" AS
 ALTER VIEW "public"."vehicle_service_history" OWNER TO "postgres";
 
 --
--- Name: vehicle_visit_parts; Type: TABLE; Schema: public; Owner: postgres
+-- Name: vehicle_service_visit_details; Type: VIEW; Schema: public; Owner: postgres
 --
 
-CREATE TABLE IF NOT EXISTS "public"."vehicle_visit_parts" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "visit_id" "uuid" NOT NULL,
-    "product_id" "uuid" NOT NULL,
-    "batch_id" "uuid",
-    "quantity_used" numeric(10,3) NOT NULL,
-    "cost_per_unit" numeric(10,2),
-    "notes" "text",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "created_by" "uuid"
-);
+CREATE OR REPLACE VIEW "public"."vehicle_service_visit_details" AS
+ SELECT "vsv"."id" AS "visit_id",
+    "vsv"."vehicle_id",
+    "v"."registration_number",
+    "v"."make",
+    "v"."model",
+    "vsv"."visit_datetime",
+    "vsv"."visit_type",
+    "vsv"."procedures",
+    "vsv"."status",
+    "vsv"."odometer_reading",
+    "vsv"."engine_hours",
+    "vsv"."mechanic_name",
+    "vsv"."labor_hours",
+    "vsv"."actual_cost",
+    "vsv"."notes",
+    "json_agg"("json_build_object"('part_id', "vvp"."id", 'product_id', "vvp"."product_id", 'product_name', "p"."name", 'batch_id', "vvp"."batch_id", 'quantity_used', "vvp"."quantity_used", 'cost_per_unit', "vvp"."cost_per_unit", 'total_cost', ("vvp"."quantity_used" * COALESCE("vvp"."cost_per_unit", (0)::numeric)), 'notes', "vvp"."notes") ORDER BY "vvp"."created_at") FILTER (WHERE ("vvp"."id" IS NOT NULL)) AS "parts_used"
+   FROM ((("public"."vehicle_service_visits" "vsv"
+     JOIN "public"."vehicles" "v" ON (("vsv"."vehicle_id" = "v"."id")))
+     LEFT JOIN "public"."vehicle_visit_parts" "vvp" ON (("vsv"."id" = "vvp"."visit_id")))
+     LEFT JOIN "public"."products" "p" ON (("vvp"."product_id" = "p"."id")))
+  GROUP BY "vsv"."id", "vsv"."vehicle_id", "v"."registration_number", "v"."make", "v"."model", "vsv"."visit_datetime", "vsv"."visit_type", "vsv"."procedures", "vsv"."status", "vsv"."odometer_reading", "vsv"."engine_hours", "vsv"."mechanic_name", "vsv"."labor_hours", "vsv"."actual_cost", "vsv"."notes";
 
 
-ALTER TABLE "public"."vehicle_visit_parts" OWNER TO "postgres";
+ALTER VIEW "public"."vehicle_service_visit_details" OWNER TO "postgres";
+
+--
+-- Name: vehicle_work_order_details; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "public"."vehicle_work_order_details" AS
+ SELECT "mwo"."id" AS "work_order_id",
+    "mwo"."work_order_number",
+    "mwo"."vehicle_id",
+    "v"."registration_number",
+    "v"."make",
+    "v"."model",
+    "mwo"."description",
+    "mwo"."status",
+    "mwo"."priority",
+    "mwo"."assigned_to",
+    "mwo"."scheduled_date",
+    "mwo"."started_date",
+    "mwo"."completed_date",
+    "mwo"."labor_hours",
+    "mwo"."labor_cost",
+    "mwo"."parts_cost",
+    "mwo"."total_cost",
+    "mwo"."odometer_reading",
+    "mwo"."engine_hours",
+    "mwo"."notes",
+    "json_agg"("json_build_object"('part_id', "wop"."id", 'product_id', "wop"."product_id", 'product_name', "ep"."name", 'product_code', "ep"."product_code", 'batch_id', "wop"."batch_id", 'batch_number', "eb"."batch_number", 'quantity', "wop"."quantity", 'unit_price', "wop"."unit_price", 'total_price', "wop"."total_price", 'invoice_number', "ei"."invoice_number", 'supplier_name', "ei"."supplier_name", 'notes', "wop"."notes") ORDER BY "wop"."created_at") FILTER (WHERE ("wop"."id" IS NOT NULL)) AS "parts_used"
+   FROM ((((("public"."maintenance_work_orders" "mwo"
+     JOIN "public"."vehicles" "v" ON (("mwo"."vehicle_id" = "v"."id")))
+     LEFT JOIN "public"."work_order_parts" "wop" ON (("mwo"."id" = "wop"."work_order_id")))
+     LEFT JOIN "public"."equipment_products" "ep" ON (("wop"."product_id" = "ep"."id")))
+     LEFT JOIN "public"."equipment_batches" "eb" ON (("wop"."batch_id" = "eb"."id")))
+     LEFT JOIN "public"."equipment_invoices" "ei" ON (("eb"."invoice_id" = "ei"."id")))
+  GROUP BY "mwo"."id", "mwo"."work_order_number", "mwo"."vehicle_id", "v"."registration_number", "v"."make", "v"."model", "mwo"."description", "mwo"."status", "mwo"."priority", "mwo"."assigned_to", "mwo"."scheduled_date", "mwo"."started_date", "mwo"."completed_date", "mwo"."labor_hours", "mwo"."labor_cost", "mwo"."parts_cost", "mwo"."total_cost", "mwo"."odometer_reading", "mwo"."engine_hours", "mwo"."notes";
+
+
+ALTER VIEW "public"."vehicle_work_order_details" OWNER TO "postgres";
 
 --
 -- Name: vet_analytics_summary; Type: VIEW; Schema: public; Owner: postgres
@@ -6409,85 +7615,6 @@ CREATE OR REPLACE VIEW "public"."vw_animal_cost_analytics" AS
 ALTER VIEW "public"."vw_animal_cost_analytics" OWNER TO "postgres";
 
 --
--- Name: vw_animal_latest_collar; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_animal_latest_collar" AS
- SELECT DISTINCT ON ("animal_id") "animal_id",
-    "collar_no",
-    "snapshot_date" AS "last_snapshot_date"
-   FROM "public"."gea_daily"
-  WHERE ("collar_no" IS NOT NULL)
-  ORDER BY "animal_id", "snapshot_date" DESC;
-
-
-ALTER VIEW "public"."vw_animal_latest_collar" OWNER TO "postgres";
-
---
--- Name: VIEW "vw_animal_latest_collar"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON VIEW "public"."vw_animal_latest_collar" IS 'Optimized view that returns only the latest collar number for each animal, avoiding full table scans of gea_daily';
-
-
---
--- Name: vw_animal_milk_revenue; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_animal_milk_revenue" AS
- WITH "milk_production" AS (
-         SELECT "gd"."animal_id",
-            "a"."tag_no",
-            "max"("gd"."collar_no") AS "collar_no",
-            "count"(*) AS "days_tracked",
-            "sum"(((((COALESCE("gd"."m1_qty", (0)::numeric) + COALESCE("gd"."m2_qty", (0)::numeric)) + COALESCE("gd"."m3_qty", (0)::numeric)) + COALESCE("gd"."m4_qty", (0)::numeric)) + COALESCE("gd"."m5_qty", (0)::numeric))) AS "total_milk_liters",
-            "avg"(((((COALESCE("gd"."m1_qty", (0)::numeric) + COALESCE("gd"."m2_qty", (0)::numeric)) + COALESCE("gd"."m3_qty", (0)::numeric)) + COALESCE("gd"."m4_qty", (0)::numeric)) + COALESCE("gd"."m5_qty", (0)::numeric))) AS "avg_daily_milk",
-            "min"("gd"."snapshot_date") AS "first_date",
-            "max"("gd"."snapshot_date") AS "last_date",
-            "max"("gd"."lact_days") AS "lactation_days",
-            "max"("gd"."grupe") AS "current_group",
-            "max"("gd"."statusas") AS "current_status",
-            "bool_or"("gd"."in_milk") AS "is_producing"
-           FROM ("public"."gea_daily" "gd"
-             JOIN "public"."animals" "a" ON (("a"."id" = "gd"."animal_id")))
-          WHERE ("gd"."snapshot_date" >= (CURRENT_DATE - '14 days'::interval))
-          GROUP BY "gd"."animal_id", "a"."tag_no"
-        ), "withdrawal_days" AS (
-         SELECT "treatments"."animal_id",
-            "count"(DISTINCT "date"("treatments"."created_at")) AS "days_in_withdrawal"
-           FROM "public"."treatments"
-          WHERE (("treatments"."withdrawal_until_milk" IS NOT NULL) AND ("treatments"."withdrawal_until_milk" >= (CURRENT_DATE - '14 days'::interval)) AND ("treatments"."created_at" >= (CURRENT_DATE - '14 days'::interval)))
-          GROUP BY "treatments"."animal_id"
-        )
- SELECT "mp"."animal_id",
-    "mp"."tag_no",
-    "mp"."collar_no",
-    "mp"."days_tracked",
-    "mp"."total_milk_liters",
-    "mp"."avg_daily_milk",
-    ("mp"."total_milk_liters" * "public"."get_setting"('milk_price_per_liter'::"text", 0.50)) AS "milk_revenue",
-    "mp"."first_date",
-    "mp"."last_date",
-    "mp"."lactation_days",
-    "mp"."current_group",
-    "mp"."current_status",
-    "mp"."is_producing",
-    COALESCE("wd"."days_in_withdrawal", (0)::bigint) AS "days_in_withdrawal",
-    ((COALESCE("wd"."days_in_withdrawal", (0)::bigint))::numeric * "public"."get_setting"('withdrawal_daily_loss'::"text", (15)::numeric)) AS "withdrawal_revenue_loss"
-   FROM ("milk_production" "mp"
-     LEFT JOIN "withdrawal_days" "wd" ON (("wd"."animal_id" = "mp"."animal_id")));
-
-
-ALTER VIEW "public"."vw_animal_milk_revenue" OWNER TO "postgres";
-
---
--- Name: VIEW "vw_animal_milk_revenue"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON VIEW "public"."vw_animal_milk_revenue" IS 'Calculates milk production and revenue per animal from GEA data over last 14 days (changed from 90 days for accuracy)';
-
-
---
 -- Name: vw_animal_product_usage; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -6547,127 +7674,6 @@ CREATE OR REPLACE VIEW "public"."vw_animal_product_usage" AS
 
 
 ALTER VIEW "public"."vw_animal_product_usage" OWNER TO "postgres";
-
---
--- Name: vw_animal_profitability; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_animal_profitability" AS
- WITH "visit_counts" AS (
-         SELECT "a"."id" AS "animal_id",
-            "a"."tag_no",
-            COALESCE("count"(DISTINCT "t"."id"), (0)::bigint) AS "treatment_count",
-            COALESCE("count"(DISTINCT "v"."id"), (0)::bigint) AS "vaccination_count",
-            COALESCE("count"(DISTINCT
-                CASE
-                    WHEN ("av"."status" = 'Baigtas'::"text") THEN "av"."id"
-                    ELSE NULL::"uuid"
-                END), (0)::bigint) AS "visit_count",
-            COALESCE(("count"(DISTINCT
-                CASE
-                    WHEN ("av"."status" = 'Baigtas'::"text") THEN "av"."id"
-                    ELSE NULL::"uuid"
-                END) * 10), (0)::bigint) AS "visit_costs"
-           FROM ((("public"."animals" "a"
-             LEFT JOIN "public"."treatments" "t" ON ((("t"."animal_id" = "a"."id") AND ("t"."reg_date" >= (CURRENT_DATE - '90 days'::interval)))))
-             LEFT JOIN "public"."vaccinations" "v" ON ((("v"."animal_id" = "a"."id") AND ("v"."vaccination_date" >= (CURRENT_DATE - '90 days'::interval)))))
-             LEFT JOIN "public"."animal_visits" "av" ON ((("av"."animal_id" = "a"."id") AND ("av"."visit_datetime" >= (CURRENT_DATE - '90 days'::interval)))))
-          GROUP BY "a"."id", "a"."tag_no"
-        ), "treatment_medication_costs" AS (
-         SELECT "a"."id" AS "animal_id",
-            COALESCE("sum"((("ui"."qty" * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))), (0)::numeric) AS "treatment_medication_costs"
-           FROM ((("public"."animals" "a"
-             LEFT JOIN "public"."treatments" "t" ON ((("t"."animal_id" = "a"."id") AND ("t"."reg_date" >= (CURRENT_DATE - '90 days'::interval)))))
-             LEFT JOIN "public"."usage_items" "ui" ON (("ui"."treatment_id" = "t"."id")))
-             LEFT JOIN "public"."batches" "b" ON (("b"."id" = "ui"."batch_id")))
-          GROUP BY "a"."id"
-        ), "planned_medication_costs" AS (
-         SELECT "a"."id" AS "animal_id",
-            COALESCE(( SELECT "sum"((((("pm"."value" ->> 'qty'::"text"))::numeric * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))) AS "sum"
-                   FROM (("public"."animal_visits" "av"
-                     CROSS JOIN LATERAL "jsonb_array_elements"(
-                        CASE
-                            WHEN ("jsonb_typeof"("av"."planned_medications") = 'array'::"text") THEN "av"."planned_medications"
-                            ELSE '[]'::"jsonb"
-                        END) "pm"("value"))
-                     LEFT JOIN "public"."batches" "b" ON (("b"."id" = (("pm"."value" ->> 'batch_id'::"text"))::"uuid")))
-                  WHERE (("av"."animal_id" = "a"."id") AND ("av"."visit_datetime" >= (CURRENT_DATE - '90 days'::interval)) AND (("pm"."value" ->> 'batch_id'::"text") IS NOT NULL) AND (("pm"."value" ->> 'qty'::"text") IS NOT NULL))), (0)::numeric) AS "planned_medication_costs"
-           FROM "public"."animals" "a"
-          GROUP BY "a"."id"
-        ), "sync_costs" AS (
-         SELECT "a"."id" AS "animal_id",
-            COALESCE("sum"((("ss"."dosage" * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))), (0)::numeric) AS "sync_medication_costs"
-           FROM ((("public"."animals" "a"
-             LEFT JOIN "public"."animal_synchronizations" "async" ON ((("async"."animal_id" = "a"."id") AND ("async"."start_date" >= (CURRENT_DATE - '90 days'::interval)))))
-             LEFT JOIN "public"."synchronization_steps" "ss" ON ((("ss"."synchronization_id" = "async"."id") AND ("ss"."completed" = true) AND ("ss"."completed_at" >= (CURRENT_DATE - '90 days'::interval)) AND ("ss"."batch_id" IS NOT NULL) AND ("ss"."dosage" IS NOT NULL))))
-             LEFT JOIN "public"."batches" "b" ON (("b"."id" = "ss"."batch_id")))
-          GROUP BY "a"."id"
-        ), "vaccination_costs" AS (
-         SELECT "a"."id" AS "animal_id",
-            COALESCE("sum"((("v"."dose_amount" * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))), (0)::numeric) AS "vaccination_costs"
-           FROM (("public"."animals" "a"
-             LEFT JOIN "public"."vaccinations" "v" ON ((("v"."animal_id" = "a"."id") AND ("v"."vaccination_date" >= (CURRENT_DATE - '90 days'::interval)))))
-             LEFT JOIN "public"."batches" "b" ON (("b"."id" = "v"."batch_id")))
-          GROUP BY "a"."id"
-        ), "combined_costs" AS (
-         SELECT "vc"."animal_id",
-            "vc"."tag_no",
-            "vc"."treatment_count",
-            "vc"."vaccination_count",
-            "vc"."visit_count",
-            ((COALESCE("tmc"."treatment_medication_costs", (0)::numeric) + COALESCE("pmc"."planned_medication_costs", (0)::numeric)) + COALESCE("sc"."sync_medication_costs", (0)::numeric)) AS "total_medication_costs",
-            "vc"."visit_costs",
-            COALESCE("vacc"."vaccination_costs", (0)::numeric) AS "vaccination_costs",
-            ((((COALESCE("tmc"."treatment_medication_costs", (0)::numeric) + COALESCE("pmc"."planned_medication_costs", (0)::numeric)) + COALESCE("sc"."sync_medication_costs", (0)::numeric)) + ("vc"."visit_costs")::numeric) + COALESCE("vacc"."vaccination_costs", (0)::numeric)) AS "total_costs"
-           FROM (((("visit_counts" "vc"
-             LEFT JOIN "treatment_medication_costs" "tmc" ON (("tmc"."animal_id" = "vc"."animal_id")))
-             LEFT JOIN "planned_medication_costs" "pmc" ON (("pmc"."animal_id" = "vc"."animal_id")))
-             LEFT JOIN "sync_costs" "sc" ON (("sc"."animal_id" = "vc"."animal_id")))
-             LEFT JOIN "vaccination_costs" "vacc" ON (("vacc"."animal_id" = "vc"."animal_id")))
-        )
- SELECT COALESCE("cc"."animal_id", "mr"."animal_id") AS "animal_id",
-    COALESCE("cc"."tag_no", "mr"."tag_no") AS "tag_no",
-    "mr"."collar_no",
-    "mr"."days_tracked",
-    "mr"."total_milk_liters",
-    "mr"."avg_daily_milk",
-    "mr"."milk_revenue",
-    "mr"."withdrawal_revenue_loss",
-    ("mr"."milk_revenue" - "mr"."withdrawal_revenue_loss") AS "adjusted_milk_revenue",
-    COALESCE("cc"."treatment_count", (0)::bigint) AS "treatment_count",
-    COALESCE("cc"."vaccination_count", (0)::bigint) AS "vaccination_count",
-    COALESCE("cc"."visit_count", (0)::bigint) AS "visit_count",
-    COALESCE("cc"."total_medication_costs", (0)::numeric) AS "medication_costs",
-    COALESCE("cc"."visit_costs", (0)::bigint) AS "visit_costs",
-    COALESCE("cc"."total_costs", (0)::numeric) AS "total_costs",
-    (("mr"."milk_revenue" - "mr"."withdrawal_revenue_loss") - COALESCE("cc"."total_costs", (0)::numeric)) AS "net_profit",
-        CASE
-            WHEN (COALESCE("cc"."total_costs", (0)::numeric) > (0)::numeric) THEN "round"((((("mr"."milk_revenue" - "mr"."withdrawal_revenue_loss") - COALESCE("cc"."total_costs", (0)::numeric)) / COALESCE("cc"."total_costs", (0)::numeric)) * (100)::numeric), 1)
-            ELSE NULL::numeric
-        END AS "roi_percentage",
-        CASE
-            WHEN (("mr"."milk_revenue" - "mr"."withdrawal_revenue_loss") > (0)::numeric) THEN "round"(((COALESCE("cc"."total_costs", (0)::numeric) / ("mr"."milk_revenue" - "mr"."withdrawal_revenue_loss")) * (100)::numeric), 1)
-            ELSE NULL::numeric
-        END AS "cost_to_revenue_ratio",
-    "mr"."lactation_days",
-    "mr"."current_group",
-    "mr"."current_status",
-    "mr"."is_producing",
-    "mr"."days_in_withdrawal",
-    "mr"."first_date",
-    "mr"."last_date"
-   FROM ("public"."vw_animal_milk_revenue" "mr"
-     FULL JOIN "combined_costs" "cc" ON (("cc"."animal_id" = "mr"."animal_id")));
-
-
-ALTER VIEW "public"."vw_animal_profitability" OWNER TO "postgres";
-
---
--- Name: VIEW "vw_animal_profitability"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON VIEW "public"."vw_animal_profitability" IS 'Comprehensive profitability analysis. Fixed ALL cartesian product bugs by separating visits, treatment meds, planned meds, sync meds, and vaccinations into independent CTEs.';
-
 
 --
 -- Name: vw_animal_treatment_outcomes; Type: VIEW; Schema: public; Owner: postgres
@@ -6815,68 +7821,6 @@ ALTER VIEW "public"."vw_course_schedules" OWNER TO "postgres";
 
 COMMENT ON VIEW "public"."vw_course_schedules" IS 'Overview of all flexible medication courses with progress tracking';
 
-
---
--- Name: vw_herd_profitability_summary; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_herd_profitability_summary" AS
- SELECT "count"(*) AS "total_animals",
-    "count"(
-        CASE
-            WHEN ("net_profit" > (0)::numeric) THEN 1
-            ELSE NULL::integer
-        END) AS "profitable_count",
-    "count"(
-        CASE
-            WHEN ("net_profit" <= (0)::numeric) THEN 1
-            ELSE NULL::integer
-        END) AS "unprofitable_count",
-    "count"(
-        CASE
-            WHEN ("net_profit" < ('-50'::integer)::numeric) THEN 1
-            ELSE NULL::integer
-        END) AS "severe_loss_count",
-    "sum"("total_milk_liters") AS "total_herd_milk",
-    "sum"("milk_revenue") AS "total_milk_revenue",
-    "sum"("total_costs") AS "total_treatment_costs",
-    "sum"("net_profit") AS "total_herd_profit",
-    "round"("avg"("net_profit"), 2) AS "avg_profit_per_animal",
-    "round"("avg"("avg_daily_milk"), 2) AS "avg_daily_milk_per_animal",
-    "sum"("days_in_withdrawal") AS "total_withdrawal_days",
-    "sum"("withdrawal_revenue_loss") AS "total_withdrawal_loss",
-    "round"(
-        CASE
-            WHEN ("sum"("milk_revenue") > (0)::numeric) THEN (("sum"("total_costs") / "sum"("milk_revenue")) * (100)::numeric)
-            ELSE (0)::numeric
-        END, 1) AS "overall_cost_to_revenue_ratio"
-   FROM "public"."vw_animal_profitability"
-  WHERE ("days_tracked" > 0);
-
-
-ALTER VIEW "public"."vw_herd_profitability_summary" OWNER TO "postgres";
-
---
--- Name: VIEW "vw_herd_profitability_summary"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON VIEW "public"."vw_herd_profitability_summary" IS 'Aggregate herd-wide profitability metrics and KPIs';
-
-
---
--- Name: vw_latest_animal_collars; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_latest_animal_collars" AS
- SELECT DISTINCT ON ("animal_id") "animal_id",
-    "collar_no",
-    "snapshot_date"
-   FROM "public"."gea_daily"
-  WHERE ("collar_no" IS NOT NULL)
-  ORDER BY "animal_id", "snapshot_date" DESC;
-
-
-ALTER VIEW "public"."vw_latest_animal_collars" OWNER TO "postgres";
 
 --
 -- Name: vw_medical_waste; Type: VIEW; Schema: public; Owner: postgres
@@ -7319,77 +8263,6 @@ COMMENT ON VIEW "public"."vw_treated_animals_detailed" IS 'Detailed view of trea
 
 
 --
--- Name: vw_treatment_roi_analysis; Type: VIEW; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE VIEW "public"."vw_treatment_roi_analysis" AS
- WITH "recent_treatments" AS (
-         SELECT "t"."animal_id",
-            "a"."tag_no",
-            "count"(*) AS "treatment_count_last_90_days",
-            "sum"((("ui"."qty" * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))) AS "total_treatment_cost",
-            "avg"((("ui"."qty" * "b"."purchase_price") / NULLIF("b"."received_qty", (0)::numeric))) AS "avg_treatment_cost",
-            "max"("t"."reg_date") AS "last_treatment_date",
-            "count"(
-                CASE
-                    WHEN ("t"."outcome" = 'recovered'::"text") THEN 1
-                    ELSE NULL::integer
-                END) AS "successful_treatments",
-            "count"(
-                CASE
-                    WHEN ("t"."outcome" = 'ongoing'::"text") THEN 1
-                    ELSE NULL::integer
-                END) AS "ongoing_treatments"
-           FROM ((("public"."treatments" "t"
-             JOIN "public"."animals" "a" ON (("a"."id" = "t"."animal_id")))
-             LEFT JOIN "public"."usage_items" "ui" ON (("ui"."treatment_id" = "t"."id")))
-             LEFT JOIN "public"."batches" "b" ON (("b"."id" = "ui"."batch_id")))
-          WHERE ("t"."reg_date" >= (CURRENT_DATE - '90 days'::interval))
-          GROUP BY "t"."animal_id", "a"."tag_no"
-        )
- SELECT "p"."animal_id",
-    "p"."tag_no",
-    "p"."collar_no",
-    "p"."avg_daily_milk",
-    "p"."net_profit",
-    "p"."total_costs" AS "current_total_costs",
-    "rt"."treatment_count_last_90_days",
-    "rt"."total_treatment_cost",
-    "rt"."avg_treatment_cost",
-    "rt"."last_treatment_date",
-    "rt"."successful_treatments",
-    "rt"."ongoing_treatments",
-        CASE
-            WHEN ("rt"."treatment_count_last_90_days" > 0) THEN "round"(((("rt"."successful_treatments")::numeric / ("rt"."treatment_count_last_90_days")::numeric) * (100)::numeric), 1)
-            ELSE NULL::numeric
-        END AS "success_rate_percentage",
-        CASE
-            WHEN (("p"."avg_daily_milk" > (0)::numeric) AND ("rt"."avg_treatment_cost" > (0)::numeric)) THEN "round"(("rt"."avg_treatment_cost" / ("p"."avg_daily_milk" * "public"."get_setting"('milk_price_per_liter'::"text", 0.45))), 0)
-            ELSE NULL::numeric
-        END AS "days_to_payback_avg_treatment",
-        CASE
-            WHEN ("p"."net_profit" < ('-100'::integer)::numeric) THEN 'cull_recommended'::"text"
-            WHEN ("p"."net_profit" < (0)::numeric) THEN 'at_risk'::"text"
-            WHEN ("rt"."treatment_count_last_90_days" >= 3) THEN 'chronic_case'::"text"
-            WHEN ("p"."net_profit" > (50)::numeric) THEN 'profitable'::"text"
-            ELSE 'monitor'::"text"
-        END AS "recommendation",
-    "p"."current_status",
-    "p"."is_producing"
-   FROM ("public"."vw_animal_profitability" "p"
-     LEFT JOIN "recent_treatments" "rt" ON (("rt"."animal_id" = "p"."animal_id")));
-
-
-ALTER VIEW "public"."vw_treatment_roi_analysis" OWNER TO "postgres";
-
---
--- Name: VIEW "vw_treatment_roi_analysis"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON VIEW "public"."vw_treatment_roi_analysis" IS 'Treatment ROI analysis for treatment vs cull decision support';
-
-
---
 -- Name: vw_vet_drug_journal; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -7469,25 +8342,6 @@ CREATE TABLE IF NOT EXISTS "public"."work_order_labor" (
 ALTER TABLE "public"."work_order_labor" OWNER TO "postgres";
 
 --
--- Name: work_order_parts; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."work_order_parts" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "work_order_id" "uuid",
-    "product_id" "uuid",
-    "batch_id" "uuid",
-    "quantity" numeric NOT NULL,
-    "unit_price" numeric NOT NULL,
-    "total_price" numeric NOT NULL,
-    "notes" "text",
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."work_order_parts" OWNER TO "postgres";
-
---
 -- Name: worker_schedules; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -7505,13 +8359,6 @@ CREATE TABLE IF NOT EXISTS "public"."worker_schedules" (
 
 
 ALTER TABLE "public"."worker_schedules" OWNER TO "postgres";
-
---
--- Name: gea_daily id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY "public"."gea_daily" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."gea_daily_id_seq"'::"regclass");
-
 
 --
 -- Name: animal_synchronizations animal_synchronizations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -7559,6 +8406,30 @@ ALTER TABLE ONLY "public"."batches"
 
 ALTER TABLE ONLY "public"."biocide_usage"
     ADD CONSTRAINT "biocide_usage_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: cost_accumulation_documents cost_accumulation_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_documents"
+    ADD CONSTRAINT "cost_accumulation_documents_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: cost_accumulation_items cost_accumulation_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_items"
+    ADD CONSTRAINT "cost_accumulation_items_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: cost_accumulation_projects cost_accumulation_projects_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_projects"
+    ADD CONSTRAINT "cost_accumulation_projects_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -7714,6 +8585,38 @@ ALTER TABLE ONLY "public"."equipment_suppliers"
 
 
 --
+-- Name: farm_equipment_items farm_equipment_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_items"
+    ADD CONSTRAINT "farm_equipment_items_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: farm_equipment farm_equipment_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment"
+    ADD CONSTRAINT "farm_equipment_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: farm_equipment_service_parts farm_equipment_service_parts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_parts"
+    ADD CONSTRAINT "farm_equipment_service_parts_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: farm_equipment_service_records farm_equipment_service_records_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_records"
+    ADD CONSTRAINT "farm_equipment_service_records_pkey" PRIMARY KEY ("id");
+
+
+--
 -- Name: fire_extinguishers fire_extinguishers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -7730,11 +8633,35 @@ ALTER TABLE ONLY "public"."fire_extinguishers"
 
 
 --
--- Name: gea_daily gea_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: gea_daily_ataskaita1 gea_daily_ataskaita1_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY "public"."gea_daily"
-    ADD CONSTRAINT "gea_daily_pkey" PRIMARY KEY ("id");
+ALTER TABLE ONLY "public"."gea_daily_ataskaita1"
+    ADD CONSTRAINT "gea_daily_ataskaita1_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: gea_daily_ataskaita2 gea_daily_ataskaita2_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_ataskaita2"
+    ADD CONSTRAINT "gea_daily_ataskaita2_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: gea_daily_ataskaita3 gea_daily_ataskaita3_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_ataskaita3"
+    ADD CONSTRAINT "gea_daily_ataskaita3_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: gea_daily_imports gea_daily_imports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_imports"
+    ADD CONSTRAINT "gea_daily_imports_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -8238,13 +9165,6 @@ CREATE UNIQUE INDEX "diseases_name_idx" ON "public"."diseases" USING "btree" ("l
 
 
 --
--- Name: gea_daily_uniq; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE UNIQUE INDEX "gea_daily_uniq" ON "public"."gea_daily" USING "btree" ("animal_id", "snapshot_date");
-
-
---
 -- Name: idx_animal_synchronizations_animal_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -8368,6 +9288,34 @@ CREATE INDEX "idx_batches_package_count" ON "public"."batches" USING "btree" ("p
 --
 
 CREATE INDEX "idx_batches_package_size" ON "public"."batches" USING "btree" ("package_size");
+
+
+--
+-- Name: idx_cost_accumulation_documents_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_accumulation_documents_project_id" ON "public"."cost_accumulation_documents" USING "btree" ("project_id");
+
+
+--
+-- Name: idx_cost_accumulation_documents_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_accumulation_documents_status" ON "public"."cost_accumulation_documents" USING "btree" ("processing_status");
+
+
+--
+-- Name: idx_cost_accumulation_items_document_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_accumulation_items_document_id" ON "public"."cost_accumulation_items" USING "btree" ("document_id");
+
+
+--
+-- Name: idx_cost_accumulation_items_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_cost_accumulation_items_project_id" ON "public"."cost_accumulation_items" USING "btree" ("project_id");
 
 
 --
@@ -8560,24 +9508,59 @@ CREATE INDEX "idx_fire_extinguishers_vehicle" ON "public"."fire_extinguishers" U
 
 
 --
--- Name: idx_gea_daily_animal_date; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_gea_a1_cow_number; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX "idx_gea_daily_animal_date" ON "public"."gea_daily" USING "btree" ("animal_id", "snapshot_date" DESC);
-
-
---
--- Name: idx_gea_daily_animal_snapshot; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX "idx_gea_daily_animal_snapshot" ON "public"."gea_daily" USING "btree" ("animal_id", "snapshot_date" DESC);
+CREATE INDEX "idx_gea_a1_cow_number" ON "public"."gea_daily_ataskaita1" USING "btree" ("cow_number");
 
 
 --
--- Name: idx_gea_daily_recent; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_gea_a1_import_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX "idx_gea_daily_recent" ON "public"."gea_daily" USING "btree" ("snapshot_date");
+CREATE INDEX "idx_gea_a1_import_id" ON "public"."gea_daily_ataskaita1" USING "btree" ("import_id");
+
+
+--
+-- Name: idx_gea_a2_cow_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_a2_cow_number" ON "public"."gea_daily_ataskaita2" USING "btree" ("cow_number");
+
+
+--
+-- Name: idx_gea_a2_import_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_a2_import_id" ON "public"."gea_daily_ataskaita2" USING "btree" ("import_id");
+
+
+--
+-- Name: idx_gea_a2_milkings_gin; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_a2_milkings_gin" ON "public"."gea_daily_ataskaita2" USING "gin" ("milkings");
+
+
+--
+-- Name: idx_gea_a3_cow_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_a3_cow_number" ON "public"."gea_daily_ataskaita3" USING "btree" ("cow_number");
+
+
+--
+-- Name: idx_gea_a3_import_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_a3_import_id" ON "public"."gea_daily_ataskaita3" USING "btree" ("import_id");
+
+
+--
+-- Name: idx_gea_daily_imports_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "idx_gea_daily_imports_created_at" ON "public"."gea_daily_imports" USING "btree" ("created_at" DESC);
 
 
 --
@@ -9120,6 +10103,27 @@ CREATE INDEX "treatments_reg_date_idx" ON "public"."treatments" USING "btree" ("
 
 
 --
+-- Name: uq_gea_a1_import_cow; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "uq_gea_a1_import_cow" ON "public"."gea_daily_ataskaita1" USING "btree" ("import_id", "cow_number");
+
+
+--
+-- Name: uq_gea_a2_import_cow; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "uq_gea_a2_import_cow" ON "public"."gea_daily_ataskaita2" USING "btree" ("import_id", "cow_number");
+
+
+--
+-- Name: uq_gea_a3_import_cow; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX "uq_gea_a3_import_cow" ON "public"."gea_daily_ataskaita3" USING "btree" ("import_id", "cow_number");
+
+
+--
 -- Name: usage_items_batch_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -9166,6 +10170,34 @@ CREATE OR REPLACE TRIGGER "auto_process_visit_medications" BEFORE UPDATE ON "pub
 --
 
 CREATE OR REPLACE TRIGGER "deduct_parts_from_inventory" AFTER INSERT ON "public"."work_order_parts" FOR EACH ROW EXECUTE FUNCTION "public"."deduct_work_order_parts"();
+
+
+--
+-- Name: farm_equipment_items farm_equipment_items_update_next_service; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "farm_equipment_items_update_next_service" BEFORE INSERT OR UPDATE OF "last_service_date", "service_interval_value", "service_interval_type" ON "public"."farm_equipment_items" FOR EACH ROW EXECUTE FUNCTION "public"."update_farm_equipment_item_next_service_date"();
+
+
+--
+-- Name: farm_equipment_service_records farm_equipment_service_records_update_last_service; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "farm_equipment_service_records_update_last_service" AFTER INSERT ON "public"."farm_equipment_service_records" FOR EACH ROW EXECUTE FUNCTION "public"."update_last_service_date_on_new_record"();
+
+
+--
+-- Name: farm_equipment_service_records farm_equipment_service_records_update_timestamp; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "farm_equipment_service_records_update_timestamp" BEFORE UPDATE ON "public"."farm_equipment_service_records" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+--
+-- Name: farm_equipment farm_equipment_update_timestamp; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "farm_equipment_update_timestamp" BEFORE UPDATE ON "public"."farm_equipment" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
 
 
 --
@@ -9243,13 +10275,6 @@ CREATE OR REPLACE TRIGGER "set_updated_at_course_medication_schedules" BEFORE UP
 --
 
 CREATE OR REPLACE TRIGGER "set_updated_at_diseases" BEFORE UPDATE ON "public"."diseases" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_set_timestamp"();
-
-
---
--- Name: gea_daily set_updated_at_gea_daily; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE TRIGGER "set_updated_at_gea_daily" BEFORE UPDATE ON "public"."gea_daily" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_set_timestamp"();
 
 
 --
@@ -9421,13 +10446,6 @@ CREATE OR REPLACE TRIGGER "trg_check_usage" BEFORE INSERT OR UPDATE ON "public".
 
 
 --
--- Name: gea_daily trg_gea_status_apsek; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE TRIGGER "trg_gea_status_apsek" AFTER INSERT OR UPDATE OF "statusas" ON "public"."gea_daily" FOR EACH ROW EXECUTE FUNCTION "public"."on_gea_daily_status_change"();
-
-
---
 -- Name: synchronization_steps trg_sync_step_stock_deduction; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -9488,6 +10506,13 @@ CREATE OR REPLACE TRIGGER "trigger_create_usage_from_vaccination" AFTER INSERT O
 --
 
 CREATE OR REPLACE TRIGGER "trigger_deduct_equipment_stock" AFTER INSERT ON "public"."equipment_issuance_items" FOR EACH ROW EXECUTE FUNCTION "public"."deduct_equipment_stock"();
+
+
+--
+-- Name: farm_equipment_service_parts trigger_deduct_farm_equipment_service_stock; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "trigger_deduct_farm_equipment_service_stock" AFTER INSERT ON "public"."farm_equipment_service_parts" FOR EACH ROW EXECUTE FUNCTION "public"."deduct_farm_equipment_service_stock"();
 
 
 --
@@ -9572,6 +10597,13 @@ CREATE OR REPLACE TRIGGER "trigger_vehicle_visit_part_stock_deduction" BEFORE IN
 --
 
 CREATE OR REPLACE TRIGGER "trigger_vehicle_visit_part_stock_restoration" BEFORE DELETE ON "public"."vehicle_visit_parts" FOR EACH ROW EXECUTE FUNCTION "public"."restore_vehicle_visit_part_stock"();
+
+
+--
+-- Name: cost_accumulation_projects update_cost_accumulation_project_timestamp; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "update_cost_accumulation_project_timestamp" BEFORE UPDATE ON "public"."cost_accumulation_projects" FOR EACH ROW EXECUTE FUNCTION "public"."update_cost_accumulation_project_updated_at"();
 
 
 --
@@ -9726,6 +10758,54 @@ ALTER TABLE ONLY "public"."biocide_usage"
 
 ALTER TABLE ONLY "public"."biocide_usage"
     ADD CONSTRAINT "biocide_usage_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id");
+
+
+--
+-- Name: cost_accumulation_documents cost_accumulation_documents_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_documents"
+    ADD CONSTRAINT "cost_accumulation_documents_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."cost_accumulation_projects"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: cost_accumulation_documents cost_accumulation_documents_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_documents"
+    ADD CONSTRAINT "cost_accumulation_documents_uploaded_by_fkey" FOREIGN KEY ("uploaded_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: cost_accumulation_items cost_accumulation_items_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_items"
+    ADD CONSTRAINT "cost_accumulation_items_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: cost_accumulation_items cost_accumulation_items_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_items"
+    ADD CONSTRAINT "cost_accumulation_items_document_id_fkey" FOREIGN KEY ("document_id") REFERENCES "public"."cost_accumulation_documents"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: cost_accumulation_items cost_accumulation_items_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_items"
+    ADD CONSTRAINT "cost_accumulation_items_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."cost_accumulation_projects"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: cost_accumulation_projects cost_accumulation_projects_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."cost_accumulation_projects"
+    ADD CONSTRAINT "cost_accumulation_projects_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 --
@@ -9977,6 +11057,46 @@ ALTER TABLE ONLY "public"."equipment_suppliers"
 
 
 --
+-- Name: farm_equipment_items farm_equipment_items_farm_equipment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_items"
+    ADD CONSTRAINT "farm_equipment_items_farm_equipment_id_fkey" FOREIGN KEY ("farm_equipment_id") REFERENCES "public"."farm_equipment"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: farm_equipment_service_parts farm_equipment_service_parts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_parts"
+    ADD CONSTRAINT "farm_equipment_service_parts_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."equipment_batches"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: farm_equipment_service_parts farm_equipment_service_parts_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_parts"
+    ADD CONSTRAINT "farm_equipment_service_parts_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "public"."equipment_products"("id");
+
+
+--
+-- Name: farm_equipment_service_parts farm_equipment_service_parts_service_record_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_parts"
+    ADD CONSTRAINT "farm_equipment_service_parts_service_record_id_fkey" FOREIGN KEY ("service_record_id") REFERENCES "public"."farm_equipment_service_records"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: farm_equipment_service_records farm_equipment_service_records_farm_equipment_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."farm_equipment_service_records"
+    ADD CONSTRAINT "farm_equipment_service_records_farm_equipment_item_id_fkey" FOREIGN KEY ("farm_equipment_item_id") REFERENCES "public"."farm_equipment_items"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: fire_extinguishers fire_extinguishers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -10001,11 +11121,35 @@ ALTER TABLE ONLY "public"."fire_extinguishers"
 
 
 --
--- Name: gea_daily gea_daily_animal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: gea_daily_ataskaita1 gea_daily_ataskaita1_import_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY "public"."gea_daily"
-    ADD CONSTRAINT "gea_daily_animal_id_fkey" FOREIGN KEY ("animal_id") REFERENCES "public"."animals"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."gea_daily_ataskaita1"
+    ADD CONSTRAINT "gea_daily_ataskaita1_import_id_fkey" FOREIGN KEY ("import_id") REFERENCES "public"."gea_daily_imports"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: gea_daily_ataskaita2 gea_daily_ataskaita2_import_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_ataskaita2"
+    ADD CONSTRAINT "gea_daily_ataskaita2_import_id_fkey" FOREIGN KEY ("import_id") REFERENCES "public"."gea_daily_imports"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: gea_daily_ataskaita3 gea_daily_ataskaita3_import_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_ataskaita3"
+    ADD CONSTRAINT "gea_daily_ataskaita3_import_id_fkey" FOREIGN KEY ("import_id") REFERENCES "public"."gea_daily_imports"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: gea_daily_imports gea_daily_imports_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."gea_daily_imports"
+    ADD CONSTRAINT "gea_daily_imports_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 --
@@ -11355,6 +12499,27 @@ CREATE POLICY "Authenticated users can view summaries" ON "public"."milk_test_su
 
 
 --
+-- Name: farm_equipment Enable all for authenticated users; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Enable all for authenticated users" ON "public"."farm_equipment" TO "authenticated" USING (true) WITH CHECK (true);
+
+
+--
+-- Name: farm_equipment_items Enable all for authenticated users; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Enable all for authenticated users" ON "public"."farm_equipment_items" TO "authenticated" USING (true) WITH CHECK (true);
+
+
+--
+-- Name: farm_equipment_service_records Enable all for authenticated users; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Enable all for authenticated users" ON "public"."farm_equipment_service_records" TO "authenticated" USING (true) WITH CHECK (true);
+
+
+--
 -- Name: user_audit_logs System can insert audit logs; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -11390,31 +12555,12 @@ CREATE POLICY "Users can create medication schedules" ON "public"."course_medica
 
 
 --
--- Name: vehicle_service_visits Users can create service visits; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can create service visits" ON "public"."vehicle_service_visits" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
-   FROM "public"."vehicles"
-  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
-
-
---
 -- Name: vehicle_documents Users can create vehicle documents; Type: POLICY; Schema: public; Owner: postgres
 --
 
 CREATE POLICY "Users can create vehicle documents" ON "public"."vehicle_documents" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
    FROM "public"."vehicles"
   WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
-
-
---
--- Name: vehicle_visit_parts Users can create visit parts; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can create visit parts" ON "public"."vehicle_visit_parts" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
-   FROM ("public"."vehicle_service_visits" "vsv"
-     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
-  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -11460,15 +12606,6 @@ CREATE POLICY "Users can delete protocols" ON "public"."synchronization_protocol
 
 
 --
--- Name: vehicle_service_visits Users can delete service visits; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can delete service visits" ON "public"."vehicle_service_visits" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM "public"."vehicles"
-  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
-
-
---
 -- Name: synchronization_steps Users can delete steps; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -11489,16 +12626,6 @@ CREATE POLICY "Users can delete synchronizations" ON "public"."animal_synchroniz
 CREATE POLICY "Users can delete vehicle documents" ON "public"."vehicle_documents" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."vehicles"
   WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
-
-
---
--- Name: vehicle_visit_parts Users can delete visit parts; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can delete visit parts" ON "public"."vehicle_visit_parts" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM ("public"."vehicle_service_visits" "vsv"
-     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
-  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -11663,17 +12790,6 @@ CREATE POLICY "Users can update quality tests" ON "public"."milk_quality_tests" 
 
 
 --
--- Name: vehicle_service_visits Users can update service visits; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can update service visits" ON "public"."vehicle_service_visits" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM "public"."vehicles"
-  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id")))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM "public"."vehicles"
-  WHERE ("vehicles"."id" = "vehicle_service_visits"."vehicle_id"))));
-
-
---
 -- Name: synchronization_steps Users can update steps; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -11696,19 +12812,6 @@ CREATE POLICY "Users can update vehicle documents" ON "public"."vehicle_document
   WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id")))) WITH CHECK ((EXISTS ( SELECT 1
    FROM "public"."vehicles"
   WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
-
-
---
--- Name: vehicle_visit_parts Users can update visit parts; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can update visit parts" ON "public"."vehicle_visit_parts" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM ("public"."vehicle_service_visits" "vsv"
-     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
-  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id")))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM ("public"."vehicle_service_visits" "vsv"
-     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
-  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -11790,16 +12893,6 @@ CREATE POLICY "Users can view service visits for their vehicles" ON "public"."ve
 CREATE POLICY "Users can view vehicle documents" ON "public"."vehicle_documents" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."vehicles"
   WHERE ("vehicles"."id" = "vehicle_documents"."vehicle_id"))));
-
-
---
--- Name: vehicle_visit_parts Users can view visit parts; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view visit parts" ON "public"."vehicle_visit_parts" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM ("public"."vehicle_service_visits" "vsv"
-     JOIN "public"."vehicles" "v" ON (("v"."id" = "vsv"."vehicle_id")))
-  WHERE ("vsv"."id" = "vehicle_visit_parts"."visit_id"))));
 
 
 --
@@ -12107,18 +13200,6 @@ ALTER TABLE "public"."vehicle_documents" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."vehicle_fuel_records" ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: vehicle_service_visits; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE "public"."vehicle_service_visits" ENABLE ROW LEVEL SECURITY;
-
---
--- Name: vehicle_visit_parts; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE "public"."vehicle_visit_parts" ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: vehicles; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -12189,6 +13270,15 @@ GRANT ALL ON FUNCTION "public"."calculate_average_daily_milk"("p_animal_id" "uui
 GRANT ALL ON FUNCTION "public"."calculate_milk_loss_for_synchronization"("p_animal_id" "uuid", "p_sync_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."calculate_milk_loss_for_synchronization"("p_animal_id" "uuid", "p_sync_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."calculate_milk_loss_for_synchronization"("p_animal_id" "uuid", "p_sync_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text"); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."calculate_next_service_date"("p_last_service_date" "date", "p_interval_value" integer, "p_interval_type" "text") TO "service_role";
 
 
 --
@@ -12318,6 +13408,15 @@ GRANT ALL ON FUNCTION "public"."deduct_equipment_stock"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "deduct_farm_equipment_service_stock"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."deduct_farm_equipment_service_stock"() TO "anon";
+GRANT ALL ON FUNCTION "public"."deduct_farm_equipment_service_stock"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."deduct_farm_equipment_service_stock"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "deduct_sync_step_medication"(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12369,6 +13468,16 @@ GRANT ALL ON FUNCTION "public"."fn_fifo_batch"("p_product_id" "uuid") TO "servic
 GRANT ALL ON FUNCTION "public"."freeze_user"("p_user_id" "uuid", "p_admin_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."freeze_user"("p_user_id" "uuid", "p_admin_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."freeze_user"("p_user_id" "uuid", "p_admin_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "gea_daily_upload"("payload" "jsonb"); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION "public"."gea_daily_upload"("payload" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."gea_daily_upload"("payload" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."gea_daily_upload"("payload" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."gea_daily_upload"("payload" "jsonb") TO "service_role";
 
 
 --
@@ -12606,6 +13715,42 @@ GRANT ALL ON FUNCTION "public"."restore_vehicle_visit_part_stock"() TO "service_
 
 
 --
+-- Name: FUNCTION "safe_bool_lt"("p" "text"); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."safe_bool_lt"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_bool_lt"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_bool_lt"("p" "text") TO "service_role";
+
+
+--
+-- Name: FUNCTION "safe_date"("p" "text"); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."safe_date"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_date"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_date"("p" "text") TO "service_role";
+
+
+--
+-- Name: FUNCTION "safe_int"("p" "text"); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."safe_int"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_int"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_int"("p" "text") TO "service_role";
+
+
+--
+-- Name: FUNCTION "safe_numeric"("p" "text"); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."safe_numeric"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_numeric"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_numeric"("p" "text") TO "service_role";
+
+
+--
 -- Name: FUNCTION "set_work_order_number_trigger"(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12678,12 +13823,30 @@ GRANT ALL ON FUNCTION "public"."update_batch_qty_left"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "update_cost_accumulation_project_updated_at"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_cost_accumulation_project_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_cost_accumulation_project_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_cost_accumulation_project_updated_at"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "update_cost_center_updated_at"(); Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_cost_center_updated_at"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "update_farm_equipment_item_next_service_date"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_farm_equipment_item_next_service_date"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_farm_equipment_item_next_service_date"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_farm_equipment_item_next_service_date"() TO "service_role";
 
 
 --
@@ -12711,6 +13874,15 @@ GRANT ALL ON FUNCTION "public"."update_hoof_records_updated_at"() TO "service_ro
 GRANT ALL ON FUNCTION "public"."update_last_login"("p_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_last_login"("p_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_last_login"("p_user_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "update_last_service_date_on_new_record"(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION "public"."update_last_service_date_on_new_record"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_last_service_date_on_new_record"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_last_service_date_on_new_record"() TO "service_role";
 
 
 --
@@ -12930,21 +14102,48 @@ GRANT ALL ON TABLE "public"."biocide_usage" TO "service_role";
 
 
 --
+-- Name: TABLE "cost_accumulation_documents"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_accumulation_documents" TO "anon";
+GRANT ALL ON TABLE "public"."cost_accumulation_documents" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_accumulation_documents" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_accumulation_items"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_accumulation_items" TO "anon";
+GRANT ALL ON TABLE "public"."cost_accumulation_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_accumulation_items" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_accumulation_projects"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_accumulation_projects" TO "anon";
+GRANT ALL ON TABLE "public"."cost_accumulation_projects" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_accumulation_projects" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_accumulation_project_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_accumulation_project_summary" TO "anon";
+GRANT ALL ON TABLE "public"."cost_accumulation_project_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_accumulation_project_summary" TO "service_role";
+
+
+--
 -- Name: TABLE "cost_centers"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE "public"."cost_centers" TO "anon";
 GRANT ALL ON TABLE "public"."cost_centers" TO "authenticated";
 GRANT ALL ON TABLE "public"."cost_centers" TO "service_role";
-
-
---
--- Name: TABLE "equipment_categories"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."equipment_categories" TO "anon";
-GRANT ALL ON TABLE "public"."equipment_categories" TO "authenticated";
-GRANT ALL ON TABLE "public"."equipment_categories" TO "service_role";
 
 
 --
@@ -12975,6 +14174,24 @@ GRANT ALL ON TABLE "public"."equipment_invoices" TO "service_role";
 
 
 --
+-- Name: TABLE "cost_center_direct_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_center_direct_summary" TO "anon";
+GRANT ALL ON TABLE "public"."cost_center_direct_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_center_direct_summary" TO "service_role";
+
+
+--
+-- Name: TABLE "equipment_categories"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_categories" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_categories" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_categories" TO "service_role";
+
+
+--
 -- Name: TABLE "equipment_products"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12999,6 +14216,15 @@ GRANT ALL ON TABLE "public"."users" TO "service_role";
 GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "anon";
 GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "authenticated";
 GRANT ALL ON TABLE "public"."cost_center_parts_usage" TO "service_role";
+
+
+--
+-- Name: TABLE "cost_center_summary_with_children"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."cost_center_summary_with_children" TO "anon";
+GRANT ALL ON TABLE "public"."cost_center_summary_with_children" TO "authenticated";
+GRANT ALL ON TABLE "public"."cost_center_summary_with_children" TO "service_role";
 
 
 --
@@ -13101,12 +14327,102 @@ GRANT ALL ON TABLE "public"."equipment_suppliers" TO "service_role";
 
 
 --
+-- Name: TABLE "equipment_unassigned_invoice_items"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."equipment_unassigned_invoice_items" TO "anon";
+GRANT ALL ON TABLE "public"."equipment_unassigned_invoice_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."equipment_unassigned_invoice_items" TO "service_role";
+
+
+--
 -- Name: TABLE "equipment_warehouse_stock"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "anon";
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "authenticated";
 GRANT ALL ON TABLE "public"."equipment_warehouse_stock" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_items"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_items" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_items" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_items" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_service_parts"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_service_parts" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_service_parts" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_service_parts" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_service_records"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_service_records" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_service_records" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_service_records" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_cost_overview"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_cost_overview" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_cost_overview" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_cost_overview" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_items_detail"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_items_detail" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_items_detail" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_items_detail" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_service_cost_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_service_cost_summary" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_service_cost_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_service_cost_summary" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_service_details"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_service_details" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_service_details" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_service_details" TO "service_role";
+
+
+--
+-- Name: TABLE "farm_equipment_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."farm_equipment_summary" TO "anon";
+GRANT ALL ON TABLE "public"."farm_equipment_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."farm_equipment_summary" TO "service_role";
 
 
 --
@@ -13119,21 +14435,48 @@ GRANT ALL ON TABLE "public"."fire_extinguishers" TO "service_role";
 
 
 --
--- Name: TABLE "gea_daily"; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE "gea_daily_ataskaita1"; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE "public"."gea_daily" TO "anon";
-GRANT ALL ON TABLE "public"."gea_daily" TO "authenticated";
-GRANT ALL ON TABLE "public"."gea_daily" TO "service_role";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita1" TO "anon";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita1" TO "authenticated";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita1" TO "service_role";
 
 
 --
--- Name: SEQUENCE "gea_daily_id_seq"; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE "gea_daily_ataskaita2"; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON SEQUENCE "public"."gea_daily_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."gea_daily_id_seq" TO "authenticated";
-GRANT ALL ON SEQUENCE "public"."gea_daily_id_seq" TO "service_role";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita2" TO "anon";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita2" TO "authenticated";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita2" TO "service_role";
+
+
+--
+-- Name: TABLE "gea_daily_ataskaita3"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita3" TO "anon";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita3" TO "authenticated";
+GRANT ALL ON TABLE "public"."gea_daily_ataskaita3" TO "service_role";
+
+
+--
+-- Name: TABLE "gea_daily_imports"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."gea_daily_imports" TO "anon";
+GRANT ALL ON TABLE "public"."gea_daily_imports" TO "authenticated";
+GRANT ALL ON TABLE "public"."gea_daily_imports" TO "service_role";
+
+
+--
+-- Name: TABLE "gea_daily_cows_joined"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."gea_daily_cows_joined" TO "anon";
+GRANT ALL ON TABLE "public"."gea_daily_cows_joined" TO "authenticated";
+GRANT ALL ON TABLE "public"."gea_daily_cows_joined" TO "service_role";
 
 
 --
@@ -13551,6 +14894,60 @@ GRANT ALL ON TABLE "public"."vehicle_assignments" TO "service_role";
 
 
 --
+-- Name: TABLE "vehicle_service_visits"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_visit_parts"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicles"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicles" TO "anon";
+GRANT ALL ON TABLE "public"."vehicles" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicles" TO "service_role";
+
+
+--
+-- Name: TABLE "work_order_parts"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."work_order_parts" TO "anon";
+GRANT ALL ON TABLE "public"."work_order_parts" TO "authenticated";
+GRANT ALL ON TABLE "public"."work_order_parts" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_maintenance_cost_summary"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_maintenance_cost_summary" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_maintenance_cost_summary" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_maintenance_cost_summary" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_cost_overview"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_cost_overview" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_cost_overview" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_cost_overview" TO "service_role";
+
+
+--
 -- Name: TABLE "vehicle_documents"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -13569,30 +14966,12 @@ GRANT ALL ON TABLE "public"."vehicle_fuel_records" TO "service_role";
 
 
 --
--- Name: TABLE "vehicles"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vehicles" TO "anon";
-GRANT ALL ON TABLE "public"."vehicles" TO "authenticated";
-GRANT ALL ON TABLE "public"."vehicles" TO "service_role";
-
-
---
 -- Name: TABLE "vehicle_parts_usage"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "anon";
 GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "authenticated";
 GRANT ALL ON TABLE "public"."vehicle_parts_usage" TO "service_role";
-
-
---
--- Name: TABLE "vehicle_service_visits"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "anon";
-GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "authenticated";
-GRANT ALL ON TABLE "public"."vehicle_service_visits" TO "service_role";
 
 
 --
@@ -13605,12 +14984,21 @@ GRANT ALL ON TABLE "public"."vehicle_service_history" TO "service_role";
 
 
 --
--- Name: TABLE "vehicle_visit_parts"; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE "vehicle_service_visit_details"; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "anon";
-GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "authenticated";
-GRANT ALL ON TABLE "public"."vehicle_visit_parts" TO "service_role";
+GRANT ALL ON TABLE "public"."vehicle_service_visit_details" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_service_visit_details" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_service_visit_details" TO "service_role";
+
+
+--
+-- Name: TABLE "vehicle_work_order_details"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE "public"."vehicle_work_order_details" TO "anon";
+GRANT ALL ON TABLE "public"."vehicle_work_order_details" TO "authenticated";
+GRANT ALL ON TABLE "public"."vehicle_work_order_details" TO "service_role";
 
 
 --
@@ -13632,39 +15020,12 @@ GRANT ALL ON TABLE "public"."vw_animal_cost_analytics" TO "service_role";
 
 
 --
--- Name: TABLE "vw_animal_latest_collar"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_animal_latest_collar" TO "anon";
-GRANT ALL ON TABLE "public"."vw_animal_latest_collar" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_animal_latest_collar" TO "service_role";
-
-
---
--- Name: TABLE "vw_animal_milk_revenue"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_animal_milk_revenue" TO "anon";
-GRANT ALL ON TABLE "public"."vw_animal_milk_revenue" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_animal_milk_revenue" TO "service_role";
-
-
---
 -- Name: TABLE "vw_animal_product_usage"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON TABLE "public"."vw_animal_product_usage" TO "anon";
 GRANT ALL ON TABLE "public"."vw_animal_product_usage" TO "authenticated";
 GRANT ALL ON TABLE "public"."vw_animal_product_usage" TO "service_role";
-
-
---
--- Name: TABLE "vw_animal_profitability"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_animal_profitability" TO "anon";
-GRANT ALL ON TABLE "public"."vw_animal_profitability" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_animal_profitability" TO "service_role";
 
 
 --
@@ -13701,24 +15062,6 @@ GRANT ALL ON TABLE "public"."vw_biocide_journal" TO "service_role";
 GRANT ALL ON TABLE "public"."vw_course_schedules" TO "anon";
 GRANT ALL ON TABLE "public"."vw_course_schedules" TO "authenticated";
 GRANT ALL ON TABLE "public"."vw_course_schedules" TO "service_role";
-
-
---
--- Name: TABLE "vw_herd_profitability_summary"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_herd_profitability_summary" TO "anon";
-GRANT ALL ON TABLE "public"."vw_herd_profitability_summary" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_herd_profitability_summary" TO "service_role";
-
-
---
--- Name: TABLE "vw_latest_animal_collars"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_latest_animal_collars" TO "anon";
-GRANT ALL ON TABLE "public"."vw_latest_animal_collars" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_latest_animal_collars" TO "service_role";
 
 
 --
@@ -13794,15 +15137,6 @@ GRANT ALL ON TABLE "public"."vw_treated_animals_detailed" TO "service_role";
 
 
 --
--- Name: TABLE "vw_treatment_roi_analysis"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."vw_treatment_roi_analysis" TO "anon";
-GRANT ALL ON TABLE "public"."vw_treatment_roi_analysis" TO "authenticated";
-GRANT ALL ON TABLE "public"."vw_treatment_roi_analysis" TO "service_role";
-
-
---
 -- Name: TABLE "vw_vet_drug_journal"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -13827,15 +15161,6 @@ GRANT ALL ON TABLE "public"."vw_withdrawal_status" TO "service_role";
 GRANT ALL ON TABLE "public"."work_order_labor" TO "anon";
 GRANT ALL ON TABLE "public"."work_order_labor" TO "authenticated";
 GRANT ALL ON TABLE "public"."work_order_labor" TO "service_role";
-
-
---
--- Name: TABLE "work_order_parts"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE "public"."work_order_parts" TO "anon";
-GRANT ALL ON TABLE "public"."work_order_parts" TO "authenticated";
-GRANT ALL ON TABLE "public"."work_order_parts" TO "service_role";
 
 
 --
@@ -13911,5 +15236,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict 5B0YaDDevb1SzvPox8nhPpS1ggKgfDEcxmZTn8CfbWQT2TLWgw4u4R4Koo5M4kL
+-- \unrestrict EDzbElkTtxG1psRHPqQpMZabDhk04uJCqa6r8p21rBLGO6uIp9JU6uOXYNewSPq
 
