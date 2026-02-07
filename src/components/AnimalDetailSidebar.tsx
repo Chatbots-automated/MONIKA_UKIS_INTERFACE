@@ -75,6 +75,12 @@ interface GeaDaily {
   created_at: string;
 }
 
+// New GEA system structure (for reference, transformed to GeaDaily format)
+// Data comes from gea_daily_cows_joined view which joins:
+// - gea_daily_ataskaita1 (pregnancy/lactation)
+// - gea_daily_ataskaita2 (milking data with JSONB array)
+// - gea_daily_ataskaita3 (teat/insemination data)
+
 function WithdrawalStatusCard({ animalId }: { animalId: string }) {
   const [withdrawalStatus, setWithdrawalStatus] = useState<WithdrawalStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,32 +150,28 @@ function WithdrawalStatusCard({ animalId }: { animalId: string }) {
 
 function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatusChange?: () => void }) {
   const [geaData, setGeaData] = useState<GeaDaily | null>(null);
+  const [rawGeaData, setRawGeaData] = useState<any>(null); // Store raw new GEA data for full display
   const [loading, setLoading] = useState(true);
   const [prevStatus, setPrevStatus] = useState<string | null>(null);
+  const [expandedSection, setExpandedSection] = useState<string | null>('ataskaita1'); // Default to first section
 
   useEffect(() => {
     loadGeaData();
 
+    // Subscribe to new GEA imports for realtime updates
     const channel = supabase
-      .channel(`gea_daily_${animalId}`)
+      .channel(`gea_daily_imports`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'gea_daily',
-          filter: `animal_id=eq.${animalId}`,
+          table: 'gea_daily_imports',
         },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const newData = payload.new as GeaDaily;
-            setGeaData(newData);
-
-            if (newData.statusas === 'APSĖK' && prevStatus !== 'APSĖK') {
-              onStatusChange?.();
-            }
-            setPrevStatus(newData.statusas);
-          }
+        () => {
+          // Reload when new GEA import happens
+          console.log('🔄 New GEA import detected, reloading data...');
+          loadGeaData();
         }
       )
       .subscribe();
@@ -181,7 +183,83 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
 
   const loadGeaData = async () => {
     try {
-      const { data, error } = await supabase
+      // First, try to get the animal's tag number
+      const { data: animalData } = await supabase
+        .from('animals')
+        .select('tag_no')
+        .eq('id', animalId)
+        .single();
+
+      console.log('🔍 Animal data:', { animalId, tag_no: animalData?.tag_no });
+
+      if (!animalData?.tag_no) {
+        console.log('❌ No tag_no found for animal');
+        setLoading(false);
+        return;
+      }
+
+      // Try new GEA system first (gea_daily_cows_joined view)
+      console.log('🔍 Querying gea_daily_cows_joined for cow_number:', animalData.tag_no);
+      const { data: newGeaData, error: newGeaError } = await supabase
+        .from('gea_daily_cows_joined')
+        .select('*')
+        .eq('cow_number', animalData.tag_no)
+        .order('import_created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      console.log('🔍 Query result:', { newGeaData, newGeaError });
+
+      if (newGeaData && !newGeaError) {
+        console.log('✅ New GEA data found:', newGeaData);
+        // Store raw data for full display
+        setRawGeaData(newGeaData);
+        
+        // Transform new GEA data to old format for backwards compatibility
+        const transformedData: GeaDaily = {
+          id: 0, // Not used in new system
+          animal_id: animalId,
+          tag_no: animalData.tag_no,
+          collar_no: null, // Not in new system
+          statusas: newGeaData.cow_state,
+          grupe: newGeaData.group_number ? parseInt(newGeaData.group_number) : null,
+          veisline_verte: newGeaData.genetic_worth,
+          milk_avg: newGeaData.avg_milk_prod_weight,
+          // Map milkings array to individual columns
+          m1_date: newGeaData.milkings?.[0]?.date || null,
+          m1_time: newGeaData.milkings?.[0]?.time || null,
+          m1_qty: newGeaData.milkings?.[0]?.weight || null,
+          m2_date: newGeaData.milkings?.[1]?.date || null,
+          m2_time: newGeaData.milkings?.[1]?.time || null,
+          m2_qty: newGeaData.milkings?.[1]?.weight || null,
+          m3_date: newGeaData.milkings?.[2]?.date || null,
+          m3_time: newGeaData.milkings?.[2]?.time || null,
+          m3_qty: newGeaData.milkings?.[2]?.weight || null,
+          m4_date: newGeaData.milkings?.[3]?.date || null,
+          m4_time: newGeaData.milkings?.[3]?.time || null,
+          m4_qty: newGeaData.milkings?.[3]?.weight || null,
+          m5_date: newGeaData.milkings?.[4]?.date || null,
+          m5_time: newGeaData.milkings?.[4]?.time || null,
+          m5_qty: newGeaData.milkings?.[4]?.weight || null,
+          in_milk: newGeaData.produce_milk,
+          calved_on: null, // Calculate from lactation_days if needed
+          lact_days: newGeaData.lactation_days,
+          inseminated_on: newGeaData.inseminated_at,
+          kada_versiuosis: newGeaData.next_pregnancy_date,
+          snapshot_date: newGeaData.import_created_at,
+          source: 'gea_daily_new',
+          created_at: newGeaData.import_created_at,
+        };
+
+        setGeaData(transformedData);
+        setPrevStatus(transformedData.statusas);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to old gea_daily table (if it still exists)
+      console.log('⚠️ No new GEA data, trying old gea_daily table');
+      const { data: oldGeaData, error: oldGeaError } = await supabase
         .from('gea_daily')
         .select('*')
         .eq('animal_id', animalId)
@@ -189,9 +267,16 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         .limit(1)
         .maybeSingle();
 
-      if (error) throw error;
-      setGeaData(data);
-      setPrevStatus(data?.statusas || null);
+      if (oldGeaError) {
+        // Old table might not exist anymore - that's okay
+        console.log('⚠️ Old gea_daily table not found or error:', oldGeaError.message);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Old GEA data:', oldGeaData);
+      setGeaData(oldGeaData);
+      setPrevStatus(oldGeaData?.statusas || null);
     } catch (error) {
       console.error('Error loading GEA data:', error);
     } finally {
@@ -244,12 +329,311 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
   })() : null;
 
   const isApsek = geaData.statusas === 'APSĖK';
+  const isNewSystem = rawGeaData !== null;
 
+  // If using new system, show comprehensive 3-section view
+  if (isNewSystem && rawGeaData) {
+    const allMilkings = rawGeaData.milkings || [];
+    
+    return (
+      <div className={`bg-gradient-to-br ${isApsek ? 'from-green-50 to-emerald-50 border-green-300' : 'from-blue-50 to-indigo-50 border-blue-200'} border-2 rounded-xl shadow-lg overflow-hidden`}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Milk className="w-6 h-6 text-white" />
+              <div>
+                <h3 className="font-bold text-white text-lg">GEA Duomenys</h3>
+                <p className="text-blue-100 text-xs">Importuota: {formatDateLT(rawGeaData.import_created_at)}</p>
+              </div>
+            </div>
+            {isApsek && (
+              <span className="px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                <CheckCircle className="w-4 h-4" />
+                APSĖKLINTAS
+              </span>
+            )}
+          </div>
+        </div>
+
+        {isApsek && (
+          <div className="bg-green-100 border-b-2 border-green-400 p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-green-800">
+                <p className="font-semibold mb-1">Gyvūnas apsėklintas</p>
+                <p className="text-xs">Visi aktyvūs sinchronizacijos protokolai automatiškai atšaukiami</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section Tabs */}
+        <div className="bg-white border-b border-gray-200 px-4">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setExpandedSection('ataskaita1')}
+              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
+                expandedSection === 'ataskaita1'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              1-oji Ataskaita
+              <span className="ml-2 text-xs opacity-75">(Veršingumas)</span>
+            </button>
+            <button
+              onClick={() => setExpandedSection('ataskaita2')}
+              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
+                expandedSection === 'ataskaita2'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              2-oji Ataskaita
+              <span className="ml-2 text-xs opacity-75">(Melžimas)</span>
+            </button>
+            <button
+              onClick={() => setExpandedSection('ataskaita3')}
+              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
+                expandedSection === 'ataskaita3'
+                  ? 'border-orange-600 text-orange-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              3-oji Ataskaita
+              <span className="ml-2 text-xs opacity-75">(Speniai/Veisimas)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-5">
+          {/* 1-oji Ataskaita - Pregnancy & Lactation */}
+          {expandedSection === 'ataskaita1' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <h4 className="font-bold text-blue-900 text-sm mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Veršingumo ir Laktacijos Duomenys
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Ausies Nr.</span>
+                    <span className="font-semibold text-gray-900">{rawGeaData.ear_number || '-'}</span>
+                  </div>
+                  <div className={`bg-white rounded-lg p-3 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-blue-100'}`}>
+                    <span className="text-xs text-gray-500 block mb-1">Statusas</span>
+                    <span className={`font-bold text-lg ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>
+                      {rawGeaData.cow_state || '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Grupė</span>
+                    <span className="font-bold text-gray-900 text-lg">{rawGeaData.group_number || '-'}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
+                    <span className="font-bold text-blue-600 text-lg">
+                      {rawGeaData.lactation_days !== null ? rawGeaData.lactation_days : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Apsėklinimo data</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {rawGeaData.inseminated_at ? formatDateLT(rawGeaData.inseminated_at) : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Veršinga nuo</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {rawGeaData.pregnant_since ? formatDateLT(rawGeaData.pregnant_since) : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Veršingumo dienos</span>
+                    <span className="font-bold text-blue-600 text-lg">
+                      {rawGeaData.pregnant_days !== null ? `${rawGeaData.pregnant_days} d.` : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Kita veršingumo data</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {rawGeaData.next_pregnancy_date ? formatDateLT(rawGeaData.next_pregnancy_date) : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100 col-span-2">
+                    <span className="text-xs text-gray-500 block mb-1">Dienų iki laukiamo veršingumo</span>
+                    <span className="font-bold text-orange-600 text-lg">
+                      {rawGeaData.days_until_waiting_pregnancy !== null 
+                        ? `${rawGeaData.days_until_waiting_pregnancy} d.` 
+                        : '-'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2-oji Ataskaita - Milking Data */}
+          {expandedSection === 'ataskaita2' && (
+            <div className="space-y-4">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <h4 className="font-bold text-purple-900 text-sm mb-3 flex items-center gap-2">
+                  <Milk className="w-4 h-4" />
+                  Melžimo Duomenys
+                </h4>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Genetinė vertė</span>
+                    <span className="font-semibold text-gray-900">{rawGeaData.genetic_worth || '-'}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Kraujo linija</span>
+                    <span className="font-semibold text-gray-900">{rawGeaData.blood_line || '-'}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Vidutinis pieno kiekis</span>
+                    <span className="font-bold text-purple-600 text-lg">
+                      {rawGeaData.avg_milk_prod_weight ? `${rawGeaData.avg_milk_prod_weight.toFixed(1)} kg` : '-'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Gamina pieną</span>
+                    <span className="font-bold text-gray-900 text-lg">
+                      {rawGeaData.produce_milk ? 'Taip' : 'Ne'}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Paskutinis melžimas</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {rawGeaData.last_milking_date ? formatDateLT(rawGeaData.last_milking_date) : '-'}
+                      {rawGeaData.last_milking_time && ` ${rawGeaData.last_milking_time.substring(0, 5)}`}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-1">Paskutinio melžimo kiekis</span>
+                    <span className="font-bold text-purple-600 text-lg">
+                      {rawGeaData.last_milking_weight ? `${rawGeaData.last_milking_weight.toFixed(2)} kg` : '-'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Milkings Array */}
+                {allMilkings.length > 0 && (
+                  <div className="bg-white rounded-lg p-3 border border-purple-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Activity className="w-4 h-4 text-purple-600" />
+                      <span className="text-sm font-semibold text-gray-700">Visi melžimai ({allMilkings.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
+                      {allMilkings.map((m: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-purple-50 rounded border border-purple-100">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-purple-600 bg-purple-200 px-2 py-1 rounded">
+                              #{m.idx}
+                            </span>
+                            <span className="text-sm text-gray-700">
+                              {m.date ? formatDateLT(m.date) : '-'} 
+                              {m.time && <span className="text-gray-500 ml-1">{m.time.substring(0, 5)}</span>}
+                            </span>
+                          </div>
+                          <span className="font-bold text-purple-600">
+                            {m.weight ? `${m.weight.toFixed(2)} kg` : '-'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 3-oji Ataskaita - Teat & Insemination */}
+          {expandedSection === 'ataskaita3' && (
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <h4 className="font-bold text-orange-900 text-sm mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Spenių ir Veisimo Duomenys
+                </h4>
+                
+                {/* Teat Status */}
+                <div className="bg-white rounded-lg p-3 border border-orange-100 mb-4">
+                  <h5 className="text-xs font-semibold text-gray-700 mb-3">Spenių Būklė</h5>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_front_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-1">Priekinis kairysis</span>
+                      <span className={`font-bold ${rawGeaData.teat_missing_front_left ? 'text-red-700' : 'text-green-700'}`}>
+                        {rawGeaData.teat_missing_front_left ? 'Trūksta' : 'OK'}
+                      </span>
+                    </div>
+                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_front_right ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-1">Priekinis dešinysis</span>
+                      <span className={`font-bold ${rawGeaData.teat_missing_front_right ? 'text-red-700' : 'text-green-700'}`}>
+                        {rawGeaData.teat_missing_front_right ? 'Trūksta' : 'OK'}
+                      </span>
+                    </div>
+                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_back_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-1">Galinis kairysis</span>
+                      <span className={`font-bold ${rawGeaData.teat_missing_back_left ? 'text-red-700' : 'text-green-700'}`}>
+                        {rawGeaData.teat_missing_back_left ? 'Trūksta' : 'OK'}
+                      </span>
+                    </div>
+                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_right_back ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-1">Galinis dešinysis</span>
+                      <span className={`font-bold ${rawGeaData.teat_missing_right_back ? 'text-red-700' : 'text-green-700'}`}>
+                        {rawGeaData.teat_missing_right_back ? 'Trūksta' : 'OK'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Insemination Data */}
+                <div className="bg-white rounded-lg p-3 border border-orange-100">
+                  <h5 className="text-xs font-semibold text-gray-700 mb-3">Veisimo Informacija</h5>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <span className="text-xs text-gray-600 block mb-1">Apsėklinimų skaičius</span>
+                      <span className="font-bold text-orange-600 text-lg">
+                        {rawGeaData.insemination_count !== null ? rawGeaData.insemination_count : '-'}
+                      </span>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <span className="text-xs text-gray-600 block mb-1">Laktacijos numeris</span>
+                      <span className="font-bold text-orange-600 text-lg">
+                        {rawGeaData.lactation_number !== null ? rawGeaData.lactation_number : '-'}
+                      </span>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <span className="text-xs text-gray-600 block mb-1">Bulius #1</span>
+                      <span className="font-semibold text-gray-900">{rawGeaData.bull_1 || '-'}</span>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <span className="text-xs text-gray-600 block mb-1">Bulius #2</span>
+                      <span className="font-semibold text-gray-900">{rawGeaData.bull_2 || '-'}</span>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-3 col-span-2">
+                      <span className="text-xs text-gray-600 block mb-1">Bulius #3</span>
+                      <span className="font-semibold text-gray-900">{rawGeaData.bull_3 || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback to old simple display for legacy gea_daily data
   return (
     <div className={`bg-gradient-to-br ${isApsek ? 'from-green-50 to-emerald-50 border-green-300' : 'from-purple-50 to-pink-50 border-purple-200'} border-2 rounded-xl p-5 shadow-sm`}>
       <div className="flex items-center gap-2 mb-4">
         <Milk className={`w-5 h-5 ${isApsek ? 'text-green-600' : 'text-purple-600'}`} />
-        <h3 className="font-bold text-gray-900 text-lg">GEA Duomenys</h3>
+        <h3 className="font-bold text-gray-900 text-lg">GEA Duomenys (Legacy)</h3>
         {isApsek && (
           <span className="ml-2 px-2 py-1 bg-green-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
             <CheckCircle className="w-3 h-3" />
@@ -416,23 +800,9 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       loadVisits(),
       loadTreatments(),
       loadVaccinations(),
-      loadProducts(),
-      loadCurrentTeatStatus()
+      loadProducts()
     ]);
     setLoading(false);
-  };
-
-  const loadCurrentTeatStatus = async () => {
-    const { data, error } = await supabase
-      .from('teat_status')
-      .select('*')
-      .eq('animal_id', animal.id)
-      .eq('is_disabled', true);
-
-    if (!error && data) {
-      const disabledTeatPositions = data.map(t => t.teat_position.toUpperCase());
-      setDisabledTeats(disabledTeatPositions);
-    }
   };
 
   const loadVisits = async () => {
