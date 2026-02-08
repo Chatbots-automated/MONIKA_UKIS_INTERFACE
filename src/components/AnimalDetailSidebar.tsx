@@ -461,71 +461,65 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
           </div>
 
           {/* 2-oji Ataskaita - Milking Data */}
-          <div className="bg-purple-50 border-l-4 border-purple-600 rounded-lg p-4">
+          <div className="bg-purple-50 border-l-4 border-purple-600 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-3">
               <div className="bg-purple-600 rounded-full p-1.5">
                 <Milk className="w-4 h-4 text-white" />
               </div>
-              <h4 className="font-bold text-purple-900">2-oji Ataskaita: Melžimas</h4>
+              <h4 className="font-bold text-purple-900 text-sm">2-oji Ataskaita: Melžimas</h4>
             </div>
-            <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Genetinė vertė</span>
-                    <span className="font-semibold text-gray-900">{rawGeaData.genetic_worth || '-'}</span>
+            <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white rounded-lg p-2 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-0.5">Genetinė vertė</span>
+                    <span className="font-semibold text-gray-900 text-sm">{rawGeaData.genetic_worth || '-'}</span>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Kraujo linija</span>
-                    <span className="font-semibold text-gray-900">{rawGeaData.blood_line || '-'}</span>
+                  <div className="bg-white rounded-lg p-2 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-0.5">Kraujo linija</span>
+                    <span className="font-semibold text-gray-900 text-sm">{rawGeaData.blood_line || '-'}</span>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Vidutinis pieno kiekis</span>
-                    <span className="font-bold text-purple-600 text-lg">
-                      {rawGeaData.avg_milk_prod_weight ? `${rawGeaData.avg_milk_prod_weight.toFixed(1)} kg` : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Gamina pieną</span>
-                    <span className="font-bold text-gray-900 text-lg">
+                  <div className="bg-white rounded-lg p-2 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-0.5">Gamina pieną</span>
+                    <span className="font-bold text-gray-900 text-base">
                       {rawGeaData.produce_milk ? 'Taip' : 'Ne'}
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Paskutinis melžimas</span>
-                    <span className="font-semibold text-gray-900 text-sm">
+                  <div className="bg-white rounded-lg p-2 border border-purple-100">
+                    <span className="text-xs text-gray-500 block mb-0.5">Paskutinis melžimas</span>
+                    <span className="font-semibold text-gray-900 text-xs">
                       {rawGeaData.last_milking_date ? formatDateLT(rawGeaData.last_milking_date) : '-'}
                       {rawGeaData.last_milking_time && ` ${rawGeaData.last_milking_time.substring(0, 5)}`}
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <span className="text-xs text-gray-500 block mb-1">Paskutinio melžimo kiekis</span>
-                    <span className="font-bold text-purple-600 text-lg">
+                  <div className="bg-white rounded-lg p-2 border border-purple-100 col-span-2">
+                    <span className="text-xs text-gray-500 block mb-0.5">Paskutinio melžimo kiekis</span>
+                    <span className="font-bold text-purple-600 text-base">
                       {rawGeaData.last_milking_weight ? `${rawGeaData.last_milking_weight.toFixed(2)} kg` : '-'}
                     </span>
                   </div>
                 </div>
 
-                {/* Milkings Array */}
+                {/* Milkings Array - Compact */}
                 {allMilkings.length > 0 && (
-                  <div className="bg-white rounded-lg p-3 border border-purple-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Activity className="w-4 h-4 text-purple-600" />
-                      <span className="text-sm font-semibold text-gray-700">Visi melžimai ({allMilkings.length})</span>
+                  <div className="bg-white rounded-lg p-2 border border-purple-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="w-3 h-3 text-purple-600" />
+                      <span className="text-xs font-semibold text-gray-700">Visi melžimai ({allMilkings.length})</span>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
                       {allMilkings.map((m: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-purple-50 rounded border border-purple-100">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-purple-600 bg-purple-200 px-2 py-1 rounded">
+                        <div key={idx} className="flex items-center justify-between p-1.5 bg-purple-50 rounded text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-purple-600 bg-purple-200 px-1.5 py-0.5 rounded">
                               #{m.idx}
                             </span>
-                            <span className="text-sm text-gray-700">
+                            <span className="text-gray-700">
                               {m.date ? formatDateLT(m.date) : '-'} 
                               {m.time && <span className="text-gray-500 ml-1">{m.time.substring(0, 5)}</span>}
                             </span>
                           </div>
                           <span className="font-bold text-purple-600">
-                            {m.weight ? `${m.weight.toFixed(2)} kg` : '-'}
+                            {m.weight ? `${m.weight.toFixed(1)} kg` : '-'}
                           </span>
                         </div>
                       ))}
@@ -536,73 +530,67 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
           </div>
 
           {/* 3-oji Ataskaita - Teat & Insemination */}
-          <div className="bg-orange-50 border-l-4 border-orange-600 rounded-lg p-4">
+          <div className="bg-orange-50 border-l-4 border-orange-600 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-3">
               <div className="bg-orange-600 rounded-full p-1.5">
                 <AlertCircle className="w-4 h-4 text-white" />
               </div>
-              <h4 className="font-bold text-orange-900">3-oji Ataskaita: Speniai ir Veisimas</h4>
+              <h4 className="font-bold text-orange-900 text-sm">3-oji Ataskaita: Speniai ir Veisimas</h4>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
                 
-                {/* Teat Status */}
-                <div className="bg-white rounded-lg p-3 border border-orange-100 mb-4">
-                  <h5 className="text-xs font-semibold text-gray-700 mb-3">Spenių Būklė</h5>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_front_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
-                      <span className="text-xs text-gray-600 block mb-1">Priekinis kairysis</span>
-                      <span className={`font-bold ${rawGeaData.teat_missing_front_left ? 'text-red-700' : 'text-green-700'}`}>
+                {/* Teat Status - Compact */}
+                <div className="bg-white rounded-lg p-2 border border-orange-100">
+                  <h5 className="text-xs font-semibold text-gray-700 mb-2">Spenių Būklė</h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className={`p-2 rounded-lg border ${rawGeaData.teat_missing_front_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-0.5">Priekinis kairysis</span>
+                      <span className={`font-bold text-sm ${rawGeaData.teat_missing_front_left ? 'text-red-700' : 'text-green-700'}`}>
                         {rawGeaData.teat_missing_front_left ? 'Trūksta' : 'OK'}
                       </span>
                     </div>
-                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_front_right ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
-                      <span className="text-xs text-gray-600 block mb-1">Priekinis dešinysis</span>
-                      <span className={`font-bold ${rawGeaData.teat_missing_front_right ? 'text-red-700' : 'text-green-700'}`}>
+                    <div className={`p-2 rounded-lg border ${rawGeaData.teat_missing_front_right ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-0.5">Priekinis dešinysis</span>
+                      <span className={`font-bold text-sm ${rawGeaData.teat_missing_front_right ? 'text-red-700' : 'text-green-700'}`}>
                         {rawGeaData.teat_missing_front_right ? 'Trūksta' : 'OK'}
                       </span>
                     </div>
-                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_back_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
-                      <span className="text-xs text-gray-600 block mb-1">Galinis kairysis</span>
-                      <span className={`font-bold ${rawGeaData.teat_missing_back_left ? 'text-red-700' : 'text-green-700'}`}>
+                    <div className={`p-2 rounded-lg border ${rawGeaData.teat_missing_back_left ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-0.5">Galinis kairysis</span>
+                      <span className={`font-bold text-sm ${rawGeaData.teat_missing_back_left ? 'text-red-700' : 'text-green-700'}`}>
                         {rawGeaData.teat_missing_back_left ? 'Trūksta' : 'OK'}
                       </span>
                     </div>
-                    <div className={`p-3 rounded-lg border-2 ${rawGeaData.teat_missing_right_back ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
-                      <span className="text-xs text-gray-600 block mb-1">Galinis dešinysis</span>
-                      <span className={`font-bold ${rawGeaData.teat_missing_right_back ? 'text-red-700' : 'text-green-700'}`}>
+                    <div className={`p-2 rounded-lg border ${rawGeaData.teat_missing_right_back ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                      <span className="text-xs text-gray-600 block mb-0.5">Galinis dešinysis</span>
+                      <span className={`font-bold text-sm ${rawGeaData.teat_missing_right_back ? 'text-red-700' : 'text-green-700'}`}>
                         {rawGeaData.teat_missing_right_back ? 'Trūksta' : 'OK'}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Insemination Data */}
-                <div className="bg-white rounded-lg p-3 border border-orange-100">
-                  <h5 className="text-xs font-semibold text-gray-700 mb-3">Veisimo Informacija</h5>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <span className="text-xs text-gray-600 block mb-1">Apsėklinimų skaičius</span>
-                      <span className="font-bold text-orange-600 text-lg">
+                {/* Insemination Data - Compact */}
+                <div className="bg-white rounded-lg p-2 border border-orange-100">
+                  <h5 className="text-xs font-semibold text-gray-700 mb-2">Veisimo Informacija</h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-orange-50 rounded-lg p-2">
+                      <span className="text-xs text-gray-600 block mb-0.5">Apsėklinimų sk.</span>
+                      <span className="font-bold text-orange-600 text-base">
                         {rawGeaData.insemination_count !== null ? rawGeaData.insemination_count : '-'}
                       </span>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <span className="text-xs text-gray-600 block mb-1">Laktacijos numeris</span>
-                      <span className="font-bold text-orange-600 text-lg">
-                        {rawGeaData.lactation_number !== null ? rawGeaData.lactation_number : '-'}
-                      </span>
+                    <div className="bg-orange-50 rounded-lg p-2">
+                      <span className="text-xs text-gray-600 block mb-0.5">Bulius #1</span>
+                      <span className="font-semibold text-gray-900 text-sm">{rawGeaData.bull_1 || '-'}</span>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <span className="text-xs text-gray-600 block mb-1">Bulius #1</span>
-                      <span className="font-semibold text-gray-900">{rawGeaData.bull_1 || '-'}</span>
+                    <div className="bg-orange-50 rounded-lg p-2">
+                      <span className="text-xs text-gray-600 block mb-0.5">Bulius #2</span>
+                      <span className="font-semibold text-gray-900 text-sm">{rawGeaData.bull_2 || '-'}</span>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <span className="text-xs text-gray-600 block mb-1">Bulius #2</span>
-                      <span className="font-semibold text-gray-900">{rawGeaData.bull_2 || '-'}</span>
-                    </div>
-                    <div className="bg-orange-50 rounded-lg p-3 col-span-2">
-                      <span className="text-xs text-gray-600 block mb-1">Bulius #3</span>
-                      <span className="font-semibold text-gray-900">{rawGeaData.bull_3 || '-'}</span>
+                    <div className="bg-orange-50 rounded-lg p-2">
+                      <span className="text-xs text-gray-600 block mb-0.5">Bulius #3</span>
+                      <span className="font-semibold text-gray-900 text-sm">{rawGeaData.bull_3 || '-'}</span>
                     </div>
                   </div>
                 </div>
