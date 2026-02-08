@@ -2671,25 +2671,36 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   };
 
   const fetchStockLevel = async (productId: string) => {
-    const { data, error } = await supabase
+    const { data: batchesData, error } = await supabase
       .from('batches')
-      .select('qty_left, expiry_date')
-      .eq('product_id', productId)
-      .gt('qty_left', 0);
+      .select('id, received_qty, expiry_date')
+      .eq('product_id', productId);
 
-    if (error || !data) return 0;
+    if (error || !batchesData) return 0;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Only count batches that are not expired
-    const total = data
-      .filter(batch => {
-        if (!batch.expiry_date) return true;
-        const expiryDate = new Date(batch.expiry_date);
-        return expiryDate >= today;
-      })
-      .reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
+    // Filter out expired batches
+    const validBatches = batchesData.filter(batch => {
+      if (!batch.expiry_date) return true;
+      const expiryDate = new Date(batch.expiry_date);
+      return expiryDate >= today;
+    });
+
+    // Calculate actual stock for each batch (received_qty - usage)
+    const stockPromises = validBatches.map(async (batch) => {
+      const { data: usageData } = await supabase
+        .from('usage_items')
+        .select('qty')
+        .eq('batch_id', batch.id);
+      
+      const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+      return (batch.received_qty || 0) - totalUsed;
+    });
+
+    const stockLevels = await Promise.all(stockPromises);
+    const total = stockLevels.reduce((sum, stock) => sum + stock, 0);
 
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
@@ -2697,11 +2708,10 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
-      const { data, error } = await supabase
+      const { data: batchesData, error } = await supabase
         .from('batches')
-        .select('id, qty_left, expiry_date')
+        .select('id, received_qty, expiry_date')
         .eq('product_id', productId)
-        .gt('qty_left', 0)
         .order('expiry_date', { ascending: true });
 
       if (error) {
@@ -2709,18 +2719,33 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         return '';
       }
 
-      if (data && data.length > 0) {
+      if (batchesData && batchesData.length > 0) {
         // Filter out expired batches
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const validBatch = data.find(batch => {
-          if (!batch.expiry_date) return true;
-          const expiryDate = new Date(batch.expiry_date);
-          return expiryDate >= today;
-        });
+        // Check each batch for actual stock (received_qty - usage)
+        for (const batch of batchesData) {
+          // Skip expired batches
+          if (batch.expiry_date) {
+            const expiryDate = new Date(batch.expiry_date);
+            if (expiryDate < today) continue;
+          }
 
-        return validBatch?.id || '';
+          // Calculate actual stock
+          const { data: usageData } = await supabase
+            .from('usage_items')
+            .select('qty')
+            .eq('batch_id', batch.id);
+          
+          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+          const availableStock = (batch.received_qty || 0) - totalUsed;
+
+          // Return first batch with stock > 0
+          if (availableStock > 0) {
+            return batch.id;
+          }
+        }
       }
 
       return '';

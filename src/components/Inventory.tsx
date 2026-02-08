@@ -93,35 +93,40 @@ export function Inventory() {
 
       // For each batch, calculate on_hand from received_qty minus usage
       const inventoryPromises = batchesData?.map(async (batch) => {
-        // Get total usage for this batch
-        const { data: usageData, error: usageError } = await supabase
-          .from('usage_items')
-          .select('qty')
-          .eq('batch_id', batch.id);
+        try {
+          // Get total usage for this batch
+          const { data: usageData, error: usageError } = await supabase
+            .from('usage_items')
+            .select('qty')
+            .eq('batch_id', batch.id);
 
-        if (usageError) {
-          console.error('Error loading usage:', usageError);
+          if (usageError) {
+            console.error('Error loading usage for batch:', batch.id, usageError);
+            return null;
+          }
+
+          // Calculate on_hand: received_qty minus total usage
+          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
+          const onHand = (batch.received_qty || 0) - totalUsed;
+
+          return {
+            batch_id: batch.id,
+            product_id: batch.product_id,
+            on_hand: onHand,
+            expiry_date: batch.expiry_date,
+            lot: batch.lot,
+            mfg_date: batch.mfg_date,
+            product_name: batch.products?.name,
+            category: batch.products?.category,
+            unit: batch.products?.primary_pack_unit,
+            primary_pack_size: batch.products?.primary_pack_size,
+            package_size: batch.package_size,
+            package_count: batch.package_count,
+          };
+        } catch (error) {
+          console.error('Failed to process batch:', batch.id, error);
           return null;
         }
-
-        // Calculate on_hand: received_qty minus total usage
-        const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
-        const onHand = (batch.received_qty || 0) - totalUsed;
-
-        return {
-          batch_id: batch.id,
-          product_id: batch.product_id,
-          on_hand: onHand,
-          expiry_date: batch.expiry_date,
-          lot: batch.lot,
-          mfg_date: batch.mfg_date,
-          product_name: batch.products?.name,
-          category: batch.products?.category,
-          unit: batch.products?.primary_pack_unit,
-          primary_pack_size: batch.products?.primary_pack_size,
-          package_size: batch.package_size,
-          package_count: batch.package_count,
-        };
       }) || [];
 
       const results = await Promise.all(inventoryPromises);
@@ -247,32 +252,75 @@ export function Inventory() {
           primary_pack_unit: editingData.unit,
           primary_pack_size: isNaN(newPackSize) ? null : newPackSize,
         })
-        .eq('product_id', item.product_id);
+        .eq('id', item.product_id);
 
       if (productError) throw productError;
 
-      // Update batch information (including received_qty adjustment)
-      const difference = newAmount - item.on_hand;
-
-      // Get current total usage
-      const { data: usageData } = await supabase
-        .from('usage_items')
-        .select('qty')
-        .eq('batch_id', item.batch_id);
-
-      const totalUsed = usageData?.reduce((sum, u) => sum + (u.qty || 0), 0) || 0;
-      const newReceivedQty = newAmount + totalUsed;
-
-      const { error: batchError } = await supabase
+      // Get ALL batches for this product (not just one)
+      const { data: allBatches, error: batchesError } = await supabase
         .from('batches')
-        .update({
-          lot: editingData.lot,
-          expiry_date: editingData.expiry_date || null,
-          received_qty: newReceivedQty,
-        })
-        .eq('id', item.batch_id);
+        .select('id, received_qty, expiry_date')
+        .eq('product_id', item.product_id);
 
-      if (batchError) throw batchError;
+      if (batchesError) throw batchesError;
+
+      if (!allBatches || allBatches.length === 0) {
+        throw new Error('No batches found for this product');
+      }
+
+      // Filter out expired batches
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const validBatches = allBatches.filter(batch => {
+        if (!batch.expiry_date) return true;
+        const expiryDate = new Date(batch.expiry_date);
+        return expiryDate >= today;
+      });
+
+      if (validBatches.length === 0) {
+        throw new Error('No valid (non-expired) batches found for this product');
+      }
+
+      // Get usage for each batch
+      const batchUsagePromises = validBatches.map(async (batch) => {
+        const { data: usageData } = await supabase
+          .from('usage_items')
+          .select('qty')
+          .eq('batch_id', batch.id);
+        
+        const totalUsed = usageData?.reduce((sum, u) => sum + (u.qty || 0), 0) || 0;
+        return {
+          batch_id: batch.id,
+          total_used: totalUsed,
+        };
+      });
+
+      const batchUsages = await Promise.all(batchUsagePromises);
+
+      // Calculate total usage across all batches
+      const totalUsageAllBatches = batchUsages.reduce((sum, b) => sum + b.total_used, 0);
+
+      // Distribute the new amount across batches proportionally
+      const amountPerBatch = newAmount / validBatches.length;
+
+      // Update each batch
+      const updatePromises = batchUsages.map(async (batchUsage) => {
+        const newReceivedQty = amountPerBatch + batchUsage.total_used;
+        
+        const { error: updateError } = await supabase
+          .from('batches')
+          .update({
+            received_qty: newReceivedQty,
+            // Set package_size and package_count to NULL to prevent trigger from recalculating
+            package_size: null,
+            package_count: null,
+          })
+          .eq('id', batchUsage.batch_id);
+
+        if (updateError) throw updateError;
+      });
+
+      await Promise.all(updatePromises);
 
       await logAction(
         'edit_inventory',
@@ -286,6 +334,7 @@ export function Inventory() {
           new_amount: newAmount,
           old_category: item.category,
           new_category: editingData.category,
+          batches_updated: validBatches.length,
         }
       );
 
