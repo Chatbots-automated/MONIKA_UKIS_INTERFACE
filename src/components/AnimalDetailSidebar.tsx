@@ -392,44 +392,38 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                   <span className="text-xs text-gray-500 block mb-0.5">Kaklo Nr.</span>
                   <span className="font-semibold text-gray-900 text-sm">{rawGeaData.cow_number || '-'}</span>
                 </div>
+                <div className={`bg-white rounded-lg p-2 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-blue-100'}`}>
+                  <span className="text-xs text-gray-500 block mb-0.5">Statusas</span>
+                  <span className={`font-bold text-base ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>
+                    {rawGeaData.cow_state || '-'}
+                  </span>
+                </div>
                 <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Veršinga nuo</span>
+                  <span className="text-xs text-gray-500 block mb-0.5">Apsiveršiavo</span>
                   <span className="font-semibold text-gray-900 text-xs">
                     {rawGeaData.pregnant_since ? formatDateLT(rawGeaData.pregnant_since) : '-'}
                   </span>
                 </div>
                 <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Apsėklinimo data</span>
+                  <span className="text-xs text-gray-500 block mb-0.5">Apsėklinta</span>
                   <span className="font-semibold text-gray-900 text-xs">
                     {rawGeaData.inseminated_at ? formatDateLT(rawGeaData.inseminated_at) : '-'}
                   </span>
                 </div>
                 <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Kita veršingumo data</span>
+                  <span className="text-xs text-gray-500 block mb-0.5">Veršiuosis</span>
                   <span className="font-semibold text-gray-900 text-xs">
                     {rawGeaData.next_pregnancy_date ? formatDateLT(rawGeaData.next_pregnancy_date) : '-'}
-                  </span>
-                </div>
-                <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Laktacijos Nr.</span>
-                  <span className="font-bold text-blue-600 text-base">
-                    {rawGeaData.lactation_number !== null ? rawGeaData.lactation_number : '-'}
-                  </span>
-                </div>
-                <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Vidutinis pieno kiekis</span>
-                  <span className="font-bold text-purple-600 text-base">
-                    {rawGeaData.avg_milk_prod_weight ? `${rawGeaData.avg_milk_prod_weight.toFixed(1)} kg` : '-'}
                   </span>
                 </div>
               </div>
 
               {/* Right Column */}
               <div className="space-y-2">
-                <div className={`bg-white rounded-lg p-2 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-blue-100'}`}>
-                  <span className="text-xs text-gray-500 block mb-0.5">Statusas</span>
-                  <span className={`font-bold text-base ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>
-                    {rawGeaData.cow_state || '-'}
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Laktacijos Nr.</span>
+                  <span className="font-bold text-blue-600 text-base">
+                    {rawGeaData.lactation_number !== null ? rawGeaData.lactation_number : '-'}
                   </span>
                 </div>
                 <div className="bg-white rounded-lg p-2 border border-blue-100">
@@ -443,17 +437,17 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                   </span>
                 </div>
                 <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Kita dienų sk.</span>
+                  <span className="text-xs text-gray-500 block mb-0.5">Veršingumo dienos</span>
+                  <span className="font-bold text-blue-600 text-base">
+                    {rawGeaData.pregnant_days !== null ? `${rawGeaData.pregnant_days} d.` : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Liko dienų iki veršiavimosi</span>
                   <span className="font-bold text-orange-600 text-base">
                     {rawGeaData.days_until_waiting_pregnancy !== null 
                       ? `${rawGeaData.days_until_waiting_pregnancy} d.` 
                       : '-'}
-                  </span>
-                </div>
-                <div className="bg-white rounded-lg p-2 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-0.5">Veršingumo dienos</span>
-                  <span className="font-bold text-blue-600 text-base">
-                    {rawGeaData.pregnant_days !== null ? `${rawGeaData.pregnant_days} d.` : '-'}
                   </span>
                 </div>
               </div>
