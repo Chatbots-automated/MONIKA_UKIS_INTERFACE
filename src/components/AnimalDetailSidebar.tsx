@@ -345,9 +345,9 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-white text-lg">GEA Duomenys</h3>
-                  {rawGeaData.cow_number && (
+                  {rawGeaData.ear_number && (
                     <span className="bg-white/20 text-white text-sm font-bold px-2 py-0.5 rounded">
-                      Kaklo Nr: {rawGeaData.cow_number}
+                      Ausies Nr: {rawGeaData.ear_number}
                     </span>
                   )}
                 </div>
@@ -378,68 +378,79 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         {/* All Sections - Scrollable */}
         <div className="p-4 space-y-4 max-h-[600px] overflow-y-auto">
           {/* 1-oji Ataskaita - Pregnancy & Lactation */}
-          <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg p-4">
+          <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-3">
               <div className="bg-blue-600 rounded-full p-1.5">
                 <Calendar className="w-4 h-4 text-white" />
               </div>
-              <h4 className="font-bold text-blue-900">1-oji Ataskaita: Veršingumas ir Laktacija</h4>
+              <h4 className="font-bold text-blue-900 text-sm">1-oji Ataskaita: Veršingumas ir Laktacija</h4>
             </div>
-            <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Ausies Nr.</span>
-                    <span className="font-semibold text-gray-900">{rawGeaData.ear_number || '-'}</span>
-                  </div>
-                  <div className={`bg-white rounded-lg p-3 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-blue-100'}`}>
-                    <span className="text-xs text-gray-500 block mb-1">Statusas</span>
-                    <span className={`font-bold text-lg ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>
-                      {rawGeaData.cow_state || '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Grupė</span>
-                    <span className="font-bold text-gray-900 text-lg">{rawGeaData.group_number || '-'}</span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Laktacijos dienos</span>
-                    <span className="font-bold text-blue-600 text-lg">
-                      {rawGeaData.lactation_days !== null ? rawGeaData.lactation_days : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Apsėklinimo data</span>
-                    <span className="font-semibold text-gray-900 text-sm">
-                      {rawGeaData.inseminated_at ? formatDateLT(rawGeaData.inseminated_at) : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Veršinga nuo</span>
-                    <span className="font-semibold text-gray-900 text-sm">
-                      {rawGeaData.pregnant_since ? formatDateLT(rawGeaData.pregnant_since) : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Veršingumo dienos</span>
-                    <span className="font-bold text-blue-600 text-lg">
-                      {rawGeaData.pregnant_days !== null ? `${rawGeaData.pregnant_days} d.` : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100">
-                    <span className="text-xs text-gray-500 block mb-1">Kita veršingumo data</span>
-                    <span className="font-semibold text-gray-900 text-sm">
-                      {rawGeaData.next_pregnancy_date ? formatDateLT(rawGeaData.next_pregnancy_date) : '-'}
-                    </span>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-blue-100 col-span-2">
-                    <span className="text-xs text-gray-500 block mb-1">Dienų iki laukiamo veršingumo</span>
-                    <span className="font-bold text-orange-600 text-lg">
-                      {rawGeaData.days_until_waiting_pregnancy !== null 
-                        ? `${rawGeaData.days_until_waiting_pregnancy} d.` 
-                        : '-'}
-                    </span>
-                  </div>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Left Column */}
+              <div className="space-y-2">
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Kaklo Nr.</span>
+                  <span className="font-semibold text-gray-900 text-sm">{rawGeaData.cow_number || '-'}</span>
                 </div>
+                <div className={`bg-white rounded-lg p-2 border ${isApsek ? 'border-green-400 bg-green-50' : 'border-blue-100'}`}>
+                  <span className="text-xs text-gray-500 block mb-0.5">Statusas</span>
+                  <span className={`font-bold text-base ${isApsek ? 'text-green-700' : 'text-gray-900'}`}>
+                    {rawGeaData.cow_state || '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Veršinga nuo</span>
+                  <span className="font-semibold text-gray-900 text-xs">
+                    {rawGeaData.pregnant_since ? formatDateLT(rawGeaData.pregnant_since) : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Apsėklinimo data</span>
+                  <span className="font-semibold text-gray-900 text-xs">
+                    {rawGeaData.inseminated_at ? formatDateLT(rawGeaData.inseminated_at) : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Kita veršingumo data</span>
+                  <span className="font-semibold text-gray-900 text-xs">
+                    {rawGeaData.next_pregnancy_date ? formatDateLT(rawGeaData.next_pregnancy_date) : '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-2">
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Laktacijos Nr.</span>
+                  <span className="font-bold text-blue-600 text-base">
+                    {rawGeaData.lactation_number !== null ? rawGeaData.lactation_number : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Grupė</span>
+                  <span className="font-bold text-gray-900 text-base">{rawGeaData.group_number || '-'}</span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Laktacijos dienos</span>
+                  <span className="font-bold text-blue-600 text-base">
+                    {rawGeaData.lactation_days !== null ? rawGeaData.lactation_days : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Veršingumo dienos</span>
+                  <span className="font-bold text-blue-600 text-base">
+                    {rawGeaData.pregnant_days !== null ? `${rawGeaData.pregnant_days} d.` : '-'}
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="text-xs text-gray-500 block mb-0.5">Kita dienų sk.</span>
+                  <span className="font-bold text-orange-600 text-base">
+                    {rawGeaData.days_until_waiting_pregnancy !== null 
+                      ? `${rawGeaData.days_until_waiting_pregnancy} d.` 
+                      : '-'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
