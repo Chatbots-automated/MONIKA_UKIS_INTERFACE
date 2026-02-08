@@ -44,22 +44,52 @@ export function MastitisMilk() {
       const useStartDate = filterStartDate !== undefined ? filterStartDate : startDate;
       const useEndDate = filterEndDate !== undefined ? filterEndDate : endDate;
 
+      // Query new GEA system
       let query = supabase
-        .from('gea_daily')
+        .from('gea_daily_cows_joined')
         .select('*')
-        .eq('grupe', groupNumber)
-        .order('snapshot_date', { ascending: true });
+        .eq('group_number', groupNumber.toString())
+        .order('import_created_at', { ascending: true });
 
       if (useStartDate) {
-        query = query.gte('snapshot_date', useStartDate);
+        query = query.gte('import_created_at', useStartDate);
       }
       if (useEndDate) {
-        query = query.lte('snapshot_date', useEndDate);
+        query = query.lte('import_created_at', useEndDate);
       }
 
-      const { data: geaRecords, error } = await query;
+      const { data: rawGeaRecords, error } = await query;
 
       if (error) throw error;
+
+      // Map ear_number to animal_id
+      const { data: animals } = await supabase
+        .from('animals')
+        .select('id, tag_no')
+        .eq('active', true);
+
+      const animalTagMap = new Map(animals?.map(a => [a.tag_no, a.id]) || []);
+
+      // Transform new GEA structure to match old format
+      const geaRecords = rawGeaRecords?.map(gea => {
+        const date = gea.import_created_at?.split('T')[0]; // Extract date part
+        return {
+          animal_id: animalTagMap.get(gea.ear_number),
+          snapshot_date: date,
+          m1_date: gea.milkings?.[0]?.date || null,
+          m1_qty: gea.milkings?.[0]?.weight || null,
+          m2_date: gea.milkings?.[1]?.date || null,
+          m2_qty: gea.milkings?.[1]?.weight || null,
+          m3_date: gea.milkings?.[2]?.date || null,
+          m3_qty: gea.milkings?.[2]?.weight || null,
+          m4_date: gea.milkings?.[3]?.date || null,
+          m4_qty: gea.milkings?.[3]?.weight || null,
+          m5_date: gea.milkings?.[4]?.date || null,
+          m5_qty: gea.milkings?.[4]?.weight || null,
+          milk_avg: gea.avg_milk_prod_weight,
+          grupe: gea.group_number
+        };
+      }).filter(record => record.animal_id); // Only include records with valid animal_id
 
       if (!geaRecords || geaRecords.length === 0) {
         setDailyData([]);
@@ -147,25 +177,29 @@ export function MastitisMilk() {
 
       // Fetch animal details and latest milk_avg
       const animalIds = Array.from(uniqueAnimals);
-      const { data: animals } = await supabase
+      const { data: animalsList } = await supabase
         .from('animals')
         .select('id, tag_no')
         .in('id', animalIds);
 
-      // Get latest milk_avg and current group for each animal
+      // Create reverse map (animal_id -> tag_no)
+      const animalIdToTagMap = new Map(animalsList?.map(a => [a.id, a.tag_no]) || []);
+
+      // Get latest milk_avg and current group for each animal from new GEA system
       const { data: latestMilkAvgs } = await supabase
-        .from('gea_daily')
-        .select('animal_id, milk_avg, snapshot_date, grupe')
-        .in('animal_id', animalIds)
-        .order('snapshot_date', { ascending: false });
+        .from('gea_daily_cows_joined')
+        .select('ear_number, avg_milk_prod_weight, import_created_at, group_number')
+        .in('ear_number', Array.from(animalIdToTagMap.values()))
+        .order('import_created_at', { ascending: false });
 
       const latestMilkAvgMap = new Map<string, number>();
       const currentGroupMap = new Map<string, number | null>();
 
       latestMilkAvgs?.forEach(record => {
-        if (!latestMilkAvgMap.has(record.animal_id)) {
-          latestMilkAvgMap.set(record.animal_id, record.milk_avg || 0);
-          currentGroupMap.set(record.animal_id, record.grupe);
+        const animalId = animalTagMap.get(record.ear_number);
+        if (animalId && !latestMilkAvgMap.has(animalId)) {
+          latestMilkAvgMap.set(animalId, record.avg_milk_prod_weight || 0);
+          currentGroupMap.set(animalId, record.group_number ? parseInt(record.group_number) : null);
         }
       });
 

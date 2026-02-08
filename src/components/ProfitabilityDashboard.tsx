@@ -219,25 +219,44 @@ export function ProfitabilityDashboard() {
     setHerdSummary(summaryData);
 
     // Load GEA group data for group comparison (get latest snapshot for each animal)
+    // Query new GEA system and join with animals table
+    const { data: geaData, error: geaError } = await supabase
+      .from('gea_daily_cows_joined')
+      .select(`
+        ear_number,
+        group_number,
+        cow_state,
+        import_created_at
+      `)
+      .order('import_created_at', { ascending: false });
+
+    if (geaError) {
+      console.error('Error loading GEA data:', geaError);
+    }
+
+    // Map ear_number to animal_id and get latest per animal
+    const { data: animals } = await supabase
+      .from('animals')
+      .select('id, tag_no')
+      .eq('active', true);
+
+    const animalTagMap = new Map(animals?.map(a => [a.tag_no, a.id]) || []);
+    
     let allGeaData: any[] = [];
-    let geaPage = 0;
-    hasMore = true;
-
-    while (hasMore) {
-      const { data: geaData, error: geaError } = await supabase
-        .from('gea_daily')
-        .select('animal_id, grupe, statusas, snapshot_date')
-        .order('snapshot_date', { ascending: false })
-        .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
-
-      if (geaError) throw geaError;
-      if (geaData && geaData.length > 0) {
-        allGeaData = [...allGeaData, ...geaData];
-        geaPage++;
-        hasMore = geaData.length === pageSize;
-      } else {
-        hasMore = false;
+    if (geaData) {
+      const latestPerAnimal = new Map();
+      for (const gea of geaData) {
+        const animalId = animalTagMap.get(gea.ear_number);
+        if (animalId && !latestPerAnimal.has(animalId)) {
+          latestPerAnimal.set(animalId, {
+            animal_id: animalId,
+            grupe: gea.group_number,
+            statusas: gea.cow_state,
+            snapshot_date: gea.import_created_at
+          });
+        }
       }
+      allGeaData = Array.from(latestPerAnimal.values());
     }
 
     // Get only the most recent group/status for each animal
@@ -293,30 +312,50 @@ export function ProfitabilityDashboard() {
   };
 
   const loadDataWithDateFilter = async (startDateStr: string, endDateStr: string) => {
-    // Query raw data with custom date range
-    const pageSize = 1000;
+    // Query raw data with custom date range from new GEA system
+    const { data: geaData, error: geaError } = await supabase
+      .from('gea_daily_cows_joined')
+      .select(`
+        ear_number,
+        cow_number,
+        import_created_at,
+        milkings,
+        lactation_days,
+        group_number,
+        cow_state,
+        produce_milk
+      `)
+      .gte('import_created_at', startDateStr)
+      .lte('import_created_at', endDateStr);
 
-    // Query gea_daily with date filter
+    if (geaError) {
+      console.error('Error loading GEA data:', geaError);
+    }
+
+    // Map ear_number to animal_id
+    const { data: animals } = await supabase
+      .from('animals')
+      .select('id, tag_no')
+      .eq('active', true);
+
+    const animalTagMap = new Map(animals?.map(a => [a.tag_no, a.id]) || []);
+    
     let allGeaData: any[] = [];
-    let geaPage = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data: geaData, error: geaError } = await supabase
-        .from('gea_daily')
-        .select('animal_id, snapshot_date, m1_qty, m2_qty, m3_qty, m4_qty, m5_qty, lact_days, grupe, statusas, in_milk, collar_no')
-        .gte('snapshot_date', startDateStr)
-        .lte('snapshot_date', endDateStr)
-        .range(geaPage * pageSize, (geaPage + 1) * pageSize - 1);
-
-      if (geaError) throw geaError;
-      if (geaData && geaData.length > 0) {
-        allGeaData = [...allGeaData, ...geaData];
-        geaPage++;
-        hasMore = geaData.length === pageSize;
-      } else {
-        hasMore = false;
-      }
+    if (geaData) {
+      allGeaData = geaData.map(gea => ({
+        animal_id: animalTagMap.get(gea.ear_number),
+        snapshot_date: gea.import_created_at,
+        m1_qty: gea.milkings?.[0]?.weight || null,
+        m2_qty: gea.milkings?.[1]?.weight || null,
+        m3_qty: gea.milkings?.[2]?.weight || null,
+        m4_qty: gea.milkings?.[3]?.weight || null,
+        m5_qty: gea.milkings?.[4]?.weight || null,
+        lact_days: gea.lactation_days,
+        grupe: gea.group_number,
+        statusas: gea.cow_state,
+        in_milk: gea.produce_milk,
+        collar_no: gea.cow_number
+      })).filter(item => item.animal_id); // Only include items with valid animal_id
     }
 
     // Query treatments with date filter
@@ -458,26 +497,39 @@ export function ProfitabilityDashboard() {
     }
     setRoiAnalysis(allRoiData);
 
-    // Load GEA group data
+    // Load GEA group data from new GEA system
+    const { data: geaGroupData, error: geaGroupError } = await supabase
+      .from('gea_daily_cows_joined')
+      .select('ear_number, group_number, cow_state, import_created_at')
+      .order('import_created_at', { ascending: false });
+
+    if (geaGroupError) {
+      console.error('Error loading GEA group data:', geaGroupError);
+    }
+
+    // Map ear_number to animal_id
+    const { data: animalsForGroupMap } = await supabase
+      .from('animals')
+      .select('id, tag_no')
+      .eq('active', true);
+
+    const animalTagMapForGroups = new Map(animalsForGroupMap?.map(a => [a.tag_no, a.id]) || []);
+    
     let allGeaGroupData: any[] = [];
-    let geaGroupPage = 0;
-    hasMore = true;
-
-    while (hasMore) {
-      const { data: geaGroupData, error: geaGroupError } = await supabase
-        .from('gea_daily')
-        .select('animal_id, grupe, statusas, snapshot_date')
-        .order('snapshot_date', { ascending: false })
-        .range(geaGroupPage * pageSize, (geaGroupPage + 1) * pageSize - 1);
-
-      if (geaGroupError) throw geaGroupError;
-      if (geaGroupData && geaGroupData.length > 0) {
-        allGeaGroupData = [...allGeaGroupData, ...geaGroupData];
-        geaGroupPage++;
-        hasMore = geaGroupData.length === pageSize;
-      } else {
-        hasMore = false;
+    if (geaGroupData) {
+      const latestPerAnimal = new Map();
+      for (const gea of geaGroupData) {
+        const animalId = animalTagMapForGroups.get(gea.ear_number);
+        if (animalId && !latestPerAnimal.has(animalId)) {
+          latestPerAnimal.set(animalId, {
+            animal_id: animalId,
+            grupe: gea.group_number,
+            statusas: gea.cow_state,
+            snapshot_date: gea.import_created_at
+          });
+        }
       }
+      allGeaGroupData = Array.from(latestPerAnimal.values());
     }
 
     const animalGroupMap = new Map();

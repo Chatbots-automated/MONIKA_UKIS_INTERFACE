@@ -148,16 +148,26 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   };
 
   const loadGeaStatus = async () => {
+    // Get animal's tag number first
+    const { data: animalData } = await supabase
+      .from('animals')
+      .select('tag_no')
+      .eq('id', animalId)
+      .single();
+
+    if (!animalData?.tag_no) return;
+
+    // Query new GEA system using ear_number (tag_no)
     const { data } = await supabase
-      .from('gea_daily')
-      .select('statusas')
-      .eq('animal_id', animalId)
-      .order('snapshot_date', { ascending: false })
+      .from('gea_daily_cows_joined')
+      .select('cow_state')
+      .eq('ear_number', animalData.tag_no)
+      .order('import_created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (data) {
-      setGeaStatus(data.statusas);
+      setGeaStatus(data.cow_state);
     }
   };
 
