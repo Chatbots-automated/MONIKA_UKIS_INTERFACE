@@ -3,6 +3,9 @@
 ## Summary
 Updated the VETERINARINIŲ VAISTŲ IR VAISTINIŲ PREPARATŲ APSKAITOS ŽURNALAS (Veterinary Medicine and Pharmaceutical Products Accounting Journal) to match the official 2024 format.
 
+**✨ Key Feature: Real-Time Updates**
+The journal automatically updates as medicines are used in treatments - no manual entry needed! When you create a treatment and use medicine, it immediately appears in the drug journal with updated quantities.
+
 ## Changes Made
 
 ### 1. Report Template Update (`src/components/ReportTemplates.tsx`)
@@ -20,15 +23,18 @@ Updated the VETERINARINIŲ VAISTŲ IR VAISTINIŲ PREPARATŲ APSKAITOS ŽURNALAS 
   - Registration code and active substance displayed in header
 - Simplified table with **7 columns** per medicine:
   1. **Gavimo data** - Receipt date
-  2. **Dokumento, pagal kurį gautas vaistas, pavadinimas, numeris, data** - Document name, number, and date
+  2. **Dokumento, pagal kurį gautas vaistas, pavadinimas, numeris, data** - Supplier/company name, document title, "Sąskaita faktūra Nr.", and date
   3. **Gautas kiekis** - Received quantity
   4. **Tinkamumo naudoti laikas** - Expiry date
   5. **Serija** - Batch/Serial number
-  6. **Sunaudotas kiekis** - Used quantity
-  7. **Likutis** - Remaining quantity
+  6. **Sunaudotas kiekis** - Used quantity (✅ **REAL-TIME**)
+  7. **Likutis** - Remaining quantity (✅ **REAL-TIME**)
 
 **Additional Features:**
+- ✅ **Real-time updates**: Medicine usage automatically tracked from treatments
 - Summary row at the bottom of each medicine showing totals (received, used, remaining)
+- Supplier/company name displayed prominently
+- "Sąskaita faktūra" instead of generic "invoice" label
 - Expired medicines highlighted in red
 - Zero-stock items shown in gray
 - Better visual grouping and readability
@@ -39,10 +45,17 @@ Updated the VETERINARINIŲ VAISTŲ IR VAISTINIŲ PREPARATŲ APSKAITOS ŽURNALAS 
 **Added Fields:**
 - `doc_title` - Document title/name (was missing from the view)
 - `lot` - Lot number (in addition to batch_number)
+- Comments explaining real-time update mechanism
+
+**Real-Time Mechanism:**
+- `quantity_used` = SUM of all entries in `usage_items` table for this batch
+- `quantity_remaining` = `received_qty` - `quantity_used`
+- Updates automatically when treatments/vaccinations are created
+- No manual journal entry needed
 
 **Kept Fields:**
 - All existing fields from the original view
-- Calculation logic for `quantity_used` and `quantity_remaining` unchanged
+- Calculation logic unchanged (already real-time)
 
 **View Structure:**
 ```sql
@@ -112,24 +125,38 @@ This will update the view to include the `doc_title` field.
 
 ## Benefits of New Format
 
-1. **Compliance**: Matches official 2024 Lithuanian veterinary medicine journal format
-2. **Readability**: Easier to see all batches for a specific medicine
-3. **Organization**: Natural grouping by product reduces confusion
-4. **Totals**: Quick summary of received/used/remaining per medicine
-5. **Professional**: Clean, structured format suitable for inspections
+1. **Real-Time Accuracy**: Medicine usage tracked automatically from treatments - always up-to-date
+2. **Compliance**: Matches official 2024 Lithuanian veterinary medicine journal format
+3. **Readability**: Easier to see all batches for a specific medicine
+4. **Organization**: Natural grouping by product reduces confusion
+5. **Totals**: Quick summary of received/used/remaining per medicine
+6. **Professional**: Clean, structured format suitable for inspections
+7. **No Double Entry**: One workflow - treat animals, journal updates automatically
+8. **Audit Trail**: Every medicine use linked to specific treatment/vaccination
 
 ## Data Flow
 
 ```
-batches table
-    ↓
-vw_vet_drug_journal view (with doc_title)
-    ↓
-Reports.tsx (filters & fetches data)
-    ↓
-DrugJournalReport component (groups by medicine)
-    ↓
-Rendered HTML report (print-ready)
+1. Stock Receipt:
+   batches table (received_qty = 100)
+       ↓
+   
+2. Medicine Usage (Real-Time):
+   Create treatment → usage_items table (qty = 10)
+       ↓
+   
+3. Automatic Calculation:
+   vw_vet_drug_journal view
+       quantity_used = SUM(usage_items.qty) = 10
+       quantity_remaining = 100 - 10 = 90
+       ↓
+   
+4. Report Display:
+   Reports.tsx (filters & fetches data)
+       ↓
+   DrugJournalReport component (groups by medicine)
+       ↓
+   Rendered HTML report (print-ready)
 ```
 
 ## Notes
@@ -138,3 +165,7 @@ Rendered HTML report (print-ready)
 - All existing filters (date, product, batch, invoice) still work
 - The report is backwards compatible - old data displays correctly
 - No changes to data entry or stock management workflows
+- **Real-time functionality was already built-in** - we just improved the report display
+- Medicine usage from treatments, vaccinations, and synchronizations all tracked automatically
+- System validates stock availability before allowing medicine use
+- Full audit trail maintained for regulatory compliance

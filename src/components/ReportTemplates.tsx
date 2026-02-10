@@ -241,10 +241,11 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
                     </td>
                     <td className="border-2 border-gray-300 px-3 py-3 text-xs">
                       <div className="space-y-1">
-                        {batch.doc_title && <div className="font-medium text-gray-900">{batch.doc_title}</div>}
-                        {batch.invoice_number && <div className="font-medium text-gray-900">Nr. {batch.invoice_number}</div>}
+                        {batch.supplier_name && <div className="font-bold text-gray-900">{batch.supplier_name}</div>}
+                        {batch.doc_title && batch.doc_title.toLowerCase() !== 'invoice' && <div className="font-medium text-gray-900">{batch.doc_title}</div>}
+                        {batch.invoice_number && <div className="font-medium text-gray-900">Sąskaita faktūra Nr. {batch.invoice_number}</div>}
                         {batch.invoice_date && <div className="text-gray-600">{formatDateLT(batch.invoice_date)}</div>}
-                        {!batch.doc_title && !batch.invoice_number && !batch.invoice_date && <span className="text-gray-400">-</span>}
+                        {!batch.supplier_name && !batch.doc_title && !batch.invoice_number && !batch.invoice_date && <span className="text-gray-400">-</span>}
                       </div>
                     </td>
                     <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
@@ -263,13 +264,13 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
                       </span>
                     </td>
                     <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-semibold text-red-700">
-                      {batch.quantity_used || '0'}
+                      {Math.abs(parseFloat(batch.quantity_used) || 0) < 0.01 ? '0' : (parseFloat(batch.quantity_used) || 0).toFixed(2)}
                     </td>
                     <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
                       <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-bold ${
-                        (batch.quantity_remaining || 0) > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                        (parseFloat(batch.quantity_remaining) || 0) > 0.01 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {batch.quantity_remaining || '0'}
+                        {Math.abs(parseFloat(batch.quantity_remaining) || 0) < 0.01 ? '0' : (parseFloat(batch.quantity_remaining) || 0).toFixed(2)}
                       </span>
                     </td>
                   </tr>
@@ -280,14 +281,23 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
                     Viso ({medicine.product_name}):
                   </td>
                   <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-blue-900">
-                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_received) || 0), 0).toFixed(2)}
+                    {(() => {
+                      const total = medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_received) || 0), 0);
+                      return Math.abs(total) < 0.01 ? '0.00' : total.toFixed(2);
+                    })()}
                   </td>
                   <td colSpan={2} className="border-2 border-gray-300 px-3 py-3"></td>
                   <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-red-900">
-                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_used) || 0), 0).toFixed(2)}
+                    {(() => {
+                      const total = medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_used) || 0), 0);
+                      return Math.abs(total) < 0.01 ? '0.00' : total.toFixed(2);
+                    })()}
                   </td>
                   <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-emerald-900">
-                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_remaining) || 0), 0).toFixed(2)}
+                    {(() => {
+                      const total = medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_remaining) || 0), 0);
+                      return Math.abs(total) < 0.01 ? '0.00' : total.toFixed(2);
+                    })()}
                   </td>
                 </tr>
               </tbody>
