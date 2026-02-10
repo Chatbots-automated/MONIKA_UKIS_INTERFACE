@@ -18,8 +18,8 @@ SELECT
     COALESCE(a.holder_name, 'ŽŪB Berčiūnai') AS owner_name,
     a.holder_address AS owner_address,
     
-    -- Column 4: Gyvūno rūšis, lytis (Animal species, sex)
-    a.species,
+    -- Column 4: Gyvūno rūšis, lytis (Animal breed, sex)
+    COALESCE(NULLIF(TRIM(a.breed), ''), a.species) AS species,
     a.sex,
     
     -- Column 5: Gyvūno amžius (Animal age)
@@ -107,7 +107,8 @@ SELECT
     END AS treatment_outcome,
     
     -- Column 14: Veterinarijos gydytojo vardas, pavardė (Veterinarian name)
-    COALESCE(NULLIF(TRIM(t.vet_name), ''), 'Artūras Abromaitis') AS veterinarian,
+    -- ALWAYS "Artūras Abromaitis" for all rows
+    'Artūras Abromaitis' AS veterinarian,
     
     -- Additional fields
     t.notes,
@@ -135,8 +136,8 @@ SELECT
     COALESCE(a.holder_name, 'ŽŪB Berčiūnai') AS owner_name,
     a.holder_address AS owner_address,
     
-    -- Column 4: Gyvūno rūšis, lytis (Animal species, sex)
-    a.species,
+    -- Column 4: Gyvūno rūšis, lytis (Animal breed, sex)
+    COALESCE(NULLIF(TRIM(a.breed), ''), a.species) AS species,
     a.sex,
     
     -- Column 5: Gyvūno amžius (Animal age)
@@ -224,7 +225,8 @@ SELECT
     END AS treatment_outcome,
     
     -- Column 14: Veterinarijos gydytojo vardas, pavardė (Veterinarian name)
-    COALESCE(NULLIF(TRIM(t.vet_name), ''), 'Artūras Abromaitis') AS veterinarian,
+    -- ALWAYS "Artūras Abromaitis" for all rows
+    'Artūras Abromaitis' AS veterinarian,
     
     -- Additional fields
     t.notes,
