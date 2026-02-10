@@ -68,7 +68,7 @@ export function translateCategory(category: string | undefined): string {
 export async function fetchAllRows<T>(
   table: string,
   select: string = '*',
-  orderBy?: string,
+  orderBy?: string | string[],
   filters?: { column: string; value: any; operator?: string }[]
 ): Promise<T[]> {
   let allRows: T[] = [];
@@ -90,9 +90,15 @@ export async function fetchAllRows<T>(
       });
     }
 
-    // Apply ordering
+    // Apply ordering (support single or multiple columns)
     if (orderBy) {
-      query = query.order(orderBy);
+      if (Array.isArray(orderBy)) {
+        orderBy.forEach(col => {
+          query = query.order(col);
+        });
+      } else {
+        query = query.order(orderBy);
+      }
     }
 
     const { data, error } = await query;

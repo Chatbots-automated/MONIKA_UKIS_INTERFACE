@@ -49,13 +49,27 @@ interface AnalyticsData {
 
 type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices';
 
+// Get current month's first and last day
+const getCurrentMonthDates = () => {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  
+  return {
+    from: firstDay.toISOString().split('T')[0],
+    to: lastDay.toISOString().split('T')[0]
+  };
+};
+
 export function Reports() {
+  const currentMonth = getCurrentMonthDates();
+
   const [reportType, setReportType] = useState<ReportType>('analytics');
   const [data, setData] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(currentMonth.from);
+  const [dateTo, setDateTo] = useState(currentMonth.to);
   const [showFilters, setShowFilters] = useState(true);
 
   const [filterAnimal, setFilterAnimal] = useState('');
@@ -73,10 +87,19 @@ export function Reports() {
     loadFilterOptions();
     if (reportType === 'analytics') {
       loadAnalytics();
-    } else {
+    } else if (reportType !== 'treated_animals') {
+      // For other reports, load immediately
       loadReport();
     }
+    // For treated_animals, wait for date filters to be set (handled in separate useEffect)
   }, [reportType]);
+
+  // Auto-load treated_animals report with current month filters
+  useEffect(() => {
+    if (reportType === 'treated_animals' && dateFrom && dateTo) {
+      loadReport();
+    }
+  }, [reportType, dateFrom, dateTo]);
 
   const loadFilterOptions = async () => {
     try {
@@ -310,26 +333,35 @@ export function Reports() {
         }
 
         case 'treated_animals': {
-          let query = supabase.from('vw_treated_animals_detailed').select('*');
-          if (dateFrom) query = query.gte('registration_date', dateFrom);
-          if (dateTo) query = query.lte('registration_date', dateTo);
-          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
-          if (filterDisease) query = query.eq('disease_id', filterDisease);
+          // Build filters array for fetchAllRows
+          const filters: { column: string; value: any; operator?: string }[] = [];
+          
+          if (dateFrom) filters.push({ column: 'registration_date', value: dateFrom, operator: 'gte' });
+          if (dateTo) filters.push({ column: 'registration_date', value: dateTo, operator: 'lte' });
+          if (filterAnimal) filters.push({ column: 'animal_id', value: filterAnimal });
+          if (filterDisease) filters.push({ column: 'disease_id', value: filterDisease });
 
-          const { data, error } = await query;
-          if (error) throw error;
+          // Use fetchAllRows to handle pagination automatically
+          result = await fetchAllRows('vw_treated_animals_detailed', '*', 'registration_date', filters);
 
-          result = data || [];
-
+          // Apply additional filters that can't be done in the query
           if (filterProduct) {
             result = result.filter(r => {
               const product = products.find(p => p.id === filterProduct);
-              return product && r.product_name?.toLowerCase().includes(product.name.toLowerCase());
+              return product && r.medications_used?.toLowerCase().includes(product.name.toLowerCase());
             });
           }
           if (filterVet) {
             result = result.filter(r => r.veterinarian?.toLowerCase().includes(filterVet.toLowerCase()));
           }
+          
+          // Sort by registration_date (descending - newest first) and created_at
+          result.sort((a, b) => {
+            const dateCompare = b.registration_date.localeCompare(a.registration_date); // Reversed for descending
+            if (dateCompare !== 0) return dateCompare;
+            return b.created_at.localeCompare(a.created_at); // Reversed for descending
+          });
+          
           break;
         }
 
@@ -398,8 +430,15 @@ export function Reports() {
   };
 
   const clearFilters = () => {
-    setDateFrom('');
-    setDateTo('');
+    // For treated_animals, reset to current month instead of clearing
+    if (reportType === 'treated_animals') {
+      const currentMonth = getCurrentMonthDates();
+      setDateFrom(currentMonth.from);
+      setDateTo(currentMonth.to);
+    } else {
+      setDateFrom('');
+      setDateTo('');
+    }
     setFilterAnimal('');
     setFilterProduct('');
     setFilterDisease('');
@@ -774,7 +813,18 @@ export function Reports() {
                 key={key}
                 onClick={() => {
                   setReportType(key as ReportType);
-                  clearFilters();
+                  // For treated_animals, set current month dates and clear other filters
+                  if (key === 'treated_animals') {
+                    const currentMonth = getCurrentMonthDates();
+                    setDateFrom(currentMonth.from);
+                    setDateTo(currentMonth.to);
+                    setFilterAnimal('');
+                    setFilterProduct('');
+                    setFilterDisease('');
+                    setFilterVet('');
+                  } else {
+                    clearFilters();
+                  }
                 }}
                 className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
                   isActive

@@ -36,6 +36,41 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
     return '-';
   };
 
+  // Calculate Eil. Nr. based on registration date
+  // Data is sorted DESC (newest first), but Eil. Nr. should be sequential from oldest (1) to newest
+  // Since we have multiple rows per treatment (one per medicine), we need to track unique treatments
+  const dataWithEilNr = data.map((row, idx) => {
+    // Count unique treatments that are OLDER than this one (earlier date)
+    const treatmentsOlderThanThis = new Set<string>();
+    
+    for (let i = 0; i < data.length; i++) {
+      const currentRow = data[i];
+      
+      // If current row has an earlier date, it's older (gets lower Eil. Nr.)
+      if (currentRow.registration_date < row.registration_date) {
+        treatmentsOlderThanThis.add(currentRow.treatment_id);
+      } 
+      // If same date, use created_at to determine order
+      else if (currentRow.registration_date === row.registration_date) {
+        if (currentRow.created_at < row.created_at) {
+          treatmentsOlderThanThis.add(currentRow.treatment_id);
+        } else if (currentRow.created_at === row.created_at && 
+                   currentRow.treatment_id !== row.treatment_id) {
+          // Same timestamp, use treatment_id for consistent ordering
+          if (currentRow.treatment_id < row.treatment_id) {
+            treatmentsOlderThanThis.add(currentRow.treatment_id);
+          }
+        }
+      }
+    }
+    
+    // Eil. Nr. = number of older treatments + 1
+    return {
+      ...row,
+      eil_nr: treatmentsOlderThanThis.size + 1
+    };
+  });
+
   return (
     <div className="bg-white">
       <div className="text-center mb-6 no-print">
@@ -93,11 +128,11 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
             </tr>
           </thead>
           <tbody>
-            {data.map((row, idx) => (
+            {dataWithEilNr.map((row, idx) => (
               <tr key={idx} className="hover:bg-blue-50 transition-colors print-break-avoid">
-                {/* Column 1: Eil. Nr. - VERY IMPORTANT */}
+                {/* Column 1: Eil. Nr. - Sequential number based on registration date */}
                 <td className="border-2 border-gray-300 px-2 py-2 text-[11px] text-center font-bold text-gray-900 bg-yellow-50">
-                  {idx + 1}
+                  {row.eil_nr}
                 </td>
                 
                 {/* Column 2: Registration date */}
@@ -151,18 +186,35 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
                   )}
                 </td>
                 
-                {/* Column 11: Veterinary services provided */}
+                {/* Column 11: Veterinary services provided - Medicine details */}
                 <td className="border-2 border-gray-300 px-2 py-2 text-[11px]">
-                  {row.services && <div className="text-gray-900">{row.services}</div>}
-                  {row.medications_used && <div className="text-gray-600 text-[10px] mt-0.5">💊 {row.medications_used}</div>}
-                  {!row.services && !row.medications_used && <span className="text-gray-400">-</span>}
+                  {row.services && <div className="text-gray-900 mb-1">{row.services}</div>}
+                  {row.medicine_name && (
+                    <div className="text-gray-900 font-medium">
+                      {row.medicine_name}
+                    </div>
+                  )}
+                  {row.medicine_dose && (
+                    <div className="text-gray-700 text-[10px] mt-0.5">
+                      Dozė: {row.medicine_dose} {row.medicine_unit}
+                      {row.medicine_days && ` × ${row.medicine_days} d.`}
+                    </div>
+                  )}
+                  {!row.services && !row.medicine_name && <span className="text-gray-400">-</span>}
                 </td>
                 
-                {/* Column 12: Withdrawal period */}
+                {/* Column 12: Withdrawal period - Only show dates */}
                 <td className="border-2 border-gray-300 px-2 py-2 text-[11px]">
-                  {row.withdrawal_until_meat && <div className="text-red-700 text-[10px]">🥩 {formatDateLT(row.withdrawal_until_meat)}</div>}
-                  {row.withdrawal_until_milk && <div className="text-blue-700 text-[10px] mt-0.5">🥛 {formatDateLT(row.withdrawal_until_milk)}</div>}
-                  {!row.withdrawal_until_meat && !row.withdrawal_until_milk && <span className="text-gray-400">-</span>}
+                  {row.withdrawal_until_meat && row.withdrawal_days_meat > 0 && (
+                    <div className="text-red-700 text-[10px]">🥩 {formatDateLT(row.withdrawal_until_meat)}</div>
+                  )}
+                  {row.withdrawal_until_milk && row.withdrawal_days_milk > 0 && (
+                    <div className="text-blue-700 text-[10px] mt-0.5">🥛 {formatDateLT(row.withdrawal_until_milk)}</div>
+                  )}
+                  {(!row.withdrawal_until_meat || row.withdrawal_days_meat === 0) && 
+                   (!row.withdrawal_until_milk || row.withdrawal_days_milk === 0) && (
+                    <span className="text-gray-400">-</span>
+                  )}
                 </td>
                 
                 {/* Column 13: Outcome */}
