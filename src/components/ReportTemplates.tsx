@@ -166,6 +166,24 @@ interface DrugJournalReportProps {
 }
 
 export function DrugJournalReport({ data }: DrugJournalReportProps) {
+  // Group data by product (medicine)
+  const groupedData = data.reduce((acc, row) => {
+    const productKey = row.product_id || row.product_name;
+    if (!acc[productKey]) {
+      acc[productKey] = {
+        product_name: row.product_name,
+        unit: row.unit,
+        registration_code: row.registration_code,
+        active_substance: row.active_substance,
+        batches: []
+      };
+    }
+    acc[productKey].batches.push(row);
+    return acc;
+  }, {} as Record<string, any>);
+
+  const medicines = Object.values(groupedData);
+
   return (
     <div className="bg-white">
       <div className="text-center mb-6 no-print">
@@ -173,73 +191,114 @@ export function DrugJournalReport({ data }: DrugJournalReportProps) {
         <p className="text-sm text-gray-500">Sugeneruota: {formatDateLT(new Date().toISOString())}</p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border-2 border-gray-300 shadow-sm">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gradient-to-r from-emerald-50 to-teal-50">
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">1. Vaisto pavadinimas</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">2. Pirminė pakuotė (mato vnt.)</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">3. Gavimo data</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">4. Dokumento pavadinimas, numeris, data</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">5. Gautas kiekis</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">6. Pagaminimo data</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">7. Tinkamumo naudoti laikas</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">8. Serija</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Sunaudotas kiekis</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Likutis</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, idx) => (
-              <tr key={idx} className="hover:bg-emerald-50 transition-colors print-break-avoid">
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <div className="space-y-1">
-                    <div className="font-bold text-gray-900">{row.product_name || '-'}</div>
-                    {row.registration_code && <div className="text-emerald-700 text-[10px] font-medium">📋 Reg: {row.registration_code}</div>}
-                    {row.active_substance && <div className="text-gray-600 text-[10px]">💊 Veikl. med.: {row.active_substance}</div>}
-                  </div>
-                </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-medium text-gray-700">{translateUnit(row.unit) || '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.receipt_date ? formatDateLT(row.receipt_date) : '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <div className="space-y-1">
-                    {row.invoice_number && <div className="font-medium text-gray-900">SF: {row.invoice_number}</div>}
-                    {row.invoice_date && <div className="text-gray-600 text-[10px]">{formatDateLT(row.invoice_date)}</div>}
-                    {!row.invoice_number && !row.invoice_date && <span className="text-gray-400">-</span>}
-                  </div>
-                </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
-                    {row.quantity_received || '-'}
-                  </span>
-                </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.manufacture_date ? formatDateLT(row.manufacture_date) : '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.expiry_date ? formatDateLT(row.expiry_date) : '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
-                    {row.batch_number || '-'}
-                  </span>
-                </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-semibold text-red-700">{row.quantity_used || '0'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700">
-                    {row.quantity_remaining || '-'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {data.length === 0 && (
+      {medicines.length === 0 && (
         <div className="text-center py-16">
           <p className="text-lg text-gray-500">Nėra duomenų</p>
         </div>
       )}
 
-      {data.length > 0 && (
+      {medicines.map((medicine, medIdx) => (
+        <div key={medIdx} className="mb-8 page-break-inside-avoid">
+          {/* Medicine Header */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-gray-300 rounded-t-lg p-4 mb-0">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Veterinarinio vaisto / vaistinio preparato pavadinimas</p>
+                <p className="text-base font-bold text-gray-900">{medicine.product_name || '-'}</p>
+                {medicine.registration_code && (
+                  <p className="text-xs text-emerald-700 mt-1">📋 Reg. kodas: {medicine.registration_code}</p>
+                )}
+                {medicine.active_substance && (
+                  <p className="text-xs text-gray-600 mt-1">💊 Veiklioji medžiaga: {medicine.active_substance}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Pirminė pakuotė (mato vnt.)</p>
+                <p className="text-base font-bold text-gray-900">{translateUnit(medicine.unit) || '-'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Medicine Batches Table */}
+          <div className="overflow-x-auto rounded-b-lg border-2 border-t-0 border-gray-300 shadow-sm">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gavimo data</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Dokumento, pagal kurį gautas vaistas, pavadinimas, numeris, data</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gautas kiekis</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Tinkamumo naudoti laikas</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Serija</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Sunaudotas kiekis</th>
+                  <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Likutis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {medicine.batches.map((batch: any, batchIdx: number) => (
+                  <tr key={batchIdx} className="hover:bg-emerald-50 transition-colors print-break-avoid">
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">
+                      {batch.receipt_date ? formatDateLT(batch.receipt_date) : '-'}
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs">
+                      <div className="space-y-1">
+                        {batch.doc_title && <div className="font-medium text-gray-900">{batch.doc_title}</div>}
+                        {batch.invoice_number && <div className="font-medium text-gray-900">Nr. {batch.invoice_number}</div>}
+                        {batch.invoice_date && <div className="text-gray-600">{formatDateLT(batch.invoice_date)}</div>}
+                        {!batch.doc_title && !batch.invoice_number && !batch.invoice_date && <span className="text-gray-400">-</span>}
+                      </div>
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
+                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                        {batch.quantity_received || '-'}
+                      </span>
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center">
+                      <span className={`font-medium ${batch.expiry_date && new Date(batch.expiry_date) < new Date() ? 'text-red-700' : 'text-gray-900'}`}>
+                        {batch.expiry_date ? formatDateLT(batch.expiry_date) : '-'}
+                      </span>
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center">
+                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                        {batch.batch_number || batch.lot || '-'}
+                      </span>
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-semibold text-red-700">
+                      {batch.quantity_used || '0'}
+                    </td>
+                    <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-bold ${
+                        (batch.quantity_remaining || 0) > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {batch.quantity_remaining || '0'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {/* Summary row for this medicine */}
+                <tr className="bg-gray-50 font-bold">
+                  <td colSpan={2} className="border-2 border-gray-300 px-3 py-3 text-xs text-right text-gray-700">
+                    Viso ({medicine.product_name}):
+                  </td>
+                  <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-blue-900">
+                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_received) || 0), 0).toFixed(2)}
+                  </td>
+                  <td colSpan={2} className="border-2 border-gray-300 px-3 py-3"></td>
+                  <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-red-900">
+                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_used) || 0), 0).toFixed(2)}
+                  </td>
+                  <td className="border-2 border-gray-300 px-3 py-3 text-xs text-right font-bold text-emerald-900">
+                    {medicine.batches.reduce((sum: number, b: any) => sum + (parseFloat(b.quantity_remaining) || 0), 0).toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {medicines.length > 0 && (
         <div className="mt-4 space-y-2 text-sm text-gray-600 no-print">
+          <p>Viso vaistų: <span className="font-semibold text-gray-900">{medicines.length}</span></p>
           <p>Viso įrašų: <span className="font-semibold text-gray-900">{data.length}</span></p>
           <p>Tiekėjai: <span className="font-medium text-gray-800">{Array.from(new Set(data.map(d => d.supplier_name).filter(Boolean))).join(', ') || 'Nenurodyta'}</span></p>
         </div>
