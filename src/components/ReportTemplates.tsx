@@ -14,60 +14,166 @@ interface TreatedAnimalsReportProps {
 }
 
 export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
+  // Helper function to calculate animal age
+  const calculateAge = (ageMonths: number | null, birthDate: string | null): string => {
+    if (ageMonths) {
+      const years = Math.floor(ageMonths / 12);
+      const months = ageMonths % 12;
+      if (years > 0 && months > 0) return `${years} m. ${months} mėn.`;
+      if (years > 0) return `${years} m.`;
+      return `${months} mėn.`;
+    }
+    if (birthDate) {
+      const birth = new Date(birthDate);
+      const now = new Date();
+      const months = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+      const years = Math.floor(months / 12);
+      const remainingMonths = months % 12;
+      if (years > 0 && remainingMonths > 0) return `${years} m. ${remainingMonths} mėn.`;
+      if (years > 0) return `${years} m.`;
+      return `${months} mėn.`;
+    }
+    return '-';
+  };
+
   return (
     <div className="bg-white">
       <div className="text-center mb-6 no-print">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">GYDOMŲ GYVŪNŲ APSKAITA</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">GYDOMŲ GYVŪNŲ REGISTRACIJOS ŽURNALAS</h1>
         <p className="text-sm text-gray-500">Sugeneruota: {formatDateLT(new Date().toISOString())}</p>
+        <p className="text-xs text-red-600 font-semibold mt-2">⚠️ Oficialus dokumentas - Eil. Nr. yra labai svarbus</p>
       </div>
 
       <div className="overflow-x-auto rounded-lg border-2 border-gray-300 shadow-sm">
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse text-[9px]">
           <thead>
-            <tr className="bg-gradient-to-r from-gray-100 to-gray-50">
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700 text-center">Eil. Nr.</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Data, kai vaistas gyvūnams duotas pirmą kartą</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Vaisto pavadinimas</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Duotas vaisto kiekis</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gydomo gyvūno identifikavimo duomenys</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Liga / Diagnozė</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Receptą išrašiusio veterinarijos gydytojo duomenys</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Išlauka (karantinas)</th>
-              <th className="border-2 border-gray-300 px-3 py-3 text-xs font-bold text-gray-700">Gydymo trukmė</th>
+            {/* Single header row with all 14 columns */}
+            <tr className="bg-gradient-to-r from-blue-100 to-blue-50">
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 text-center align-top" style={{minWidth: '35px'}}>
+                1.<br/>Eil.<br/>Nr.
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '70px'}}>
+                2.<br/>Registracijos<br/>data
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '110px'}}>
+                3.<br/>Gyvūno laikytojo<br/>duomenys
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '70px'}}>
+                4.<br/>Gyvūno rūšis,<br/>lytis
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '55px'}}>
+                5.<br/>Gyvūno<br/>amžius
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '85px'}}>
+                6.<br/>Gyvūno<br/>ženklinimo<br/>numeris
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '70px'}}>
+                7.<br/>Pirmųjų ligos<br/>požymių data
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '90px'}}>
+                8.<br/>Gyvūno būklė
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '90px'}}>
+                9.<br/>Atlikti tyrimai
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '110px'}}>
+                10.<br/>Klinikinė<br/>diagnozė
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '110px'}}>
+                11.<br/>Suteiktos<br/>veterinarijos<br/>paslaugos
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '80px'}}>
+                12.<br/>Išlauka
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '90px'}}>
+                13.<br/>Ligos baigtis
+              </th>
+              <th className="border-2 border-gray-300 px-2 py-3 text-[9px] font-bold text-gray-700 align-top" style={{minWidth: '90px'}}>
+                14.<br/>Veterinarijos<br/>gydytojas
+              </th>
             </tr>
           </thead>
           <tbody>
             {data.map((row, idx) => (
               <tr key={idx} className="hover:bg-blue-50 transition-colors print-break-avoid">
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center font-semibold text-gray-600">{idx + 1}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.registration_date ? formatDateLT(row.registration_date) : '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900 font-medium">{row.product_name || '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.dose || '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <div className="space-y-1">
-                    <div className="font-bold text-gray-900">{row.animal_tag || '-'}</div>
-                    <div className="text-gray-600">{row.species || '-'}</div>
-                    {row.owner_name && <div className="text-gray-500 text-[10px]">{row.owner_name}</div>}
-                  </div>
+                {/* Column 1: Eil. Nr. - VERY IMPORTANT */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-center font-bold text-gray-900 bg-yellow-50">
+                  {idx + 1}
                 </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <div className="space-y-1">
-                    <div className="font-bold text-gray-900">{row.disease_name || '-'}</div>
-                    {row.clinical_diagnosis && <div className="text-gray-600 text-[10px]">{row.clinical_diagnosis}</div>}
-                  </div>
+                
+                {/* Column 2: Registration date */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  {row.registration_date ? formatDateLT(row.registration_date) : '-'}
                 </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-gray-900">{row.veterinarian || '-'}</td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs">
-                  <div className="space-y-1">
-                    {row.withdrawal_until_meat && <div className="text-red-700 font-medium">🥩 Mėsa: {formatDateLT(row.withdrawal_until_meat)}</div>}
-                    {row.withdrawal_until_milk && <div className="text-blue-700 font-medium">🥛 Pienas: {formatDateLT(row.withdrawal_until_milk)}</div>}
-                    {!row.withdrawal_until_meat && !row.withdrawal_until_milk && <span className="text-gray-400">-</span>}
-                  </div>
+                
+                {/* Column 3: Owner details */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px]">
+                  {row.owner_name && <div className="font-semibold text-gray-900">{row.owner_name}</div>}
+                  {row.owner_address && <div className="text-gray-600 text-[8px] mt-0.5">{row.owner_address}</div>}
+                  {!row.owner_name && !row.owner_address && <span className="text-gray-400">-</span>}
                 </td>
-                <td className="border-2 border-gray-300 px-3 py-3 text-xs text-center">
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                    {row.treatment_days ? `${row.treatment_days} d.` : '-'}
-                  </span>
+                
+                {/* Column 4: Species, sex */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  <div>{row.species || '-'}</div>
+                  {row.sex && <div className="text-gray-600 text-[8px] mt-0.5">{row.sex}</div>}
+                </td>
+                
+                {/* Column 5: Age */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900 text-center">
+                  {calculateAge(row.age_months, row.birth_date)}
+                </td>
+                
+                {/* Column 6: Animal tag number */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-center">
+                  <span className="font-bold text-gray-900">{row.animal_tag || '-'}</span>
+                </td>
+                
+                {/* Column 7: First symptoms date */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  {row.first_symptoms_date ? formatDateLT(row.first_symptoms_date) : '-'}
+                </td>
+                
+                {/* Column 8: Animal condition */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  {row.animal_condition || '-'}
+                </td>
+                
+                {/* Column 9: Tests performed */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  {row.tests || '-'}
+                </td>
+                
+                {/* Column 10: Clinical diagnosis */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px]">
+                  <div className="font-semibold text-gray-900">{row.disease_name || '-'}</div>
+                  {row.clinical_diagnosis && row.clinical_diagnosis !== row.disease_name && (
+                    <div className="text-gray-600 text-[8px] mt-0.5">{row.clinical_diagnosis}</div>
+                  )}
+                </td>
+                
+                {/* Column 11: Veterinary services provided */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px]">
+                  {row.services && <div className="text-gray-900">{row.services}</div>}
+                  {row.medications_used && <div className="text-gray-600 text-[8px] mt-0.5">💊 {row.medications_used}</div>}
+                  {!row.services && !row.medications_used && <span className="text-gray-400">-</span>}
+                </td>
+                
+                {/* Column 12: Withdrawal period */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px]">
+                  {row.withdrawal_until_meat && <div className="text-red-700 text-[8px]">🥩 {formatDateLT(row.withdrawal_until_meat)}</div>}
+                  {row.withdrawal_until_milk && <div className="text-blue-700 text-[8px] mt-0.5">🥛 {formatDateLT(row.withdrawal_until_milk)}</div>}
+                  {!row.withdrawal_until_meat && !row.withdrawal_until_milk && <span className="text-gray-400">-</span>}
+                </td>
+                
+                {/* Column 13: Outcome */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] text-gray-900">
+                  {row.treatment_outcome || '-'}
+                </td>
+                
+                {/* Column 14: Veterinarian name */}
+                <td className="border-2 border-gray-300 px-1 py-2 text-[9px] font-medium text-gray-900">
+                  {row.veterinarian || '-'}
                 </td>
               </tr>
             ))}
@@ -84,6 +190,7 @@ export function TreatedAnimalsReport({ data }: TreatedAnimalsReportProps) {
       {data.length > 0 && (
         <div className="mt-4 text-sm text-gray-600 no-print">
           <p>Viso įrašų: <span className="font-semibold text-gray-900">{data.length}</span></p>
+          <p className="text-xs text-red-600 mt-2">⚠️ Eil. Nr. (eilės numeris) yra oficialaus dokumento dalis ir negali būti keičiamas</p>
         </div>
       )}
     </div>
