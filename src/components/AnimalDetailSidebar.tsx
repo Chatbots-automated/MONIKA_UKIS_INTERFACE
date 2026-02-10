@@ -1056,26 +1056,41 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                   Atidaryti brolio sistemą
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
+              
+              {/* Ausies numeris - centered at top */}
+              <div className="mb-4">
+                <div className="bg-white rounded-lg p-3 border border-blue-200 text-center">
                   <span className="text-xs text-gray-500 block mb-1">Ausies numeris</span>
-                  <span className="font-bold text-gray-900 text-lg">{animal.tag_no || '-'}</span>
+                  <span className="font-bold text-blue-600 text-lg">{animal.tag_no || '-'}</span>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-1">Rūšis</span>
-                  <span className="font-bold text-gray-900 text-lg">{animal.species}</span>
+              </div>
+
+              {/* Two column layout */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Left Column */}
+                <div className="space-y-3">
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Lytis</span>
+                    <span className="font-bold text-gray-900 text-base">{animal.sex || '-'}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Gimimo data</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {animal.birth_date ? formatDateLT(animal.birth_date) : '-'}
+                    </span>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-1">Lytis</span>
-                  <span className="font-bold text-gray-900 text-lg">{animal.sex || '-'}</span>
-                </div>
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <span className="text-xs text-gray-500 block mb-1">Amžius</span>
-                  <span className="font-bold text-gray-900 text-lg">{animal.age_months ? `${animal.age_months} mėn.` : '-'}</span>
-                </div>
-                <div className="bg-white rounded-lg p-3 border border-blue-100 col-span-2">
-                  <span className="text-xs text-gray-500 block mb-1">Gyvūno ID sistemoje</span>
-                  <span className="font-mono text-gray-700 text-sm">{animal.id}</span>
+
+                {/* Right Column */}
+                <div className="space-y-3">
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Veislė</span>
+                    <span className="font-bold text-gray-900 text-base">{animal.breed || '-'}</span>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-blue-100">
+                    <span className="text-xs text-gray-500 block mb-1">Amžius</span>
+                    <span className="font-bold text-gray-900 text-base">{animal.age_months ? `${animal.age_months} mėn.` : '-'}</span>
+                  </div>
                 </div>
               </div>
             </div>
