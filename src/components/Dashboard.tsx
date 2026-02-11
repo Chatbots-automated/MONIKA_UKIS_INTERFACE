@@ -257,25 +257,16 @@ export function Dashboard() {
         })
         .slice(0, 10);
 
-      // Calculate total value efficiently by fetching all usage data at once
-      const { data: allUsageData } = await supabase
-        .from('usage_items')
-        .select('batch_id, qty');
+      // Calculate total value using qty_left from batches
+      // Fetch batches with qty_left
+      const { data: batchesWithStock } = await supabase
+        .from('batches')
+        .select('id, qty_left, received_qty, purchase_price');
 
-      // Create a map of batch_id to total usage
-      const usageByBatch = new Map<string, number>();
-      allUsageData?.forEach(item => {
-        const batchId = item.batch_id;
-        const currentUsage = usageByBatch.get(batchId) || 0;
-        usageByBatch.set(batchId, currentUsage + (item.qty || 0));
-      });
-
-      // Calculate total value using the batches data we already have
       let totalValue = 0;
-      if (batchValue.data) {
-        for (const batch of batchValue.data) {
-          const totalUsed = usageByBatch.get(batch.id) || 0;
-          const onHand = (batch.received_qty || 0) - totalUsed;
+      if (batchesWithStock) {
+        for (const batch of batchesWithStock) {
+          const onHand = batch.qty_left || 0;
           const unitPrice = batch.received_qty > 0 ? (batch.purchase_price || 0) / batch.received_qty : 0;
           const batchValue = unitPrice * onHand;
           totalValue += batchValue;

@@ -145,9 +145,11 @@ While the display is now fixed, the underlying data discrepancy remains. Conside
 
 ## Files Modified
 
-- `src/components/ProductUsageAnalysis.tsx` - Fixed inventory calculation logic in "Vaistų Panaudojimas" section
-- `src/components/Inventory.tsx` - Fixed inventory calculation logic in "Atsargos" section
-- `diagnose-product-stock.js` - Diagnostic script (can be used for any product)
+1. `src/components/ProductUsageAnalysis.tsx` - Fixed inventory calculation logic in "Vaistų Panaudojimas" section
+2. `src/components/Inventory.tsx` - Fixed inventory calculation logic in "Atsargos" section  
+3. `src/components/AnimalDetailSidebar.tsx` - Fixed stock calculation in animal sidebar (profilaktika product selection)
+4. `src/components/Dashboard.tsx` - Fixed total inventory value calculation
+5. `diagnose-product-stock.js` - Diagnostic script (can be used for any product)
 
 ## Additional Fix: Inventory (Atsargos) Component
 
@@ -199,3 +201,18 @@ To verify the fix:
 3. Verify:
    - ✅ Likutis: 20 bolus (not -130 or other negative value)
    - ✅ No "NEIGIAMA" (negative) badge displayed
+
+### 3. Animal Sidebar - Profilaktika Section
+1. Open any animal's detail sidebar
+2. Select "Profilaktika" procedure
+3. Select Ymcp Bolus from the product dropdown
+4. Verify:
+   - ✅ Likutis: 20.00 bolus (not -130.00)
+   - ✅ Stock level displayed in green (not red)
+
+### 4. Dashboard - Inventory Value
+1. Navigate to Dashboard
+2. Check the inventory statistics
+3. Verify:
+   - ✅ Total inventory value is calculated using accurate qty_left values
+   - ✅ Stock counts reflect actual remaining inventory

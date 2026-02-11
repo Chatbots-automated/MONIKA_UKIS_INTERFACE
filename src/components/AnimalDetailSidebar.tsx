@@ -2682,7 +2682,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const fetchStockLevel = async (productId: string) => {
     const { data: batchesData, error } = await supabase
       .from('batches')
-      .select('id, received_qty, expiry_date')
+      .select('id, received_qty, qty_left, expiry_date')
       .eq('product_id', productId);
 
     if (error || !batchesData) return 0;
@@ -2697,19 +2697,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
       return expiryDate >= today;
     });
 
-    // Calculate actual stock for each batch (received_qty - usage)
-    const stockPromises = validBatches.map(async (batch) => {
-      const { data: usageData } = await supabase
-        .from('usage_items')
-        .select('qty')
-        .eq('batch_id', batch.id);
-      
-      const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
-      return (batch.received_qty || 0) - totalUsed;
-    });
-
-    const stockLevels = await Promise.all(stockPromises);
-    const total = stockLevels.reduce((sum, stock) => sum + stock, 0);
+    // Use qty_left from batches (maintained by database triggers) as the source of truth
+    const total = validBatches.reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
 
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
@@ -2719,7 +2708,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     try {
       const { data: batchesData, error } = await supabase
         .from('batches')
-        .select('id, received_qty, expiry_date')
+        .select('id, qty_left, expiry_date')
         .eq('product_id', productId)
         .order('expiry_date', { ascending: true });
 
@@ -2733,7 +2722,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Check each batch for actual stock (received_qty - usage)
+        // Check each batch for actual stock using qty_left (maintained by triggers)
         for (const batch of batchesData) {
           // Skip expired batches
           if (batch.expiry_date) {
@@ -2741,14 +2730,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
             if (expiryDate < today) continue;
           }
 
-          // Calculate actual stock
-          const { data: usageData } = await supabase
-            .from('usage_items')
-            .select('qty')
-            .eq('batch_id', batch.id);
-          
-          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
-          const availableStock = (batch.received_qty || 0) - totalUsed;
+          // Use qty_left from database as source of truth
+          const availableStock = batch.qty_left || 0;
 
           // Return first batch with stock > 0
           if (availableStock > 0) {
