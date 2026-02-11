@@ -110,7 +110,7 @@ export function ProductUsageAnalysis() {
       // Fetch all lookup data upfront (MUCH faster than individual queries)
       console.log('📚 Loading lookup data...');
       const products = await fetchAllRows<any>('products', 'id, name, category, subcategory, primary_pack_unit');
-      const batches = await fetchAllRows<any>('batches', 'id, product_id, purchase_price, received_qty, created_at, supplier_id');
+      const batches = await fetchAllRows<any>('batches', 'id, product_id, purchase_price, received_qty, qty_left, created_at, supplier_id');
       const suppliers = await fetchAllRows<any>('suppliers', 'id, name');
       const treatments = await fetchAllRows<any>('treatments', 'id, animal_id');
       const animals = await fetchAllRows<any>('animals', 'id, tag_no');
@@ -270,9 +270,13 @@ export function ProductUsageAnalysis() {
       // Process synchronization steps (sync medications)
       console.log('🔄 Processing sync medications...');
       for (const step of syncSteps || []) {
+        // Skip if no batch info or dosage
         if (!step.batches || !step.dosage) continue;
 
         const batch = step.batches;
+        // CRITICAL: Skip if batch doesn't have a product_id (orphaned batch reference)
+        if (!batch.product_id) continue;
+        
         const product = productMap.get(batch.product_id);
         if (!product) continue;
 
@@ -353,8 +357,13 @@ export function ProductUsageAnalysis() {
         })).sort((a, b) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime());
 
         record.total_received = productBatches.reduce((sum, b) => sum + (b.received_qty || 0), 0);
-        record.total_used = record.total_quantity;
-        record.remaining_stock = record.total_received - record.total_used;
+        
+        // CRITICAL FIX: Use qty_left from batches as the source of truth
+        // The database triggers maintain qty_left accurately, so we should trust it
+        // rather than recalculating from usage records (which may have historical discrepancies)
+        const actualRemainingStock = productBatches.reduce((sum, b) => sum + (b.qty_left || 0), 0);
+        record.total_used = record.total_received - actualRemainingStock;
+        record.remaining_stock = actualRemainingStock;
       }
 
       setUsageData(Array.from(usageByProduct.values()));
@@ -734,17 +743,27 @@ export function ProductUsageAnalysis() {
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-600">Panaudota{(startDate || endDate) ? ' (filtruota)' : ''}:</span>
+                                    <span className="text-sm text-gray-600">Panaudota:</span>
                                     <span className="text-sm font-bold text-orange-700">
-                                      {formatNumberLT(filteredQuantity)} {product.unit}
+                                      {formatNumberLT(product.total_used)} {product.unit}
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center pt-2 border-t border-gray-300">
                                     <span className="text-sm font-semibold text-gray-700">Likutis:</span>
-                                    <span className={`text-sm font-bold ${(product.total_received - filteredQuantity) > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                      {formatNumberLT(product.total_received - filteredQuantity)} {product.unit}
+                                    <span className={`text-sm font-bold ${product.remaining_stock > 0 ? 'text-green-700' : product.remaining_stock === 0 ? 'text-gray-700' : 'text-red-700'}`}>
+                                      {formatNumberLT(product.remaining_stock)} {product.unit}
                                     </span>
                                   </div>
+                                  {(startDate || endDate) && (
+                                    <div className="pt-2 border-t border-gray-200">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-xs text-gray-500">Panaudota (filtruota):</span>
+                                        <span className="text-xs font-semibold text-gray-600">
+                                          {formatNumberLT(filteredQuantity)} {product.unit}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="border-t border-gray-300 pt-3">

@@ -79,6 +79,7 @@ export function Inventory() {
           expiry_date,
           mfg_date,
           received_qty,
+          qty_left,
           package_size,
           package_count,
           products!inner(
@@ -91,46 +92,21 @@ export function Inventory() {
 
       if (batchesError) throw batchesError;
 
-      // For each batch, calculate on_hand from received_qty minus usage
-      const inventoryPromises = batchesData?.map(async (batch) => {
-        try {
-          // Get total usage for this batch
-          const { data: usageData, error: usageError } = await supabase
-            .from('usage_items')
-            .select('qty')
-            .eq('batch_id', batch.id);
-
-          if (usageError) {
-            console.error('Error loading usage for batch:', batch.id, usageError);
-            return null;
-          }
-
-          // Calculate on_hand: received_qty minus total usage
-          const totalUsed = usageData?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0;
-          const onHand = (batch.received_qty || 0) - totalUsed;
-
-          return {
-            batch_id: batch.id,
-            product_id: batch.product_id,
-            on_hand: onHand,
-            expiry_date: batch.expiry_date,
-            lot: batch.lot,
-            mfg_date: batch.mfg_date,
-            product_name: batch.products?.name,
-            category: batch.products?.category,
-            unit: batch.products?.primary_pack_unit,
-            primary_pack_size: batch.products?.primary_pack_size,
-            package_size: batch.package_size,
-            package_count: batch.package_count,
-          };
-        } catch (error) {
-          console.error('Failed to process batch:', batch.id, error);
-          return null;
-        }
-      }) || [];
-
-      const results = await Promise.all(inventoryPromises);
-      const batchesWithStock = results.filter((item): item is StockItem => item !== null);
+      // Map batches to inventory items using qty_left as the source of truth
+      const batchesWithStock = batchesData?.map((batch) => ({
+        batch_id: batch.id,
+        product_id: batch.product_id,
+        on_hand: batch.qty_left || 0, // ✅ Use qty_left from database (maintained by triggers)
+        expiry_date: batch.expiry_date,
+        lot: batch.lot,
+        mfg_date: batch.mfg_date,
+        product_name: batch.products?.name,
+        category: batch.products?.category,
+        unit: batch.products?.primary_pack_unit,
+        primary_pack_size: batch.products?.primary_pack_size,
+        package_size: batch.package_size,
+        package_count: batch.package_count,
+      })) || [];
 
       // Filter out expired batches
       const today = new Date();
@@ -259,7 +235,7 @@ export function Inventory() {
       // Get ALL batches for this product (not just one)
       const { data: allBatches, error: batchesError } = await supabase
         .from('batches')
-        .select('id, received_qty, expiry_date')
+        .select('id, received_qty, qty_left, expiry_date')
         .eq('product_id', item.product_id);
 
       if (batchesError) throw batchesError;
@@ -281,41 +257,32 @@ export function Inventory() {
         throw new Error('No valid (non-expired) batches found for this product');
       }
 
-      // Get usage for each batch
-      const batchUsagePromises = validBatches.map(async (batch) => {
-        const { data: usageData } = await supabase
-          .from('usage_items')
-          .select('qty')
-          .eq('batch_id', batch.id);
-        
-        const totalUsed = usageData?.reduce((sum, u) => sum + (u.qty || 0), 0) || 0;
-        return {
-          batch_id: batch.id,
-          total_used: totalUsed,
-        };
-      });
-
-      const batchUsages = await Promise.all(batchUsagePromises);
-
-      // Calculate total usage across all batches
-      const totalUsageAllBatches = batchUsages.reduce((sum, b) => sum + b.total_used, 0);
+      // Calculate how much was actually used from each batch (using qty_left as source of truth)
+      const batchesWithUsage = validBatches.map(batch => ({
+        batch_id: batch.id,
+        received_qty: batch.received_qty || 0,
+        qty_left: batch.qty_left || 0,
+        total_used: (batch.received_qty || 0) - (batch.qty_left || 0),
+      }));
 
       // Distribute the new amount across batches proportionally
       const amountPerBatch = newAmount / validBatches.length;
 
-      // Update each batch
-      const updatePromises = batchUsages.map(async (batchUsage) => {
-        const newReceivedQty = amountPerBatch + batchUsage.total_used;
+      // Update each batch - we need to adjust received_qty to match the desired qty_left
+      const updatePromises = batchesWithUsage.map(async (batch) => {
+        // New received_qty = desired qty_left + actual usage
+        const newReceivedQty = amountPerBatch + batch.total_used;
         
         const { error: updateError } = await supabase
           .from('batches')
           .update({
             received_qty: newReceivedQty,
+            qty_left: amountPerBatch, // ✅ Directly set qty_left to desired amount
             // Set package_size and package_count to NULL to prevent trigger from recalculating
             package_size: null,
             package_count: null,
           })
-          .eq('id', batchUsage.batch_id);
+          .eq('id', batch.batch_id);
 
         if (updateError) throw updateError;
       });
