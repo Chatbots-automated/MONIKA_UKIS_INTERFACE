@@ -294,7 +294,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
           const visitData = {
             animal_id: animalId,
             visit_datetime: new Date(step.scheduled_date).toISOString(),
-            procedures: ['Gydymas'],
+            procedures: ['Sinchronizacijos protokolas'],
             notes: `Sinchronizacija - ${step.step_name}${step.is_evening ? ' (vakare)' : ''}${step.dosage ? `\nDozė: ${step.dosage} ${step.dosage_unit}` : ''}`,
             status: 'Planuojamas',
             treatment_required: false,

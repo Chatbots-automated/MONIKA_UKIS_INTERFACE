@@ -173,7 +173,7 @@ export interface StockByProduct {
 }
 
 export type VisitStatus = 'Planuojamas' | 'Vykdomas' | 'Baigtas' | 'Atšauktas' | 'Neįvykęs';
-export type VisitProcedure = 'Temperatūra' | 'Apžiūra' | 'Profilaktika' | 'Gydymas' | 'Vakcina' | 'Nagai' | 'Kita';
+export type VisitProcedure = 'Temperatūra' | 'Apžiūra' | 'Profilaktika' | 'Gydymas' | 'Vakcina' | 'Sinchronizacijos protokolas' | 'Nagai' | 'Kita';
 
 export interface AnimalVisit {
   id: string;

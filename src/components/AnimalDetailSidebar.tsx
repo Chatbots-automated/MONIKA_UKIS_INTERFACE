@@ -2747,7 +2747,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     }
   };
 
-  const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Nagai', 'Kita'];
+  const allProcedures: VisitProcedure[] = ['Temperatūra', 'Apžiūra', 'Profilaktika', 'Gydymas', 'Vakcina', 'Sinchronizacijos protokolas', 'Nagai', 'Kita'];
 
   const toggleProcedure = (proc: VisitProcedure) => {
     const isAdding = !formData.procedures.includes(proc);
@@ -4305,7 +4305,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
           )}
 
           {/* SYNCHRONIZATION PROTOCOL */}
-          {formData.procedures.includes('Gydymas') && (
+          {formData.procedures.includes('Sinchronizacijos protokolas') && (
             <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg">
               <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-purple-600" />
@@ -4320,7 +4320,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                 }}
               />
             </div>
-          )}          {/* VAKCINA FORM */}
+          )}
+
+          {/* VAKCINA FORM */}
           {formData.procedures.includes('Vakcina') && (
             <div ref={vaccinationSectionRef} className="p-4 bg-purple-50 border-2 border-purple-300 rounded-lg space-y-4">
               <h4 className="font-bold text-gray-900 flex items-center gap-2">
