@@ -149,7 +149,8 @@ While the display is now fixed, the underlying data discrepancy remains. Conside
 2. `src/components/Inventory.tsx` - Fixed inventory calculation logic in "Atsargos" section  
 3. `src/components/AnimalDetailSidebar.tsx` - Fixed stock calculation in animal sidebar (profilaktika product selection)
 4. `src/components/Dashboard.tsx` - Fixed total inventory value calculation
-5. `diagnose-product-stock.js` - Diagnostic script (can be used for any product)
+5. `supabase/migrations/20260213000000_fix_vet_drug_journal_view.sql` - Fixed database view for drug journal report
+6. `diagnose-product-stock.js` - Diagnostic script (can be used for any product)
 
 ## Additional Fix: Inventory (Atsargos) Component
 
@@ -216,3 +217,46 @@ To verify the fix:
 3. Verify:
    - ✅ Total inventory value is calculated using accurate qty_left values
    - ✅ Stock counts reflect actual remaining inventory
+
+### 5. Drug Journal Report (VETERINARINIŲ VAISTŲ ŽURNALAS)
+1. Navigate to Reports → Drug Journal
+2. Generate the report (clear date filters to see all data)
+3. Find MastoBol or Ymcp Bolus in the report
+4. Verify:
+   - ✅ "Likutis" (Remaining) column shows positive values
+   - ✅ No negative stock amounts displayed
+   - ✅ Totals at bottom match actual inventory
+
+**IMPORTANT:** This fix requires a database migration. Run the following SQL in Supabase SQL Editor:
+
+```sql
+-- Fix vw_vet_drug_journal view to use qty_left instead of summing usage_items
+DROP VIEW IF EXISTS vw_vet_drug_journal;
+
+CREATE OR REPLACE VIEW vw_vet_drug_journal AS
+SELECT 
+  b.id AS batch_id,
+  b.product_id,
+  b.created_at AS receipt_date,
+  p.name AS product_name,
+  p.registration_code,
+  p.active_substance,
+  s.name AS supplier_name,
+  b.lot,
+  b.batch_number,
+  b.mfg_date AS manufacture_date,
+  b.expiry_date,
+  b.received_qty AS quantity_received,
+  p.primary_pack_unit AS unit,
+  -- FIXED: Use qty_left as source of truth (maintained by database triggers)
+  (b.received_qty - COALESCE(b.qty_left, 0)) AS quantity_used,
+  COALESCE(b.qty_left, 0) AS quantity_remaining,
+  b.doc_title,
+  b.doc_number AS invoice_number,
+  b.doc_date AS invoice_date
+FROM batches b
+JOIN products p ON b.product_id = p.id
+LEFT JOIN suppliers s ON b.supplier_id = s.id
+WHERE p.category IN ('medicines', 'prevention')
+ORDER BY b.created_at DESC;
+```
