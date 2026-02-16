@@ -2755,7 +2755,15 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
     if (formData.procedures.includes(proc)) {
       setFormData({ ...formData, procedures: formData.procedures.filter(p => p !== proc) });
     } else {
-      setFormData({ ...formData, procedures: [...formData.procedures, proc] });
+      // Special handling for Sinchronizacijos protokolas - it should be used alone
+      if (proc === 'Sinchronizacijos protokolas') {
+        setFormData({ ...formData, procedures: ['Sinchronizacijos protokolas'] });
+      } else if (formData.procedures.includes('Sinchronizacijos protokolas')) {
+        // If Sinchronizacijos protokolas is already selected, replace it with the new procedure
+        setFormData({ ...formData, procedures: [proc] });
+      } else {
+        setFormData({ ...formData, procedures: [...formData.procedures, proc] });
+      }
 
       // Auto-scroll to relevant section after a short delay (for tablet UX)
       setTimeout(() => {
@@ -2804,6 +2812,14 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
     if (formData.procedures.length === 0) {
       showNotification('Pasirinkite bent vieną procedūrą', 'error');
+      setLoading(false);
+      return;
+    }
+
+    // If "Sinchronizacijos protokolas" is selected, don't create a visit here
+    // The SynchronizationProtocolComponent handles its own visit creation
+    if (formData.procedures.includes('Sinchronizacijos protokolas')) {
+      showNotification('Sinchronizacijos protokolas turi būti sukurtas naudojant protokolo formą žemiau. Vizitai bus sukurti automatiškai.', 'info');
       setLoading(false);
       return;
     }

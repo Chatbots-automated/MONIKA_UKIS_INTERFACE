@@ -433,21 +433,40 @@ export function FarmEquipmentMaintenance() {
 
   // Service recording
   const handleOpenServiceModal = async (item: FarmEquipmentItem) => {
-    setServicingItem(item);
-    setServiceForm({
-      service_date: new Date().toISOString().split('T')[0],
-      notes: '',
-    });
-    setServiceParts([]);
-    setShowAddPartForm(false);
-    await loadProducts();
-    setShowServiceModal(true);
+    try {
+      setServicingItem(item);
+      setServiceForm({
+        service_date: new Date().toISOString().split('T')[0],
+        notes: '',
+      });
+      setServiceParts([]);
+      setShowAddPartForm(false);
+      await loadProducts();
+      setShowServiceModal(true);
+    } catch (error: any) {
+      console.error('Error opening service modal:', error);
+      alert('Klaida atidarant aptarnavimo langą: ' + error.message);
+    }
   };
 
   const loadProducts = async () => {
+    // First get farm products
+    const { data: farmProducts } = await supabase
+      .from('equipment_products')
+      .select('id')
+      .eq('default_location_type', 'farm');
+    
+    const farmProductIds = farmProducts?.map(p => p.id) || [];
+    
+    if (farmProductIds.length === 0) {
+      setProducts([]);
+      return;
+    }
+
     const { data } = await supabase
       .from('equipment_warehouse_stock')
       .select('product_id, product_name, product_code, unit_type, total_qty')
+      .in('product_id', farmProductIds)
       .gt('total_qty', 0)
       .order('product_name');
 

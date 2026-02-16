@@ -51,7 +51,11 @@ interface WorkerStats {
   outstanding_items: any[];
 }
 
-export function TechnikaReports() {
+interface TechnikaReportsProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
   const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function TechnikaReports() {
   useEffect(() => {
     loadCategories();
     loadData();
-  }, [dateFilter]);
+  }, [dateFilter, locationFilter]);
 
   useEffect(() => {
     if (activeTab === 'farm-equipment') {
@@ -138,14 +142,19 @@ export function TechnikaReports() {
   };
 
   const loadProductHistory = async () => {
-    const { data: products } = await supabase
+    const productsQuery = supabase
       .from('equipment_products')
       .select(`
         *,
         equipment_categories(name)
       `)
-      .eq('is_active', true)
-      .order('name');
+      .eq('is_active', true);
+    
+    if (locationFilter) {
+      productsQuery.eq('default_location_type', locationFilter);
+    }
+    
+    const { data: products } = await productsQuery.order('name');
 
     if (!products) return;
 
@@ -207,7 +216,7 @@ export function TechnikaReports() {
   };
 
   const loadCategoryStats = async () => {
-    const { data: stats } = await supabase
+    const statsQuery = supabase
       .from('equipment_batches')
       .select(`
         product_id,
@@ -216,11 +225,18 @@ export function TechnikaReports() {
         received_qty,
         equipment_products!inner(
           category_id,
+          default_location_type,
           equipment_categories(name)
         )
       `)
       .gte('created_at', dateFilter.from)
       .lte('created_at', dateFilter.to + 'T23:59:59');
+    
+    if (locationFilter) {
+      statsQuery.eq('equipment_products.default_location_type', locationFilter);
+    }
+    
+    const { data: stats } = await statsQuery;
 
     if (!stats) return;
 
@@ -259,7 +275,8 @@ export function TechnikaReports() {
           quantity,
           quantity_returned,
           unit_price,
-          equipment_products(name, unit_type)
+          product_id,
+          equipment_products(name, unit_type, default_location_type)
         ),
         users(full_name)
       `)
@@ -288,6 +305,11 @@ export function TechnikaReports() {
       const worker = workerMap.get(workerId)!;
 
       issuance.equipment_issuance_items?.forEach((item: any) => {
+        // Filter by location if specified
+        if (locationFilter && item.equipment_products?.default_location_type !== locationFilter) {
+          return;
+        }
+        
         const outstanding = parseFloat(item.quantity || 0) - parseFloat(item.quantity_returned || 0);
         if (outstanding > 0) {
           worker.items_count++;
@@ -307,13 +329,35 @@ export function TechnikaReports() {
   };
 
   const loadOverviewStats = async () => {
-    const { data: warehouseStock } = await supabase
+    // Get products filtered by location
+    let productIds: string[] | undefined;
+    if (locationFilter) {
+      const { data: products } = await supabase
+        .from('equipment_products')
+        .select('id')
+        .eq('default_location_type', locationFilter);
+      productIds = products?.map(p => p.id);
+    }
+
+    const stockQuery = supabase
       .from('equipment_warehouse_stock')
       .select('*');
+    
+    if (productIds) {
+      stockQuery.in('product_id', productIds);
+    }
+    
+    const { data: warehouseStock } = await stockQuery;
 
-    const { data: itemsOnLoan } = await supabase
+    const loansQuery = supabase
       .from('equipment_items_on_loan')
       .select('*');
+    
+    if (productIds) {
+      loansQuery.in('product_id', productIds);
+    }
+    
+    const { data: itemsOnLoan } = await loansQuery;
 
     const { data: monthlyInvoices } = await supabase
       .from('equipment_invoices')
@@ -486,8 +530,8 @@ export function TechnikaReports() {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
-              { id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign },
-              { id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car },
+              ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
+              ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
               { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;

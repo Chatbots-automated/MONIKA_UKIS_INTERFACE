@@ -733,17 +733,6 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
 
   return (
     <div className="space-y-4">
-      {isApsek && !activeSync && (
-        <div className="bg-green-100 border-2 border-green-400 rounded-lg p-4">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-green-800">
-              <p className="font-semibold mb-1">Gyvūnas apsėklintas</p>
-              <p className="text-xs">Sinchronizacijos protokolai negalimi, nes gyvūnas jau turi APSĖK statusą</p>
-            </div>
-          </div>
-        </div>
-      )}
       {!showCreateForm ? (
         <button
           onClick={() => setShowCreateForm(true)}

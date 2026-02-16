@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Upload, FileText, X, Check, AlertCircle, Eye, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2 } from 'lucide-react';
+import { Upload, FileText, X, Check, AlertCircle, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2 } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -15,6 +15,7 @@ interface Product {
   name: string;
   unit_type: string;
   category_id: string | null;
+  product_code?: string | null;
 }
 
 interface Category {
@@ -45,6 +46,7 @@ interface CostCenter {
   name: string;
   description: string | null;
   color: string;
+  parent_id?: string | null;
 }
 
 interface InvoiceItem {
@@ -60,7 +62,18 @@ interface InvoiceItem {
   };
 }
 
-export function EquipmentInvoices() {
+interface StagedFile {
+  file: File;
+  id: string;
+  previewUrl: string;
+  selected: boolean;
+}
+
+interface EquipmentInvoicesProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {}) {
   const { logAction, user } = useAuth();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -87,6 +100,18 @@ export function EquipmentInvoices() {
     description: '',
     min_stock_level: '0',
   });
+
+  // Multi-upload staging states
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const [showStagingArea, setShowStagingArea] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed'>('idle');
+  const [processedInvoices, setProcessedInvoices] = useState<Array<{
+    fileId: string;
+    fileName: string;
+    status: 'pending' | 'parsing' | 'parsed' | 'error';
+    invoiceData?: any;
+    error?: string;
+  }>>([]);
 
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [savedInvoiceId, setSavedInvoiceId] = useState<string | null>(null);
@@ -159,6 +184,144 @@ export function EquipmentInvoices() {
     } else {
       alert('Prašome pasirinkti PDF failą');
       e.target.value = '';
+    }
+  };
+
+  const handleMultiFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newStagedFiles: StagedFile[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.type === 'application/pdf') {
+        newStagedFiles.push({
+          file,
+          id: `${Date.now()}-${i}`,
+          previewUrl: URL.createObjectURL(file),
+          selected: true,
+        });
+      }
+    }
+
+    if (newStagedFiles.length === 0) {
+      alert('Prašome pasirinkti PDF failus');
+      e.target.value = '';
+      return;
+    }
+
+    setStagedFiles(prev => [...prev, ...newStagedFiles]);
+    setShowStagingArea(true);
+    e.target.value = '';
+  };
+
+  const toggleFileSelection = (id: string) => {
+    setStagedFiles(prev => 
+      prev.map(f => f.id === id ? { ...f, selected: !f.selected } : f)
+    );
+  };
+
+  const removeFile = (id: string) => {
+    setStagedFiles(prev => {
+      const updated = prev.filter(f => f.id !== id);
+      if (updated.length === 0) {
+        setShowStagingArea(false);
+      }
+      return updated;
+    });
+  };
+
+  const clearAllStaged = () => {
+    stagedFiles.forEach(f => URL.revokeObjectURL(f.previewUrl));
+    setStagedFiles([]);
+    setShowStagingArea(false);
+  };
+
+  const processSelectedFiles = async () => {
+    const selectedFiles = stagedFiles.filter(f => f.selected);
+    
+    if (selectedFiles.length === 0) {
+      alert('Prašome pasirinkti bent vieną sąskaitą');
+      return;
+    }
+
+    setProcessingStatus('processing');
+
+    // Initialize processing status for all selected files
+    const initialProcessing = selectedFiles.map(f => ({
+      fileId: f.id,
+      fileName: f.file.name,
+      status: 'pending' as const,
+    }));
+    setProcessedInvoices(initialProcessing);
+
+    // Process all files in parallel
+    const processingPromises = selectedFiles.map(async (stagedFile) => {
+      try {
+        // Update status to parsing
+        setProcessedInvoices(prev => 
+          prev.map(p => p.fileId === stagedFile.id ? { ...p, status: 'parsing' } : p)
+        );
+
+        const arrayBuffer = await stagedFile.file.arrayBuffer();
+        const sanitizedFilename = stagedFile.file.name
+          .replace(/[()]/g, '')
+          .replace(/[^\w\s.-]/g, '_')
+          .replace(/\s+/g, '_');
+
+        const response = await fetch('https://n8n-up8s.onrender.com/webhook/36549f46-a08b-4790-bf56-40cdc919e4c0', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/pdf',
+            'X-Filename': sanitizedFilename,
+          },
+          body: arrayBuffer,
+        });
+
+        if (!response.ok) {
+          throw new Error('Nepavyko įkelti failo');
+        }
+
+        const data = await response.json();
+        const parsedData = Array.isArray(data) ? data[0] : data;
+
+        // Update status to parsed
+        setProcessedInvoices(prev => 
+          prev.map(p => p.fileId === stagedFile.id 
+            ? { ...p, status: 'parsed', invoiceData: parsedData } 
+            : p
+          )
+        );
+
+        await logAction('upload_equipment_invoice', undefined, undefined, undefined, { filename: sanitizedFilename });
+
+        return { success: true, fileId: stagedFile.id, data: parsedData };
+      } catch (error: any) {
+        console.error('Error processing file:', stagedFile.file.name, error);
+        setProcessedInvoices(prev => 
+          prev.map(p => p.fileId === stagedFile.id 
+            ? { ...p, status: 'error', error: error.message } 
+            : p
+          )
+        );
+        return { success: false, fileId: stagedFile.id, error: error.message };
+      }
+    });
+
+    // Wait for all to complete
+    await Promise.all(processingPromises);
+
+    setProcessingStatus('completed');
+
+    // Show completion message
+    const successCount = processedInvoices.filter(p => p.status === 'parsed').length;
+    const errorCount = processedInvoices.filter(p => p.status === 'error').length;
+    
+    if (errorCount === 0) {
+      alert(`✅ Visos ${successCount} sąskaitos sėkmingai apdorotos! Dabar galite peržiūrėti ir patvirtinti kiekvieną.`);
+    } else {
+      alert(`⚠️ Apdorota: ${successCount} sėkmingai, ${errorCount} su klaidomis.`);
     }
   };
 
@@ -244,7 +407,7 @@ export function EquipmentInvoices() {
         handleProductMatch(creatingProduct.index, newProduct.id);
       }
 
-      await logAction('create_equipment_product', { product_id: newProduct.id, name: newProduct.name });
+      await logAction('create_equipment_product', 'equipment_products', newProduct.id, null, { name: newProduct.name });
 
       setShowCreateModal(false);
       setCreatingProduct(null);
@@ -252,6 +415,7 @@ export function EquipmentInvoices() {
         name: '',
         product_code: '',
         unit_type: 'pcs',
+        category_id: '',
         manufacturer: '',
         model_number: '',
         description: '',
@@ -265,15 +429,16 @@ export function EquipmentInvoices() {
     }
   };
 
-  const handleFileUpload = async () => {
-    if (!selectedFile) return;
+  const handleFileUpload = async (fileToUpload?: File) => {
+    const file = fileToUpload || selectedFile;
+    if (!file) return;
 
     setUploadStatus('uploading');
     setUploadMessage('Įkeliama...');
 
     try {
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const sanitizedFilename = selectedFile.name
+      const arrayBuffer = await file.arrayBuffer();
+      const sanitizedFilename = file.name
         .replace(/[()]/g, '')
         .replace(/[^\w\s.-]/g, '_')
         .replace(/\s+/g, '_');
@@ -332,7 +497,13 @@ export function EquipmentInvoices() {
 
       setUploadStatus('success');
       setUploadMessage('Failas sėkmingai apdorotas');
-      await logAction('upload_equipment_invoice', { filename: sanitizedFilename });
+      
+      // Hide staging area when processing from multi-upload
+      if (showStagingArea) {
+        setShowStagingArea(false);
+      }
+      
+      await logAction('upload_equipment_invoice', undefined, undefined, undefined, { filename: sanitizedFilename });
     } catch (error: any) {
       setUploadStatus('error');
       setUploadMessage(error.message || 'Klaida įkeliant failą');
@@ -423,13 +594,22 @@ export function EquipmentInvoices() {
             ...savedItem,
             product: {
               name: product.name,
-              product_code: product.product_code,
+              product_code: product.product_code || null,
             },
           });
         }
       }
 
-      await logAction('confirm_equipment_invoice', { invoice_id: invoice.id });
+      await logAction('confirm_equipment_invoice', 'equipment_invoices', invoice.id);
+
+      // Remove the processed file from staged files
+      let processedFileId: string | undefined;
+      if (selectedFile && stagedFiles.length > 0) {
+        processedFileId = stagedFiles.find(f => f.file === selectedFile)?.id;
+        if (processedFileId) {
+          setStagedFiles(prev => prev.filter(f => f.id !== processedFileId));
+        }
+      }
 
       setSavedInvoiceId(invoice.id);
       setInvoiceItems(savedItems);
@@ -437,10 +617,21 @@ export function EquipmentInvoices() {
       setInvoiceData(null);
       setSelectedFile(null);
       setPdfUrl(null);
+      setEditedItems(new Map());
+      setMatchedProducts(new Map());
+      setHeaderData(null);
 
       setShowAssignmentModal(true);
 
       loadData();
+
+      // Check if there are more files to process
+      const remainingSelected = stagedFiles.filter(f => f.selected && f.file !== selectedFile);
+      if (remainingSelected.length > 0) {
+        // Will process next file after assignment modal is closed
+      } else if (processedFileId && stagedFiles.filter(f => f.id !== processedFileId).length === 0) {
+        setShowStagingArea(false);
+      }
     } catch (error: any) {
       console.error('Error:', error);
       alert('Klaida: ' + error.message);
@@ -509,7 +700,13 @@ export function EquipmentInvoices() {
 
       if (invoiceItems.length <= 1) {
         setShowAssignmentModal(false);
-        alert('Visi produktai priskirti sėkmingai!');
+        const hasMoreStaged = stagedFiles.filter(f => f.selected).length > 0;
+        if (hasMoreStaged) {
+          alert('Produktai priskirti! Apdorojama kita sąskaita...');
+          await processNextStagedFile();
+        } else {
+          alert('Visi produktai priskirti sėkmingai!');
+        }
       } else {
         alert('Produktas priskirtas');
       }
@@ -535,6 +732,65 @@ export function EquipmentInvoices() {
 
     if (invoiceItems.length <= 1) {
       setShowAssignmentModal(false);
+      // Check if there are more files to process from staging
+      await processNextStagedFile();
+    }
+  };
+
+  const processNextStagedFile = async () => {
+    // Find next parsed invoice that hasn't been reviewed yet
+    const nextParsed = processedInvoices.find(p => p.status === 'parsed' && p.invoiceData);
+    
+    if (nextParsed) {
+      const stagedFile = stagedFiles.find(f => f.id === nextParsed.fileId);
+      if (stagedFile) {
+        setSelectedFile(stagedFile.file);
+        setPdfUrl(stagedFile.previewUrl);
+        
+        // Set the invoice data directly without re-parsing
+        const parsedData = nextParsed.invoiceData;
+        setInvoiceData(parsedData);
+
+        // Handle supplier data
+        const supplierName = typeof parsedData.supplier === 'object'
+          ? (parsedData.supplier?.name || '')
+          : (parsedData.supplier || '');
+        const supplierCode = typeof parsedData.supplier === 'object'
+          ? (parsedData.supplier?.code || '')
+          : (parsedData.supplier_code || '');
+        const vatCode = typeof parsedData.supplier === 'object'
+          ? (parsedData.supplier?.vat_code || '')
+          : (parsedData.vat_code || '');
+
+        const invoiceInfo = parsedData.invoice || parsedData;
+
+        setHeaderData({
+          supplier_name: supplierName,
+          supplier_code: supplierCode,
+          vat_code: vatCode,
+          invoice_number: invoiceInfo.number || invoiceInfo.invoice_number || '',
+          invoice_date: invoiceInfo.date || invoiceInfo.invoice_date || new Date().toISOString().split('T')[0],
+          currency: invoiceInfo.currency || 'EUR',
+          total_net: invoiceInfo.total_net || 0,
+          total_vat: invoiceInfo.total_vat || 0,
+          total_gross: invoiceInfo.total_gross || 0,
+        });
+
+        const newMatches = new Map<number, Product | null>();
+        parsedData.items?.forEach((item: any, index: number) => {
+          const match = searchProductMatch(item.description || '');
+          newMatches.set(index, match);
+        });
+        setMatchedProducts(newMatches);
+
+        setUploadStatus('success');
+        setUploadMessage('Failas sėkmingai apdorotas');
+        
+        // Mark this invoice as being reviewed
+        setProcessedInvoices(prev => 
+          prev.filter(p => p.fileId !== nextParsed.fileId)
+        );
+      }
     }
   };
 
@@ -627,26 +883,48 @@ export function EquipmentInvoices() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Nauja sąskaita</h3>
 
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-slate-400 transition-colors">
-          <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-4">Įkelkite PDF sąskaitą automatiniam apdorojimui</p>
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={handleFileSelect}
-            className="hidden"
-            id="pdf-upload"
-          />
-          <label
-            htmlFor="pdf-upload"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 cursor-pointer transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            Pasirinkti PDF
-          </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+            <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 mb-3 text-sm">Viena sąskaita</p>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="pdf-upload"
+            />
+            <label
+              htmlFor="pdf-upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 cursor-pointer transition-colors text-sm"
+            >
+              <FileText className="w-4 h-4" />
+              Pasirinkti PDF
+            </label>
+          </div>
+
+          <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors bg-blue-50">
+            <Upload className="w-10 h-10 text-blue-500 mx-auto mb-3" />
+            <p className="text-blue-700 mb-3 text-sm font-medium">Kelios sąskaitos vienu metu</p>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={handleMultiFileSelect}
+              className="hidden"
+              id="multi-pdf-upload"
+              multiple
+            />
+            <label
+              htmlFor="multi-pdf-upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors text-sm"
+            >
+              <FileText className="w-4 h-4" />
+              Pasirinkti kelis PDF
+            </label>
+          </div>
         </div>
 
-        {selectedFile && (
+        {selectedFile && !showStagingArea && (
           <div className="mt-4 p-4 bg-slate-50 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -659,7 +937,7 @@ export function EquipmentInvoices() {
               <div className="flex items-center gap-2">
                 {uploadStatus === 'idle' && (
                   <button
-                    onClick={handleFileUpload}
+                    onClick={() => handleFileUpload()}
                     className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
                   >
                     Apdoroti
@@ -696,6 +974,249 @@ export function EquipmentInvoices() {
           </div>
         )}
 
+        {showStagingArea && stagedFiles.length > 0 && (
+          <div className="mt-4 p-6 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-6 h-6 text-blue-600" />
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-800">Įkeltos sąskaitos ({stagedFiles.length})</h4>
+                  <p className="text-sm text-gray-600">
+                    {processingStatus === 'processing' 
+                      ? `Apdorojamos sąskaitos...`
+                      : processingStatus === 'completed'
+                      ? 'Apdorojimas baigtas!'
+                      : 'Pasirinkite, kurias sąskaitas norite apdoroti'
+                    }
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={clearAllStaged}
+                disabled={processingStatus === 'processing'}
+                className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-4 h-4" />
+                Išvalyti visas
+              </button>
+            </div>
+
+            {/* Progress Bar */}
+            {(processingStatus === 'processing' || processingStatus === 'completed') && processedInvoices.length > 0 && (
+              <div className="mb-4 bg-white rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Apdorojimo progresas</span>
+                  <span className="text-sm font-semibold text-blue-600">
+                    {Math.round((processedInvoices.filter(p => p.status !== 'pending').length / processedInvoices.length) * 100)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ 
+                      width: `${(processedInvoices.filter(p => p.status !== 'pending').length / processedInvoices.length) * 100}%` 
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs text-gray-600">
+                  <span>✅ Apdorota: {processedInvoices.filter(p => p.status === 'parsed').length}</span>
+                  <span>⏳ Apdorojama: {processedInvoices.filter(p => p.status === 'parsing').length}</span>
+                  <span>❌ Klaidos: {processedInvoices.filter(p => p.status === 'error').length}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4 max-h-96 overflow-y-auto">
+              {stagedFiles.map((stagedFile) => {
+                const processingInfo = processedInvoices.find(p => p.fileId === stagedFile.id);
+                const isParsing = processingInfo?.status === 'parsing';
+                const isParsed = processingInfo?.status === 'parsed';
+                const hasError = processingInfo?.status === 'error';
+
+                return (
+                  <div
+                    key={stagedFile.id}
+                    className={`relative border-2 rounded-lg overflow-hidden transition-all duration-200 ${
+                      isParsing
+                        ? 'border-blue-300 bg-blue-50 shadow-sm'
+                        : isParsed
+                        ? 'border-green-300 bg-green-50 shadow-sm'
+                        : hasError
+                        ? 'border-red-300 bg-red-50 shadow-sm'
+                        : stagedFile.selected
+                        ? 'border-blue-400 bg-white shadow-sm'
+                        : 'border-gray-300 bg-gray-50 opacity-60'
+                    }`}
+                  >
+                    {/* Status Badge */}
+                    {isParsing && (
+                      <div className="absolute top-2 left-2 z-20 px-2 py-1 bg-blue-500 text-white text-xs font-medium rounded flex items-center gap-1">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                        Apdorojama
+                      </div>
+                    )}
+                    {isParsed && (
+                      <div className="absolute top-2 left-2 z-20 px-2 py-1 bg-green-500 text-white text-xs font-medium rounded flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Apdorota
+                      </div>
+                    )}
+                    {hasError && (
+                      <div className="absolute top-2 left-2 z-20 px-2 py-1 bg-red-500 text-white text-xs font-medium rounded flex items-center gap-1">
+                        <X className="w-3 h-3" />
+                        Klaida
+                      </div>
+                    )}
+
+                    {!isParsing && !isParsed && !hasError && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <input
+                          type="checkbox"
+                          checked={stagedFile.selected}
+                          onChange={() => toggleFileSelection(stagedFile.id)}
+                          className="w-5 h-5 rounded cursor-pointer"
+                          disabled={processingStatus === 'processing'}
+                        />
+                      </div>
+                    )}
+
+                    {processingStatus === 'idle' && (
+                      <button
+                        onClick={() => removeFile(stagedFile.id)}
+                        className="absolute top-2 right-2 z-10 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <div className="aspect-[3/4] bg-gray-100 relative">
+                      {isParsing && (
+                        <div className="absolute inset-0 bg-blue-100 bg-opacity-30 flex items-center justify-center z-10">
+                          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+                        </div>
+                      )}
+                      {isParsed && (
+                        <div className="absolute inset-0 bg-green-100 bg-opacity-20 flex items-center justify-center z-10">
+                          <Check className="w-12 h-12 text-green-500" />
+                        </div>
+                      )}
+                      <iframe
+                        src={`${stagedFile.previewUrl}#view=FitH`}
+                        className="w-full h-full pointer-events-none"
+                        title={stagedFile.file.name}
+                      />
+                    </div>
+
+                    <div className="p-3 bg-white">
+                      <p className="text-sm font-medium text-gray-800 truncate" title={stagedFile.file.name}>
+                        {stagedFile.file.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(stagedFile.file.size / 1024).toFixed(2)} KB
+                      </p>
+                      {hasError && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">
+                          {processingInfo.error}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t-2 border-blue-200">
+              <div className="flex-1">
+                {processingStatus === 'idle' && (
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">{stagedFiles.filter(f => f.selected).length}</span> iš{' '}
+                    <span className="font-semibold">{stagedFiles.length}</span> sąskaitų pasirinkta
+                  </p>
+                )}
+                {processingStatus === 'processing' && (
+                  <div className="flex items-center gap-3">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-700">Apdorojamos sąskaitos...</p>
+                      <p className="text-xs text-gray-600">
+                        {processedInvoices.filter(p => p.status === 'parsed').length} iš {processedInvoices.length} apdorota
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {processingStatus === 'completed' && (
+                  <div className="flex items-center gap-3">
+                    <Check className="w-6 h-6 text-green-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-700">Visos sąskaitos apdorotos!</p>
+                      <p className="text-xs text-gray-600">
+                        {processedInvoices.filter(p => p.status === 'parsed').length} sėkmingai, {' '}
+                        {processedInvoices.filter(p => p.status === 'error').length} su klaidomis
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                {processingStatus === 'idle' && (
+                  <button
+                    onClick={processSelectedFiles}
+                    disabled={stagedFiles.filter(f => f.selected).length === 0}
+                    className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium"
+                  >
+                    <Check className="w-4 h-4" />
+                    Apdoroti pasirinktas ({stagedFiles.filter(f => f.selected).length})
+                  </button>
+                )}
+                {processingStatus === 'completed' && processedInvoices.filter(p => p.status === 'parsed').length > 0 && (
+                  <button
+                    onClick={() => {
+                      processNextStagedFile();
+                      setShowStagingArea(false);
+                    }}
+                    className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Pradėti peržiūrą ({processedInvoices.filter(p => p.status === 'parsed').length})
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notification for remaining invoices to review */}
+        {processedInvoices.filter(p => p.status === 'parsed').length > 0 && !invoiceData && (
+          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <FileText className="w-7 h-7 text-green-600" />
+                  <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs font-semibold rounded-full w-5 h-5 flex items-center justify-center">
+                    {processedInvoices.filter(p => p.status === 'parsed').length}
+                  </span>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800">
+                    {processedInvoices.filter(p => p.status === 'parsed').length} sąskaitos laukia peržiūros
+                  </p>
+                  <p className="text-sm text-gray-600">Spauskite mygtuką, kad pradėtumėte peržiūrą</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  processNextStagedFile();
+                }}
+                className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
+              >
+                <FileText className="w-4 h-4" />
+                Pradėti peržiūrą
+              </button>
+            </div>
+          </div>
+        )}
+
         {invoiceData && headerData && (
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
             {pdfUrl && (
@@ -716,7 +1237,14 @@ export function EquipmentInvoices() {
             <div className="space-y-6">
             <div className="border-2 border-blue-300 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-gray-900">Sąskaitos duomenys</h3>
+                  {processedInvoices.filter(p => p.status === 'parsed').length > 0 && (
+                    <span className="px-2.5 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
+                      {processedInvoices.filter(p => p.status === 'parsed').length} liko
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={() => setEditingHeader(!editingHeader)}
                   className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -1194,10 +1722,16 @@ export function EquipmentInvoices() {
                   setSelectedFile(null);
                   setPdfUrl(null);
                   setEditedItems(new Map());
+                  setMatchedProducts(new Map());
+                  setHeaderData(null);
+                  // Show staging area again if there are files
+                  if (stagedFiles.length > 0) {
+                    setShowStagingArea(true);
+                  }
                 }}
                 className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Atšaukti
+                {stagedFiles.length > 0 ? 'Grįžti į sąrašą' : 'Atšaukti'}
               </button>
               <button
                 onClick={handleConfirmInvoice}
@@ -1393,9 +1927,11 @@ export function EquipmentInvoices() {
                 Priskirti produktus ({invoiceItems.length} liko)
               </h3>
               <button
-                onClick={() => {
+                onClick={async () => {
                   setShowAssignmentModal(false);
                   setInvoiceItems([]);
+                  // Check if there are more files to process
+                  await processNextStagedFile();
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >

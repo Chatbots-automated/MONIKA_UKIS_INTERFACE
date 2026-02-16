@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Wrench, Truck, ClipboardList, HardHat, AlertTriangle, Calendar } from 'lucide-react';
 
-export function TechnikaDashboard() {
+interface TechnikaDashboardProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function TechnikaDashboard({ locationFilter }: TechnikaDashboardProps = {}) {
   const [stats, setStats] = useState({
     tools: 0,
     toolsAvailable: 0,
@@ -16,28 +20,59 @@ export function TechnikaDashboard() {
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [locationFilter]);
 
   const loadStats = async () => {
-    const [toolsRes, vehiclesRes, workOrdersRes, ppeRes] = await Promise.all([
-      supabase.from('tools').select('id, is_available', { count: 'exact' }),
+    // Get products filtered by location
+    const productsQuery = supabase
+      .from('equipment_products')
+      .select('id, name, default_location_type');
+    
+    if (locationFilter) {
+      productsQuery.eq('default_location_type', locationFilter);
+    }
+    
+    const productsRes = await productsQuery;
+    const productIds = productsRes.data?.map(p => p.id) || [];
+
+    // Get stock for these products
+    const stockQuery = supabase
+      .from('equipment_warehouse_stock')
+      .select('product_id, quantity_on_hand');
+    
+    if (productIds.length > 0) {
+      stockQuery.in('product_id', productIds);
+    }
+    
+    const stockRes = await stockQuery;
+    const totalStock = stockRes.data?.reduce((sum, s) => sum + (s.quantity_on_hand || 0), 0) || 0;
+
+    // Get items on loan for these products
+    const loansQuery = supabase
+      .from('equipment_issuance_items')
+      .select('id, equipment_products(default_location_type)')
+      .eq('returned', false);
+    
+    const loansRes = await loansQuery;
+    const filteredLoans = locationFilter 
+      ? loansRes.data?.filter((item: any) => item.equipment_products?.default_location_type === locationFilter) || []
+      : loansRes.data || [];
+
+    const [vehiclesRes, workOrdersRes] = await Promise.all([
       supabase.from('vehicles').select('id, status', { count: 'exact' }).eq('is_active', true),
       supabase.from('maintenance_work_orders').select('id', { count: 'exact' }).eq('status', 'pending'),
-      supabase.from('ppe_items').select('id, quantity_on_hand, min_stock_level', { count: 'exact' }),
     ]);
 
-    const toolsAvailable = toolsRes.data?.filter(t => t.is_available).length || 0;
     const vehiclesActive = vehiclesRes.data?.filter(v => v.status === 'active').length || 0;
-    const ppeLowStock = ppeRes.data?.filter(p => p.quantity_on_hand <= p.min_stock_level).length || 0;
 
     setStats({
-      tools: toolsRes.count || 0,
-      toolsAvailable,
+      tools: productsRes.data?.length || 0,
+      toolsAvailable: totalStock,
       vehicles: vehiclesRes.count || 0,
       vehiclesActive,
       workOrdersPending: workOrdersRes.count || 0,
-      ppeItems: ppeRes.count || 0,
-      ppeLowStock,
+      ppeItems: filteredLoans.length,
+      ppeLowStock: 0,
       upcomingMaintenance: 0,
     });
   };
@@ -46,9 +81,9 @@ export function TechnikaDashboard() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
-          title="Įrankiai"
+          title="Produktai"
           value={stats.tools.toString()}
-          subtitle={`${stats.toolsAvailable} prieinami`}
+          subtitle={`${stats.toolsAvailable} vnt. sandėlyje`}
           icon={Wrench}
           color="blue"
         />
@@ -67,9 +102,9 @@ export function TechnikaDashboard() {
           color="amber"
         />
         <StatCard
-          title="PPE"
+          title="Išduoti daiktai"
           value={stats.ppeItems.toString()}
-          subtitle={`${stats.ppeLowStock} mažos atsargos`}
+          subtitle={`${stats.ppeLowStock} grąžinti`}
           icon={HardHat}
           color="purple"
         />

@@ -56,7 +56,11 @@ interface UserOption {
 
 type Tab = 'inventory' | 'receive' | 'issue' | 'on-loan';
 
-export function EquipmentInventory() {
+interface EquipmentInventoryProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps = {}) {
   const { user, logAction } = useAuth();
   const [warehouseStock, setWarehouseStock] = useState<WarehouseStock[]>([]);
   const [itemsOnLoan, setItemsOnLoan] = useState<ItemOnLoan[]>([]);
@@ -101,7 +105,7 @@ export function EquipmentInventory() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [locationFilter]);
 
   const loadData = async () => {
     const [stockRes, loansRes, toolsRes, usersRes] = await Promise.all([
@@ -124,7 +128,8 @@ export function EquipmentInventory() {
             issued_to_name,
             issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
           ),
-          equipment_products(name, unit_type)
+          equipment_products(name, unit_type, default_location_type),
+          product_id
         `)
         .in('equipment_issuances.status', ['issued', 'partial_return']),
       supabase
@@ -142,13 +147,40 @@ export function EquipmentInventory() {
       supabase.from('users').select('id, full_name, email').order('full_name'),
     ]);
 
-    if (stockRes.data) setWarehouseStock(stockRes.data);
+    if (stockRes.data) {
+      // Filter by location if locationFilter is provided
+      if (locationFilter) {
+        // Load products to get their location types
+        const { data: productsData } = await supabase
+          .from('equipment_products')
+          .select('id, default_location_type');
+        
+        const productLocationMap = new Map(
+          productsData?.map(p => [p.id, p.default_location_type]) || []
+        );
+        
+        const filteredStock = stockRes.data.filter((stock: any) => 
+          productLocationMap.get(stock.product_id) === locationFilter
+        );
+        
+        setWarehouseStock(filteredStock);
+      } else {
+        setWarehouseStock(stockRes.data);
+      }
+    }
 
     const allLoans: ItemOnLoan[] = [];
 
     if (loansRes.data) {
       const equipmentLoans = loansRes.data
-        .filter((item: any) => parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0))
+        .filter((item: any) => {
+          const hasOutstanding = parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0);
+          // Filter by location if locationFilter is provided
+          if (locationFilter && item.equipment_products?.default_location_type) {
+            return hasOutstanding && item.equipment_products.default_location_type === locationFilter;
+          }
+          return hasOutstanding;
+        })
         .map((item: any) => ({
           item_id: item.id,
           issuance_id: item.issuance_id,

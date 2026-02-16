@@ -35,7 +35,11 @@ interface Employee {
   full_name: string;
 }
 
-export function PPEManagement() {
+interface PPEManagementProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function PPEManagement({ locationFilter }: PPEManagementProps = {}) {
   const { user, logAction } = useAuth();
   const [items, setItems] = useState<PPEItem[]>([]);
   const [issuances, setIssuances] = useState<PPEIssuance[]>([]);
@@ -43,6 +47,7 @@ export function PPEManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [batches, setBatches] = useState<any[]>([]);
+  const [currentView, setCurrentView] = useState<'farm' | 'warehouse'>(locationFilter || 'farm');
   const [issueForm, setIssueForm] = useState({
     product_id: '',
     batch_id: '',
@@ -55,29 +60,116 @@ export function PPEManagement() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentView, locationFilter]);
 
   const loadData = async () => {
-    const [itemsRes, issuancesRes, employeesRes] = await Promise.all([
-      supabase
-        .from('equipment_warehouse_stock')
-        .select('*')
-        .ilike('category_name', '%drabužiai%')
-        .gt('total_qty', 0)
-        .order('product_name'),
+    // Determine which location to filter by
+    const viewToUse = locationFilter || currentView;
+
+    // Load batches with product location filtering
+    const batchesQuery = supabase
+      .from('equipment_batches')
+      .select(`
+        id,
+        product_id,
+        batch_number,
+        qty_left,
+        purchase_price,
+        location_id,
+        equipment_products!inner(
+          id,
+          name,
+          product_code,
+          unit_type,
+          default_location_type,
+          equipment_categories!inner(
+            name
+          )
+        )
+      `)
+      .gt('qty_left', 0)
+      .ilike('equipment_products.equipment_categories.name', '%drabužiai%')
+      .eq('equipment_products.default_location_type', viewToUse);
+
+    const { data: batchesData, error: batchesError } = await batchesQuery;
+
+    if (batchesError) {
+      console.error('Error loading batches:', batchesError);
+      return;
+    }
+
+    // Aggregate by product
+    const productMap = new Map<string, PPEItem>();
+    
+    batchesData?.forEach((batch: any) => {
+      const product = batch.equipment_products;
+      const productId = product.id;
+      
+      if (productMap.has(productId)) {
+        const existing = productMap.get(productId)!;
+        existing.total_qty += batch.qty_left;
+        existing.total_value += batch.qty_left * batch.purchase_price;
+        existing.batch_count += 1;
+      } else {
+        productMap.set(productId, {
+          product_id: productId,
+          product_name: product.name,
+          product_code: product.product_code || '',
+          unit_type: product.unit_type,
+          category_name: product.equipment_categories?.name || 'Drabužiai',
+          total_qty: batch.qty_left,
+          total_value: batch.qty_left * batch.purchase_price,
+          batch_count: 1,
+        });
+      }
+    });
+
+    const aggregatedItems = Array.from(productMap.values());
+    setItems(aggregatedItems);
+
+    // Get product IDs that match our location filter
+    const validProductIds = new Set(aggregatedItems.map(item => item.product_id));
+
+    // Load issuances and employees
+    const [issuancesRes, employeesRes] = await Promise.all([
       supabase
         .from('equipment_items_on_loan')
         .select('*')
         .order('issue_date', { ascending: false })
-        .limit(50),
+        .limit(200), // Load more to ensure we get enough after filtering
       supabase
         .from('users')
         .select('id, full_name')
         .order('full_name'),
     ]);
 
-    if (itemsRes.data) setItems(itemsRes.data as any);
-    if (issuancesRes.data) setIssuances(issuancesRes.data as any);
+    // Filter issuances by product location
+    if (issuancesRes.data) {
+      // We need to get product_id from the issuance
+      // The view doesn't include product_id, so we need to load it
+      const issuancesWithProducts = await Promise.all(
+        issuancesRes.data.map(async (issuance: any) => {
+          const { data: issuanceItems } = await supabase
+            .from('equipment_issuance_items')
+            .select('product_id')
+            .eq('issuance_id', issuance.issuance_id)
+            .limit(1)
+            .single();
+          
+          return {
+            ...issuance,
+            product_id: issuanceItems?.product_id,
+          };
+        })
+      );
+
+      // Filter to only show issuances for products in this location
+      const filteredIssuances = issuancesWithProducts
+        .filter(issuance => validProductIds.has(issuance.product_id))
+        .slice(0, 50); // Limit to 50 after filtering
+      
+      setIssuances(filteredIssuances as any);
+    }
     if (employeesRes.data) setEmployees(employeesRes.data);
   };
 
@@ -86,6 +178,9 @@ export function PPEManagement() {
   );
 
   const loadBatchesForProduct = async (productId: string) => {
+    // Simply load all batches for this product
+    // Since we're already filtering products by default_location_type,
+    // all batches for this product should be valid
     const { data, error } = await supabase
       .from('equipment_batches')
       .select('*')
@@ -184,9 +279,47 @@ export function PPEManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      {/* View Tabs - only show if no locationFilter is provided */}
+      {!locationFilter && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => !locationFilter && setCurrentView('farm')}
+              className={`flex-1 px-4 py-2.5 rounded-md font-medium transition-colors ${
+                currentView === 'farm'
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Ferma
+            </button>
+            <button
+              onClick={() => !locationFilter && setCurrentView('warehouse')}
+              className={`flex-1 px-4 py-2.5 rounded-md font-medium transition-colors ${
+                currentView === 'warehouse'
+                  ? 'bg-slate-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Sandėlis
+            </button>
+          </div>
+        </div>
+      )}
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-800">PPE atsargos</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">
+              {(locationFilter || currentView) === 'farm' ? 'Fermos' : 'Sandėlio'} PPE atsargos
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {(locationFilter || currentView) === 'farm' 
+                ? 'Drabužiai ir apsaugos priemonės fermoje' 
+                : 'Drabužiai ir apsaugos priemonės sandėlyje'
+              }
+            </p>
+          </div>
           <button
             onClick={() => setShowIssueModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"

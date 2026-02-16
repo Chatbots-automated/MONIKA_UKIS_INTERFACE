@@ -24,7 +24,7 @@ import { TreatmentCostTab } from './components/TreatmentCostTab';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { InvoiceViewer } from './components/InvoiceViewer';
-import { Technika } from './components/Technika';
+import { TechnikaSelector } from './components/TechnikaSelector';
 import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
@@ -144,7 +144,7 @@ function App() {
   if (selectedModule === 'technika') {
     return (
       <RealtimeProvider>
-        <Technika onBackToModules={() => setSelectedModule(null)} />
+        <TechnikaSelector onBackToModules={() => setSelectedModule(null)} />
         {notification && (
           <NotificationToast
             message={notification.message}

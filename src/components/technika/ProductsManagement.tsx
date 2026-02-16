@@ -15,6 +15,7 @@ interface Product {
   min_stock_level: number;
   is_active: boolean;
   created_at: string;
+  default_location_type?: string;
   category?: { name: string };
 }
 
@@ -37,7 +38,11 @@ const UNIT_TYPES = [
   { value: 'pair', label: 'pora' },
 ];
 
-export function ProductsManagement() {
+interface ProductsManagementProps {
+  locationFilter?: 'farm' | 'warehouse';
+}
+
+export function ProductsManagement({ locationFilter }: ProductsManagementProps = {}) {
   const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -55,6 +60,7 @@ export function ProductsManagement() {
     model_number: '',
     description: '',
     min_stock_level: '0',
+    default_location: 'warehouse', // 'farm' or 'warehouse'
   });
 
   useEffect(() => {
@@ -81,6 +87,7 @@ export function ProductsManagement() {
           return product;
         })
       );
+      
       setProducts(productsWithCategories);
     }
     if (categoriesRes.data) setCategories(categoriesRes.data);
@@ -100,7 +107,10 @@ export function ProductsManagement() {
       (filterActive === 'active' && product.is_active) ||
       (filterActive === 'inactive' && !product.is_active);
 
-    return matchesSearch && matchesCategory && matchesActive;
+    // Filter by location if locationFilter is provided
+    const matchesLocation = !locationFilter || product.default_location_type === locationFilter;
+
+    return matchesSearch && matchesCategory && matchesActive && matchesLocation;
   });
 
   const handleSaveProduct = async () => {
@@ -120,6 +130,7 @@ export function ProductsManagement() {
         description: productForm.description || null,
         min_stock_level: parseFloat(productForm.min_stock_level) || 0,
         is_active: true,
+        default_location_type: productForm.default_location,
       };
 
       if (editingProduct) {
@@ -150,6 +161,7 @@ export function ProductsManagement() {
         model_number: '',
         description: '',
         min_stock_level: '0',
+        default_location: 'warehouse',
       });
       loadData();
     } catch (error: any) {
@@ -215,6 +227,7 @@ export function ProductsManagement() {
                 model_number: '',
                 description: '',
                 min_stock_level: '0',
+                default_location: 'warehouse',
               });
               setShowAddModal(true);
             }}
@@ -327,6 +340,7 @@ export function ProductsManagement() {
                             model_number: product.model_number || '',
                             description: product.description || '',
                             min_stock_level: product.min_stock_level.toString(),
+                            default_location: product.default_location_type || 'warehouse',
                           });
                           setShowAddModal(true);
                         }}
@@ -425,6 +439,41 @@ export function ProductsManagement() {
                   ))}
                 </select>
               </div>
+
+              {/* Show location field only for Drabužiai or API categories */}
+              {productForm.category_id && categories.find(c => c.id === productForm.category_id)?.name && 
+               (categories.find(c => c.id === productForm.category_id)?.name.toLowerCase().includes('drabužiai') ||
+                categories.find(c => c.id === productForm.category_id)?.name.toLowerCase().includes('api')) && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paskirtis *
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="location"
+                        value="farm"
+                        checked={productForm.default_location === 'farm'}
+                        onChange={(e) => setProductForm({ ...productForm, default_location: e.target.value })}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-gray-700">Ferma</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="location"
+                        value="warehouse"
+                        checked={productForm.default_location === 'warehouse'}
+                        onChange={(e) => setProductForm({ ...productForm, default_location: e.target.value })}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-gray-700">Dirbtuvės / Sandėlis</span>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
