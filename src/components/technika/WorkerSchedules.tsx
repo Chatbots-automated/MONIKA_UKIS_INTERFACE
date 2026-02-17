@@ -6,6 +6,7 @@ import { Calendar, ChevronLeft, ChevronRight, Clock, User, Trash2, X, Edit2, Ale
 interface Worker {
   id: string;
   full_name: string;
+  work_location?: string;
 }
 
 interface Schedule {
@@ -16,6 +17,11 @@ interface Schedule {
   shift_end: string;
   schedule_type: string;
   notes: string;
+  work_location?: string;
+}
+
+interface WorkerSchedulesProps {
+  workLocation?: 'farm' | 'warehouse';
 }
 
 const SCHEDULE_TYPES = [
@@ -26,7 +32,7 @@ const SCHEDULE_TYPES = [
   { value: 'training', label: 'Mokymai', color: 'bg-purple-500', lightColor: 'bg-purple-100', borderColor: 'border-purple-600' },
 ];
 
-export function WorkerSchedules() {
+export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
   const { logAction } = useAuth();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -81,13 +87,32 @@ export function WorkerSchedules() {
 
   useEffect(() => {
     loadData();
-  }, [currentDate]);
+  }, [currentDate, workLocation]);
 
   const loadData = async () => {
-    const [workersRes, schedulesRes] = await Promise.all([
-      supabase.from('users').select('id, full_name').order('full_name'),
-      supabase.from('worker_schedules').select('*').order('date', { ascending: true }),
-    ]);
+    // Load workers - filter by work_location if specified
+    const workersQuery = supabase
+      .from('users')
+      .select('id, full_name, work_location')
+      .order('full_name');
+    
+    if (workLocation) {
+      workersQuery.or(`work_location.eq.${workLocation},work_location.eq.both`);
+    }
+    
+    const workersRes = await workersQuery;
+
+    // Load schedules - filter by work_location if specified
+    const schedulesQuery = supabase
+      .from('worker_schedules')
+      .select('*')
+      .order('date', { ascending: true });
+    
+    if (workLocation) {
+      schedulesQuery.eq('work_location', workLocation);
+    }
+    
+    const schedulesRes = await schedulesQuery;
 
     if (workersRes.data) {
       setWorkers(workersRes.data);
@@ -215,6 +240,7 @@ export function WorkerSchedules() {
               shift_end: `${String(endHour).padStart(2, '0')}:00`,
               schedule_type: selectedScheduleType,
               notes: '',
+              work_location: workLocation || 'warehouse',
             });
           }
         }

@@ -1,8 +1,8 @@
-import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ModuleSelectorProps {
-  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika') => void;
+  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules') => void;
 }
 
 export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
@@ -35,7 +35,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           </p>
         </div>
 
-        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-5 max-w-7xl' : 'md:grid-cols-2 lg:grid-cols-4 max-w-7xl'} gap-8 mx-auto`}>
+        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-6 max-w-7xl' : 'md:grid-cols-2 lg:grid-cols-5 max-w-7xl'} gap-8 mx-auto`}>
           <button
             onClick={() => onSelectModule('veterinarija')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
@@ -264,6 +264,64 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
               </div>
 
               <div className="flex items-center justify-center gap-2 text-slate-600 font-semibold group-hover:gap-4 transition-all">
+                <span>Atidaryti sistemą</span>
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onSelectModule('worker-schedules')}
+            className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
+          >
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 text-center">
+              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Calendar className="w-12 h-12 text-indigo-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-white mb-2">
+                Darbuotojai
+              </h2>
+              <p className="text-indigo-100">
+                Grafikai
+              </p>
+            </div>
+
+            <div className="p-8">
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Darbo grafikai</p>
+                    <p className="text-sm text-gray-600">Fermos ir technikos kiemo darbuotojai</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Pamainų planavimas</p>
+                    <p className="text-sm text-gray-600">Vizualus grafikų valdymas</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Darbo ataskaitos</p>
+                    <p className="text-sm text-gray-600">Darbuotojų veiklos fiksavimas</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-indigo-600 font-semibold group-hover:gap-4 transition-all">
                 <span>Atidaryti sistemą</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </div>

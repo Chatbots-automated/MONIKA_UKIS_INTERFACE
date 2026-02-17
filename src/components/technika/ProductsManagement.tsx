@@ -40,9 +40,10 @@ const UNIT_TYPES = [
 
 interface ProductsManagementProps {
   locationFilter?: 'farm' | 'warehouse';
+  workerMode?: boolean;
 }
 
-export function ProductsManagement({ locationFilter }: ProductsManagementProps = {}) {
+export function ProductsManagement({ locationFilter, workerMode = false }: ProductsManagementProps = {}) {
   const { logAction } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -65,11 +66,22 @@ export function ProductsManagement({ locationFilter }: ProductsManagementProps =
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [locationFilter]); // Reload when locationFilter changes
 
   const loadData = async () => {
+    // Build query with server-side filtering
+    let productsQuery = supabase
+      .from('equipment_products')
+      .select('*')
+      .order('name');
+
+    // Apply location filter at database level if provided
+    if (locationFilter) {
+      productsQuery = productsQuery.eq('default_location_type', locationFilter);
+    }
+
     const [productsRes, categoriesRes] = await Promise.all([
-      supabase.from('equipment_products').select('*').order('name'),
+      productsQuery,
       supabase.from('equipment_categories').select('*').order('name'),
     ]);
 
@@ -107,10 +119,8 @@ export function ProductsManagement({ locationFilter }: ProductsManagementProps =
       (filterActive === 'active' && product.is_active) ||
       (filterActive === 'inactive' && !product.is_active);
 
-    // Filter by location if locationFilter is provided
-    const matchesLocation = !locationFilter || product.default_location_type === locationFilter;
-
-    return matchesSearch && matchesCategory && matchesActive && matchesLocation;
+    // Location filtering is now done at database level, no need to filter here
+    return matchesSearch && matchesCategory && matchesActive;
   });
 
   const handleSaveProduct = async () => {
@@ -215,27 +225,29 @@ export function ProductsManagement({ locationFilter }: ProductsManagementProps =
             <Package className="w-6 h-6 text-slate-600" />
             <h3 className="text-xl font-bold text-gray-800">Produktų valdymas</h3>
           </div>
-          <button
-            onClick={() => {
-              setEditingProduct(null);
-              setProductForm({
-                name: '',
-                product_code: '',
-                category_id: '',
-                unit_type: 'pcs',
-                manufacturer: '',
-                model_number: '',
-                description: '',
-                min_stock_level: '0',
-                default_location: 'warehouse',
-              });
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Pridėti produktą
-          </button>
+          {!workerMode && (
+            <button
+              onClick={() => {
+                setEditingProduct(null);
+                setProductForm({
+                  name: '',
+                  product_code: '',
+                  category_id: '',
+                  unit_type: 'pcs',
+                  manufacturer: '',
+                  model_number: '',
+                  description: '',
+                  min_stock_level: '0',
+                  default_location: 'warehouse',
+                });
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Pridėti produktą
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -285,7 +297,7 @@ export function ProductsManagement({ locationFilter }: ProductsManagementProps =
                 <th className="text-left p-4 font-semibold text-gray-700">Vienetas</th>
                 <th className="text-left p-4 font-semibold text-gray-700">Min. lygis</th>
                 <th className="text-left p-4 font-semibold text-gray-700">Statusas</th>
-                <th className="text-right p-4 font-semibold text-gray-700">Veiksmai</th>
+                {!workerMode && <th className="text-right p-4 font-semibold text-gray-700">Veiksmai</th>}
               </tr>
             </thead>
             <tbody>
@@ -326,38 +338,40 @@ export function ProductsManagement({ locationFilter }: ProductsManagementProps =
                       {product.is_active ? 'Aktyvus' : 'Neaktyvus'}
                     </button>
                   </td>
-                  <td className="p-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingProduct(product);
-                          setProductForm({
-                            name: product.name,
-                            product_code: product.product_code || '',
-                            category_id: product.category_id || '',
-                            unit_type: product.unit_type,
-                            manufacturer: product.manufacturer || '',
-                            model_number: product.model_number || '',
-                            description: product.description || '',
-                            min_stock_level: product.min_stock_level.toString(),
-                            default_location: product.default_location_type || 'warehouse',
-                          });
-                          setShowAddModal(true);
-                        }}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Redaguoti"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(product)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Ištrinti"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                  {!workerMode && (
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setProductForm({
+                              name: product.name,
+                              product_code: product.product_code || '',
+                              category_id: product.category_id || '',
+                              unit_type: product.unit_type,
+                              manufacturer: product.manufacturer || '',
+                              model_number: product.model_number || '',
+                              description: product.description || '',
+                              min_stock_level: product.min_stock_level.toString(),
+                              default_location: product.default_location_type || 'warehouse',
+                            });
+                            setShowAddModal(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Redaguoti"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(product)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Ištrinti"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

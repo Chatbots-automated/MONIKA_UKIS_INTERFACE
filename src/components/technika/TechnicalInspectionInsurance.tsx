@@ -15,7 +15,11 @@ interface Vehicle {
 
 type FilterType = 'all' | 'ta_soon' | 'insurance_soon' | 'expired';
 
-export function TechnicalInspectionInsurance() {
+interface TechnicalInspectionInsuranceProps {
+  workerMode?: boolean;
+}
+
+export function TechnicalInspectionInsurance({ workerMode = false }: TechnicalInspectionInsuranceProps = {}) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');

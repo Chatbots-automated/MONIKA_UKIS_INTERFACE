@@ -31,7 +31,6 @@ import { WorkOrders } from './technika/WorkOrders';
 import { MaintenanceSchedules } from './technika/MaintenanceSchedules';
 import { EquipmentInventory } from './technika/EquipmentInventory';
 import { TechnikaReports } from './technika/TechnikaReports';
-import { WorkerSchedules } from './technika/WorkerSchedules';
 import { ProductsManagement } from './technika/ProductsManagement';
 import Kaupiniai from './Kaupiniai';
 import { FireExtinguishersManagement } from './technika/FireExtinguishersManagement';
@@ -56,7 +55,6 @@ const menuItems = [
   { id: 'quality', label: 'Kokybės įvertinimas', icon: Star },
   { id: 'schedules', label: 'Planiniai technikos aptarnavimai', icon: Calendar },
   { id: 'work-orders', label: 'Remonto darbai', icon: ClipboardList },
-  { id: 'worker-schedules', label: 'Darbuotojų grafikai', icon: Users },
   { id: 'inventory', label: 'Sandėlis', icon: Package },
   { id: 'reports', label: 'Ataskaitos', icon: BarChart3 },
 ];
@@ -104,8 +102,6 @@ export function EquipmentYardModule({ onBack }: EquipmentYardModuleProps) {
         return <MaintenanceSchedules />;
       case 'kaupiniai':
         return <Kaupiniai />;
-      case 'worker-schedules':
-        return <WorkerSchedules />;
       case 'inventory':
         return <EquipmentInventory locationFilter="warehouse" />;
       case 'reports':

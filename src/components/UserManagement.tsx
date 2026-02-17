@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity, Tractor, Warehouse } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth, UserRole, User } from '../contexts/AuthContext';
 import { formatDateLT } from '../lib/formatters';
@@ -10,11 +10,13 @@ export function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>('viewer');
+  const [editWorkLocation, setEditWorkLocation] = useState<string>('warehouse');
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('viewer');
   const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserWorkLocation, setNewUserWorkLocation] = useState<string>('warehouse');
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -26,6 +28,23 @@ export function UserManagement() {
       fetchUsers();
     }
   }, [isAdmin]);
+
+  // Auto-set work_location when role changes
+  useEffect(() => {
+    if (newUserRole === 'farm_worker') {
+      setNewUserWorkLocation('farm');
+    } else if (newUserRole === 'warehouse_worker') {
+      setNewUserWorkLocation('warehouse');
+    }
+  }, [newUserRole]);
+
+  useEffect(() => {
+    if (editRole === 'farm_worker') {
+      setEditWorkLocation('farm');
+    } else if (editRole === 'warehouse_worker') {
+      setEditWorkLocation('warehouse');
+    }
+  }, [editRole]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -47,9 +66,16 @@ export function UserManagement() {
 
   const handleUpdateRole = async (userId: string) => {
     try {
+      const updateData: any = { role: editRole };
+      
+      // Add work_location for worker roles
+      if (editRole === 'farm_worker' || editRole === 'warehouse_worker') {
+        updateData.work_location = editWorkLocation;
+      }
+
       const { error } = await supabase
         .from('users')
-        .update({ role: editRole })
+        .update(updateData)
         .eq('id', userId);
 
       if (error) throw error;
@@ -77,10 +103,17 @@ export function UserManagement() {
 
       if (createError) throw createError;
 
-      if (newUserId && newUserFullName) {
+      if (newUserId) {
+        const updateData: any = { full_name: newUserFullName };
+        
+        // Add work_location for worker roles
+        if (newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') {
+          updateData.work_location = newUserWorkLocation;
+        }
+
         const { error: updateError } = await supabase
           .from('users')
-          .update({ full_name: newUserFullName })
+          .update(updateData)
           .eq('id', newUserId);
 
         if (updateError) throw updateError;
@@ -92,6 +125,7 @@ export function UserManagement() {
       setNewUserPassword('');
       setNewUserRole('viewer');
       setNewUserFullName('');
+      setNewUserWorkLocation('warehouse');
       fetchUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -190,6 +224,10 @@ export function UserManagement() {
         return <Wrench className="w-4 h-4" />;
       case 'viewer':
         return <Eye className="w-4 h-4" />;
+      case 'farm_worker':
+        return <Tractor className="w-4 h-4" />;
+      case 'warehouse_worker':
+        return <Warehouse className="w-4 h-4" />;
     }
   };
 
@@ -203,6 +241,10 @@ export function UserManagement() {
         return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'viewer':
         return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'farm_worker':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'warehouse_worker':
+        return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
 
@@ -216,6 +258,10 @@ export function UserManagement() {
         return 'Technikas';
       case 'viewer':
         return 'Stebėtojas';
+      case 'farm_worker':
+        return 'Fermos darbuotojas';
+      case 'warehouse_worker':
+        return 'Technikos kiemo darbuotojas';
     }
   };
 
@@ -355,12 +401,36 @@ export function UserManagement() {
                   onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 >
-                  <option value="viewer">Stebėtojas (View Only)</option>
-                  <option value="tech">Technikas (Limited Access)</option>
-                  <option value="vet">Veterinaras (Full Access)</option>
-                  <option value="admin">Administratorius (All Access)</option>
+                  <optgroup label="Veterinarijos modulis">
+                    <option value="viewer">Stebėtojas (View Only)</option>
+                    <option value="tech">Technikas (Limited Access)</option>
+                    <option value="vet">Veterinaras (Full Access)</option>
+                    <option value="admin">Administratorius (All Access)</option>
+                  </optgroup>
+                  <optgroup label="Technikos modulis">
+                    <option value="farm_worker">Fermos darbuotojas</option>
+                    <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
+                  </optgroup>
                 </select>
               </div>
+              {(newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Darbo vieta
+                  </label>
+                  <select
+                    value={newUserWorkLocation}
+                    onChange={(e) => setNewUserWorkLocation(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="farm">Ferma</option>
+                    <option value="warehouse">Technikos kiemas</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Automatiškai nustatyta pagal rolę, bet galite pakeisti jei reikia
+                  </p>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
@@ -430,21 +500,46 @@ export function UserManagement() {
                     </td>
                     <td className="px-6 py-4">
                       {editingUser === user.id ? (
-                        <select
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value as UserRole)}
-                          className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                        >
-                          <option value="viewer">Stebėtojas</option>
-                          <option value="tech">Technikas</option>
-                          <option value="vet">Veterinaras</option>
-                          <option value="admin">Administratorius</option>
-                        </select>
+                        <div className="space-y-2">
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value as UserRole)}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          >
+                            <optgroup label="Veterinarijos modulis">
+                              <option value="viewer">Stebėtojas</option>
+                              <option value="tech">Technikas</option>
+                              <option value="vet">Veterinaras</option>
+                              <option value="admin">Administratorius</option>
+                            </optgroup>
+                            <optgroup label="Technikos modulis">
+                              <option value="farm_worker">Fermos darbuotojas</option>
+                              <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
+                            </optgroup>
+                          </select>
+                          {(editRole === 'farm_worker' || editRole === 'warehouse_worker') && (
+                            <select
+                              value={editWorkLocation}
+                              onChange={(e) => setEditWorkLocation(e.target.value)}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-xs"
+                            >
+                              <option value="farm">Ferma</option>
+                              <option value="warehouse">Technikos kiemas</option>
+                            </select>
+                          )}
+                        </div>
                       ) : (
-                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border ${getRoleColor(user.role)}`}>
-                          {getRoleIcon(user.role)}
-                          {getRoleLabel(user.role)}
-                        </span>
+                        <div className="space-y-1">
+                          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border ${getRoleColor(user.role)}`}>
+                            {getRoleIcon(user.role)}
+                            {getRoleLabel(user.role)}
+                          </span>
+                          {(user.role === 'farm_worker' || user.role === 'warehouse_worker') && user.work_location && (
+                            <div className="text-xs text-gray-500 ml-1">
+                              📍 {user.work_location === 'farm' ? 'Ferma' : 'Technikos kiemas'}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -491,6 +586,7 @@ export function UserManagement() {
                               onClick={() => {
                                 setEditingUser(user.id);
                                 setEditRole(user.role);
+                                setEditWorkLocation(user.work_location || 'warehouse');
                               }}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Edit Role"

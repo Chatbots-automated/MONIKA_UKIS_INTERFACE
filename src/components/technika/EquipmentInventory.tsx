@@ -108,30 +108,49 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
   }, [locationFilter]);
 
   const loadData = async () => {
+    // Build stock query with location filtering at database level
+    let stockQuery = supabase
+      .from('equipment_warehouse_stock')
+      .select(`
+        *,
+        equipment_products!inner(default_location_type)
+      `);
+    
+    if (locationFilter) {
+      stockQuery = stockQuery.eq('equipment_products.default_location_type', locationFilter);
+    }
+
+    // Build loans query with location filtering at database level
+    let loansQuery = supabase
+      .from('equipment_issuance_items')
+      .select(`
+        id,
+        issuance_id,
+        batch_id,
+        quantity,
+        quantity_returned,
+        unit_price,
+        equipment_issuances!inner(
+          issuance_number,
+          issue_date,
+          expected_return_date,
+          status,
+          issued_to,
+          issued_to_name,
+          issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
+        ),
+        equipment_products!inner(name, unit_type, default_location_type),
+        product_id
+      `)
+      .in('equipment_issuances.status', ['issued', 'partial_return']);
+    
+    if (locationFilter) {
+      loansQuery = loansQuery.eq('equipment_products.default_location_type', locationFilter);
+    }
+
     const [stockRes, loansRes, toolsRes, usersRes] = await Promise.all([
-      supabase.from('equipment_warehouse_stock').select('*'),
-      supabase
-        .from('equipment_issuance_items')
-        .select(`
-          id,
-          issuance_id,
-          batch_id,
-          quantity,
-          quantity_returned,
-          unit_price,
-          equipment_issuances!inner(
-            issuance_number,
-            issue_date,
-            expected_return_date,
-            status,
-            issued_to,
-            issued_to_name,
-            issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
-          ),
-          equipment_products(name, unit_type, default_location_type),
-          product_id
-        `)
-        .in('equipment_issuances.status', ['issued', 'partial_return']),
+      stockQuery,
+      loansQuery,
       supabase
         .from('tools')
         .select(`
@@ -148,25 +167,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
     ]);
 
     if (stockRes.data) {
-      // Filter by location if locationFilter is provided
-      if (locationFilter) {
-        // Load products to get their location types
-        const { data: productsData } = await supabase
-          .from('equipment_products')
-          .select('id, default_location_type');
-        
-        const productLocationMap = new Map(
-          productsData?.map(p => [p.id, p.default_location_type]) || []
-        );
-        
-        const filteredStock = stockRes.data.filter((stock: any) => 
-          productLocationMap.get(stock.product_id) === locationFilter
-        );
-        
-        setWarehouseStock(filteredStock);
-      } else {
-        setWarehouseStock(stockRes.data);
-      }
+      setWarehouseStock(stockRes.data);
     }
 
     const allLoans: ItemOnLoan[] = [];
@@ -175,10 +176,6 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       const equipmentLoans = loansRes.data
         .filter((item: any) => {
           const hasOutstanding = parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0);
-          // Filter by location if locationFilter is provided
-          if (locationFilter && item.equipment_products?.default_location_type) {
-            return hasOutstanding && item.equipment_products.default_location_type === locationFilter;
-          }
           return hasOutstanding;
         })
         .map((item: any) => ({

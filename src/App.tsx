@@ -25,12 +25,14 @@ import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
 import { InvoiceViewer } from './components/InvoiceViewer';
 import { TechnikaSelector } from './components/TechnikaSelector';
+import { WorkerSchedulesSelector } from './components/WorkerSchedulesSelector';
+import { WorkerPortal } from './components/worker/WorkerPortal';
 import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro, Droplets } from 'lucide-react';
 
-type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | null;
+type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | null;
 
 interface Notification {
   id: string;
@@ -42,7 +44,7 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedModule, setSelectedModule] = useState<Module>(null);
   const [notification, setNotification] = useState<Notification | null>(null);
-  const { user, loading } = useAuth();
+  const { user, loading, isWorker } = useAuth();
 
   useEffect(() => {
     setNotificationCallback((message: string, type: NotificationType) => {
@@ -71,6 +73,22 @@ function App() {
 
   if (!user) {
     return <AuthForm />;
+  }
+
+  // Route workers directly to WorkerPortal
+  if (isWorker) {
+    return (
+      <RealtimeProvider>
+        <WorkerPortal />
+        {notification && (
+          <NotificationToast
+            message={notification.message}
+            type={notification.type}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </RealtimeProvider>
+    );
   }
 
   if (!selectedModule) {
@@ -145,6 +163,21 @@ function App() {
     return (
       <RealtimeProvider>
         <TechnikaSelector onBackToModules={() => setSelectedModule(null)} />
+        {notification && (
+          <NotificationToast
+            message={notification.message}
+            type={notification.type}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </RealtimeProvider>
+    );
+  }
+
+  if (selectedModule === 'worker-schedules') {
+    return (
+      <RealtimeProvider>
+        <WorkerSchedulesSelector onBack={() => setSelectedModule(null)} />
         {notification && (
           <NotificationToast
             message={notification.message}

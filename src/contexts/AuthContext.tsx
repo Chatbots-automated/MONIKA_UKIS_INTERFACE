@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer';
+export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker';
 
 export interface User {
   id: string;
@@ -14,6 +14,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   last_login: string | null;
+  work_location?: string;
 }
 
 interface AuthContextType {
@@ -27,6 +28,9 @@ interface AuthContextType {
   isVet: boolean;
   isTech: boolean;
   isViewer: boolean;
+  isFarmWorker: boolean;
+  isWarehouseWorker: boolean;
+  isWorker: boolean;
   isFrozen: boolean;
 }
 
@@ -170,6 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       case 'suppliers':
         return role === 'admin' || role === 'vet' || role === 'tech';
 
+      case 'worker_time_tracking':
+        return role === 'farm_worker' || role === 'warehouse_worker';
+
+      case 'worker_task_reporting':
+        return role === 'farm_worker' || role === 'warehouse_worker';
+
+      case 'worker_view_technika':
+        return role === 'farm_worker' || role === 'warehouse_worker';
+
+      case 'approve_worker_reports':
+        return role === 'admin';
+
       case 'view':
         return true;
 
@@ -182,6 +198,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isVet = user?.role === 'vet';
   const isTech = user?.role === 'tech';
   const isViewer = user?.role === 'viewer';
+  const isFarmWorker = user?.role === 'farm_worker';
+  const isWarehouseWorker = user?.role === 'warehouse_worker';
+  const isWorker = isFarmWorker || isWarehouseWorker;
   const isFrozen = user?.is_frozen || false;
 
   return (
@@ -196,6 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isVet,
       isTech,
       isViewer,
+      isFarmWorker,
+      isWarehouseWorker,
+      isWorker,
       isFrozen
     }}>
       {children}

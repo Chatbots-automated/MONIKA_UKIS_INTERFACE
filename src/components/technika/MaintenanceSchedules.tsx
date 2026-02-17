@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, Plus, Search, Edit, Trash2, X, Save, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Calendar, Plus, Search, Edit, Trash2, X, Save, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { MaintenanceCalendar } from './MaintenanceCalendar';
+import { TaskCompletionModal } from '../worker/TaskCompletionModal';
 
 interface MaintenanceSchedule {
   id: string;
@@ -49,7 +50,13 @@ interface Vehicle {
   current_engine_hours: number;
 }
 
-export function MaintenanceSchedules() {
+interface MaintenanceSchedulesProps {
+  workerMode?: boolean;
+  workerId?: string;
+  activeTimeEntry?: any | null;
+}
+
+export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeEntry }: MaintenanceSchedulesProps = {}) {
   const { user, logAction } = useAuth();
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -60,6 +67,8 @@ export function MaintenanceSchedules() {
   const [servicingSchedule, setServicingSchedule] = useState<MaintenanceSchedule | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<MaintenanceSchedule | null>(null);
   const [showCalendar, setShowCalendar] = useState(true);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedTaskSchedule, setSelectedTaskSchedule] = useState<MaintenanceSchedule | null>(null);
   const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({
     schedule_name: '',
     vehicle_id: '',
@@ -751,28 +760,43 @@ export function MaintenanceSchedules() {
                 </div>
 
                 <div className="flex gap-2">
-                  {overdue && (
+                  {workerMode ? (
                     <button
-                      onClick={() => handleOpenServiceModal(schedule)}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                      onClick={() => {
+                        setSelectedTaskSchedule(schedule);
+                        setShowTaskModal(true);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                      <CheckCircle className="w-4 h-4" />
-                      Aptarnauti
+                      <FileText className="w-4 h-4" />
+                      Pranešti apie aptarnavimą
                     </button>
+                  ) : (
+                    <>
+                      {overdue && (
+                        <button
+                          onClick={() => handleOpenServiceModal(schedule)}
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Aptarnauti
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleOpenScheduleModal(schedule)}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Redaguoti
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSchedule(schedule)}
+                        className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
                   )}
-                  <button
-                    onClick={() => handleOpenScheduleModal(schedule)}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Redaguoti
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSchedule(schedule)}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             );
@@ -1129,6 +1153,21 @@ export function MaintenanceSchedules() {
             </div>
           </div>
         </div>
+      )}
+
+      {showTaskModal && selectedTaskSchedule && (
+        <TaskCompletionModal
+          taskType="maintenance_schedule"
+          taskId={selectedTaskSchedule.id}
+          taskName={selectedTaskSchedule.schedule_name}
+          taskDescription={`${selectedTaskSchedule.vehicle.registration_number} - ${selectedTaskSchedule.vehicle.make} ${selectedTaskSchedule.vehicle.model}`}
+          activeTimeEntry={activeTimeEntry}
+          onClose={() => {
+            setShowTaskModal(false);
+            setSelectedTaskSchedule(null);
+          }}
+          onSuccess={loadData}
+        />
       )}
     </div>
   );

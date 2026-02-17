@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, Wrench, Calendar, User, AlertCircle } from 'lucide-react';
+import { Search, Wrench, Calendar, User, AlertCircle, FileText } from 'lucide-react';
 import { WorkOrderDetailSidebar } from './WorkOrderDetailSidebar';
 import { MaintenanceCalendar } from './MaintenanceCalendar';
+import { TaskCompletionModal } from '../worker/TaskCompletionModal';
 
 interface WorkOrder {
   id: string;
@@ -38,7 +39,13 @@ interface WorkOrder {
   } | null;
 }
 
-export function WorkOrders() {
+interface WorkOrdersProps {
+  workerMode?: boolean;
+  workerId?: string;
+  activeTimeEntry?: any | null;
+}
+
+export function WorkOrders({ workerMode = false, workerId, activeTimeEntry }: WorkOrdersProps = {}) {
   const { user } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,21 +55,31 @@ export function WorkOrders() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<'edit' | 'work'>('edit');
   const [showCalendar, setShowCalendar] = useState(true);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedTaskOrder, setSelectedTaskOrder] = useState<WorkOrder | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [workerId]);
 
   const loadData = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('maintenance_work_orders')
       .select(`
         *,
         vehicle:vehicles(registration_number, make, model),
         tool:tools(name),
         assignee:users!maintenance_work_orders_assigned_to_fkey(full_name)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+
+    // In worker mode, only show work orders assigned to the worker
+    if (workerMode && workerId) {
+      query = query.eq('assigned_to', workerId);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error loading work orders:', error);
@@ -356,16 +373,30 @@ export function WorkOrders() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenSidebar(wo, 'work');
-                      }}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      <Wrench className="w-4 h-4" />
-                      Tvarkyti
-                    </button>
+                    {workerMode ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTaskOrder(wo);
+                          setShowTaskModal(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Pranešti apie darbą
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenSidebar(wo, 'work');
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <Wrench className="w-4 h-4" />
+                        Tvarkyti
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -384,6 +415,21 @@ export function WorkOrders() {
             setSelectedWorkOrderId(null);
           }}
           onWorkOrderUpdate={loadData}
+        />
+      )}
+
+      {showTaskModal && selectedTaskOrder && (
+        <TaskCompletionModal
+          taskType="work_order"
+          taskId={selectedTaskOrder.id}
+          taskName={selectedTaskOrder.work_order_number}
+          taskDescription={selectedTaskOrder.description}
+          activeTimeEntry={activeTimeEntry}
+          onClose={() => {
+            setShowTaskModal(false);
+            setSelectedTaskOrder(null);
+          }}
+          onSuccess={loadData}
         />
       )}
     </div>

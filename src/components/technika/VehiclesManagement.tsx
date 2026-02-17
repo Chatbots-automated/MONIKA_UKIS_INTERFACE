@@ -44,7 +44,11 @@ interface User {
   email: string;
 }
 
-export function VehiclesManagement() {
+interface VehiclesManagementProps {
+  workerMode?: boolean;
+}
+
+export function VehiclesManagement({ workerMode = false }: VehiclesManagementProps = {}) {
   const { user, logAction } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -436,13 +440,15 @@ export function VehiclesManagement() {
               <Gauge className="w-4 h-4" />
               Suvesti motovalandas
             </button>
-            <button
-              onClick={() => handleOpenVehicleModal()}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Pridėti transportą
-            </button>
+            {!workerMode && (
+              <button
+                onClick={() => handleOpenVehicleModal()}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Pridėti transportą
+              </button>
+            )}
           </div>
         </div>
 
@@ -562,24 +568,28 @@ export function VehiclesManagement() {
                     <Gauge className="w-4 h-4" />
                     Rodmenys
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenVehicleModal(vehicle);
-                    }}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteVehicle(vehicle);
-                    }}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {!workerMode && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenVehicleModal(vehicle);
+                        }}
+                        className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteVehicle(vehicle);
+                        }}
+                        className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
