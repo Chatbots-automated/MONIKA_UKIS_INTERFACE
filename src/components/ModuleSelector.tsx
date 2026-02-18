@@ -1,4 +1,4 @@
-import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ModuleSelectorProps {
@@ -6,7 +6,15 @@ interface ModuleSelectorProps {
 }
 
 export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, signOut, user } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-teal-800 to-emerald-900 flex items-center justify-center p-4">
@@ -35,24 +43,24 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           </p>
         </div>
 
-        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-6 max-w-7xl' : 'md:grid-cols-2 lg:grid-cols-5 max-w-7xl'} gap-8 mx-auto`}>
+        <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 max-w-6xl' : 'md:grid-cols-2 lg:grid-cols-3 max-w-5xl'} gap-6 lg:gap-8 mx-auto`}>
           <button
             onClick={() => onSelectModule('veterinarija')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
           >
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-8 text-center">
-              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Stethoscope className="w-12 h-12 text-blue-600" />
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 lg:p-8 text-center">
+              <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Stethoscope className="w-14 h-14 text-blue-600" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                 Veterinarija
               </h2>
-              <p className="text-blue-100">
+              <p className="text-sm lg:text-base text-blue-100">
                 VetStock Sistema
               </p>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 lg:p-8">
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
@@ -98,19 +106,19 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             onClick={() => onSelectModule('islaidos')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2 relative"
           >
-            <div className="bg-gradient-to-br from-amber-600 to-amber-700 p-8 text-center">
-              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Euro className="w-12 h-12 text-amber-600" />
+            <div className="bg-gradient-to-br from-amber-600 to-amber-700 p-6 lg:p-8 text-center">
+              <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Euro className="w-14 h-14 text-amber-600" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                 Išlaidos
               </h2>
-              <p className="text-amber-100">
+              <p className="text-sm lg:text-base text-amber-100">
                 Finansų Valdymas
               </p>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 lg:p-8">
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center mt-0.5">
@@ -158,19 +166,19 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             onClick={() => onSelectModule('pienas')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
           >
-            <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-8 text-center">
-              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Droplets className="w-12 h-12 text-cyan-600" />
+            <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-6 lg:p-8 text-center">
+              <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Droplets className="w-14 h-14 text-cyan-600" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                 Pienas
               </h2>
-              <p className="text-cyan-100">
+              <p className="text-sm lg:text-base text-cyan-100">
                 Pieno Apskaita
               </p>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 lg:p-8">
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-6 h-6 bg-cyan-100 rounded-full flex items-center justify-center mt-0.5">
@@ -216,19 +224,19 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             onClick={() => onSelectModule('technika')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
           >
-            <div className="bg-gradient-to-br from-slate-600 to-gray-700 p-8 text-center">
-              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Settings className="w-12 h-12 text-slate-600" />
+            <div className="bg-gradient-to-br from-slate-600 to-gray-700 p-6 lg:p-8 text-center">
+              <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Settings className="w-14 h-14 text-slate-600" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                 Technika
               </h2>
-              <p className="text-slate-100">
+              <p className="text-sm lg:text-base text-slate-100">
                 Įrangos Valdymas
               </p>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 lg:p-8">
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center mt-0.5">
@@ -274,19 +282,19 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             onClick={() => onSelectModule('worker-schedules')}
             className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
           >
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 text-center">
-              <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Calendar className="w-12 h-12 text-indigo-600" />
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 lg:p-8 text-center">
+              <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Calendar className="w-14 h-14 text-indigo-600" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                 Darbuotojai
               </h2>
-              <p className="text-indigo-100">
+              <p className="text-sm lg:text-base text-indigo-100">
                 Grafikai
               </p>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 lg:p-8">
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
@@ -333,19 +341,19 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
               onClick={() => onSelectModule('admin')}
               className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
             >
-              <div className="bg-gradient-to-br from-red-600 to-pink-700 p-8 text-center">
-                <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Shield className="w-12 h-12 text-red-600" />
+              <div className="bg-gradient-to-br from-red-600 to-pink-700 p-6 lg:p-8 text-center">
+                <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <Shield className="w-14 h-14 text-red-600" />
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-2">
+                <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
                   Admin
                 </h2>
-                <p className="text-red-100">
+                <p className="text-sm lg:text-base text-red-100">
                   Vartotojų Valdymas
                 </p>
               </div>
 
-              <div className="p-8">
+              <div className="p-6 lg:p-8">
                 <div className="space-y-4 mb-8">
                   <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
@@ -389,10 +397,24 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
           )}
         </div>
 
-        <div className="mt-12 text-center">
-          <p className="text-sm text-white/60">
-            © 2025 ŽŪB Berčiūnai · Versija 1.0.0
-          </p>
+        <div className="mt-12 space-y-4">
+          {/* Logout Button */}
+          <div className="flex justify-center">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors backdrop-blur-sm border border-white/20"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>Atsijungti</span>
+              {user && <span className="text-white/70">({user.email})</span>}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <p className="text-sm text-white/60">
+              © 2025 ŽŪB Berčiūnai · Versija 1.0.0
+            </p>
+          </div>
         </div>
       </div>
     </div>

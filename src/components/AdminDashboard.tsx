@@ -4,11 +4,10 @@ import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
 import { SecurityMonitor } from './SecurityMonitor';
 import { CriticalDataEditor } from './CriticalDataEditor';
-import { WorkerTimeApproval } from './admin/WorkerTimeApproval';
-import { WorkerTaskApproval } from './admin/WorkerTaskApproval';
-import { Users, Activity, Shield, FileText, Settings, Clock, ClipboardCheck } from 'lucide-react';
+import { WorkerApprovals } from './admin/WorkerApprovals';
+import { Users, Activity, Shield, FileText, Settings, ClipboardCheck } from 'lucide-react';
 
-type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'maintenance' | 'worker-time' | 'worker-tasks';
+type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'maintenance' | 'worker-approvals';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>('activity');
@@ -16,8 +15,7 @@ export function AdminDashboard() {
   const tabs = [
     { id: 'activity' as AdminTab, label: 'Veiklos apžvalga', icon: Activity },
     { id: 'users' as AdminTab, label: 'Vartotojai', icon: Users },
-    { id: 'worker-time' as AdminTab, label: 'Darbo laikas', icon: Clock },
-    { id: 'worker-tasks' as AdminTab, label: 'Darbuotojų ataskaitos', icon: ClipboardCheck },
+    { id: 'worker-approvals' as AdminTab, label: 'Darbuotojų ataskaitos', icon: ClipboardCheck },
     { id: 'audit' as AdminTab, label: 'Audito žurnalas', icon: FileText },
     { id: 'security' as AdminTab, label: 'Saugumas', icon: Shield },
     { id: 'maintenance' as AdminTab, label: 'ŽURNALAS', icon: Settings },
@@ -55,8 +53,7 @@ export function AdminDashboard() {
       <div className="mt-6">
         {activeTab === 'activity' && <UserActivityDashboard />}
         {activeTab === 'users' && <UserManagement />}
-        {activeTab === 'worker-time' && <WorkerTimeApproval />}
-        {activeTab === 'worker-tasks' && <WorkerTaskApproval />}
+        {activeTab === 'worker-approvals' && <WorkerApprovals />}
         {activeTab === 'audit' && <AuditLogViewer />}
         {activeTab === 'security' && <SecurityMonitor />}
         {activeTab === 'maintenance' && <CriticalDataEditor />}

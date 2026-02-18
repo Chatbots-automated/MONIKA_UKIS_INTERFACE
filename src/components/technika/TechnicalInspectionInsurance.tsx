@@ -34,10 +34,10 @@ export function TechnicalInspectionInsurance({ workerMode = false }: TechnicalIn
   const fetchVehicles = async () => {
     try {
       setLoading(true);
+      // Load all vehicles (not filtered by created_by for workers to see all)
       const { data, error } = await supabase
         .from('vehicles')
         .select('id, make, model, vehicle_type, registration_number, technical_inspection_due_date, insurance_expiry_date')
-        .eq('created_by', user?.id)
         .order('make');
 
       if (error) throw error;
