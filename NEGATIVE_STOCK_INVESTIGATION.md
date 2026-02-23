@@ -126,22 +126,46 @@ The 150 bolus discrepancy in usage records vs. actual stock deduction likely occ
 3. **Data migration issues** when the system was being developed
 4. **Manual corrections** that adjusted `qty_left` without deleting corresponding usage records
 
-## Recommendation
+## Critical Finding: Actual Negative qty_left in Database
 
-While the display is now fixed, the underlying data discrepancy remains. Consider:
+While investigating BioBos Respi 4, we discovered that some batches have **ACTUAL negative qty_left values** in the database:
 
-1. **Add CHECK constraint** to `batches` table:
+**Example: BioBos Respi 4 - Batch 705232BLV**
+- Received: 19.9 ml
+- Qty Left: **-200.1 ml** ⚠️ (actually negative in DB!)
+- Used: 220 ml (more than received!)
+
+This is different from the Ymcp Bolus issue. Here, the database itself has negative values because:
+1. The `batches` table has NO CHECK constraint on `qty_left` (unlike `equipment_batches`)
+2. The trigger allowed `qty_left` to go negative when stock was over-used
+3. Multiple vaccinations were recorded that exceeded available stock
+
+## Recommendation - CRITICAL FIX REQUIRED
+
+**You MUST run these SQL scripts in Supabase to fix the issue:**
+
+See `APPLY_STOCK_FIXES.md` for detailed instructions.
+
+### Quick Fix:
+
+1. **Fix negative qty_left values:**
+   ```sql
+   UPDATE batches SET qty_left = 0, status = 'depleted' WHERE qty_left < 0;
+   ```
+
+2. **Add CHECK constraint** to prevent future negatives:
    ```sql
    ALTER TABLE batches ADD CONSTRAINT batches_qty_left_check CHECK (qty_left >= 0);
    ```
 
-2. **Audit historical data**: Run a script to identify all products with usage record discrepancies
+3. **Fix the drug journal view** (see APPLY_STOCK_FIXES.md)
 
-3. **Data cleanup** (optional): Either:
-   - Delete excess usage records that weren't actually deducted from stock, OR
-   - Add a note/flag to indicate these are "phantom" usage records for reporting purposes
+### Why This Is Critical
 
-4. **Monitor going forward**: The `check_batch_stock()` function should prevent new discrepancies
+- ✅ The code fixes I made are correct - they use `qty_left` as source of truth
+- ❌ But some `qty_left` values are actually negative in the database
+- ⚠️  Without the CHECK constraint, this can happen again
+- 🔧 After running the SQL fixes, ALL stock displays will be accurate
 
 ## Files Modified
 
