@@ -108,20 +108,20 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
   }, [locationFilter]);
 
   const loadData = async () => {
-    // Build stock query with location filtering at database level
-    let stockQuery = supabase
+    // Fetch all stock data with product info
+    const stockQuery = supabase
       .from('equipment_warehouse_stock')
       .select(`
         *,
-        equipment_products!inner(default_location_type)
+        equipment_products(
+          id,
+          name,
+          default_location_type
+        )
       `);
-    
-    if (locationFilter) {
-      stockQuery = stockQuery.eq('equipment_products.default_location_type', locationFilter);
-    }
 
-    // Build loans query with location filtering at database level
-    let loansQuery = supabase
+    // Fetch all loans data with product info
+    const loansQuery = supabase
       .from('equipment_issuance_items')
       .select(`
         id,
@@ -139,14 +139,15 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
           issued_to_name,
           issued_to_user:users!equipment_issuances_issued_to_fkey(full_name)
         ),
-        equipment_products!inner(name, unit_type, default_location_type),
+        equipment_products(
+          id,
+          name,
+          unit_type,
+          default_location_type
+        ),
         product_id
       `)
       .in('equipment_issuances.status', ['issued', 'partial_return']);
-    
-    if (locationFilter) {
-      loansQuery = loansQuery.eq('equipment_products.default_location_type', locationFilter);
-    }
 
     const [stockRes, loansRes, toolsRes, usersRes] = await Promise.all([
       stockQuery,
@@ -166,8 +167,15 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       supabase.from('users').select('id, full_name, email').order('full_name'),
     ]);
 
+    // Filter stock by location if needed
     if (stockRes.data) {
-      setWarehouseStock(stockRes.data);
+      let filteredStock = stockRes.data;
+      if (locationFilter) {
+        filteredStock = stockRes.data.filter((stock: any) => 
+          stock.equipment_products?.default_location_type === locationFilter
+        );
+      }
+      setWarehouseStock(filteredStock);
     }
 
     const allLoans: ItemOnLoan[] = [];
@@ -176,6 +184,10 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       const equipmentLoans = loansRes.data
         .filter((item: any) => {
           const hasOutstanding = parseFloat(item.quantity || 0) > parseFloat(item.quantity_returned || 0);
+          // Filter by location if specified
+          if (locationFilter && item.equipment_products?.default_location_type !== locationFilter) {
+            return false;
+          }
           return hasOutstanding;
         })
         .map((item: any) => ({

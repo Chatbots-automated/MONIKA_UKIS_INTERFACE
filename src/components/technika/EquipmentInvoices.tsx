@@ -67,6 +67,7 @@ interface StagedFile {
   id: string;
   previewUrl: string;
   selected: boolean;
+  status?: 'pending' | 'kept' | 'discarded';
 }
 
 interface EquipmentInvoicesProps {
@@ -85,6 +86,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<Map<number, Product | null>>(new Map());
+  const [productSearchTerm, setProductSearchTerm] = useState('');
   const [headerData, setHeaderData] = useState<any>(null);
   const [editedItems, setEditedItems] = useState<Map<number, any>>(new Map());
   const [editingHeader, setEditingHeader] = useState(false);
@@ -104,6 +106,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   // Multi-upload staging states
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [showStagingArea, setShowStagingArea] = useState(false);
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+  const [reviewMode, setReviewMode] = useState<'batch' | 'individual'>('individual');
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed'>('idle');
   const [processedInvoices, setProcessedInvoices] = useState<Array<{
     fileId: string;
@@ -124,6 +128,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     vehicleId: string;
     toolId: string;
     costCenterId: string;
+    transportCompany: string;
     notes: string;
   }>({
     invoiceItemId: '',
@@ -131,6 +136,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     vehicleId: '',
     toolId: '',
     costCenterId: '',
+    transportCompany: '',
     notes: '',
   });
 
@@ -236,11 +242,46 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     stagedFiles.forEach(f => URL.revokeObjectURL(f.previewUrl));
     setStagedFiles([]);
     setShowStagingArea(false);
+    setCurrentReviewIndex(0);
+    setReviewMode('individual');
+  };
+
+  const handleKeepFile = () => {
+    setStagedFiles(prev => prev.map((f, idx) => 
+      idx === currentReviewIndex ? { ...f, status: 'kept', selected: true } : f
+    ));
+    if (currentReviewIndex < stagedFiles.length - 1) {
+      setCurrentReviewIndex(currentReviewIndex + 1);
+    }
+  };
+
+  const handleDiscardFile = () => {
+    setStagedFiles(prev => prev.map((f, idx) => 
+      idx === currentReviewIndex ? { ...f, status: 'discarded', selected: false } : f
+    ));
+    if (currentReviewIndex < stagedFiles.length - 1) {
+      setCurrentReviewIndex(currentReviewIndex + 1);
+    }
+  };
+
+  const handlePreviousFile = () => {
+    if (currentReviewIndex > 0) {
+      setCurrentReviewIndex(currentReviewIndex - 1);
+    }
+  };
+
+  const finishReview = () => {
+    const keptFiles = stagedFiles.filter(f => f.status === 'kept');
+    if (keptFiles.length === 0) {
+      alert('Nepasirinkote jokių failų');
+      return;
+    }
+    setReviewMode('batch');
   };
 
   const processSelectedFiles = async () => {
-    const selectedFiles = stagedFiles.filter(f => f.selected);
-    
+    const selectedFiles = stagedFiles.filter(f => f.status === 'kept');
+
     if (selectedFiles.length === 0) {
       alert('Prašome pasirinkti bent vieną sąskaitą');
       return;
@@ -395,16 +436,25 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           description: newProductForm.description || null,
           min_stock_level: parseFloat(newProductForm.min_stock_level) || 0,
           is_active: true,
+          default_location_type: locationFilter || 'warehouse',
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      setProducts([...products, newProduct]);
+      // Add to products list with full object structure
+      const productWithMatch = {
+        ...newProduct,
+        matched: true,
+      };
+      setProducts([...products, productWithMatch]);
 
+      // Automatically match the product
       if (creatingProduct) {
-        handleProductMatch(creatingProduct.index, newProduct.id);
+        const newMatches = new Map(matchedProducts);
+        newMatches.set(creatingProduct.index, newProduct);
+        setMatchedProducts(newMatches);
       }
 
       await logAction('create_equipment_product', 'equipment_products', newProduct.id, null, { name: newProduct.name });
@@ -645,6 +695,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       vehicleId: '',
       toolId: '',
       costCenterId: '',
+      transportCompany: '',
       notes: '',
     });
     setShowAssignmentModal(true);
@@ -666,6 +717,11 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       return;
     }
 
+    if (assignmentForm.assignmentType === 'transport_service' && !assignmentForm.transportCompany) {
+      alert('Prašome įvesti transporto kompaniją');
+      return;
+    }
+
     try {
       const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
         invoice_item_id: assignmentForm.invoiceItemId,
@@ -673,6 +729,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         vehicle_id: assignmentForm.vehicleId || null,
         tool_id: assignmentForm.toolId || null,
         cost_center_id: assignmentForm.costCenterId || null,
+        transport_company: assignmentForm.transportCompany || null,
         notes: assignmentForm.notes || null,
         assigned_by: user?.id || null,
       });
@@ -695,6 +752,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         vehicleId: '',
         toolId: '',
         costCenterId: '',
+        transportCompany: '',
         notes: '',
       });
 
@@ -724,6 +782,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       vehicleId: '',
       toolId: '',
       costCenterId: '',
+      transportCompany: '',
       notes: '',
     });
 
@@ -851,6 +910,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                           vehicleId: '',
                           toolId: '',
                           costCenterId: '',
+                          transportCompany: '',
                           notes: '',
                         });
                         setInvoiceItems([{
@@ -975,31 +1035,143 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         )}
 
         {showStagingArea && stagedFiles.length > 0 && (
-          <div className="mt-4 p-6 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <FileText className="w-6 h-6 text-blue-600" />
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-800">Įkeltos sąskaitos ({stagedFiles.length})</h4>
-                  <p className="text-sm text-gray-600">
-                    {processingStatus === 'processing' 
-                      ? `Apdorojamos sąskaitos...`
-                      : processingStatus === 'completed'
-                      ? 'Apdorojimas baigtas!'
-                      : 'Pasirinkite, kurias sąskaitas norite apdoroti'
-                    }
-                  </p>
+          <div className="mt-4">
+            {reviewMode === 'individual' && stagedFiles.filter(f => !f.status || f.status === 'pending').length > 0 ? (
+              /* Individual Review Mode */
+              <div className="bg-white border-2 border-blue-500 rounded-xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h4 className="text-xl font-bold text-gray-900">
+                      Peržiūrėkite sąskaitą {currentReviewIndex + 1} iš {stagedFiles.length}
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Pasirinkite, ar norite išsaugoti šią sąskaitą apdorojimui
+                    </p>
+                  </div>
+                  <button
+                    onClick={clearAllStaged}
+                    className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    Atšaukti viską
+                  </button>
                 </div>
+
+                {/* Current File Preview */}
+                {stagedFiles[currentReviewIndex] && (
+                  <div className="space-y-4">
+                    {/* PDF Preview */}
+                    <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-100">
+                      <iframe
+                        src={stagedFiles[currentReviewIndex].previewUrl}
+                        className="w-full h-[500px]"
+                        title="Invoice Preview"
+                      />
+                    </div>
+
+                    {/* File Info */}
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-gray-600" />
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{stagedFiles[currentReviewIndex].file.name}</p>
+                          <p className="text-sm text-gray-600">
+                            {(stagedFiles[currentReviewIndex].file.size / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Decision Buttons */}
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <button
+                        onClick={handlePreviousFile}
+                        disabled={currentReviewIndex === 0}
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ← Atgal
+                      </button>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={handleDiscardFile}
+                          className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 font-medium"
+                        >
+                          <X className="w-5 h-5" />
+                          Išmesti
+                        </button>
+                        <button
+                          onClick={handleKeepFile}
+                          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
+                        >
+                          <Check className="w-5 h-5" />
+                          Išsaugoti
+                        </button>
+                      </div>
+
+                      {currentReviewIndex === stagedFiles.length - 1 ? (
+                        <button
+                          onClick={finishReview}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        >
+                          Baigti peržiūrą →
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setCurrentReviewIndex(currentReviewIndex + 1)}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                        >
+                          Praleisti →
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Progress Indicator */}
+                    <div className="flex items-center gap-2 justify-center">
+                      {stagedFiles.map((file, idx) => (
+                        <div
+                          key={file.id}
+                          className={`w-2 h-2 rounded-full transition-all ${
+                            file.status === 'kept' ? 'bg-green-500' :
+                            file.status === 'discarded' ? 'bg-red-500' :
+                            idx === currentReviewIndex ? 'bg-blue-500 scale-150' :
+                            'bg-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <button
-                onClick={clearAllStaged}
-                disabled={processingStatus === 'processing'}
-                className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 className="w-4 h-4" />
-                Išvalyti visas
-              </button>
-            </div>
+            ) : (
+              /* Batch View Mode - Show all selected files */
+              <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-6 h-6 text-blue-600" />
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-800">
+                        Pasirinktos sąskaitos ({stagedFiles.filter(f => f.status === 'kept').length})
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        {processingStatus === 'processing' 
+                          ? `Apdorojamos sąskaitos...`
+                          : processingStatus === 'completed'
+                          ? 'Apdorojimas baigtas!'
+                          : 'Paspauskite "Apdoroti pasirinktas" kad pradėtumėte'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={clearAllStaged}
+                    disabled={processingStatus === 'processing'}
+                    className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Išvalyti visas
+                  </button>
+                </div>
 
             {/* Progress Bar */}
             {(processingStatus === 'processing' || processingStatus === 'completed') && processedInvoices.length > 0 && (
@@ -1026,8 +1198,33 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4 max-h-96 overflow-y-auto">
-              {stagedFiles.map((stagedFile) => {
+                {/* Progress Bar */}
+                {(processingStatus === 'processing' || processingStatus === 'completed') && processedInvoices.length > 0 && (
+                  <div className="mb-4 bg-white rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">Apdorojimo progresas</span>
+                      <span className="text-sm font-semibold text-blue-600">
+                        {Math.round((processedInvoices.filter(p => p.status !== 'pending').length / processedInvoices.length) * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out"
+                        style={{ 
+                          width: `${(processedInvoices.filter(p => p.status !== 'pending').length / processedInvoices.length) * 100}%` 
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-gray-600">
+                      <span>✅ Apdorota: {processedInvoices.filter(p => p.status === 'parsed').length}</span>
+                      <span>⏳ Apdorojama: {processedInvoices.filter(p => p.status === 'parsing').length}</span>
+                      <span>❌ Klaidos: {processedInvoices.filter(p => p.status === 'error').length}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 max-h-96 overflow-y-auto">
+                  {stagedFiles.filter(f => f.status === 'kept').map((stagedFile) => {
                 const processingInfo = processedInvoices.find(p => p.fileId === stagedFile.id);
                 const isParsing = processingInfo?.status === 'parsing';
                 const isParsed = processingInfo?.status === 'parsed';
@@ -1123,16 +1320,15 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   </div>
                 );
               })}
-            </div>
+                </div>
 
-            <div className="flex items-center justify-between pt-4 border-t-2 border-blue-200">
-              <div className="flex-1">
-                {processingStatus === 'idle' && (
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">{stagedFiles.filter(f => f.selected).length}</span> iš{' '}
-                    <span className="font-semibold">{stagedFiles.length}</span> sąskaitų pasirinkta
-                  </p>
-                )}
+                <div className="flex items-center justify-between pt-4 border-t-2 border-blue-200">
+                  <div className="flex-1">
+                    {processingStatus === 'idle' && (
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold">{stagedFiles.filter(f => f.status === 'kept').length}</span> sąskaitų paruošta apdorojimui
+                      </p>
+                    )}
                 {processingStatus === 'processing' && (
                   <div className="flex items-center gap-3">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -1155,34 +1351,36 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                       </p>
                     </div>
                   </div>
-                )}
-              </div>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-3">
-                {processingStatus === 'idle' && (
-                  <button
-                    onClick={processSelectedFiles}
-                    disabled={stagedFiles.filter(f => f.selected).length === 0}
-                    className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium"
-                  >
-                    <Check className="w-4 h-4" />
-                    Apdoroti pasirinktas ({stagedFiles.filter(f => f.selected).length})
-                  </button>
-                )}
-                {processingStatus === 'completed' && processedInvoices.filter(p => p.status === 'parsed').length > 0 && (
-                  <button
-                    onClick={() => {
-                      processNextStagedFile();
-                      setShowStagingArea(false);
-                    }}
-                    className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
-                  >
-                    <FileText className="w-4 h-4" />
-                    Pradėti peržiūrą ({processedInvoices.filter(p => p.status === 'parsed').length})
-                  </button>
-                )}
+                  <div className="flex items-center gap-3">
+                    {processingStatus === 'idle' && (
+                      <button
+                        onClick={processSelectedFiles}
+                        disabled={stagedFiles.filter(f => f.status === 'kept').length === 0}
+                        className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium"
+                      >
+                        <Check className="w-4 h-4" />
+                        Apdoroti pasirinktas ({stagedFiles.filter(f => f.status === 'kept').length})
+                      </button>
+                    )}
+                    {processingStatus === 'completed' && processedInvoices.filter(p => p.status === 'parsed').length > 0 && (
+                      <button
+                        onClick={() => {
+                          processNextStagedFile();
+                          setShowStagingArea(false);
+                        }}
+                        className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Pradėti peržiūrą ({processedInvoices.filter(p => p.status === 'parsed').length})
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1662,47 +1860,77 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
                       {isMatched ? (
                         <div className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border border-emerald-200">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-1">
                             <span className="text-emerald-800"><strong>Produktas:</strong></span>
+                            <input
+                              type="text"
+                              placeholder="Ieškoti produkto..."
+                              value={productSearchTerm}
+                              onChange={(e) => setProductSearchTerm(e.target.value)}
+                              className="px-2 py-1 border border-emerald-300 rounded text-xs flex-1"
+                            />
                             <select
                               value={matchedProduct.id}
-                              onChange={(e) => handleProductMatch(index, e.target.value)}
+                              onChange={(e) => {
+                                handleProductMatch(index, e.target.value);
+                                setProductSearchTerm('');
+                              }}
                               className="px-2 py-0.5 border border-emerald-300 rounded text-xs bg-white"
                             >
-                              {products.map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
+                              {products
+                                .filter(p => 
+                                  !productSearchTerm || 
+                                  p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                  (p.product_code && p.product_code.toLowerCase().includes(productSearchTerm.toLowerCase()))
+                                )
+                                .map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} {p.product_code ? `(${p.product_code})` : ''}
+                                  </option>
+                                ))}
                             </select>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-1">
                             <p className="text-xs text-gray-700 font-semibold">
                               Produktas nerastas
                             </p>
+                            <input
+                              type="text"
+                              placeholder="Ieškoti produkto..."
+                              value={productSearchTerm}
+                              onChange={(e) => setProductSearchTerm(e.target.value)}
+                              className="px-2 py-1 border border-gray-400 rounded text-xs flex-1"
+                            />
                             <select
                               onChange={(e) => {
                                 if (e.target.value) {
                                   handleProductMatch(index, e.target.value);
+                                  setProductSearchTerm('');
                                 }
                               }}
                               className="px-2 py-0.5 border border-gray-400 rounded text-xs bg-white font-mono"
                               defaultValue=""
                             >
-                              <option value="">Pasirinkti esamą...</option>
-                              {products.map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
+                              <option value="">Pasirinkti...</option>
+                              {products
+                                .filter(p => 
+                                  !productSearchTerm || 
+                                  p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                  (p.product_code && p.product_code.toLowerCase().includes(productSearchTerm.toLowerCase()))
+                                )
+                                .map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} {p.product_code ? `(${p.product_code})` : ''}
+                                  </option>
+                                ))}
                             </select>
                           </div>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="flex items-center gap-1 px-3 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 transition-all shadow-md"
+                            className="flex items-center gap-1 px-3 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 transition-all shadow-md whitespace-nowrap"
                           >
                             <PlusCircle className="w-3 h-3" />
                             Sukurti naują
@@ -1969,6 +2197,101 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Paskyrimo tipas</label>
+                  
+                  {/* Farm Equipment Specific Categories */}
+                  {locationFilter === 'farm' && (
+                    <>
+                      <p className="text-xs text-gray-600 mb-2">Fermos įrangos kategorijos:</p>
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'periodic_service', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'periodic_service'
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Periodinis servisas</p>
+                            <p className="text-xs text-gray-500 mt-1">Planuotas aptarnavimas</p>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'breakdown_repair', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'breakdown_repair'
+                              ? 'border-red-500 bg-red-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Gedimo taisymas</p>
+                            <p className="text-xs text-gray-500 mt-1">Skubūs remontai</p>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'parts_replacement', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'parts_replacement'
+                              ? 'border-orange-500 bg-orange-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Dalių keitimas</p>
+                            <p className="text-xs text-gray-500 mt-1">Nusidėvėjusių dalių keitimas</p>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'modernization', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'modernization'
+                              ? 'border-purple-500 bg-purple-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Modernizavimas</p>
+                            <p className="text-xs text-gray-500 mt-1">Pagerinimas, atnaujinimas</p>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'safety_inspection', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'safety_inspection'
+                              ? 'border-yellow-500 bg-yellow-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Saugos patikra</p>
+                            <p className="text-xs text-gray-500 mt-1">Saugos tikrinimas</p>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cleaning_maintenance', invoiceItemId: invoiceItems[0].id })}
+                          className={`p-3 border-2 rounded-lg transition-all ${
+                            assignmentForm.assignmentType === 'cleaning_maintenance'
+                              ? 'border-cyan-500 bg-cyan-50'
+                              : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm">Valymas ir priežiūra</p>
+                            <p className="text-xs text-gray-500 mt-1">Rutininis valymas</p>
+                          </div>
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2 mt-4">Arba bendros kategorijos:</p>
+                    </>
+                  )}
+
+                  {/* General Categories */}
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'tool', invoiceItemId: invoiceItems[0].id })}
@@ -1998,6 +2321,22 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                       </div>
                     </button>
 
+                    {!locationFilter && (
+                      <button
+                        onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'transport_service', invoiceItemId: invoiceItems[0].id, transportCompany: invoiceData?.supplier || '' })}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          assignmentForm.assignmentType === 'transport_service'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <p className="font-semibold text-gray-900">Transporto paslaugos</p>
+                          <p className="text-xs text-gray-500 mt-1">Pervežimo, pristatymo paslaugos</p>
+                        </div>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'general_farm', invoiceItemId: invoiceItems[0].id })}
                       className={`p-4 border-2 rounded-lg transition-all ${
@@ -2015,50 +2354,84 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
                   {costCenters.length > 0 && (
                     <div className="border-t pt-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Arba kaštų centrui</label>
-                      <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">Arba kaštų centrui</label>
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
                         {costCenters.filter(c => !c.parent_id).map(center => (
-                          <div key={center.id} className="space-y-2">
+                          <div key={center.id} className="space-y-1.5">
+                            {/* Parent Level */}
                             <button
                               onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: center.id, invoiceItemId: invoiceItems[0].id })}
                               className={`w-full p-3 border-2 rounded-lg transition-all text-left ${
                                 assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === center.id
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-300 hover:border-gray-400'
+                                  ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                  : 'border-gray-300 hover:border-gray-400 bg-white'
                               }`}
                             >
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2">
                                 <div
                                   className="w-4 h-4 rounded-full flex-shrink-0"
                                   style={{ backgroundColor: center.color }}
                                 />
-                                <p className="font-semibold text-gray-900 text-sm">{center.name}</p>
-                              </div>
-                              {center.description && (
-                                <p className="text-xs text-gray-500">{center.description}</p>
-                              )}
-                            </button>
-                            {costCenters.filter(child => child.parent_id === center.id).map(child => (
-                              <button
-                                key={child.id}
-                                onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: child.id, invoiceItemId: invoiceItems[0].id })}
-                                className={`w-full ml-4 p-2 border-2 rounded-lg transition-all text-left ${
-                                  assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === child.id
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="w-3 h-3 rounded-full flex-shrink-0"
-                                    style={{ backgroundColor: child.color }}
-                                  />
-                                  <p className="font-medium text-gray-800 text-xs">{child.name}</p>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-gray-900 text-sm">{center.name}</p>
+                                  {center.description && (
+                                    <p className="text-xs text-gray-500 mt-0.5">{center.description}</p>
+                                  )}
                                 </div>
-                                {child.description && (
-                                  <p className="text-xs text-gray-500 mt-1 ml-5">{child.description}</p>
-                                )}
-                              </button>
+                              </div>
+                            </button>
+
+                            {/* Children Level */}
+                            {costCenters.filter(child => child.parent_id === center.id).map(child => (
+                              <div key={child.id} className="ml-6 space-y-1">
+                                <button
+                                  onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: child.id, invoiceItemId: invoiceItems[0].id })}
+                                  className={`w-full p-2.5 border-2 rounded-lg transition-all text-left ${
+                                    assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === child.id
+                                      ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                      : 'border-gray-200 hover:border-gray-300 bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-3 h-3 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: child.color }}
+                                    />
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800 text-sm">{child.name}</p>
+                                      {child.description && (
+                                        <p className="text-xs text-gray-500 mt-0.5">{child.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+
+                                {/* Grandchildren Level (3rd level) */}
+                                {costCenters.filter(grandchild => grandchild.parent_id === child.id).map(grandchild => (
+                                  <button
+                                    key={grandchild.id}
+                                    onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'cost_center', costCenterId: grandchild.id, invoiceItemId: invoiceItems[0].id })}
+                                    className={`w-full ml-6 p-2 border-2 rounded-lg transition-all text-left ${
+                                      assignmentForm.assignmentType === 'cost_center' && assignmentForm.costCenterId === grandchild.id
+                                        ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                        : 'border-gray-100 hover:border-gray-200 bg-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: grandchild.color }}
+                                      />
+                                      <div className="flex-1">
+                                        <p className="font-medium text-gray-700 text-sm">{grandchild.name}</p>
+                                        {grandchild.description && (
+                                          <p className="text-xs text-gray-500 mt-0.5">{grandchild.description}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
                             ))}
                           </div>
                         ))}
@@ -2082,6 +2455,22 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {assignmentForm.assignmentType === 'transport_service' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transporto kompanija</label>
+                    <input
+                      type="text"
+                      value={assignmentForm.transportCompany}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, transportCompany: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2"
+                      placeholder="Įveskite kompanijos pavadinimą"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Tiekėjas iš sąskaitos: <span className="font-medium">{invoiceData?.supplier || 'Nenurodyta'}</span>
+                    </p>
                   </div>
                 )}
 

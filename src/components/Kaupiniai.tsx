@@ -67,6 +67,10 @@ interface Document {
   processing_error: string | null;
   processed_at: string | null;
   notes: string | null;
+  comments: string | null;
+  act_number: string | null;
+  act_file_path: string | null;
+  act_file_url: string | null;
 }
 
 interface CostItem {
@@ -112,9 +116,14 @@ export default function Kaupiniai() {
 
   // File upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedActFile, setSelectedActFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'processing' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   const [documentType, setDocumentType] = useState<'invoice' | 'receipt' | 'contract' | 'estimate' | 'other'>('invoice');
+  const [uploadComments, setUploadComments] = useState('');
+  const [uploadActNumber, setUploadActNumber] = useState('');
+  const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
+  const [viewerTab, setViewerTab] = useState<'document' | 'act'>('document');
 
   useEffect(() => {
     loadProjects();
@@ -299,6 +308,55 @@ export default function Kaupiniai() {
     }
   };
 
+  const handleViewDocument = (doc: Document) => {
+    setViewingDocument(doc);
+    setViewerTab('document');
+  };
+
+  const handleDownloadFile = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('kaupiniai-documents')
+        .download(filePath);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert('Klaida atsisiunčiant failą');
+    }
+  };
+
+  const handleDownloadActFile = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('kaupiniai-acts')
+        .download(filePath);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading act file:', error);
+      alert('Klaida atsisiunčiant akto failą');
+    }
+  };
+
   const handleFileUpload = async () => {
     console.log('handleFileUpload called');
     console.log('selectedFile:', selectedFile);
@@ -310,18 +368,76 @@ export default function Kaupiniai() {
     }
 
     setUploadStatus('uploading');
-    setUploadMessage('Įkeliama ir apdorojama...');
+    setUploadMessage('Įkeliama į saugyklą...');
 
     try {
       console.log('Starting file upload...');
-      // Send file to n8n webhook
-      const arrayBuffer = await selectedFile.arrayBuffer();
       const sanitizedFilename = selectedFile.name
         .replace(/[()]/g, '')
         .replace(/[^\w\s.-]/g, '_');
 
-      console.log('Sending to webhook:', sanitizedFilename);
+      // Upload main document to Supabase Storage
+      const timestamp = Date.now();
+      const storagePath = `${selectedProject}/${timestamp}_${sanitizedFilename}`;
+      
+      console.log('Uploading to storage:', storagePath);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('kaupiniai-documents')
+        .upload(storagePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
 
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw new Error('Nepavyko įkelti failo į saugyklą: ' + uploadError.message);
+      }
+
+      console.log('File uploaded to storage:', uploadData);
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('kaupiniai-documents')
+        .getPublicUrl(storagePath);
+
+      console.log('File URL:', urlData.publicUrl);
+
+      // Upload act file if provided
+      let actFilePath = null;
+      let actFileUrl = null;
+      if (selectedActFile) {
+        const actSanitizedFilename = selectedActFile.name
+          .replace(/[()]/g, '')
+          .replace(/[^\w\s.-]/g, '_');
+        const actStoragePath = `${selectedProject}/${uploadActNumber || 'ACT'}_${timestamp}_${actSanitizedFilename}`;
+        
+        console.log('Uploading act file to storage:', actStoragePath);
+        const { data: actUploadData, error: actUploadError } = await supabase.storage
+          .from('kaupiniai-acts')
+          .upload(actStoragePath, selectedActFile, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (actUploadError) {
+          console.error('Act storage upload error:', actUploadError);
+          // Don't fail the whole upload if act upload fails
+          console.warn('Continuing without act file');
+        } else {
+          actFilePath = actStoragePath;
+          const { data: actUrlData } = supabase.storage
+            .from('kaupiniai-acts')
+            .getPublicUrl(actStoragePath);
+          actFileUrl = actUrlData.publicUrl;
+          console.log('Act file uploaded:', actFileUrl);
+        }
+      }
+
+      // Send file to n8n webhook for parsing
+      setUploadMessage('Apdorojama sąskaita faktūra...');
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      
+      console.log('Sending to webhook:', sanitizedFilename);
       const response = await fetch('https://n8n-up8s.onrender.com/webhook/36549f46-a08b-4790-bf56-40cdc919e4c0', {
         method: 'POST',
         headers: {
@@ -334,21 +450,22 @@ export default function Kaupiniai() {
       console.log('Webhook response status:', response.status);
 
       if (!response.ok) {
-        throw new Error('Nepavyko įkelti failo');
+        throw new Error('Nepavyko apdoroti failo');
       }
 
       setUploadStatus('processing');
-      setUploadMessage('Apdorojama sąskaita faktūra...');
-
       const webhookData = await response.json();
       console.log('Webhook response data:', webhookData);
 
-      // Process webhook response
-      await processWebhookResponse(webhookData, sanitizedFilename);
+      // Process webhook response with storage paths
+      await processWebhookResponse(webhookData, sanitizedFilename, storagePath, urlData.publicUrl, actFilePath, actFileUrl);
 
       setUploadStatus('success');
       setUploadMessage('Failas sėkmingai įkeltas ir apdorotas!');
       setSelectedFile(null);
+      setSelectedActFile(null);
+      setUploadComments('');
+      setUploadActNumber('');
       
       // Reload data
       loadProjects();
@@ -367,7 +484,14 @@ export default function Kaupiniai() {
     }
   };
 
-  const processWebhookResponse = async (webhookData: any, filename: string) => {
+  const processWebhookResponse = async (
+    webhookData: any, 
+    filename: string, 
+    filePath: string, 
+    fileUrl: string,
+    actFilePath: string | null,
+    actFileUrl: string | null
+  ) => {
     if (!selectedProject) return;
 
     try {
@@ -396,9 +520,15 @@ export default function Kaupiniai() {
       const documentData = {
         project_id: selectedProject,
         file_name: filename,
+        file_path: filePath,
+        file_url: fileUrl,
         document_type: documentType,
         supplier_name: supplier?.name || null,
         supplier_code: supplier?.code || null,
+        comments: uploadComments || null,
+        act_number: uploadActNumber || null,
+        act_file_path: actFilePath,
+        act_file_url: actFileUrl,
         invoice_number: invoice?.number || null,
         invoice_date: invoice?.date || null,
         due_date: invoice?.due_date || null,
@@ -473,13 +603,44 @@ export default function Kaupiniai() {
     if (!confirm('Ar tikrai norite ištrinti šį dokumentą?')) return;
 
     try {
+      // Get document to find file paths
+      const { data: doc, error: fetchError } = await supabase
+        .from('cost_accumulation_documents')
+        .select('file_path, act_file_path')
+        .eq('id', documentId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Delete from storage if paths exist
+      if (doc.file_path) {
+        const { error: storageError } = await supabase.storage
+          .from('kaupiniai-documents')
+          .remove([doc.file_path]);
+        
+        if (storageError) {
+          console.error('Error deleting file from storage:', storageError);
+        }
+      }
+
+      if (doc.act_file_path) {
+        const { error: actStorageError } = await supabase.storage
+          .from('kaupiniai-acts')
+          .remove([doc.act_file_path]);
+        
+        if (actStorageError) {
+          console.error('Error deleting act file from storage:', actStorageError);
+        }
+      }
+
+      // Delete document record
       const { error } = await supabase
         .from('cost_accumulation_documents')
         .delete()
         .eq('id', documentId);
 
       if (error) throw error;
-      
+
       if (selectedProject) {
         loadProjects();
         loadProjectDocuments(selectedProject);
@@ -714,6 +875,59 @@ export default function Kaupiniai() {
                           className="w-full"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Komentarai (neprivaloma)
+                        </label>
+                        <textarea
+                          value={uploadComments}
+                          onChange={(e) => setUploadComments(e.target.value)}
+                          placeholder="Įveskite komentarus apie šį dokumentą..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          rows={3}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Akto numeris (neprivaloma)
+                        </label>
+                        <input
+                          type="text"
+                          value={uploadActNumber}
+                          onChange={(e) => setUploadActNumber(e.target.value)}
+                          placeholder="Pvz.: AKT-2026-001"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Oficialus akto numeris dokumentui</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Akto failas (neprivaloma)
+                        </label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) => setSelectedActFile(e.target.files?.[0] || null)}
+                          className="w-full"
+                        />
+                        {selectedActFile && (
+                          <div className="mt-2 flex items-center gap-2 p-2 bg-blue-50 rounded">
+                            <FileText className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm text-blue-900">{selectedActFile.name}</span>
+                            <button
+                              onClick={() => setSelectedActFile(null)}
+                              className="ml-auto text-red-600 hover:text-red-700"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">Įkelkite pasirašytą akto dokumentą (PDF, DOC, DOCX)</p>
+                      </div>
+
                       {selectedFile && (
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <span className="text-sm text-gray-700">{selectedFile.name}</span>
@@ -815,10 +1029,54 @@ export default function Kaupiniai() {
                                       </span>
                                     </div>
                                   )}
+                                  {doc.act_number && (
+                                    <div className="col-span-2">
+                                      <span className="font-medium">Akto Nr.:</span>{' '}
+                                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                                        {doc.act_number}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
+                                {doc.comments && (
+                                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                    <p className="text-sm text-gray-700">
+                                      <span className="font-medium">Komentarai:</span> {doc.comments}
+                                    </p>
+                                  </div>
+                                )}
                                 {doc.processing_error && (
                                   <p className="mt-2 text-sm text-red-600">{doc.processing_error}</p>
                                 )}
+
+                                {/* View and Download Buttons */}
+                                <div className="mt-3 flex gap-2">
+                                  <button
+                                    onClick={() => handleViewDocument(doc)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    Peržiūrėti
+                                  </button>
+                                  {doc.file_path && (
+                                    <button
+                                      onClick={() => handleDownloadFile(doc.file_path!, doc.file_name)}
+                                      className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      Atsisiųsti dokumentą
+                                    </button>
+                                  )}
+                                  {doc.act_file_path && (
+                                    <button
+                                      onClick={() => handleDownloadActFile(doc.act_file_path!, `${doc.act_number || 'ACT'}.pdf`)}
+                                      className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      Atsisiųsti aktą
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 onClick={() => handleDeleteDocument(doc.id)}
@@ -1036,6 +1294,138 @@ export default function Kaupiniai() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {editingProjectId ? 'Išsaugoti' : 'Sukurti'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Document Viewer Modal */}
+        {viewingDocument && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="p-4 border-b">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{viewingDocument.file_name}</h3>
+                    {viewingDocument.act_number && (
+                      <p className="text-sm text-gray-600">Akto Nr.: {viewingDocument.act_number}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setViewingDocument(null)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-6 h-6 text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Tabs for Document and Act */}
+                {viewingDocument.act_file_url && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setViewerTab('document')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        viewerTab === 'document'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Dokumentas
+                    </button>
+                    <button
+                      onClick={() => setViewerTab('act')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        viewerTab === 'act'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Aktas
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* PDF Viewer */}
+              <div className="flex-1 overflow-hidden">
+                {viewerTab === 'document' ? (
+                  viewingDocument.file_url ? (
+                    <iframe
+                      src={viewingDocument.file_url}
+                      className="w-full h-full border-0"
+                      title="Document Viewer"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">Dokumentas nepasiekiamas peržiūrai</p>
+                        {viewingDocument.file_path && (
+                          <button
+                            onClick={() => handleDownloadFile(viewingDocument.file_path!, viewingDocument.file_name)}
+                            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Atsisiųsti dokumentą
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  viewingDocument.act_file_url ? (
+                    <iframe
+                      src={viewingDocument.act_file_url}
+                      className="w-full h-full border-0"
+                      title="Act Viewer"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">Aktas nepasiekiamas peržiūrai</p>
+                        {viewingDocument.act_file_path && (
+                          <button
+                            onClick={() => handleDownloadActFile(viewingDocument.act_file_path!, `${viewingDocument.act_number || 'ACT'}.pdf`)}
+                            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                          >
+                            Atsisiųsti aktą
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Footer with Actions */}
+              <div className="p-4 border-t flex items-center justify-between bg-gray-50">
+                <div className="flex gap-2">
+                  {viewingDocument.file_path && (
+                    <button
+                      onClick={() => handleDownloadFile(viewingDocument.file_path!, viewingDocument.file_name)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Atsisiųsti dokumentą
+                    </button>
+                  )}
+                  {viewingDocument.act_file_path && (
+                    <button
+                      onClick={() => handleDownloadActFile(viewingDocument.act_file_path!, `${viewingDocument.act_number || 'ACT'}.pdf`)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Atsisiųsti aktą
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setViewingDocument(null)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Uždaryti
                 </button>
               </div>
             </div>

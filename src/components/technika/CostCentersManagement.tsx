@@ -10,6 +10,10 @@ interface CostCenter {
   color: string;
   parent_id: string | null;
   is_active: boolean;
+  is_service: boolean;
+  service_type: 'our_workers' | 'external_company' | null;
+  service_worker_ids: string[] | null;
+  service_company_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -64,21 +68,40 @@ export function CostCentersManagement() {
   const [editingCenter, setEditingCenter] = useState<CostCenter | null>(null);
   const [expandedCenter, setExpandedCenter] = useState<string | null>(null);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
+  const [expandedGrandchild, setExpandedGrandchild] = useState<string | null>(null);
   const [centerItems, setCenterItems] = useState<CostCenterItem[]>([]);
   const [childItems, setChildItems] = useState<CostCenterItem[]>([]);
+  const [grandchildItems, setGrandchildItems] = useState<CostCenterItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingChildItems, setLoadingChildItems] = useState(false);
+  const [loadingGrandchildItems, setLoadingGrandchildItems] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     color: '#3B82F6',
     parent_id: null as string | null,
+    is_service: false,
+    service_type: null as 'our_workers' | 'external_company' | null,
+    service_worker_ids: [] as string[],
+    service_company_name: '',
   });
   const [creatingChildFor, setCreatingChildFor] = useState<string | null>(null);
+  const [workers, setWorkers] = useState<Array<{ id: string; full_name: string }>>([]);
 
   useEffect(() => {
     loadCostCenters();
+    loadWorkers();
   }, []);
+
+  const loadWorkers = async () => {
+    const { data } = await supabase
+      .from('users')
+      .select('id, full_name')
+      .in('role', ['farm_worker', 'warehouse_worker'])
+      .order('full_name');
+    
+    if (data) setWorkers(data);
+  };
 
   const loadCostCenters = async () => {
     setLoading(true);
@@ -190,6 +213,22 @@ export function CostCentersManagement() {
     setLoadingChildItems(false);
   };
 
+  const loadGrandchildItems = async (grandchildId: string) => {
+    setLoadingGrandchildItems(true);
+    const { data, error } = await supabase
+      .from('cost_center_parts_usage')
+      .select('*')
+      .eq('cost_center_id', grandchildId)
+      .order('invoice_date', { ascending: false});
+
+    if (error) {
+      console.error('Error loading grandchild cost center items:', error);
+    } else if (data) {
+      setGrandchildItems(data);
+    }
+    setLoadingGrandchildItems(false);
+  };
+
   const handleToggleChildExpand = async (childId: string) => {
     if (expandedChild === childId) {
       setExpandedChild(null);
@@ -197,6 +236,16 @@ export function CostCentersManagement() {
     } else {
       setExpandedChild(childId);
       await loadChildItems(childId);
+    }
+  };
+
+  const handleToggleGrandchildExpand = async (grandchildId: string) => {
+    if (expandedGrandchild === grandchildId) {
+      setExpandedGrandchild(null);
+      setGrandchildItems([]);
+    } else {
+      setExpandedGrandchild(grandchildId);
+      await loadGrandchildItems(grandchildId);
     }
   };
 
@@ -208,6 +257,10 @@ export function CostCentersManagement() {
         description: center.description || '',
         color: center.color,
         parent_id: center.parent_id,
+        is_service: center.is_service || false,
+        service_type: center.service_type || null,
+        service_worker_ids: center.service_worker_ids || [],
+        service_company_name: center.service_company_name || '',
       });
       setCreatingChildFor(null);
     } else {
@@ -236,6 +289,10 @@ export function CostCentersManagement() {
       description: '',
       color: '#3B82F6',
       parent_id: null,
+      is_service: false,
+      service_type: null,
+      service_worker_ids: [],
+      service_company_name: '',
     });
   };
 
@@ -245,16 +302,38 @@ export function CostCentersManagement() {
       return;
     }
 
+    // Validate service fields
+    if (formData.is_service) {
+      if (!formData.service_type) {
+        alert('Prašome pasirinkti kas atliko darbą');
+        return;
+      }
+      if (formData.service_type === 'our_workers' && formData.service_worker_ids.length === 0) {
+        alert('Prašome pasirinkti bent vieną darbuotoją');
+        return;
+      }
+      if (formData.service_type === 'external_company' && !formData.service_company_name.trim()) {
+        alert('Prašome įvesti įmonės pavadinimą');
+        return;
+      }
+    }
+
     try {
+      const dataToSave = {
+        name: formData.name,
+        description: formData.description || null,
+        color: formData.color,
+        parent_id: formData.parent_id,
+        is_service: formData.is_service,
+        service_type: formData.is_service ? formData.service_type : null,
+        service_worker_ids: formData.is_service && formData.service_type === 'our_workers' ? formData.service_worker_ids : null,
+        service_company_name: formData.is_service && formData.service_type === 'external_company' ? formData.service_company_name : null,
+      };
+
       if (editingCenter) {
         const { error } = await supabase
           .from('cost_centers')
-          .update({
-            name: formData.name,
-            description: formData.description || null,
-            color: formData.color,
-            parent_id: formData.parent_id,
-          })
+          .update(dataToSave)
           .eq('id', editingCenter.id);
 
         if (error) throw error;
@@ -268,10 +347,7 @@ export function CostCentersManagement() {
         const { error } = await supabase
           .from('cost_centers')
           .insert({
-            name: formData.name,
-            description: formData.description || null,
-            color: formData.color,
-            parent_id: formData.parent_id,
+            ...dataToSave,
             created_by: user?.id,
           });
 
@@ -483,6 +559,13 @@ export function CostCentersManagement() {
                         </div>
 
                         <div className="flex gap-2 ml-5">
+                          <button
+                            onClick={() => handleOpenChildModal(child)}
+                            className="flex items-center justify-center gap-1 px-2 py-1.5 bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors text-xs font-medium"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Sub
+                          </button>
                           {child.total_assignments > 0 && (
                             <button
                               onClick={() => handleToggleChildExpand(child.id)}
@@ -508,7 +591,7 @@ export function CostCentersManagement() {
                             <Edit2 className="w-3 h-3" />
                             Redaguoti
                           </button>
-                          {child.total_assignments === 0 ? (
+                          {child.total_assignments === 0 && (!child.children || child.children.length === 0) ? (
                             <button
                               onClick={() => handleDelete(child)}
                               className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-xs font-medium"
@@ -583,6 +666,133 @@ export function CostCentersManagement() {
                                 </div>
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {/* Grandchildren (3rd level) */}
+                        {child.children && child.children.length > 0 && (
+                          <div className="mt-3 ml-5 space-y-2">
+                            {child.children.map((grandchild) => (
+                              <div 
+                                key={grandchild.id} 
+                                className="bg-white rounded-lg border border-gray-300 p-2"
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <div
+                                      className="w-2 h-2 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: grandchild.color }}
+                                    />
+                                    <div className="flex-1">
+                                      <h6 className="font-medium text-gray-800 text-xs">{grandchild.name}</h6>
+                                      {grandchild.description && (
+                                        <p className="text-xs text-gray-500 mt-0.5">{grandchild.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
+                                  <div className="flex items-center gap-1">
+                                    <Package className="w-3 h-3 text-gray-500" />
+                                    <span className="text-gray-600">{grandchild.total_assignments} prod.</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <TrendingUp className="w-3 h-3 text-gray-500" />
+                                    <span className="text-gray-600">{grandchild.total_cost.toFixed(2)} EUR</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex gap-1">
+                                  {grandchild.total_assignments > 0 && (
+                                    <button
+                                      onClick={() => handleToggleGrandchildExpand(grandchild.id)}
+                                      className="flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors text-xs"
+                                    >
+                                      {expandedGrandchild === grandchild.id ? (
+                                        <>
+                                          <ChevronUp className="w-2 h-2" />
+                                          Slėpti
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown className="w-2 h-2" />
+                                          Produktai
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleOpenModal(grandchild)}
+                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-white border text-gray-700 rounded hover:bg-gray-50 transition-colors text-xs"
+                                  >
+                                    <Edit2 className="w-2 h-2" />
+                                  </button>
+                                  {grandchild.total_assignments === 0 ? (
+                                    <button
+                                      onClick={() => handleDelete(grandchild)}
+                                      className="flex items-center justify-center gap-1 px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-xs"
+                                    >
+                                      <Trash2 className="w-2 h-2" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleArchive(grandchild)}
+                                      className="flex items-center justify-center gap-1 px-2 py-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors text-xs"
+                                    >
+                                      <Archive className="w-2 h-2" />
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Grandchild Items Display */}
+                                {expandedGrandchild === grandchild.id && (
+                                  <div className="mt-2 pt-2 border-t border-gray-200">
+                                    {loadingGrandchildItems ? (
+                                      <div className="flex items-center justify-center py-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
+                                      </div>
+                                    ) : grandchildItems.length === 0 ? (
+                                      <p className="text-center text-gray-500 text-xs py-1">Nėra priskirtų produktų</p>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        <h6 className="font-semibold text-gray-800 text-xs mb-1">
+                                          Panaudojimo įrašai ({grandchildItems.length})
+                                        </h6>
+                                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                                          {grandchildItems.map((item, idx) => (
+                                            <div key={idx} className="bg-gray-50 rounded p-2 border border-gray-200">
+                                              <div className="flex items-start justify-between mb-1">
+                                                <div className="flex-1">
+                                                  <p className="font-medium text-gray-900 text-xs">{item.product_name}</p>
+                                                  {item.product_code && (
+                                                    <p className="text-xs text-gray-500">Kodas: {item.product_code}</p>
+                                                  )}
+                                                </div>
+                                                <div className="text-right ml-2">
+                                                  <p className="font-bold text-gray-900 text-xs">{item.total_price.toFixed(2)} EUR</p>
+                                                  <p className="text-xs text-gray-600">{item.quantity} {item.unit_type}</p>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-2 text-xs text-gray-500 pt-1 border-t border-gray-200">
+                                                <div className="flex items-center gap-1">
+                                                  <FileText className="w-2 h-2" />
+                                                  <span>{item.invoice_number}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  <Calendar className="w-2 h-2" />
+                                                  <span>{item.invoice_date}</span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -803,6 +1013,116 @@ export function CostCentersManagement() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Service/Repair Tracking */}
+              <div className="border-t pt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <input
+                    type="checkbox"
+                    id="is_service"
+                    checked={formData.is_service}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      is_service: e.target.checked,
+                      service_type: e.target.checked ? formData.service_type : null,
+                      service_worker_ids: e.target.checked ? formData.service_worker_ids : [],
+                      service_company_name: e.target.checked ? formData.service_company_name : '',
+                    })}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <label htmlFor="is_service" className="text-sm font-medium text-gray-700">
+                    Ar tai paslauga / remontas?
+                  </label>
+                </div>
+
+                {formData.is_service && (
+                  <div className="space-y-4 ml-6 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Kas atliko darbą? *
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="service_type"
+                            checked={formData.service_type === 'our_workers'}
+                            onChange={() => setFormData({ 
+                              ...formData, 
+                              service_type: 'our_workers',
+                              service_company_name: '',
+                            })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">Mūsų darbuotojai</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="service_type"
+                            checked={formData.service_type === 'external_company'}
+                            onChange={() => setFormData({ 
+                              ...formData, 
+                              service_type: 'external_company',
+                              service_worker_ids: [],
+                            })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">Įmonė</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {formData.service_type === 'our_workers' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Pasirinkite darbuotojus *
+                        </label>
+                        <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white space-y-2">
+                          {workers.map((worker) => (
+                            <label key={worker.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                              <input
+                                type="checkbox"
+                                checked={formData.service_worker_ids?.includes(worker.id) || false}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({
+                                      ...formData,
+                                      service_worker_ids: [...(formData.service_worker_ids || []), worker.id],
+                                    });
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      service_worker_ids: (formData.service_worker_ids || []).filter(id => id !== worker.id),
+                                    });
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <span className="text-sm text-gray-700">{worker.full_name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {formData.service_type === 'external_company' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Įmonės pavadinimas *
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.service_company_name || ''}
+                          onChange={(e) => setFormData({ ...formData, service_company_name: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2"
+                          placeholder="Pvz.: UAB Remonto meistrai"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

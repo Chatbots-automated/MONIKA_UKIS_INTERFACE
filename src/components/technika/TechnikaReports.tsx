@@ -56,7 +56,7 @@ interface TechnikaReportsProps {
 }
 
 export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
@@ -103,10 +103,24 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     vehicleCount: 0,
   });
 
+  // Transport services data
+  const [transportServices, setTransportServices] = useState<any[]>([]);
+  const [transportStats, setTransportStats] = useState({
+    totalCost: 0,
+    companyCount: 0,
+    invoiceCount: 0,
+  });
+
   useEffect(() => {
     loadCategories();
     loadData();
   }, [dateFilter, locationFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'transport-services') {
+      loadTransportServices();
+    }
+  }, [activeTab, dateFilter, locationFilter]);
 
   useEffect(() => {
     if (activeTab === 'farm-equipment') {
@@ -136,6 +150,102 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
       ]);
     } catch (error) {
       console.error('Error loading reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTransportServices = async () => {
+    setLoading(true);
+    try {
+      console.log('Loading transport services...', { dateFilter });
+      
+      // Query transport service assignments with invoice data
+      const { data, error } = await supabase
+        .from('equipment_invoice_item_assignments')
+        .select(`
+          id,
+          transport_company,
+          notes,
+          assigned_at,
+          invoice_item_id,
+          equipment_invoice_items(
+            id,
+            description,
+            quantity,
+            unit_price,
+            total_price,
+            invoice_id,
+            equipment_invoices(
+              id,
+              invoice_number,
+              invoice_date,
+              supplier_name
+            )
+          )
+        `)
+        .eq('assignment_type', 'transport_service')
+        .order('assigned_at', { ascending: false });
+
+      if (error) {
+        console.error('Transport services query error:', error);
+        throw error;
+      }
+      
+      console.log('Transport services raw data:', data);
+      
+      // Filter by date client-side (more flexible)
+      const filteredData = data?.filter((item: any) => {
+        const assignedDate = new Date(item.assigned_at);
+        const fromDate = new Date(dateFilter.from);
+        const toDate = new Date(dateFilter.to);
+        toDate.setHours(23, 59, 59, 999); // Include the entire end date
+        return assignedDate >= fromDate && assignedDate <= toDate;
+      }) || [];
+      
+      console.log('Filtered transport services data:', filteredData);
+
+      // Group by transport company
+      const companyMap = new Map<string, any>();
+      let totalCost = 0;
+      let invoiceCount = 0;
+
+      filteredData.forEach((assignment: any) => {
+        const company = assignment.transport_company || 'Nenurodyta';
+        const item = assignment.equipment_invoice_items;
+        const cost = item.total_price || 0;
+
+        totalCost += cost;
+        invoiceCount++;
+
+        if (!companyMap.has(company)) {
+          companyMap.set(company, {
+            company,
+            totalCost: 0,
+            invoiceCount: 0,
+            items: [],
+          });
+        }
+
+        const companyData = companyMap.get(company);
+        companyData.totalCost += cost;
+        companyData.invoiceCount++;
+        companyData.items.push({
+          ...assignment,
+          item,
+        });
+      });
+
+      const services = Array.from(companyMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+
+      setTransportServices(services);
+      setTransportStats({
+        totalCost,
+        companyCount: companyMap.size,
+        invoiceCount,
+      });
+    } catch (error) {
+      console.error('Error loading transport services:', error);
     } finally {
       setLoading(false);
     }
@@ -532,6 +642,7 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
               { id: 'categories', label: 'Kategorijos', icon: Filter },
               ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
               ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
+              { id: 'transport-services', label: 'Transporto paslaugos', icon: Car },
               { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -1372,6 +1483,99 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                             )}
                           </div>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'transport-services' && (
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StatCard
+                  title="Bendra transporto paslaugų kaina"
+                  value={`€${transportStats.totalCost.toFixed(2)}`}
+                  icon={DollarSign}
+                  trend={null}
+                  color="blue"
+                />
+                <StatCard
+                  title="Kompanijų skaičius"
+                  value={transportStats.companyCount.toString()}
+                  icon={Car}
+                  trend={null}
+                  color="green"
+                />
+                <StatCard
+                  title="Sąskaitų skaičius"
+                  value={transportStats.invoiceCount.toString()}
+                  icon={FileText}
+                  trend={null}
+                  color="purple"
+                />
+              </div>
+
+              {/* Transport Services by Company */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Transporto paslaugos pagal kompaniją</h3>
+                {transportServices.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">Transporto paslaugų nerastas</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {transportServices.map((service) => (
+                      <div key={service.company} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="p-4 bg-gradient-to-r from-blue-50 to-white">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="text-lg font-semibold text-gray-900">{service.company}</h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {service.invoiceCount} sąskaitos
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-blue-600">
+                                €{service.totalCost.toFixed(2)}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                Vidutiniškai: €{(service.totalCost / service.invoiceCount).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Items List */}
+                        <div className="p-4 bg-gray-50">
+                          <div className="space-y-2">
+                            {service.items.map((item: any, idx: number) => (
+                              <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{item.item.description}</p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                      Sąskaita: {item.item.equipment_invoices.invoice_number} • 
+                                      Data: {new Date(item.item.equipment_invoices.invoice_date).toLocaleDateString('lt-LT')}
+                                    </p>
+                                    {item.notes && (
+                                      <p className="text-sm text-gray-500 mt-1 italic">{item.notes}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    <p className="font-semibold text-gray-900">€{item.item.total_price.toFixed(2)}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {item.item.quantity} × €{item.item.unit_price.toFixed(2)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
