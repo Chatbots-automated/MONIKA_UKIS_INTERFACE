@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
+import { fetchAllRows, fetchGeaMilkMap } from '../lib/helpers';
 import { AnimalMilkLossBySynchronization } from '../lib/types';
 import { Milk, Calendar, TrendingDown, RefreshCw, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
@@ -31,14 +32,70 @@ export function AnimalMilkLossAnalysis() {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from('animal_milk_loss_by_synchronization')
-        .select('*')
-        .order('sync_start', { ascending: false });
+      const [allSyncs, steps, protocols, animals, milkMap, settings] = await Promise.all([
+        fetchAllRows<{ id: string; animal_id: string; start_date: string; status: string; protocol_id: string | null }>(
+          'animal_synchronizations',
+          'id, animal_id, start_date, status, protocol_id'
+        ),
+        fetchAllRows<{ synchronization_id: string; scheduled_date: string }>(
+          'synchronization_steps',
+          'synchronization_id, scheduled_date'
+        ),
+        fetchAllRows<{ id: string; name: string }>('synchronization_protocols', 'id, name'),
+        fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no'),
+        fetchGeaMilkMap(),
+        supabase.from('system_settings').select('setting_key, setting_value').eq('setting_key', 'milk_price_per_liter').maybeSingle(),
+      ]);
 
-      if (error) throw error;
+      const syncStatuses = ['Active', 'Completed'];
+      const filteredSyncs = allSyncs.filter((s) => syncStatuses.includes(s.status));
 
-      setMilkLossData(data || []);
+      const stepMaxDate = new Map<string, string>();
+      steps.forEach((s) => {
+        const cur = stepMaxDate.get(s.synchronization_id);
+        if (!cur || s.scheduled_date > cur) stepMaxDate.set(s.synchronization_id, s.scheduled_date);
+      });
+
+      const protocolMap = new Map(protocols.map((p) => [p.id, p.name]));
+      const animalMap = new Map(animals.map((a) => [a.id, { tag_no: a.tag_no }]));
+      const milkPrice = parseFloat(String(settings.data?.setting_value || '0.45')) || 0.45;
+
+      const rows: AnimalMilkLossBySynchronization[] = [];
+      for (const s of filteredSyncs) {
+        const animal = animalMap.get(s.animal_id);
+        const tagNo = animal?.tag_no || '';
+        const maxStep = stepMaxDate.get(s.id);
+        const syncEnd = maxStep ? new Date(maxStep) : new Date(new Date(s.start_date).getTime() + 14 * 24 * 60 * 60 * 1000);
+        const syncEndStr = syncEnd.toISOString().split('T')[0];
+        const startDate = new Date(s.start_date);
+        const endDate = new Date(syncEndStr);
+        const lossDays = Math.max(0, Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+        if (lossDays <= 0) continue;
+
+        const avgMilk = milkMap.get(tagNo) ?? 0;
+        const totalMilkLost = avgMilk * lossDays;
+        const milkLossValue = totalMilkLost * milkPrice;
+
+        rows.push({
+          animal_id: s.animal_id,
+          animal_number: tagNo,
+          animal_name: null,
+          sync_id: s.id,
+          sync_start: s.start_date,
+          sync_end: syncEndStr,
+          sync_status: s.status,
+          protocol_id: s.protocol_id,
+          protocol_name: s.protocol_id ? protocolMap.get(s.protocol_id) ?? null : null,
+          loss_days: lossDays,
+          avg_daily_milk_kg: avgMilk,
+          total_milk_lost_kg: totalMilkLost,
+          milk_loss_value_eur: milkLossValue,
+          milk_price_used: milkPrice,
+        });
+      }
+
+      rows.sort((a, b) => (a.sync_start > b.sync_start ? -1 : 1));
+      setMilkLossData(rows);
     } catch (error) {
       console.error('Error loading milk loss data:', error);
     } finally {

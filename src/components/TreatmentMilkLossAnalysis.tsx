@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
+import { fetchAllRows, fetchGeaMilkMap } from '../lib/helpers';
 import { Droplet, Calendar, TrendingDown, RefreshCw, ChevronDown, ChevronRight, Search, AlertTriangle, X } from 'lucide-react';
 
 interface TreatmentMilkLoss {
@@ -64,20 +65,87 @@ export function TreatmentMilkLossAnalysis({ animalId, animalTag, onClose }: Trea
     try {
       setLoading(true);
 
-      let query = supabase
-        .from('treatment_milk_loss_summary')
-        .select('*')
-        .order('treatment_date', { ascending: false });
+      const [treatments, animals, usageItems, products, milkMap, settings] = await Promise.all([
+        fetchAllRows<{
+          id: string;
+          animal_id: string;
+          reg_date: string;
+          withdrawal_until_milk: string | null;
+          withdrawal_until_meat: string | null;
+          clinical_diagnosis: string | null;
+          vet_name: string | null;
+        }>('treatments', 'id, animal_id, reg_date, withdrawal_until_milk, withdrawal_until_meat, clinical_diagnosis, vet_name'),
+        fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no'),
+        fetchAllRows<{ treatment_id: string | null; product_id: string; batch_id: string | null; qty: number; unit: string }>(
+          'usage_items',
+          'treatment_id, product_id, batch_id, qty, unit'
+        ),
+        fetchAllRows<{ id: string; name: string; category: string | null; withdrawal_days_milk: number | null; withdrawal_days_meat: number | null }>(
+          'products',
+          'id, name, category, withdrawal_days_milk, withdrawal_days_meat'
+        ),
+        fetchGeaMilkMap(),
+        supabase.from('system_settings').select('setting_key, setting_value').eq('setting_key', 'milk_price_per_liter').maybeSingle(),
+      ]);
 
-      if (animalId) {
-        query = query.eq('animal_id', animalId);
+      const milkPrice = parseFloat(String(settings.data?.setting_value || '0.45')) || 0.45;
+      const animalMap = new Map(animals.map((a) => [a.id, a.tag_no || '']));
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
+      const rows: TreatmentMilkLoss[] = [];
+      for (const t of treatments) {
+        if (!t.withdrawal_until_milk) continue;
+        const regDate = t.reg_date;
+        const endDate = t.withdrawal_until_milk;
+        const withdrawalDays = Math.ceil((new Date(endDate).getTime() - new Date(regDate).getTime()) / (24 * 60 * 60 * 1000));
+        const totalLossDays = withdrawalDays + 1;
+        if (totalLossDays <= 0) continue;
+
+        const tagNo = animalMap.get(t.animal_id) || '';
+        const avgMilk = milkMap.get(tagNo) ?? 0;
+        const totalMilkLost = avgMilk * totalLossDays;
+        const totalValueLost = totalMilkLost * milkPrice;
+
+        const meds = usageItems
+          .filter((ui) => ui.treatment_id === t.id)
+          .map((ui) => {
+            const p = productMap.get(ui.product_id);
+            if (p?.category !== 'medicines') return null;
+            return {
+              product_id: ui.product_id,
+              product_name: p.name,
+              qty: ui.qty,
+              unit: ui.unit,
+              withdrawal_milk_days: p.withdrawal_days_milk ?? 0,
+              withdrawal_meat_days: p.withdrawal_days_meat ?? 0,
+            };
+          })
+          .filter(Boolean) as TreatmentMilkLoss['medications_used'];
+
+        if (animalId && t.animal_id !== animalId) continue;
+
+        rows.push({
+          treatment_id: t.id,
+          animal_id: t.animal_id,
+          animal_tag: tagNo,
+          treatment_date: regDate,
+          withdrawal_until_milk: t.withdrawal_until_milk,
+          withdrawal_until_meat: t.withdrawal_until_meat,
+          clinical_diagnosis: t.clinical_diagnosis,
+          vet_name: t.vet_name,
+          withdrawal_days: withdrawalDays,
+          safety_days: 1,
+          total_loss_days: totalLossDays,
+          avg_daily_milk_kg: avgMilk,
+          total_milk_lost_kg: totalMilkLost,
+          milk_price_eur_per_kg: milkPrice,
+          total_value_lost_eur: totalValueLost,
+          medications_used: meds,
+        });
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      setTreatmentLossData(data || []);
+      rows.sort((a, b) => (a.treatment_date > b.treatment_date ? -1 : 1));
+      setTreatmentLossData(rows);
     } catch (error) {
       console.error('Error loading treatment milk loss data:', error);
     } finally {

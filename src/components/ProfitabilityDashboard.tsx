@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchGeaGroupData } from '../lib/helpers';
 import { formatCurrencyLT, formatNumberLT } from '../lib/formatters';
 import {
   TrendingUp,
@@ -218,56 +219,27 @@ export function ProfitabilityDashboard() {
     if (summaryError) throw summaryError;
     setHerdSummary(summaryData);
 
-    // Load GEA group data for group comparison (get latest snapshot for each animal)
-    // Query new GEA system and join with animals table
-    const { data: geaData, error: geaError } = await supabase
-      .from('gea_daily_cows_joined')
-      .select(`
-        ear_number,
-        group_number,
-        cow_state,
-        import_created_at
-      `)
-      .order('import_created_at', { ascending: false });
-
-    if (geaError) {
-      console.error('Error loading GEA data:', geaError);
-    }
-
-    // Map ear_number to animal_id and get latest per animal
+    // Load GEA group data from raw tables (avoids slow gea_daily_cows_joined view)
     const { data: animals } = await supabase
       .from('animals')
       .select('id, tag_no')
       .eq('active', true);
 
+    const geaGroupMap = await fetchGeaGroupData();
     const animalTagMap = new Map(animals?.map(a => [a.tag_no, a.id]) || []);
-    
-    let allGeaData: any[] = [];
-    if (geaData) {
-      const latestPerAnimal = new Map();
-      for (const gea of geaData) {
-        const animalId = animalTagMap.get(gea.ear_number);
-        if (animalId && !latestPerAnimal.has(animalId)) {
-          latestPerAnimal.set(animalId, {
-            animal_id: animalId,
-            grupe: gea.group_number,
-            statusas: gea.cow_state,
-            snapshot_date: gea.import_created_at
-          });
-        }
-      }
-      allGeaData = Array.from(latestPerAnimal.values());
-    }
 
-    // Get only the most recent group/status for each animal
-    const animalGroupMap = new Map();
-    allGeaData.forEach(row => {
-      if (!animalGroupMap.has(row.animal_id) ||
-          new Date(row.snapshot_date) > new Date(animalGroupMap.get(row.animal_id).snapshot_date)) {
-        animalGroupMap.set(row.animal_id, row);
+    const latestAnimalData: any[] = [];
+    animalTagMap.forEach((animalId, tagNo) => {
+      const gea = geaGroupMap.get(tagNo);
+      if (gea) {
+        latestAnimalData.push({
+          animal_id: animalId,
+          grupe: gea.group_number,
+          statusas: gea.cow_state,
+          snapshot_date: gea.import_created_at
+        });
       }
     });
-    const latestAnimalData = Array.from(animalGroupMap.values());
     setGeaGroupData(latestAnimalData);
 
     // Count animals by status
