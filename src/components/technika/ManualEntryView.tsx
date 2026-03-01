@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { FileText, Clock, User, ChevronDown } from 'lucide-react';
+import { FileText, Clock, User, Copy, Trash2, AlertTriangle, BarChart3, Edit2, Save, X } from 'lucide-react';
 
 interface Worker {
   id: string;
@@ -81,11 +81,17 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [dayEntries, setDayEntries] = useState<DayEntry[]>([]);
   const [saving, setSaving] = useState(false);
+  const [skipWeekends, setSkipWeekends] = useState(true);
+  const [bulkStartTime, setBulkStartTime] = useState('');
+  const [bulkEndTime, setBulkEndTime] = useState('');
+  const [showBulkFill, setShowBulkFill] = useState(false);
 
   // Peržiūra tab state
   const [viewWorker, setViewWorker] = useState<string>('');
   const [viewMonth, setViewMonth] = useState(new Date());
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<SavedEntry | null>(null);
 
   useEffect(() => {
     loadWorkers();
@@ -248,6 +254,91 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     );
   };
 
+  const copyFromPreviousDay = (currentDate: string) => {
+    const currentIndex = dayEntries.findIndex(d => d.date === currentDate);
+    if (currentIndex <= 0) return;
+    const prevDay = dayEntries[currentIndex - 1];
+    if (!prevDay.start_time || !prevDay.end_time) {
+      alert('Ankstesnė diena neturi laiko įrašų');
+      return;
+    }
+    updateDayEntry(currentDate, 'start_time', prevDay.start_time);
+    updateDayEntry(currentDate, 'end_time', prevDay.end_time);
+  };
+
+  const applyBulkFill = () => {
+    if (!bulkStartTime || !bulkEndTime) {
+      alert('Įveskite pradžios ir pabaigos laiką');
+      return;
+    }
+    const normalizedStart = normalizeTimeToHHMM(bulkStartTime);
+    const normalizedEnd = normalizeTimeToHHMM(bulkEndTime);
+    if (!normalizedStart || !normalizedEnd) {
+      alert('Neteisingas laiko formatas');
+      return;
+    }
+    setDayEntries(prev =>
+      prev.map(d => {
+        const date = new Date(d.date);
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        if (skipWeekends && isWeekend) return d;
+        return { ...d, start_time: normalizedStart, end_time: normalizedEnd };
+      })
+    );
+    setShowBulkFill(false);
+    setBulkStartTime('');
+    setBulkEndTime('');
+  };
+
+  const clearAllTimes = () => {
+    if (!confirm('Ar tikrai norite išvalyti visus laikus?')) return;
+    setDayEntries(prev => prev.map(d => ({ ...d, start_time: '', end_time: '' })));
+  };
+
+  const isUnusualHours = (hours: number): boolean => {
+    return hours > 0 && (hours < 4 || hours > 12);
+  };
+
+  const saveEditedEntry = async () => {
+    if (!editingEntry) return;
+    try {
+      const normalizedStart = normalizeTimeToHHMM(editingEntry.start_time);
+      const normalizedEnd = normalizeTimeToHHMM(editingEntry.end_time);
+      
+      if (!normalizedStart || !normalizedEnd) {
+        alert('Neteisingas laiko formatas');
+        return;
+      }
+
+      await supabase
+        .from('manual_time_entries')
+        .update({
+          start_time: normalizedStart,
+          end_time: normalizedEnd,
+        })
+        .eq('id', editingEntry.id);
+
+      await supabase
+        .from('worker_schedules')
+        .update({
+          shift_start: normalizedStart,
+          shift_end: normalizedEnd,
+          notes: `${calculateHours(normalizedStart, normalizedEnd).toFixed(2)}h`,
+        })
+        .eq('worker_id', editingEntry.worker_id)
+        .eq('date', editingEntry.entry_date);
+
+      await logAction('update_manual_entry', 'manual_time_entries', editingEntry.id);
+      
+      setEditingEntryId(null);
+      setEditingEntry(null);
+      loadSavedEntries();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
   const saveEntries = async () => {
     if (!selectedWorker) {
       alert('Pasirinkite darbuotoją');
@@ -317,6 +408,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     0
   );
   const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
+  const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
+  const unusualDaysCount = dayEntries.filter(d => {
+    const h = calculateHours(d.start_time, d.end_time);
+    return isUnusualHours(h);
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -379,7 +475,82 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="skipWeekends"
+                checked={skipWeekends}
+                onChange={e => setSkipWeekends(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="skipWeekends" className="text-sm text-gray-700 cursor-pointer">
+                Praleisti savaitgalius
+              </label>
+            </div>
+            <button
+              onClick={() => setShowBulkFill(!showBulkFill)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              Užpildyti visas dienas
+            </button>
+            <button
+              onClick={clearAllTimes}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Išvalyti
+            </button>
           </div>
+
+          {showBulkFill && (
+            <div className="mb-6 p-4 bg-purple-50 border-2 border-purple-200 rounded-lg">
+              <h4 className="font-semibold text-purple-900 mb-3">Užpildyti visas dienas tuo pačiu laiku</h4>
+              <div className="flex items-end gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pradžia</label>
+                  <input
+                    type="text"
+                    value={bulkStartTime}
+                    onChange={e => setBulkStartTime(e.target.value)}
+                    onBlur={() => setBulkStartTime(normalizeTimeToHHMM(bulkStartTime))}
+                    placeholder="08:00"
+                    className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pabaiga</label>
+                  <input
+                    type="text"
+                    value={bulkEndTime}
+                    onChange={e => setBulkEndTime(e.target.value)}
+                    onBlur={() => setBulkEndTime(normalizeTimeToHHMM(bulkEndTime))}
+                    placeholder="17:00"
+                    className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
+                  />
+                </div>
+                <button
+                  onClick={applyBulkFill}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Pritaikyti
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBulkFill(false);
+                    setBulkStartTime('');
+                    setBulkEndTime('');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Atšaukti
+                </button>
+              </div>
+              <p className="text-xs text-purple-700 mt-2">
+                {skipWeekends ? '✓ Savaitgaliai bus praleisti' : 'Užpildys visas dienas įskaitant savaitgalius'}
+              </p>
+            </div>
+          )}
 
           {selectedWorker && dayEntries.length > 0 && (
             <>
@@ -391,17 +562,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">Pradžia</th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">Valandos</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-700"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dayEntries.map(day => {
+                    {dayEntries.map((day, index) => {
                       const date = new Date(day.date);
                       const dayName = DAY_NAMES[date.getDay()];
                       const hours = calculateHours(day.start_time, day.end_time);
+                      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                      const unusual = isUnusualHours(hours);
                       return (
-                        <tr key={day.date} className="border-b border-gray-100 hover:bg-blue-50/50">
+                        <tr key={day.date} className={`border-b border-gray-100 hover:bg-blue-50/50 ${isWeekend ? 'bg-gray-50' : ''}`}>
                           <td className="px-4 py-2 whitespace-nowrap">
-                            <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
+                            <span className={`text-xs uppercase ${isWeekend ? 'text-gray-400' : 'text-gray-500'}`}>{dayName}</span>{' '}
                             {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
                           </td>
                           <td className="px-4 py-2">
@@ -427,9 +601,25 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             />
                           </td>
                           <td className="px-4 py-2">
-                            <span className={`font-semibold ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                              {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                                {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
+                              </span>
+                              {unusual && (
+                                <AlertTriangle className="w-4 h-4 text-orange-500" title="Neįprastas valandų skaičius (<4h arba >12h)" />
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            {index > 0 && (
+                              <button
+                                onClick={() => copyFromPreviousDay(day.date)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                title="Kopijuoti iš ankstesnės dienos"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -438,10 +628,43 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 </table>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-sm text-gray-600">
-                  Užpildyta dienų: <strong>{filledDays}</strong> · Viso valandų: <strong>{totalHours.toFixed(1)}h</strong>
+              {/* Monthly Statistics */}
+              {filledDays > 0 && (
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                      <div className="text-xs text-blue-700 font-medium">Užpildyta dienų</div>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-900">{filledDays}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-4 h-4 text-green-600" />
+                      <div className="text-xs text-green-700 font-medium">Viso valandų</div>
+                    </div>
+                    <div className="text-2xl font-bold text-green-900">{totalHours.toFixed(1)}h</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4 text-purple-600" />
+                      <div className="text-xs text-purple-700 font-medium">Vidutiniškai/dieną</div>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-900">{avgHoursPerDay.toFixed(1)}h</div>
+                  </div>
+                  {unusualDaysCount > 0 && (
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertTriangle className="w-4 h-4 text-orange-600" />
+                        <div className="text-xs text-orange-700 font-medium">Neįprastos dienos</div>
+                      </div>
+                      <div className="text-2xl font-bold text-orange-900">{unusualDaysCount}</div>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              <div className="mt-4 flex items-center justify-end">
                 <button
                   onClick={saveEntries}
                   disabled={filledDays === 0 || saving}
@@ -506,31 +729,140 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Pradžia</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Valandos</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {savedEntries.map(entry => {
                         const date = new Date(entry.entry_date);
                         const dayName = DAY_NAMES[date.getDay()];
+                        const isEditing = editingEntryId === entry.id;
+                        const unusual = isUnusualHours(entry.hours_worked);
+                        
                         return (
-                          <tr key={entry.id} className="border-b border-gray-100">
-                            <td className="px-4 py-3">
+                          <tr key={entry.id} className={`border-b border-gray-100 ${unusual ? 'bg-orange-50/50' : ''}`}>
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
                               {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
                             </td>
-                            <td className="px-4 py-3 font-mono">{entry.start_time}</td>
-                            <td className="px-4 py-3 font-mono">{entry.end_time}</td>
-                            <td className="px-4 py-3">
-                              <span className="font-semibold text-green-700">{entry.hours_worked.toFixed(1)}h</span>
-                            </td>
+                            {isEditing && editingEntry ? (
+                              <>
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="text"
+                                    value={editingEntry.start_time}
+                                    onChange={e => setEditingEntry({ ...editingEntry, start_time: e.target.value })}
+                                    onBlur={() => setEditingEntry({ ...editingEntry, start_time: normalizeTimeToHHMM(editingEntry.start_time) })}
+                                    className="w-28 px-2 py-1.5 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="text"
+                                    value={editingEntry.end_time}
+                                    onChange={e => setEditingEntry({ ...editingEntry, end_time: e.target.value })}
+                                    onBlur={() => setEditingEntry({ ...editingEntry, end_time: normalizeTimeToHHMM(editingEntry.end_time) })}
+                                    className="w-28 px-2 py-1.5 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="font-semibold text-blue-700">
+                                    {calculateHours(editingEntry.start_time, editingEntry.end_time).toFixed(1)}h
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={saveEditedEntry}
+                                      className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                      title="Išsaugoti"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingEntryId(null);
+                                        setEditingEntry(null);
+                                      }}
+                                      className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                      title="Atšaukti"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-4 py-3 font-mono">{entry.start_time}</td>
+                                <td className="px-4 py-3 font-mono">{entry.end_time}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-green-700">{entry.hours_worked.toFixed(1)}h</span>
+                                    {unusual && (
+                                      <AlertTriangle className="w-4 h-4 text-orange-500" title="Neįprastas valandų skaičius (<4h arba >12h)" />
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    onClick={() => {
+                                      setEditingEntryId(entry.id);
+                                      setEditingEntry({ ...entry });
+                                    }}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                    title="Redaguoti"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-4 text-lg font-bold text-blue-900">
-                  Viso: {savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0).toFixed(1)}h
+
+                {/* Monthly Statistics for Peržiūra */}
+                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                      <div className="text-xs text-blue-700 font-medium">Darbo dienų</div>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-900">{savedEntries.length}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-4 h-4 text-green-600" />
+                      <div className="text-xs text-green-700 font-medium">Viso valandų</div>
+                    </div>
+                    <div className="text-2xl font-bold text-green-900">
+                      {savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0).toFixed(1)}h
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-4 h-4 text-purple-600" />
+                      <div className="text-xs text-purple-700 font-medium">Vidutiniškai/dieną</div>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-900">
+                      {(savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0) / savedEntries.length).toFixed(1)}h
+                    </div>
+                  </div>
+                  {savedEntries.filter(e => isUnusualHours(e.hours_worked)).length > 0 && (
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertTriangle className="w-4 h-4 text-orange-600" />
+                        <div className="text-xs text-orange-700 font-medium">Neįprastos dienos</div>
+                      </div>
+                      <div className="text-2xl font-bold text-orange-900">
+                        {savedEntries.filter(e => isUnusualHours(e.hours_worked)).length}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
