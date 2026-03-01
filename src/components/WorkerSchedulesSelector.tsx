@@ -1,20 +1,94 @@
 import { useState } from 'react';
-import { ArrowLeft, Users, Tractor, Warehouse } from 'lucide-react';
+import { ArrowLeft, Users, Tractor, Warehouse, FileText, Calendar } from 'lucide-react';
 import { WorkerSchedulesModule } from './WorkerSchedulesModule';
 
 interface WorkerSchedulesSelectorProps {
   onBack: () => void;
 }
 
+type SubModule = 'manual' | 'calendar' | null;
+
 export function WorkerSchedulesSelector({ onBack }: WorkerSchedulesSelectorProps) {
   const [selectedLocation, setSelectedLocation] = useState<'farm' | 'warehouse' | null>(null);
+  const [selectedSubModule, setSelectedSubModule] = useState<SubModule>(null);
 
-  if (selectedLocation) {
+  // When sub-module is selected (manual entry), show the module
+  if (selectedLocation && selectedSubModule === 'manual') {
     return (
       <WorkerSchedulesModule
         location={selectedLocation}
-        onBack={() => setSelectedLocation(null)}
+        mode="manual"
+        onBack={() => setSelectedSubModule(null)}
       />
+    );
+  }
+
+  // When location is selected, show sub-module choice (Surašyti iš lapų | Sukurti grafikus)
+  if (selectedLocation) {
+    const isFarm = selectedLocation === 'farm';
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <button
+            onClick={() => setSelectedLocation(null)}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Grįžti
+          </button>
+
+          <div className="text-center mb-12">
+            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${isFarm ? 'bg-green-100' : 'bg-slate-100'}`}>
+              {isFarm ? <Tractor className="w-8 h-8 text-green-600" /> : <Warehouse className="w-8 h-8 text-slate-600" />}
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {isFarm ? 'Ferma' : 'Technikos kiemas'}
+            </h1>
+            <p className="text-gray-600">Pasirinkite veiksmą</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <button
+              onClick={() => setSelectedSubModule('manual')}
+              className={`group bg-white rounded-xl shadow-sm border-2 border-gray-200 hover:border-blue-500 hover:shadow-md transition-all p-8 text-left`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+                  <FileText className="w-7 h-7 text-blue-600 group-hover:text-white transition-colors" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                    Surašyti iš lapų
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Įveskite darbuotojų darbo valandas iš popierinių lapų – pasirinkite darbuotoją, mėnesį ir įveskite laikus klaviatūra
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <div
+              className="group bg-gray-100 rounded-xl shadow-sm border-2 border-gray-200 p-8 text-left opacity-60 cursor-not-allowed"
+              title="Netrukus"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-7 h-7 text-gray-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-gray-500 mb-2">
+                    Sukurti grafikus
+                  </h3>
+                  <p className="text-gray-500 text-sm">
+                    Kalendoriaus pagrindu kurti grafikus – netrukus
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 

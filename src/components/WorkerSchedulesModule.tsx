@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { ArrowLeft, Calendar, Users, Tractor, Warehouse } from 'lucide-react';
-import { WorkerSchedules } from './technika/WorkerSchedules';
+import { ArrowLeft, Tractor, Warehouse } from 'lucide-react';
+import { ManualEntryView } from './technika/ManualEntryView';
 
 interface WorkerSchedulesModuleProps {
   location: 'farm' | 'warehouse';
+  mode?: 'manual' | 'calendar';
   onBack: () => void;
 }
 
-export function WorkerSchedulesModule({ location, onBack }: WorkerSchedulesModuleProps) {
+export function WorkerSchedulesModule({ location, mode = 'manual', onBack }: WorkerSchedulesModuleProps) {
   const isFarm = location === 'farm';
   const Icon = isFarm ? Tractor : Warehouse;
   const title = isFarm ? 'Fermos darbuotojai' : 'Technikos kiemo darbuotojai';
@@ -29,7 +29,7 @@ export function WorkerSchedulesModule({ location, onBack }: WorkerSchedulesModul
               <Icon className="w-8 h-8" />
               <div>
                 <h1 className="text-2xl font-bold">{title}</h1>
-                <p className="text-sm text-white opacity-90">Darbo grafikai</p>
+                <p className="text-sm text-white opacity-90">Surašyti iš lapų</p>
               </div>
             </div>
             <div className="w-24"></div>
@@ -39,7 +39,7 @@ export function WorkerSchedulesModule({ location, onBack }: WorkerSchedulesModul
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <WorkerSchedules workLocation={location} />
+        {mode === 'manual' && <ManualEntryView workLocation={location} />}
       </div>
     </div>
   );

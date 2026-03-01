@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, ChevronLeft, ChevronRight, Clock, User, Trash2, X, Edit2, AlertCircle, Users, FileText, Plus, ChevronDown } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, User, Trash2, X, Edit2, AlertCircle, Users } from 'lucide-react';
 
 interface Worker {
   id: string;
@@ -46,36 +46,10 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [hoveredScheduleId, setHoveredScheduleId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'single' | 'multi' | 'view-entries'>('single');
+  const [viewMode, setViewMode] = useState<'single' | 'multi'>('single');
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [multiLayout, setMultiLayout] = useState<'rows' | 'overlay'>('rows');
   const timelineRef = useRef<HTMLDivElement>(null);
-  
-  // Manual entry from papers
-  const [showManualEntryModal, setShowManualEntryModal] = useState(false);
-  const [manualEntries, setManualEntries] = useState<Array<{
-    id: string;
-    worker_id: string;
-    date: string;
-    start_time: string;
-    end_time: string;
-  }>>([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  
-  // View saved time entries
-  const [savedTimeEntries, setSavedTimeEntries] = useState<Array<{
-    id: string;
-    worker_id: string;
-    entry_date: string;
-    start_time: string;
-    end_time: string;
-    hours_worked: number;
-    notes: string;
-    worker?: { full_name: string };
-  }>>([]);
-  const [viewEntriesMonth, setViewEntriesMonth] = useState(new Date());
-  const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
-  const [workerDetailMonth, setWorkerDetailMonth] = useState<{ [workerId: string]: Date }>({});
 
   // Worker colors for overlay mode
   const workerColors = [
@@ -114,12 +88,6 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
   useEffect(() => {
     loadData();
   }, [currentDate, workLocation]);
-
-  useEffect(() => {
-    if (viewMode === 'view-entries') {
-      loadSavedTimeEntries();
-    }
-  }, [viewMode, viewEntriesMonth]);
 
   const loadData = async () => {
     // Load workers - filter by work_location if specified
@@ -373,236 +341,6 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
     }
   };
 
-  // Manual entry functions
-  const calculateHoursFromTimes = (startTime: string, endTime: string): number => {
-    if (!startTime || !endTime) return 0;
-    
-    const [startH, startM] = startTime.split(':').map(Number);
-    const [endH, endM] = endTime.split(':').map(Number);
-    
-    const startMinutes = startH * 60 + startM;
-    let endMinutes = endH * 60 + endM;
-    
-    // Handle overnight shifts
-    if (endMinutes < startMinutes) {
-      endMinutes += 24 * 60;
-    }
-    
-    return (endMinutes - startMinutes) / 60;
-  };
-
-  const addManualEntry = () => {
-    setManualEntries([
-      ...manualEntries,
-      {
-        id: `temp-${Date.now()}`,
-        worker_id: selectedWorker || workers[0]?.id || '',
-        date: new Date().toISOString().split('T')[0],
-        start_time: '',
-        end_time: '',
-      },
-    ]);
-  };
-
-  const updateManualEntry = (id: string, field: string, value: any) => {
-    setManualEntries(manualEntries.map(entry => 
-      entry.id === id ? { ...entry, [field]: value } : entry
-    ));
-  };
-
-  const removeManualEntry = (id: string) => {
-    setManualEntries(manualEntries.filter(entry => entry.id !== id));
-  };
-
-  const calculateTotalHours = (entries: typeof manualEntries, workerId?: string) => {
-    const filtered = workerId ? entries.filter(e => e.worker_id === workerId) : entries;
-    return filtered.reduce((sum, e) => sum + calculateHoursFromTimes(e.start_time, e.end_time), 0);
-  };
-
-  const calculateWeekHours = (entries: typeof manualEntries, workerId?: string) => {
-    const filtered = workerId ? entries.filter(e => e.worker_id === workerId) : entries;
-    
-    // Group by week
-    const weekGroups: { [key: string]: typeof manualEntries } = {};
-    filtered.forEach(entry => {
-      const date = new Date(entry.date);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay() + 1); // Monday
-      const weekKey = weekStart.toISOString().split('T')[0];
-      
-      if (!weekGroups[weekKey]) weekGroups[weekKey] = [];
-      weekGroups[weekKey].push(entry);
-    });
-    
-    return Object.entries(weekGroups).map(([weekStart, weekEntries]) => ({
-      weekStart,
-      hours: weekEntries.reduce((sum, e) => sum + calculateHoursFromTimes(e.start_time, e.end_time), 0),
-    }));
-  };
-
-  const calculateTotalDays = (entries: typeof manualEntries, workerId?: string) => {
-    const filtered = workerId ? entries.filter(e => e.worker_id === workerId) : entries;
-    return filtered.length;
-  };
-
-  const loadSavedTimeEntries = async () => {
-    try {
-      console.log('Loading entries for month:', viewEntriesMonth.toISOString().split('T')[0]);
-
-      const startDate = new Date(viewEntriesMonth.getFullYear(), viewEntriesMonth.getMonth(), 1);
-      const endDate = new Date(viewEntriesMonth.getFullYear(), viewEntriesMonth.getMonth() + 1, 0);
-
-      // Try to load from manual_time_entries first
-      let manualQuery = supabase
-        .from('manual_time_entries')
-        .select(`
-          *,
-          worker:users!worker_id(full_name)
-        `)
-        .gte('entry_date', startDate.toISOString().split('T')[0])
-        .lte('entry_date', endDate.toISOString().split('T')[0]);
-
-      const { data: manualData, error: manualError } = await manualQuery.order('entry_date', { ascending: false });
-
-      if (!manualError && manualData && manualData.length > 0) {
-        console.log('Loaded from manual_time_entries:', manualData);
-        setSavedTimeEntries(manualData);
-        return;
-      }
-
-      // Fallback: Load from worker_schedules if manual_time_entries doesn't exist or is empty
-      let scheduleQuery = supabase
-        .from('worker_schedules')
-        .select(`
-          id,
-          worker_id,
-          date,
-          shift_start,
-          shift_end,
-          notes,
-          users!worker_id(full_name)
-        `)
-        .gte('date', startDate.toISOString().split('T')[0])
-        .lte('date', endDate.toISOString().split('T')[0])
-        .eq('schedule_type', 'work');
-
-      // Filter by location if specified
-      if (workLocation) {
-        scheduleQuery = scheduleQuery.eq('work_location', workLocation);
-      }
-
-      const { data: scheduleData, error: scheduleError } = await scheduleQuery.order('date', { ascending: false });
-
-      if (scheduleError) throw scheduleError;
-
-      console.log('Raw schedule data:', scheduleData);
-
-      // Transform worker_schedules data to match manual_time_entries format
-      const transformedData = (scheduleData || []).map(schedule => {
-        const hours = calculateHoursFromTimes(schedule.shift_start, schedule.shift_end);
-        
-        // Handle the worker data - it might be nested differently
-        let workerName = 'Unknown';
-        if (schedule.users) {
-          if (typeof schedule.users === 'object' && schedule.users.full_name) {
-            workerName = schedule.users.full_name;
-          } else if (Array.isArray(schedule.users) && schedule.users[0]?.full_name) {
-            workerName = schedule.users[0].full_name;
-          }
-        }
-        
-        return {
-          id: schedule.id,
-          worker_id: schedule.worker_id,
-          entry_date: schedule.date,
-          start_time: schedule.shift_start,
-          end_time: schedule.shift_end,
-          hours_worked: Math.abs(hours), // Ensure positive hours
-          notes: schedule.notes || '',
-          worker: { full_name: workerName },
-        };
-      });
-
-      console.log('Transformed entries:', transformedData);
-      setSavedTimeEntries(transformedData);
-    } catch (error: any) {
-      console.error('Error loading time entries:', error);
-      setSavedTimeEntries([]);
-    }
-  };
-
-  const saveManualEntries = async () => {
-    if (manualEntries.length === 0) {
-      alert('Pridėkite bent vieną įrašą');
-      return;
-    }
-
-    // Validate all entries have times
-    const invalidEntries = manualEntries.filter(e => !e.start_time || !e.end_time);
-    if (invalidEntries.length > 0) {
-      alert('Prašome užpildyti visus pradžios ir pabaigos laikus');
-      return;
-    }
-
-    try {
-      // Insert into worker_schedules for calendar display
-      const schedulesToInsert = manualEntries.map(entry => ({
-        worker_id: entry.worker_id,
-        date: entry.date,
-        shift_start: entry.start_time,
-        shift_end: entry.end_time,
-        schedule_type: 'work',
-        notes: `${calculateHoursFromTimes(entry.start_time, entry.end_time).toFixed(2)}h`,
-        work_location: workLocation || null,
-      }));
-
-      const { error: scheduleError } = await supabase
-        .from('worker_schedules')
-        .insert(schedulesToInsert);
-
-      if (scheduleError) throw scheduleError;
-
-      // Also insert into manual_time_entries for future worker access
-      const timeEntriesToInsert = manualEntries.map(entry => ({
-        worker_id: entry.worker_id,
-        entry_date: entry.date,
-        start_time: entry.start_time,
-        end_time: entry.end_time,
-        notes: `Įvesta iš lapų`,
-      }));
-
-      const { error: timeError } = await supabase
-        .from('manual_time_entries')
-        .insert(timeEntriesToInsert);
-
-      if (timeError) {
-        console.error('⚠️ Warning: Could not save to manual_time_entries:', timeError);
-        console.error('⚠️ Make sure you run the migration: 20260218_create_manual_time_entries.sql');
-        // Don't fail the whole operation if this table doesn't exist yet
-      } else {
-        console.log('✅ Successfully saved to manual_time_entries');
-      }
-
-      await logAction('create_manual_schedules', 'worker_schedules', null, null, {
-        count: schedulesToInsert.length,
-        month: selectedMonth.toISOString(),
-      });
-
-      alert('Grafikai sėkmingai išsaugoti!');
-      setShowManualEntryModal(false);
-      setManualEntries([]);
-      loadData();
-      
-      // Reload time entries if we're in view mode
-      if (viewMode === 'view-entries') {
-        loadSavedTimeEntries();
-      }
-    } catch (error: any) {
-      console.error('Error:', error);
-      alert(`Klaida: ${error.message}`);
-    }
-  };
-
   const dates = getWeekDates();
 
   return (
@@ -613,211 +351,33 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
             <Calendar className="w-6 h-6 text-slate-600" />
             <h3 className="text-xl font-bold text-gray-800">Darbuotojų grafikai</h3>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
             <button
-              onClick={() => setShowManualEntryModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+              onClick={() => setViewMode('single')}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                viewMode === 'single'
+                  ? 'bg-white text-slate-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
             >
-              <FileText className="w-4 h-4" />
-              Surašyti iš lapų
+              <User className="w-4 h-4" />
+              <span className="text-sm font-medium">Vienas</span>
             </button>
-            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('single')}
-                className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                  viewMode === 'single'
-                    ? 'bg-white text-slate-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <User className="w-4 h-4" />
-                <span className="text-sm font-medium">Vienas</span>
-              </button>
-              <button
-                onClick={() => setViewMode('multi')}
-                className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                  viewMode === 'multi'
-                    ? 'bg-white text-slate-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                <span className="text-sm font-medium">Visi</span>
-              </button>
-              <button
-                onClick={() => setViewMode('view-entries')}
-                className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-                  viewMode === 'view-entries'
-                    ? 'bg-white text-slate-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span className="text-sm font-medium">Peržiūra</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setViewMode('multi')}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                viewMode === 'multi'
+                  ? 'bg-white text-slate-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span className="text-sm font-medium">Visi</span>
+            </button>
           </div>
         </div>
 
-        {viewMode === 'view-entries' ? (
-          // View Saved Time Entries - Grouped by Worker
-          <div>
-            {/* Month Filter */}
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700">Mėnuo:</label>
-                <input
-                  type="month"
-                  value={`${viewEntriesMonth.getFullYear()}-${String(viewEntriesMonth.getMonth() + 1).padStart(2, '0')}`}
-                  onChange={(e) => {
-                    const [year, month] = e.target.value.split('-');
-                    setViewEntriesMonth(new Date(parseInt(year), parseInt(month) - 1, 1));
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-base"
-                />
-              </div>
-              <div className="text-sm text-gray-600">
-                Viso valandų: <span className="font-bold text-blue-900 text-lg">
-                  {savedTimeEntries.reduce((sum, e) => sum + (e.hours_worked || 0), 0).toFixed(1)}h
-                </span>
-              </div>
-            </div>
-
-            {/* Workers List */}
-            {savedTimeEntries.length === 0 ? (
-              <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Nėra įrašų šiam mėnesiui</p>
-                <p className="text-sm text-gray-500 mt-2">Naudokite "Surašyti iš lapų" norėdami pridėti įrašus</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Group entries by worker */}
-                {Array.from(new Set(savedTimeEntries.map(e => e.worker_id))).map(workerId => {
-                  const allWorkerEntries = savedTimeEntries.filter(e => e.worker_id === workerId);
-                  const workerName = allWorkerEntries[0]?.worker?.full_name || 'Unknown';
-                  const isExpanded = expandedWorker === workerId;
-                  
-                  // Get the filter month for this worker (default to main month)
-                  const filterMonth = workerDetailMonth[workerId] || viewEntriesMonth;
-                  
-                  // Filter entries by the selected month for this worker
-                  const workerEntries = allWorkerEntries.filter(e => {
-                    const entryDate = new Date(e.entry_date);
-                    return entryDate.getMonth() === filterMonth.getMonth() && 
-                           entryDate.getFullYear() === filterMonth.getFullYear();
-                  });
-                  
-                  const totalHours = workerEntries.reduce((sum, e) => sum + (e.hours_worked || 0), 0);
-                  const totalDays = workerEntries.length;
-
-                  return (
-                    <div key={workerId} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      {/* Worker Header - Clickable */}
-                      <button
-                        onClick={() => setExpandedWorker(isExpanded ? null : workerId)}
-                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div className="text-left">
-                            <h4 className="font-bold text-gray-900 text-lg">{workerName}</h4>
-                            <p className="text-sm text-gray-600">
-                              {totalDays} {totalDays === 1 ? 'diena' : totalDays < 10 ? 'dienos' : 'dienų'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-blue-900">{totalHours.toFixed(1)}h</div>
-                            <div className="text-xs text-gray-500">viso valandų</div>
-                          </div>
-                          <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                        </div>
-                      </button>
-
-                      {/* Expanded Details */}
-                      {isExpanded && (
-                        <div className="border-t border-gray-200 bg-gray-50">
-                          {/* Month Filter for this worker */}
-                          <div className="px-6 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <label className="text-sm font-medium text-gray-700">Filtruoti mėnesį:</label>
-                              <input
-                                type="month"
-                                value={`${filterMonth.getFullYear()}-${String(filterMonth.getMonth() + 1).padStart(2, '0')}`}
-                                onChange={(e) => {
-                                  const [year, month] = e.target.value.split('-');
-                                  setWorkerDetailMonth({
-                                    ...workerDetailMonth,
-                                    [workerId]: new Date(parseInt(year), parseInt(month) - 1, 1),
-                                  });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-sm"
-                              />
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              Rodoma: <span className="font-bold text-blue-900">{totalHours.toFixed(1)}h</span> / {totalDays} d.
-                            </div>
-                          </div>
-
-                          <table className="w-full">
-                            <thead>
-                              <tr className="bg-gray-100 border-b border-gray-200">
-                                <th className="px-6 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
-                                <th className="px-6 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Pradžia</th>
-                                <th className="px-6 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Pabaiga</th>
-                                <th className="px-6 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Valandos</th>
-                                <th className="px-6 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Pastabos</th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white">
-                              {workerEntries.map((entry) => {
-                                const date = new Date(entry.entry_date);
-                                const dayName = date.toLocaleDateString('lt-LT', { weekday: 'short' });
-                                
-                                return (
-                                  <tr key={entry.id} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
-                                    <td className="px-6 py-3 whitespace-nowrap">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-500 uppercase font-medium">{dayName}</span>
-                                        <span className="text-sm text-gray-900">
-                                          {date.toLocaleDateString('lt-LT', { month: 'short', day: 'numeric' })}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-6 py-3 whitespace-nowrap">
-                                      <span className="text-sm text-gray-700 font-mono">{entry.start_time}</span>
-                                    </td>
-                                    <td className="px-6 py-3 whitespace-nowrap">
-                                      <span className="text-sm text-gray-700 font-mono">{entry.end_time}</span>
-                                    </td>
-                                    <td className="px-6 py-3 whitespace-nowrap">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-green-100 text-green-800">
-                                        {entry.hours_worked.toFixed(1)}h
-                                      </span>
-                                    </td>
-                                    <td className="px-6 py-3">
-                                      <span className="text-sm text-gray-600">{entry.notes || '-'}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
+        <>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           {viewMode === 'single' ? (
             <div>
@@ -1470,7 +1030,6 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
           </div>
         )}
         </>
-        )}
       </div>
 
       {showEditModal && editingSchedule && (
@@ -1613,236 +1172,6 @@ export function WorkerSchedules({ workLocation }: WorkerSchedulesProps = {}) {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Manual Entry Modal */}
-      {showManualEntryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white z-10">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Surašyti iš lapų</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Įveskite darbuotojų darbo valandas pagal popierinių lapų duomenis
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowManualEntryModal(false);
-                    setManualEntries([]);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-gray-600" />
-                </button>
-              </div>
-
-              {/* Month Selector */}
-              <div className="mt-4 flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700">Mėnuo:</label>
-                <input
-                  type="month"
-                  value={`${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`}
-                  onChange={(e) => {
-                    const [year, month] = e.target.value.split('-');
-                    setSelectedMonth(new Date(parseInt(year), parseInt(month) - 1, 1));
-                  }}
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-            </div>
-
-            <div className="p-6">
-              {/* Add Entry Button */}
-              <button
-                onClick={addManualEntry}
-                className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Pridėti įrašą
-              </button>
-
-              {/* Entries List */}
-              {manualEntries.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">Pradėkite įvesti darbuotojų darbo laiką</p>
-                  <p className="text-sm text-gray-500 mt-2">Spauskite "Pridėti įrašą" ir įveskite pradžios bei pabaigos laiką</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {manualEntries.map((entry, index) => {
-                    const worker = workers.find(w => w.id === entry.worker_id);
-                    const hours = calculateHoursFromTimes(entry.start_time, entry.end_time);
-                    
-                    return (
-                      <div key={entry.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-center gap-3">
-                          {/* Entry Number */}
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-semibold text-sm">
-                            {index + 1}
-                          </div>
-
-                          {/* Worker */}
-                          <div className="flex-1 min-w-[180px]">
-                            <select
-                              value={entry.worker_id}
-                              onChange={(e) => updateManualEntry(entry.id, 'worker_id', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                            >
-                              {workers.map(w => (
-                                <option key={w.id} value={w.id}>{w.full_name}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Date */}
-                          <div className="flex-shrink-0">
-                            <input
-                              type="date"
-                              value={entry.date}
-                              onChange={(e) => updateManualEntry(entry.id, 'date', e.target.value)}
-                              className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-
-                          {/* Start Time */}
-                          <div className="flex-shrink-0">
-                            <input
-                              type="time"
-                              value={entry.start_time}
-                              onChange={(e) => updateManualEntry(entry.id, 'start_time', e.target.value)}
-                              className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                              placeholder="08:00"
-                            />
-                          </div>
-
-                          <span className="text-gray-400">→</span>
-
-                          {/* End Time */}
-                          <div className="flex-shrink-0">
-                            <input
-                              type="time"
-                              value={entry.end_time}
-                              onChange={(e) => updateManualEntry(entry.id, 'end_time', e.target.value)}
-                              className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                              placeholder="17:00"
-                            />
-                          </div>
-
-                          {/* Calculated Hours */}
-                          <div className="flex-shrink-0 w-20 text-center">
-                            <div className={`px-3 py-2 rounded text-sm font-bold ${
-                              hours < 0 
-                                ? 'bg-red-50 border border-red-200 text-red-900' 
-                                : 'bg-green-50 border border-green-200 text-green-900'
-                            }`}>
-                              {hours !== 0 ? `${Math.abs(hours).toFixed(1)}h` : '-'}
-                              {hours < 0 && <span className="block text-xs">⚠️ Klaidinga</span>}
-                            </div>
-                          </div>
-
-                          {/* Delete */}
-                          <button
-                            onClick={() => removeManualEntry(entry.id)}
-                            className="flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Ištrinti"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Summary Statistics */}
-              {manualEntries.length > 0 && (
-                <div className="mt-6 space-y-4">
-                  {/* Per Worker Summary */}
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-5">
-                    <h4 className="font-bold text-blue-900 mb-4 text-lg">Pagal darbuotoją</h4>
-                    <div className="space-y-3">
-                      {Array.from(new Set(manualEntries.map(e => e.worker_id))).map(workerId => {
-                        const worker = workers.find(w => w.id === workerId);
-                        const totalHours = calculateTotalHours(manualEntries, workerId);
-                        const totalDays = calculateTotalDays(manualEntries, workerId);
-                        const weekHours = calculateWeekHours(manualEntries, workerId);
-                        
-                        return (
-                          <div key={workerId} className="bg-white rounded-lg p-4 shadow-sm">
-                            <div className="flex justify-between items-start mb-2">
-                              <span className="font-semibold text-gray-800">{worker?.full_name}</span>
-                              <div className="flex gap-4">
-                                <div className="text-right">
-                                  <div className="text-xs text-gray-500">Mėnuo</div>
-                                  <div className="text-lg font-bold text-blue-900">{totalHours.toFixed(1)}h</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-xs text-gray-500">Dienų</div>
-                                  <div className="text-lg font-bold text-green-900">{totalDays}</div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Weekly breakdown */}
-                            {weekHours.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-gray-200">
-                                <div className="text-xs text-gray-600 mb-1">Savaitės:</div>
-                                <div className="flex flex-wrap gap-2">
-                                  {weekHours.map((week, idx) => (
-                                    <div key={week.weekStart} className="bg-blue-50 px-2 py-1 rounded text-xs">
-                                      <span className="text-gray-600">S{idx + 1}:</span>{' '}
-                                      <span className="font-semibold text-blue-900">{week.hours.toFixed(1)}h</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Overall Totals */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
-                      <div className="text-sm opacity-90 mb-1">Viso per mėnesį</div>
-                      <div className="text-4xl font-bold">{calculateTotalHours(manualEntries).toFixed(1)}h</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
-                      <div className="text-sm opacity-90 mb-1">Viso darbo dienų</div>
-                      <div className="text-4xl font-bold">{calculateTotalDays(manualEntries)}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-6 border-t bg-gray-50 flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setShowManualEntryModal(false);
-                  setManualEntries([]);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-white transition-colors"
-              >
-                Atšaukti
-              </button>
-              <button
-                onClick={saveManualEntries}
-                disabled={manualEntries.length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-semibold"
-              >
-                Išsaugoti grafikus ({manualEntries.length})
-              </button>
-            </div>
           </div>
         </div>
       )}
