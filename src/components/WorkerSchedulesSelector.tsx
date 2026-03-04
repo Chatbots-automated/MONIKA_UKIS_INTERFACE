@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Users, Tractor, Warehouse, FileText, Calendar } from 'lucide-react';
 import { WorkerSchedulesModule } from './WorkerSchedulesModule';
 
@@ -9,8 +9,47 @@ interface WorkerSchedulesSelectorProps {
 type SubModule = 'manual' | 'calendar' | null;
 
 export function WorkerSchedulesSelector({ onBack }: WorkerSchedulesSelectorProps) {
-  const [selectedLocation, setSelectedLocation] = useState<'farm' | 'warehouse' | null>(null);
-  const [selectedSubModule, setSelectedSubModule] = useState<SubModule>(null);
+  const [selectedLocation, setSelectedLocation] = useState<'farm' | 'warehouse' | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const location = params.get('location');
+    return (location as 'farm' | 'warehouse') || null;
+  });
+  const [selectedSubModule, setSelectedSubModule] = useState<SubModule>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const submodule = params.get('submodule');
+    return (submodule as SubModule) || null;
+  });
+
+  // Update URL when location or submodule changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (selectedLocation) {
+      params.set('location', selectedLocation);
+    } else {
+      params.delete('location');
+    }
+    if (selectedSubModule) {
+      params.set('submodule', selectedSubModule);
+    } else {
+      params.delete('submodule');
+    }
+    const newUrl = `?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [selectedLocation, selectedSubModule]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const location = params.get('location');
+      const submodule = params.get('submodule');
+      setSelectedLocation((location as 'farm' | 'warehouse') || null);
+      setSelectedSubModule((submodule as SubModule) || null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // When sub-module is selected (manual entry), show the module
   if (selectedLocation && selectedSubModule === 'manual') {

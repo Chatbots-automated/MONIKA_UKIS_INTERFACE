@@ -1,14 +1,42 @@
 import { ArrowLeft, Tractor, Warehouse } from 'lucide-react';
 import { FarmEquipmentModule } from './FarmEquipmentModule';
 import { EquipmentYardModule } from './EquipmentYardModule';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface TechnikaSelectorProps {
   onBackToModules: () => void;
 }
 
 export function TechnikaSelector({ onBackToModules }: TechnikaSelectorProps) {
-  const [selectedModule, setSelectedModule] = useState<'farm' | 'yard' | null>(null);
+  const [selectedModule, setSelectedModule] = useState<'farm' | 'yard' | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const submodule = params.get('submodule');
+    return (submodule as 'farm' | 'yard') || null;
+  });
+
+  // Update URL when submodule changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (selectedModule) {
+      params.set('submodule', selectedModule);
+    } else {
+      params.delete('submodule');
+    }
+    const newUrl = `?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [selectedModule]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const submodule = params.get('submodule');
+      setSelectedModule((submodule as 'farm' | 'yard') || null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   if (selectedModule === 'farm') {
     return <FarmEquipmentModule onBack={() => setSelectedModule(null)} />;

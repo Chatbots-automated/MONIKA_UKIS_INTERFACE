@@ -56,7 +56,11 @@ interface TechnikaReportsProps {
 }
 
 export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    return (tab as any) || 'overview';
+  });
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
@@ -114,11 +118,35 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
   // Cost center data
   const [costCenterSummary, setCostCenterSummary] = useState<any[]>([]);
   const [expandedCostCenter, setExpandedCostCenter] = useState<string | null>(null);
+  const [costCenterDetails, setCostCenterDetails] = useState<any[]>([]);
+  const [loadingCostCenterDetails, setLoadingCostCenterDetails] = useState(false);
   const [costCenterStats, setCostCenterStats] = useState({
     totalCost: 0,
     totalCenters: 0,
     totalAssignments: 0,
   });
+
+  // Update URL when tab changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', activeTab);
+    const newUrl = `?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [activeTab]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab) {
+        setActiveTab(tab as any);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     loadCategories();
@@ -191,6 +219,36 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
       }
     } catch (error) {
       console.error('Error loading cost center data:', error);
+    }
+  };
+
+  const loadCostCenterDetails = async (costCenterId: string) => {
+    setLoadingCostCenterDetails(true);
+    try {
+      const { data, error } = await supabase
+        .from('cost_center_parts_usage')
+        .select('*')
+        .eq('cost_center_id', costCenterId)
+        .order('assigned_at', { ascending: false });
+
+      if (error) throw error;
+
+      setCostCenterDetails(data || []);
+    } catch (error) {
+      console.error('Error loading cost center details:', error);
+      setCostCenterDetails([]);
+    } finally {
+      setLoadingCostCenterDetails(false);
+    }
+  };
+
+  const handleToggleCostCenterDetails = async (costCenterId: string) => {
+    if (expandedCostCenter === costCenterId) {
+      setExpandedCostCenter(null);
+      setCostCenterDetails([]);
+    } else {
+      setExpandedCostCenter(costCenterId);
+      await loadCostCenterDetails(costCenterId);
     }
   };
 
@@ -1709,43 +1767,142 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-center">
                               <button
-                                onClick={() =>
-                                  setExpandedCostCenter(
-                                    expandedCostCenter === cc.cost_center_id ? null : cc.cost_center_id
-                                  )
-                                }
-                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                onClick={() => handleToggleCostCenterDetails(cc.cost_center_id)}
+                                className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                               >
-                                {expandedCostCenter === cc.cost_center_id ? 'Slėpti' : 'Rodyti detales'}
+                                {expandedCostCenter === cc.cost_center_id ? (
+                                  <>
+                                    <ChevronDown className="w-4 h-4" />
+                                    Slėpti detales
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronRight className="w-4 h-4" />
+                                    Rodyti detales
+                                  </>
+                                )}
                               </button>
                             </td>
                           </tr>
                           {expandedCostCenter === cc.cost_center_id && (
                             <tr>
-                              <td colSpan={5} className="px-6 py-4 bg-gray-50">
-                                <div className="space-y-2">
-                                  <div className="text-sm">
-                                    <span className="font-medium text-gray-700">Pirmas priskyrimas:</span>{' '}
-                                    <span className="text-gray-600">
-                                      {cc.first_assignment_date
-                                        ? new Date(cc.first_assignment_date).toLocaleDateString('lt-LT')
-                                        : '-'}
-                                    </span>
+                              <td colSpan={5} className="px-6 py-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+                                {loadingCostCenterDetails ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                   </div>
-                                  <div className="text-sm">
-                                    <span className="font-medium text-gray-700">Paskutinis priskyrimas:</span>{' '}
-                                    <span className="text-gray-600">
-                                      {cc.last_assignment_date
-                                        ? new Date(cc.last_assignment_date).toLocaleDateString('lt-LT')
-                                        : '-'}
-                                    </span>
+                                ) : costCenterDetails.length === 0 ? (
+                                  <div className="text-center py-8 text-gray-500">
+                                    <Package className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                                    <p>Nėra priskirtų produktų</p>
                                   </div>
-                                  {cc.parent_id && (
-                                    <div className="text-sm">
-                                      <span className="font-medium text-gray-700">Turi tėvinį kaštų centrą</span>
+                                ) : (
+                                  <div className="space-y-3">
+                                    {/* Summary Header - Compact */}
+                                    <div className="bg-white rounded-lg border border-blue-200 p-3">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-4">
+                                          <div>
+                                            <span className="text-gray-500">Įrašų:</span>
+                                            <span className="ml-1 font-semibold text-gray-900">{costCenterDetails.length}</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">Pirmas:</span>
+                                            <span className="ml-1 font-medium text-gray-900">
+                                              {cc.first_assignment_date
+                                                ? new Date(cc.first_assignment_date).toLocaleDateString('lt-LT')
+                                                : '-'}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">Paskutinis:</span>
+                                            <span className="ml-1 font-medium text-gray-900">
+                                              {cc.last_assignment_date
+                                                ? new Date(cc.last_assignment_date).toLocaleDateString('lt-LT')
+                                                : '-'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-sm font-bold text-green-700">
+                                            {parseFloat(cc.total_cost || 0).toFixed(2)} EUR
+                                          </p>
+                                        </div>
+                                      </div>
                                     </div>
-                                  )}
-                                </div>
+
+                                    {/* Detailed Items List - Compact Table */}
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                      <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                          <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Produktas</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sąskaita</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tiekėjas</th>
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Kiekis</th>
+                                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Kaina</th>
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Data</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Priskyrė</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                          {costCenterDetails.map((item, idx) => (
+                                            <tr key={item.item_id || idx} className="hover:bg-gray-50">
+                                              <td className="px-3 py-2 text-xs text-gray-500 font-medium">
+                                                {idx + 1}
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <div>
+                                                  <p className="text-sm font-medium text-gray-900">
+                                                    {item.product_name || item.item_description || 'Produktas'}
+                                                  </p>
+                                                  <div className="flex items-center gap-1 mt-0.5">
+                                                    {item.product_code && (
+                                                      <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                                                        {item.product_code}
+                                                      </span>
+                                                    )}
+                                                    {item.category_name && (
+                                                      <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
+                                                        {item.category_name}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </td>
+                                              <td className="px-3 py-2 text-sm text-gray-900">
+                                                {item.invoice_number || '-'}
+                                              </td>
+                                              <td className="px-3 py-2 text-sm text-gray-700">
+                                                {item.supplier_name || '-'}
+                                              </td>
+                                              <td className="px-3 py-2 text-center text-sm text-gray-900">
+                                                {item.quantity} {item.unit_type}
+                                              </td>
+                                              <td className="px-3 py-2 text-right">
+                                                <p className="text-sm font-bold text-green-700">
+                                                  {parseFloat(item.total_price || 0).toFixed(2)} EUR
+                                                </p>
+                                                <p className="text-xs text-gray-400">
+                                                  @ {parseFloat(item.unit_price || 0).toFixed(2)}
+                                                </p>
+                                              </td>
+                                              <td className="px-3 py-2 text-center text-xs text-gray-600">
+                                                {item.invoice_date
+                                                  ? new Date(item.invoice_date).toLocaleDateString('lt-LT')
+                                                  : '-'}
+                                              </td>
+                                              <td className="px-3 py-2 text-sm text-gray-700">
+                                                {item.assigned_by_name || '-'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           )}

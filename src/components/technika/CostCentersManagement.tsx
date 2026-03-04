@@ -144,6 +144,18 @@ export function CostCentersManagement() {
         }
       });
 
+      // Sort children within each parent
+      const sortChildren = (parent: CostCenterSummary) => {
+        if (parent.children && parent.children.length > 0) {
+          parent.children.sort((a, b) => a.name.localeCompare(b.name));
+          parent.children.forEach(child => sortChildren(child));
+        }
+      };
+
+      // Sort root centers and their children
+      rootCenters.sort((a, b) => a.name.localeCompare(b.name));
+      rootCenters.forEach(root => sortChildren(root));
+
       setCostCenters(rootCenters);
     }
     setLoading(false);
@@ -472,21 +484,33 @@ export function CostCentersManagement() {
           {costCenters.map((center) => (
             <div key={center.id}>
               {/* Parent Cost Center */}
-              <div className="bg-white rounded-lg border-2 border-gray-300 p-5">
+              <div className="bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-300 p-5 shadow-sm">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <div
-                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        className="w-4 h-4 rounded-full flex-shrink-0 ring-2 ring-gray-300"
                         style={{ backgroundColor: center.color }}
                       />
                       <h3 className="text-lg font-semibold text-gray-900">
                         {center.name}
                       </h3>
                       {center.children && center.children.length > 0 && (
-                        <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                          {center.children.length} subcentr{center.children.length === 1 ? 'as' : 'ai'}
-                        </span>
+                        <>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                            {center.children.length} subcentr{center.children.length === 1 ? 'as' : 'ai'}
+                          </span>
+                          {(() => {
+                            const grandchildCount = center.children.reduce((sum, child) => 
+                              sum + (child.children?.length || 0), 0
+                            );
+                            return grandchildCount > 0 && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
+                                {grandchildCount} sub-subcentr{grandchildCount === 1 ? 'as' : 'ai'}
+                              </span>
+                            );
+                          })()}
+                        </>
                       )}
                     </div>
                     {center.description && (
@@ -526,7 +550,10 @@ export function CostCentersManagement() {
 
                 {/* Child Cost Centers - Inside parent */}
                 {center.children && center.children.length > 0 && (
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-2 mb-4 pl-4 border-l-4 border-blue-200">
+                    <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">
+                      Subcentrai ({center.children.length})
+                    </h4>
                     {center.children.map((child) => (
                       <div 
                         key={child.id} 
@@ -671,7 +698,10 @@ export function CostCentersManagement() {
 
                         {/* Grandchildren (3rd level) */}
                         {child.children && child.children.length > 0 && (
-                          <div className="mt-3 ml-5 space-y-2">
+                          <div className="mt-3 ml-5 space-y-2 pl-3 border-l-2 border-green-200">
+                            <h5 className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
+                              Sub-subcentrai ({child.children.length})
+                            </h5>
                             {child.children.map((grandchild) => (
                               <div 
                                 key={grandchild.id} 

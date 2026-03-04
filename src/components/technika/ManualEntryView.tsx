@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { FileText, Clock, User, Copy, Trash2, AlertTriangle, BarChart3, Edit2, Save, X } from 'lucide-react';
+import { FileText, Clock, User, Copy, Trash2, AlertTriangle, BarChart3, Edit2, Save, X, Plus, Settings } from 'lucide-react';
 
 interface Worker {
   id: string;
@@ -13,6 +13,19 @@ interface DayEntry {
   date: string;
   start_time: string;
   end_time: string;
+  worker_type: 'darbuotojas' | 'vairuotojas' | 'traktorininkas';
+  lunch_type: 'none' | 'half' | 'full';
+  work_description: string;
+  measurement_value: string;
+  measurement_unit_id: string;
+}
+
+interface MeasurementUnit {
+  id: string;
+  worker_type: string;
+  unit_name: string;
+  unit_abbreviation: string;
+  work_location: string;
 }
 
 interface SavedEntry {
@@ -23,7 +36,13 @@ interface SavedEntry {
   end_time: string;
   hours_worked: number;
   notes: string;
+  worker_type: string;
+  lunch_type: string;
+  work_description: string;
+  measurement_value: number;
+  measurement_unit_id: string;
   worker?: { full_name: string };
+  measurement_unit?: { unit_name: string; unit_abbreviation: string };
 }
 
 interface ManualEntryViewProps {
@@ -51,14 +70,23 @@ function normalizeTimeToHHMM(value: string): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function calculateHours(startTime: string, endTime: string): number {
+function calculateHours(startTime: string, endTime: string, lunchType: 'none' | 'half' | 'full' = 'full'): number {
   if (!startTime || !endTime) return 0;
   const [startH, startM] = startTime.split(':').map(Number);
   const [endH, endM] = endTime.split(':').map(Number);
   let startMinutes = startH * 60 + startM;
   let endMinutes = endH * 60 + endM;
   if (endMinutes < startMinutes) endMinutes += 24 * 60;
-  return (endMinutes - startMinutes) / 60;
+  let hours = (endMinutes - startMinutes) / 60;
+  
+  // Apply lunch deduction
+  if (lunchType === 'full') {
+    hours = Math.max(0, hours - 1);
+  } else if (lunchType === 'half') {
+    hours = Math.max(0, hours - 0.5);
+  }
+  
+  return hours;
 }
 
 function getDaysInMonth(year: number, month: number): DayEntry[] {
@@ -66,7 +94,16 @@ function getDaysInMonth(year: number, month: number): DayEntry[] {
   const lastDay = new Date(year, month + 1, 0).getDate();
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    days.push({ date: dateStr, start_time: '', end_time: '' });
+    days.push({ 
+      date: dateStr, 
+      start_time: '', 
+      end_time: '',
+      worker_type: 'darbuotojas',
+      lunch_type: 'full',
+      work_description: '',
+      measurement_value: '',
+      measurement_unit_id: ''
+    });
   }
   return days;
 }
@@ -74,7 +111,11 @@ function getDaysInMonth(year: number, month: number): DayEntry[] {
 export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const { logAction } = useAuth();
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [activeTab, setActiveTab] = useState<'ivesti' | 'perziura'>('ivesti');
+  const [activeTab, setActiveTab] = useState<'ivesti' | 'perziura' | 'vienetai'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const entrytab = params.get('entrytab');
+    return (entrytab as 'ivesti' | 'perziura' | 'vienetai') || 'ivesti';
+  });
 
   // Įvesti tab state
   const [selectedWorker, setSelectedWorker] = useState<string>('');
@@ -85,6 +126,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [bulkStartTime, setBulkStartTime] = useState('');
   const [bulkEndTime, setBulkEndTime] = useState('');
   const [showBulkFill, setShowBulkFill] = useState(false);
+  const [bulkWorkerType, setBulkWorkerType] = useState<'darbuotojas' | 'vairuotojas' | 'traktorininkas'>('darbuotojas');
+  const [bulkLunchType, setBulkLunchType] = useState<'none' | 'half' | 'full'>('full');
 
   // Peržiūra tab state
   const [viewWorker, setViewWorker] = useState<string>('');
@@ -93,8 +136,40 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<SavedEntry | null>(null);
 
+  // Measurement units state
+  const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnit[]>([]);
+  const [newUnitName, setNewUnitName] = useState('');
+  const [newUnitAbbr, setNewUnitAbbr] = useState('');
+  const [newUnitWorkerType, setNewUnitWorkerType] = useState<'vairuotojas' | 'traktorininkas'>('vairuotojas');
+  
+  // Refs for auto-advancing inputs
+  const timeInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  // Update URL when tab changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('entrytab', activeTab);
+    const newUrl = `?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [activeTab]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const entrytab = params.get('entrytab');
+      if (entrytab) {
+        setActiveTab(entrytab as 'ivesti' | 'perziura' | 'vienetai');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   useEffect(() => {
     loadWorkers();
+    loadMeasurementUnits();
   }, [workLocation]);
 
   useEffect(() => {
@@ -114,7 +189,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let manualQuery = supabase
       .from('manual_time_entries')
-      .select('entry_date, start_time, end_time')
+      .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id')
       .eq('worker_id', selectedWorker)
       .gte('entry_date', startDate.toISOString().split('T')[0])
       .lte('entry_date', endDate.toISOString().split('T')[0]);
@@ -125,7 +200,16 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       setDayEntries(prev =>
         prev.map(d => {
           const existing = manualData.find((m: any) => m.entry_date === d.date);
-          return existing ? { ...d, start_time: existing.start_time?.slice(0, 5) || '', end_time: existing.end_time?.slice(0, 5) || '' } : d;
+          return existing ? { 
+            ...d, 
+            start_time: existing.start_time?.slice(0, 5) || '', 
+            end_time: existing.end_time?.slice(0, 5) || '',
+            worker_type: existing.worker_type || 'darbuotojas',
+            lunch_type: existing.lunch_type || 'full',
+            work_description: existing.work_description || '',
+            measurement_value: existing.measurement_value?.toString() || '',
+            measurement_unit_id: existing.measurement_unit_id || ''
+          } : d;
         })
       );
       return;
@@ -177,6 +261,76 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     }
   };
 
+  const loadMeasurementUnits = async () => {
+    const query = supabase
+      .from('measurement_units')
+      .select('*')
+      .eq('is_active', true)
+      .order('worker_type')
+      .order('unit_name');
+    
+    if (workLocation) {
+      query.or(`work_location.eq.${workLocation},work_location.eq.both`);
+    }
+    
+    const { data } = await query;
+    if (data) {
+      setMeasurementUnits(data);
+    }
+  };
+
+  const addMeasurementUnit = async () => {
+    if (!newUnitName.trim() || !newUnitAbbr.trim()) {
+      alert('Įveskite vieneto pavadinimą ir santrumpą');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('measurement_units')
+        .insert({
+          work_location: workLocation || 'both',
+          worker_type: newUnitWorkerType,
+          unit_name: newUnitName.trim(),
+          unit_abbreviation: newUnitAbbr.trim(),
+        });
+
+      if (error) throw error;
+
+      await logAction('create_measurement_unit', 'measurement_units', null, null, {
+        unit_name: newUnitName,
+        worker_type: newUnitWorkerType,
+      });
+
+      setNewUnitName('');
+      setNewUnitAbbr('');
+      loadMeasurementUnits();
+      alert('Vienetas sėkmingai pridėtas!');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const deleteMeasurementUnit = async (unitId: string) => {
+    if (!confirm('Ar tikrai norite ištrinti šį vienetą?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('measurement_units')
+        .update({ is_active: false })
+        .eq('id', unitId);
+
+      if (error) throw error;
+
+      await logAction('delete_measurement_unit', 'measurement_units', unitId);
+      loadMeasurementUnits();
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
   const loadSavedEntries = async () => {
     if (!viewWorker) return;
     const startDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
@@ -184,7 +338,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let manualQuery = supabase
       .from('manual_time_entries')
-      .select(`*, worker:users!worker_id(full_name)`)
+      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
       .eq('worker_id', viewWorker)
       .gte('entry_date', startDate.toISOString().split('T')[0])
       .lte('entry_date', endDate.toISOString().split('T')[0])
@@ -237,10 +391,45 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     setSavedEntries(transformed);
   };
 
-  const updateDayEntry = (date: string, field: 'start_time' | 'end_time', value: string) => {
+  const updateDayEntry = (date: string, field: keyof DayEntry, value: string) => {
     setDayEntries(prev =>
       prev.map(d => (d.date === date ? { ...d, [field]: value } : d))
     );
+  };
+
+  const handleTimeInput = (date: string, field: 'start_time' | 'end_time', value: string) => {
+    // Remove non-digits
+    const digits = value.replace(/\D/g, '');
+    
+    // Auto-format with colon after 2 digits
+    let formatted = digits;
+    if (digits.length >= 2) {
+      formatted = digits.slice(0, 2) + ':' + digits.slice(2, 4);
+    }
+    
+    updateDayEntry(date, field, formatted);
+    
+    // Auto-advance logic
+    if (digits.length === 4) {
+      const currentIndex = dayEntries.findIndex(d => d.date === date);
+      
+      if (field === 'start_time') {
+        // Move to end_time of same day
+        const endRef = timeInputRefs.current[`${date}-end_time`];
+        if (endRef) {
+          setTimeout(() => endRef.focus(), 0);
+        }
+      } else if (field === 'end_time') {
+        // Move to start_time of next day
+        if (currentIndex < dayEntries.length - 1) {
+          const nextDate = dayEntries[currentIndex + 1].date;
+          const nextStartRef = timeInputRefs.current[`${nextDate}-start_time`];
+          if (nextStartRef) {
+            setTimeout(() => nextStartRef.focus(), 0);
+          }
+        }
+      }
+    }
   };
 
   const handleTimeBlur = (date: string, field: 'start_time' | 'end_time') => {
@@ -262,8 +451,22 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       alert('Ankstesnė diena neturi laiko įrašų');
       return;
     }
-    updateDayEntry(currentDate, 'start_time', prevDay.start_time);
-    updateDayEntry(currentDate, 'end_time', prevDay.end_time);
+    setDayEntries(prev =>
+      prev.map(d => 
+        d.date === currentDate 
+          ? {
+              ...d,
+              start_time: prevDay.start_time,
+              end_time: prevDay.end_time,
+              worker_type: prevDay.worker_type,
+              lunch_type: prevDay.lunch_type,
+              work_description: prevDay.work_description,
+              measurement_value: prevDay.measurement_value,
+              measurement_unit_id: prevDay.measurement_unit_id
+            }
+          : d
+      )
+    );
   };
 
   const applyBulkFill = () => {
@@ -282,7 +485,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         const date = new Date(d.date);
         const isWeekend = date.getDay() === 0 || date.getDay() === 6;
         if (skipWeekends && isWeekend) return d;
-        return { ...d, start_time: normalizedStart, end_time: normalizedEnd };
+        return { 
+          ...d, 
+          start_time: normalizedStart, 
+          end_time: normalizedEnd,
+          worker_type: bulkWorkerType,
+          lunch_type: bulkLunchType
+        };
       })
     );
     setShowBulkFill(false);
@@ -292,7 +501,14 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
   const clearAllTimes = () => {
     if (!confirm('Ar tikrai norite išvalyti visus laikus?')) return;
-    setDayEntries(prev => prev.map(d => ({ ...d, start_time: '', end_time: '' })));
+    setDayEntries(prev => prev.map(d => ({ 
+      ...d, 
+      start_time: '', 
+      end_time: '',
+      work_description: '',
+      measurement_value: '',
+      measurement_unit_id: ''
+    })));
   };
 
   const isUnusualHours = (hours: number): boolean => {
@@ -315,6 +531,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         .update({
           start_time: normalizedStart,
           end_time: normalizedEnd,
+          worker_type: editingEntry.worker_type,
+          lunch_type: editingEntry.lunch_type,
+          work_description: editingEntry.work_description || null,
+          measurement_value: editingEntry.measurement_value || null,
+          measurement_unit_id: editingEntry.measurement_unit_id || null,
         })
         .eq('id', editingEntry.id);
 
@@ -323,7 +544,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         .update({
           shift_start: normalizedStart,
           shift_end: normalizedEnd,
-          notes: `${calculateHours(normalizedStart, normalizedEnd).toFixed(2)}h`,
+          notes: `${calculateHours(normalizedStart, normalizedEnd, editingEntry.lunch_type as any).toFixed(2)}h`,
         })
         .eq('worker_id', editingEntry.worker_id)
         .eq('date', editingEntry.entry_date);
@@ -364,7 +585,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         shift_start: entry.start_time,
         shift_end: entry.end_time,
         schedule_type: 'work',
-        notes: `${calculateHours(entry.start_time, entry.end_time).toFixed(2)}h`,
+        notes: `${calculateHours(entry.start_time, entry.end_time, entry.lunch_type).toFixed(2)}h`,
         work_location: workLocation,
       }));
 
@@ -379,6 +600,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         entry_date: entry.date,
         start_time: entry.start_time,
         end_time: entry.end_time,
+        worker_type: entry.worker_type,
+        lunch_type: entry.lunch_type,
+        work_description: entry.work_description || null,
+        measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
+        measurement_unit_id: entry.measurement_unit_id || null,
         notes: 'Įvesta iš lapų',
       }));
 
@@ -391,7 +617,14 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       });
 
       alert('Grafikai sėkmingai išsaugoti!');
-      setDayEntries(prev => prev.map(d => ({ ...d, start_time: '', end_time: '' })));
+      setDayEntries(prev => prev.map(d => ({ 
+        ...d, 
+        start_time: '', 
+        end_time: '',
+        work_description: '',
+        measurement_value: '',
+        measurement_unit_id: ''
+      })));
       if (activeTab === 'perziura' && viewWorker === selectedWorker) {
         loadSavedEntries();
       }
@@ -404,13 +637,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   };
 
   const totalHours = dayEntries.reduce(
-    (sum, d) => sum + calculateHours(d.start_time, d.end_time),
+    (sum, d) => sum + calculateHours(d.start_time, d.end_time, d.lunch_type),
     0
   );
   const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
   const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
   const unusualDaysCount = dayEntries.filter(d => {
-    const h = calculateHours(d.start_time, d.end_time);
+    const h = calculateHours(d.start_time, d.end_time, d.lunch_type);
     return isUnusualHours(h);
   }).length;
 
@@ -440,9 +673,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           <Clock className="w-4 h-4" />
           Peržiūra
         </button>
+        <button
+          onClick={() => setActiveTab('vienetai')}
+          className={`px-4 py-2 font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+            activeTab === 'vienetai'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Matavimo vienetai
+        </button>
       </div>
 
-      {activeTab === 'ivesti' ? (
+      {activeTab === 'ivesti' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">Surašyti iš lapų</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -506,7 +750,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           {showBulkFill && (
             <div className="mb-6 p-4 bg-purple-50 border-2 border-purple-200 rounded-lg">
               <h4 className="font-semibold text-purple-900 mb-3">Užpildyti visas dienas tuo pačiu laiku</h4>
-              <div className="flex items-end gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pradžia</label>
                   <input
@@ -515,7 +759,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                     onChange={e => setBulkStartTime(e.target.value)}
                     onBlur={() => setBulkStartTime(normalizeTimeToHHMM(bulkStartTime))}
                     placeholder="08:00"
-                    className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
                   />
                 </div>
                 <div>
@@ -526,9 +770,35 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                     onChange={e => setBulkEndTime(e.target.value)}
                     onBlur={() => setBulkEndTime(normalizeTimeToHHMM(bulkEndTime))}
                     placeholder="17:00"
-                    className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 font-mono"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojo tipas</label>
+                  <select
+                    value={bulkWorkerType}
+                    onChange={e => setBulkWorkerType(e.target.value as any)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="darbuotojas">Darbuotojas</option>
+                    <option value="vairuotojas">Vairuotojas</option>
+                    <option value="traktorininkas">Traktorininkas</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pietūs</label>
+                  <select
+                    value={bulkLunchType}
+                    onChange={e => setBulkLunchType(e.target.value as any)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="none">Be pietų</option>
+                    <option value="half">Pusė pietų (30min)</option>
+                    <option value="full">Su pietumis (1h)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
                 <button
                   onClick={applyBulkFill}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -558,66 +828,131 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Data</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Pradžia</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Valandos</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700"></th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Data</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Pradžia</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Tipas</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Pietūs</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Val.</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {dayEntries.map((day, index) => {
                       const date = new Date(day.date);
                       const dayName = DAY_NAMES[date.getDay()];
-                      const hours = calculateHours(day.start_time, day.end_time);
+                      const hours = calculateHours(day.start_time, day.end_time, day.lunch_type);
                       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                       const unusual = isUnusualHours(hours);
+                      const availableUnits = measurementUnits.filter(u => u.worker_type === day.worker_type);
+                      
                       return (
                         <tr key={day.date} className={`border-b border-gray-100 hover:bg-blue-50/50 ${isWeekend ? 'bg-gray-50' : ''}`}>
-                          <td className="px-4 py-2 whitespace-nowrap">
+                          <td className="px-2 py-2 whitespace-nowrap">
                             <span className={`text-xs uppercase ${isWeekend ? 'text-gray-400' : 'text-gray-500'}`}>{dayName}</span>{' '}
                             {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-2 py-2">
                             <input
+                              ref={el => timeInputRefs.current[`${day.date}-start_time`] = el}
                               type="text"
                               value={day.start_time}
-                              onChange={e => updateDayEntry(day.date, 'start_time', e.target.value)}
+                              onChange={e => handleTimeInput(day.date, 'start_time', e.target.value)}
                               onBlur={() => handleTimeBlur(day.date, 'start_time')}
-                              placeholder="08:10"
-                              className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
-                              title="24h formatas, pvz. 08:10 arba 18:53"
+                              placeholder="0810"
+                              maxLength={5}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                              title="Įveskite 4 skaitmenis, pvz. 0810"
                             />
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-2 py-2">
                             <input
+                              ref={el => timeInputRefs.current[`${day.date}-end_time`] = el}
                               type="text"
                               value={day.end_time}
-                              onChange={e => updateDayEntry(day.date, 'end_time', e.target.value)}
+                              onChange={e => handleTimeInput(day.date, 'end_time', e.target.value)}
                               onBlur={() => handleTimeBlur(day.date, 'end_time')}
-                              placeholder="18:53"
-                              className="w-28 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
-                              title="24h formatas, pvz. 08:10 arba 18:53"
+                              placeholder="1853"
+                              maxLength={5}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                              title="Įveskite 4 skaitmenis, pvz. 1853"
                             />
                           </td>
-                          <td className="px-4 py-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-semibold ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                          <td className="px-2 py-2">
+                            <select
+                              value={day.worker_type}
+                              onChange={e => updateDayEntry(day.date, 'worker_type', e.target.value)}
+                              className="w-28 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                            >
+                              <option value="darbuotojas">Darb.</option>
+                              <option value="vairuotojas">Vair.</option>
+                              <option value="traktorininkas">Trakt.</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <select
+                              value={day.lunch_type}
+                              onChange={e => updateDayEntry(day.date, 'lunch_type', e.target.value)}
+                              className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                            >
+                              <option value="none">Be</option>
+                              <option value="half">Pusė</option>
+                              <option value="full">Pilni</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            {day.worker_type === 'darbuotojas' ? (
+                              <input
+                                type="text"
+                                value={day.work_description}
+                                onChange={e => updateDayEntry(day.date, 'work_description', e.target.value)}
+                                placeholder="Atliekamas darbas"
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                              />
+                            ) : (
+                              <div className="flex gap-1">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={day.measurement_value}
+                                  onChange={e => updateDayEntry(day.date, 'measurement_value', e.target.value)}
+                                  placeholder="0"
+                                  className="w-16 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                />
+                                <select
+                                  value={day.measurement_unit_id}
+                                  onChange={e => updateDayEntry(day.date, 'measurement_unit_id', e.target.value)}
+                                  className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                >
+                                  <option value="">Vnt.</option>
+                                  {availableUnits.map(unit => (
+                                    <option key={unit.id} value={unit.id}>
+                                      {unit.unit_abbreviation}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              <span className={`font-semibold text-xs ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
                                 {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
                               </span>
                               {unusual && (
-                                <AlertTriangle className="w-4 h-4 text-orange-500" title="Neįprastas valandų skaičius (<4h arba >12h)" />
+                                <AlertTriangle className="w-3 h-3 text-orange-500" title="Neįprastas valandų skaičius" />
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-2 py-2">
                             {index > 0 && (
                               <button
                                 onClick={() => copyFromPreviousDay(day.date)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
                                 title="Kopijuoti iš ankstesnės dienos"
                               >
-                                <Copy className="w-4 h-4" />
+                                <Copy className="w-3 h-3" />
                               </button>
                             )}
                           </td>
@@ -683,7 +1018,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'perziura' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">Peržiūra</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -725,11 +1062,14 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Data</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Pradžia</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Valandos</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700"></th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Data</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pradžia</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Tipas</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pietūs</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Val.</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -741,36 +1081,94 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                         
                         return (
                           <tr key={entry.id} className={`border-b border-gray-100 ${unusual ? 'bg-orange-50/50' : ''}`}>
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-3 py-3 whitespace-nowrap">
                               <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
                               {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
                             </td>
                             {isEditing && editingEntry ? (
                               <>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3">
                                   <input
                                     type="text"
                                     value={editingEntry.start_time}
                                     onChange={e => setEditingEntry({ ...editingEntry, start_time: e.target.value })}
                                     onBlur={() => setEditingEntry({ ...editingEntry, start_time: normalizeTimeToHHMM(editingEntry.start_time) })}
-                                    className="w-28 px-2 py-1.5 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
+                                    className="w-20 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                                   />
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3">
                                   <input
                                     type="text"
                                     value={editingEntry.end_time}
                                     onChange={e => setEditingEntry({ ...editingEntry, end_time: e.target.value })}
                                     onBlur={() => setEditingEntry({ ...editingEntry, end_time: normalizeTimeToHHMM(editingEntry.end_time) })}
-                                    className="w-28 px-2 py-1.5 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono"
+                                    className="w-20 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                                   />
                                 </td>
-                                <td className="px-4 py-3">
-                                  <span className="font-semibold text-blue-700">
-                                    {calculateHours(editingEntry.start_time, editingEntry.end_time).toFixed(1)}h
+                                <td className="px-3 py-3">
+                                  <select
+                                    value={editingEntry.worker_type}
+                                    onChange={e => setEditingEntry({ ...editingEntry, worker_type: e.target.value })}
+                                    className="w-28 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  >
+                                    <option value="darbuotojas">Darbuotojas</option>
+                                    <option value="vairuotojas">Vairuotojas</option>
+                                    <option value="traktorininkas">Traktorininkas</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <select
+                                    value={editingEntry.lunch_type}
+                                    onChange={e => setEditingEntry({ ...editingEntry, lunch_type: e.target.value })}
+                                    className="w-24 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  >
+                                    <option value="none">Be pietų</option>
+                                    <option value="half">Pusė (30min)</option>
+                                    <option value="full">Pilni (1h)</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-3">
+                                  {editingEntry.worker_type === 'darbuotojas' ? (
+                                    <input
+                                      type="text"
+                                      value={editingEntry.work_description || ''}
+                                      onChange={e => setEditingEntry({ ...editingEntry, work_description: e.target.value })}
+                                      placeholder="Atliekamas darbas"
+                                      className="w-full px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                    />
+                                  ) : (
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={editingEntry.measurement_value || ''}
+                                        onChange={e => setEditingEntry({ ...editingEntry, measurement_value: parseFloat(e.target.value) || 0 })}
+                                        placeholder="0"
+                                        className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                      />
+                                      <select
+                                        value={editingEntry.measurement_unit_id || ''}
+                                        onChange={e => setEditingEntry({ ...editingEntry, measurement_unit_id: e.target.value })}
+                                        className="w-20 px-1 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                      >
+                                        <option value="">Vnt.</option>
+                                        {measurementUnits
+                                          .filter(u => u.worker_type === editingEntry.worker_type)
+                                          .map(unit => (
+                                            <option key={unit.id} value={unit.id}>
+                                              {unit.unit_abbreviation}
+                                            </option>
+                                          ))}
+                                      </select>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <span className="font-semibold text-blue-700 text-xs">
+                                    {calculateHours(editingEntry.start_time, editingEntry.end_time, editingEntry.lunch_type as any).toFixed(1)}h
                                   </span>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3">
                                   <div className="flex gap-1">
                                     <button
                                       onClick={saveEditedEntry}
@@ -794,17 +1192,36 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               </>
                             ) : (
                               <>
-                                <td className="px-4 py-3 font-mono">{entry.start_time}</td>
-                                <td className="px-4 py-3 font-mono">{entry.end_time}</td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3 font-mono text-sm">{entry.start_time}</td>
+                                <td className="px-3 py-3 font-mono text-sm">{entry.end_time}</td>
+                                <td className="px-3 py-3">
+                                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                    {entry.worker_type === 'darbuotojas' ? 'Darb.' : entry.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
+                                    {entry.lunch_type === 'none' ? 'Be' : entry.lunch_type === 'half' ? 'Pusė' : 'Pilni'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3">
+                                  {entry.worker_type === 'darbuotojas' ? (
+                                    <span className="text-xs text-gray-700">{entry.work_description || '-'}</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-700">
+                                      {entry.measurement_value ? `${entry.measurement_value} ${entry.measurement_unit?.unit_abbreviation || ''}` : '-'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-green-700">{entry.hours_worked.toFixed(1)}h</span>
+                                    <span className="font-semibold text-green-700 text-sm">{entry.hours_worked.toFixed(1)}h</span>
                                     {unusual && (
                                       <AlertTriangle className="w-4 h-4 text-orange-500" title="Neįprastas valandų skaičius (<4h arba >12h)" />
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3">
                                   <button
                                     onClick={() => {
                                       setEditingEntryId(entry.id);
@@ -877,6 +1294,135 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
               <p className="text-gray-600">Pasirinkite darbuotoją ir mėnesį</p>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'vienetai' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">Matavimo vienetų valdymas</h3>
+          <p className="text-sm text-gray-600 mb-6">
+            Sukurkite ir tvarkykite matavimu vienetus vairuotojams ir traktorininkams.
+          </p>
+
+          {/* Add new unit form */}
+          <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+            <h4 className="font-semibold text-blue-900 mb-3">Pridėti naują vienetą</h4>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojo tipas</label>
+                <select
+                  value={newUnitWorkerType}
+                  onChange={e => setNewUnitWorkerType(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="vairuotojas">Vairuotojas</option>
+                  <option value="traktorininkas">Traktorininkas</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas</label>
+                <input
+                  type="text"
+                  value={newUnitName}
+                  onChange={e => setNewUnitName(e.target.value)}
+                  placeholder="pvz. Priekaba"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Santrumpa</label>
+                <input
+                  type="text"
+                  value={newUnitAbbr}
+                  onChange={e => setNewUnitAbbr(e.target.value)}
+                  placeholder="pvz. prk"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={addMeasurementUnit}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Pridėti
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Units list */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Vairuotojas units */}
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <User className="w-4 h-4" />
+                Vairuotojas
+              </h4>
+              <div className="space-y-2">
+                {measurementUnits
+                  .filter(u => u.worker_type === 'vairuotojas')
+                  .map(unit => (
+                    <div
+                      key={unit.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div>
+                        <div className="font-medium text-gray-800">{unit.unit_name}</div>
+                        <div className="text-xs text-gray-500">Santrumpa: {unit.unit_abbreviation}</div>
+                      </div>
+                      <button
+                        onClick={() => deleteMeasurementUnit(unit.id)}
+                        className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        title="Ištrinti"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                {measurementUnits.filter(u => u.worker_type === 'vairuotojas').length === 0 && (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    Nėra sukurtų vienetų
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Traktorininkas units */}
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <User className="w-4 h-4" />
+                Traktorininkas
+              </h4>
+              <div className="space-y-2">
+                {measurementUnits
+                  .filter(u => u.worker_type === 'traktorininkas')
+                  .map(unit => (
+                    <div
+                      key={unit.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div>
+                        <div className="font-medium text-gray-800">{unit.unit_name}</div>
+                        <div className="text-xs text-gray-500">Santrumpa: {unit.unit_abbreviation}</div>
+                      </div>
+                      <button
+                        onClick={() => deleteMeasurementUnit(unit.id)}
+                        className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        title="Ištrinti"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                {measurementUnits.filter(u => u.worker_type === 'traktorininkas').length === 0 && (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    Nėra sukurtų vienetų
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

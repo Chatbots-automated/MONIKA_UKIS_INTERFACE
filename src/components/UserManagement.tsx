@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity, Tractor, Warehouse } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity, Tractor, Warehouse, Settings, Lock, Unlock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth, UserRole, User } from '../contexts/AuthContext';
 import { formatDateLT } from '../lib/formatters';
@@ -22,6 +22,11 @@ export function UserManagement() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Module permissions state
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [permissionsUserId, setPermissionsUserId] = useState<string | null>(null);
+  const [modulePermissions, setModulePermissions] = useState<any[]>([]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -198,6 +203,105 @@ export function UserManagement() {
     }
   };
 
+  const openPermissionsModal = async (userId: string) => {
+    setPermissionsUserId(userId);
+    await loadModulePermissions(userId);
+    setShowPermissionsModal(true);
+  };
+
+  const loadModulePermissions = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_module_permissions')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      // Define all available modules
+      const allModules = [
+        { name: 'darbuotojai', label: 'Darbuotojai' },
+        { name: 'technika', label: 'Technika' },
+        { name: 'veterinarija', label: 'Veterinarija' },
+        { name: 'warehouse', label: 'Sandėlis' },
+        { name: 'stock', label: 'Atsargos' },
+        { name: 'biocides', label: 'Biocidai' },
+        { name: 'waste', label: 'Atliekos' },
+        { name: 'animals', label: 'Gyvūnai' },
+        { name: 'treatments', label: 'Gydymai' },
+        { name: 'reports', label: 'Ataskaitos' },
+        { name: 'settings', label: 'Nustatymai' },
+      ];
+
+      // Merge with existing permissions
+      const permissions = allModules.map(module => {
+        const existing = data?.find(p => p.module_name === module.name);
+        return {
+          module_name: module.name,
+          module_label: module.label,
+          can_view: existing?.can_view || false,
+          can_edit: existing?.can_edit || false,
+          can_delete: existing?.can_delete || false,
+          can_create: existing?.can_create || false,
+          id: existing?.id || null,
+        };
+      });
+
+      setModulePermissions(permissions);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load permissions');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const updateModulePermission = (moduleName: string, field: string, value: boolean) => {
+    setModulePermissions(prev =>
+      prev.map(p =>
+        p.module_name === moduleName ? { ...p, [field]: value } : p
+      )
+    );
+  };
+
+  const saveModulePermissions = async () => {
+    if (!permissionsUserId) return;
+
+    try {
+      // Delete existing permissions
+      await supabase
+        .from('user_module_permissions')
+        .delete()
+        .eq('user_id', permissionsUserId);
+
+      // Insert only permissions that have at least one permission enabled
+      const permissionsToInsert = modulePermissions
+        .filter(p => p.can_view || p.can_edit || p.can_delete || p.can_create)
+        .map(p => ({
+          user_id: permissionsUserId,
+          module_name: p.module_name,
+          can_view: p.can_view,
+          can_edit: p.can_edit,
+          can_delete: p.can_delete,
+          can_create: p.can_create,
+        }));
+
+      if (permissionsToInsert.length > 0) {
+        const { error } = await supabase
+          .from('user_module_permissions')
+          .insert(permissionsToInsert);
+
+        if (error) throw error;
+      }
+
+      setSuccess('Permissions saved successfully');
+      setShowPermissionsModal(false);
+      fetchUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save permissions');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
   const fetchAuditLogs = async (userId?: string) => {
     try {
       const { data, error } = await supabase.rpc('get_user_audit_logs', {
@@ -228,6 +332,8 @@ export function UserManagement() {
         return <Tractor className="w-4 h-4" />;
       case 'warehouse_worker':
         return <Warehouse className="w-4 h-4" />;
+      case 'custom':
+        return <Settings className="w-4 h-4" />;
     }
   };
 
@@ -245,6 +351,8 @@ export function UserManagement() {
         return 'bg-green-100 text-green-800 border-green-200';
       case 'warehouse_worker':
         return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'custom':
+        return 'bg-purple-100 text-purple-800 border-purple-200';
     }
   };
 
@@ -262,6 +370,8 @@ export function UserManagement() {
         return 'Fermos darbuotojas';
       case 'warehouse_worker':
         return 'Technikos kiemo darbuotojas';
+      case 'custom':
+        return 'Pasirinktinė prieiga';
     }
   };
 
@@ -411,6 +521,9 @@ export function UserManagement() {
                     <option value="farm_worker">Fermos darbuotojas</option>
                     <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
                   </optgroup>
+                  <optgroup label="Pasirinktinė prieiga">
+                    <option value="custom">Pasirinktinė prieiga (Custom Permissions)</option>
+                  </optgroup>
                 </select>
               </div>
               {(newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') && (
@@ -516,6 +629,9 @@ export function UserManagement() {
                               <option value="farm_worker">Fermos darbuotojas</option>
                               <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
                             </optgroup>
+                            <optgroup label="Pasirinktinė prieiga">
+                              <option value="custom">Pasirinktinė prieiga</option>
+                            </optgroup>
                           </select>
                           {(editRole === 'farm_worker' || editRole === 'warehouse_worker') && (
                             <select
@@ -593,13 +709,22 @@ export function UserManagement() {
                             >
                               <Edit2 className="w-5 h-5" />
                             </button>
+                            {user.role === 'custom' && (
+                              <button
+                                onClick={() => openPermissionsModal(user.id)}
+                                className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                title="Manage Module Permissions"
+                              >
+                                <Lock className="w-5 h-5" />
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setSelectedUserId(user.id);
                                 setShowAuditLogs(true);
                                 fetchAuditLogs(user.id);
                               }}
-                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                               title="View Audit Logs"
                             >
                               <Activity className="w-5 h-5" />
@@ -865,6 +990,118 @@ export function UserManagement() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Module Permissions Modal */}
+      {showPermissionsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-500 to-indigo-600">
+              <div className="flex items-center gap-3">
+                <Lock className="w-6 h-6 text-white" />
+                <h2 className="text-2xl font-bold text-white">Modulių Prieigos Valdymas</h2>
+              </div>
+              <button
+                onClick={() => setShowPermissionsModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              <p className="text-gray-600 mb-6">
+                Pasirinkite, kuriuos modulius vartotojas gali pasiekti ir kokias operacijas atlikti.
+              </p>
+
+              <div className="space-y-4">
+                {modulePermissions.map((module) => (
+                  <div
+                    key={module.module_name}
+                    className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-900 text-lg">{module.module_label}</h3>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {module.module_name}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={module.can_view}
+                          onChange={(e) => updateModulePermission(module.module_name, 'can_view', e.target.checked)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                          <Eye className="w-4 h-4" />
+                          Žiūrėti
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={module.can_create}
+                          onChange={(e) => updateModulePermission(module.module_name, 'can_create', e.target.checked)}
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-green-600 transition-colors flex items-center gap-1">
+                          <UserPlus className="w-4 h-4" />
+                          Kurti
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={module.can_edit}
+                          onChange={(e) => updateModulePermission(module.module_name, 'can_edit', e.target.checked)}
+                          className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-amber-600 transition-colors flex items-center gap-1">
+                          <Edit2 className="w-4 h-4" />
+                          Redaguoti
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={module.can_delete}
+                          onChange={(e) => updateModulePermission(module.module_name, 'can_delete', e.target.checked)}
+                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-red-600 transition-colors flex items-center gap-1">
+                          <Trash2 className="w-4 h-4" />
+                          Trinti
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPermissionsModal(false)}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={saveModulePermissions}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg flex items-center gap-2"
+              >
+                <Check className="w-5 h-5" />
+                Išsaugoti Prieigos Teises
+              </button>
             </div>
           </div>
         </div>

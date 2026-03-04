@@ -46,6 +46,56 @@ function App() {
   const [notification, setNotification] = useState<Notification | null>(null);
   const { user, loading, isWorker } = useAuth();
 
+  // Initialize from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const module = params.get('module') as Module;
+    const view = params.get('view');
+    
+    if (module) {
+      setSelectedModule(module);
+    }
+    if (view) {
+      setCurrentView(view);
+    }
+  }, []);
+
+  // Update URL when navigation changes
+  useEffect(() => {
+    if (!user) return;
+    
+    const params = new URLSearchParams();
+    if (selectedModule) {
+      params.set('module', selectedModule);
+    }
+    if (currentView !== 'dashboard' || selectedModule) {
+      params.set('view', currentView);
+    }
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : '/';
+    window.history.pushState({}, '', newUrl);
+  }, [currentView, selectedModule, user]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const module = params.get('module') as Module;
+      const view = params.get('view');
+      
+      if (!module && !view) {
+        setSelectedModule(null);
+        setCurrentView('dashboard');
+      } else {
+        if (module) setSelectedModule(module);
+        if (view) setCurrentView(view);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   useEffect(() => {
     setNotificationCallback((message: string, type: NotificationType) => {
       setNotification({

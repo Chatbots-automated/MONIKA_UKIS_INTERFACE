@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserManagement } from './UserManagement';
 import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
@@ -10,7 +10,33 @@ import { Users, Activity, Shield, FileText, Settings, ClipboardCheck } from 'luc
 type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'maintenance' | 'worker-approvals';
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('activity');
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('admintab');
+    return (tab as AdminTab) || 'activity';
+  });
+
+  // Update URL when tab changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('admintab', activeTab);
+    const newUrl = `?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [activeTab]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('admintab');
+      if (tab) {
+        setActiveTab(tab as AdminTab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const tabs = [
     { id: 'activity' as AdminTab, label: 'Veiklos apžvalga', icon: Activity },

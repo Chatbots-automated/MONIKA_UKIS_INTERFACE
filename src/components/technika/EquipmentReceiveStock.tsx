@@ -1078,31 +1078,29 @@ export function EquipmentReceiveStock({ onReceived }: EquipmentReceiveStockProps
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs text-amber-800 font-semibold">
-                              Produktas nerastas
-                            </p>
-                            <select
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleProductMatch(index, e.target.value);
-                                }
-                              }}
-                              className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white"
-                              defaultValue=""
-                            >
-                              <option value="">Pasirinkti esamą...</option>
-                              {products.map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs text-amber-800 font-semibold whitespace-nowrap">
+                            Produktas nerastas
+                          </p>
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleProductMatch(index, e.target.value);
+                              }
+                            }}
+                            className="px-2 py-0.5 border border-amber-300 rounded text-xs bg-white flex-1 min-w-[150px]"
+                            defaultValue=""
+                          >
+                            <option value="">Pasirinkti esamą...</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors"
+                            className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-colors whitespace-nowrap flex-shrink-0"
                           >
                             <PlusCircle className="w-3 h-3" />
                             Sukurti naują

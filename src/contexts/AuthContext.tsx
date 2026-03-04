@@ -1,7 +1,15 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker';
+export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker' | 'custom';
+
+export interface ModulePermission {
+  module_name: string;
+  can_view: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_create: boolean;
+}
 
 export interface User {
   id: string;
@@ -15,6 +23,7 @@ export interface User {
   updated_at: string;
   last_login: string | null;
   work_location?: string;
+  module_permissions?: ModulePermission[];
 }
 
 interface AuthContextType {
@@ -23,6 +32,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (action: string) => boolean;
+  hasModulePermission: (moduleName: string, permissionType?: 'view' | 'edit' | 'delete' | 'create') => boolean;
   logAction: (action: string, tableName?: string, recordId?: string, oldData?: any, newData?: any) => Promise<void>;
   isAdmin: boolean;
   isVet: boolean;
@@ -31,6 +41,7 @@ interface AuthContextType {
   isFarmWorker: boolean;
   isWarehouseWorker: boolean;
   isWorker: boolean;
+  isCustomRole: boolean;
   isFrozen: boolean;
 }
 
@@ -83,6 +94,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (fetchError) throw fetchError;
+
+      // Load module permissions for custom role users
+      if (fullUser.role === 'custom') {
+        const { data: permissions, error: permError } = await supabase
+          .from('user_module_permissions')
+          .select('*')
+          .eq('user_id', fullUser.id);
+
+        if (!permError && permissions) {
+          fullUser.module_permissions = permissions;
+        }
+      }
 
       setUser(fullUser);
       localStorage.setItem(SESSION_KEY, JSON.stringify(fullUser));
@@ -194,6 +217,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const hasModulePermission = (moduleName: string, permissionType: 'view' | 'edit' | 'delete' | 'create' = 'view'): boolean => {
+    if (!user) return false;
+    if (user.is_frozen) return false;
+
+    const role = user.role;
+
+    // Admin always has all permissions
+    if (role === 'admin') return true;
+
+    // For custom role, check module_permissions
+    if (role === 'custom') {
+      if (!user.module_permissions) return false;
+      
+      const permission = user.module_permissions.find(p => p.module_name === moduleName);
+      if (!permission) return false;
+
+      switch (permissionType) {
+        case 'view':
+          return permission.can_view;
+        case 'edit':
+          return permission.can_edit;
+        case 'delete':
+          return permission.can_delete;
+        case 'create':
+          return permission.can_create;
+        default:
+          return false;
+      }
+    }
+
+    // For other roles, use default role-based permissions
+    // Vet has full access to veterinary modules
+    if (role === 'vet' && ['veterinarija', 'animals', 'treatments'].includes(moduleName)) {
+      return true;
+    }
+
+    // Tech has access to warehouse/technical modules (but cannot delete)
+    if (role === 'tech' && ['technika', 'warehouse', 'stock', 'biocides', 'waste'].includes(moduleName)) {
+      return permissionType !== 'delete';
+    }
+
+    // Viewer has view-only access to all modules
+    if (role === 'viewer' && permissionType === 'view') {
+      return true;
+    }
+
+    // Farm worker has access to farm-related modules
+    if (role === 'farm_worker' && ['darbuotojai_farm', 'worker_portal_farm'].includes(moduleName)) {
+      return true;
+    }
+
+    // Warehouse worker has access to warehouse-related modules
+    if (role === 'warehouse_worker' && ['darbuotojai_warehouse', 'worker_portal_warehouse'].includes(moduleName)) {
+      return true;
+    }
+
+    // Default: no permission
+    return false;
+  };
+
   const isAdmin = user?.role === 'admin';
   const isVet = user?.role === 'vet';
   const isTech = user?.role === 'tech';
@@ -201,6 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isFarmWorker = user?.role === 'farm_worker';
   const isWarehouseWorker = user?.role === 'warehouse_worker';
   const isWorker = isFarmWorker || isWarehouseWorker;
+  const isCustomRole = user?.role === 'custom';
   const isFrozen = user?.is_frozen || false;
 
   return (
@@ -210,6 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       hasPermission,
+      hasModulePermission,
       logAction,
       isAdmin,
       isVet,
@@ -218,6 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isFarmWorker,
       isWarehouseWorker,
       isWorker,
+      isCustomRole,
       isFrozen
     }}>
       {children}

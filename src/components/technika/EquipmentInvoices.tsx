@@ -1892,17 +1892,17 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-1">
-                            <p className="text-xs text-gray-700 font-semibold">
-                              Produktas nerastas
-                            </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs text-gray-700 font-semibold whitespace-nowrap">
+                            Produktas nerastas
+                          </p>
+                          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <input
                               type="text"
                               placeholder="Ieškoti produkto..."
                               value={productSearchTerm}
                               onChange={(e) => setProductSearchTerm(e.target.value)}
-                              className="px-2 py-1 border border-gray-400 rounded text-xs flex-1"
+                              className="px-2 py-1 border border-gray-400 rounded text-xs flex-1 min-w-[120px]"
                             />
                             <select
                               onChange={(e) => {
@@ -1911,7 +1911,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                                   setProductSearchTerm('');
                                 }
                               }}
-                              className="px-2 py-0.5 border border-gray-400 rounded text-xs bg-white font-mono"
+                              className="px-2 py-0.5 border border-gray-400 rounded text-xs bg-white font-mono min-w-[100px]"
                               defaultValue=""
                             >
                               <option value="">Pasirinkti...</option>
@@ -1930,7 +1930,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                           </div>
                           <button
                             onClick={() => handleCreateProduct(item, index)}
-                            className="flex items-center gap-1 px-3 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 transition-all shadow-md whitespace-nowrap"
+                            className="flex items-center gap-1 px-3 py-1 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 transition-all shadow-md whitespace-nowrap flex-shrink-0"
                           >
                             <PlusCircle className="w-3 h-3" />
                             Sukurti naują
