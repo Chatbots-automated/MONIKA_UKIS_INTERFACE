@@ -258,11 +258,11 @@ export function Animals() {
           reversed.includes(searchLower);
       }
 
-      // Filter by neck number search term
+      // Filter by neck number search term (exact match)
       if (neckTerm) {
-        const neckLower = neckTerm.toLowerCase().trim();
-        const collarNo = animal.collar_no?.toLowerCase() || '';
-        matchesNeck = collarNo.includes(neckLower);
+        const neckTrimmed = neckTerm.trim();
+        const collarNo = animal.collar_no || '';
+        matchesNeck = collarNo === neckTrimmed;
       }
 
       return matchesGeneral && matchesNeck;
