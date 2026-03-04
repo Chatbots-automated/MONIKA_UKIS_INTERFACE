@@ -56,7 +56,7 @@ interface TechnikaReportsProps {
 }
 
 export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers'>('overview');
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
@@ -111,6 +111,15 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     invoiceCount: 0,
   });
 
+  // Cost center data
+  const [costCenterSummary, setCostCenterSummary] = useState<any[]>([]);
+  const [expandedCostCenter, setExpandedCostCenter] = useState<string | null>(null);
+  const [costCenterStats, setCostCenterStats] = useState({
+    totalCost: 0,
+    totalCenters: 0,
+    totalAssignments: 0,
+  });
+
   useEffect(() => {
     loadCategories();
     loadData();
@@ -119,6 +128,9 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
   useEffect(() => {
     if (activeTab === 'transport-services') {
       loadTransportServices();
+    }
+    if (activeTab === 'cost-centers') {
+      loadCostCenterData();
     }
   }, [activeTab, dateFilter, locationFilter]);
 
@@ -152,6 +164,33 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
       console.error('Error loading reports:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCostCenterData = async () => {
+    try {
+      const { data: costCenters, error } = await supabase
+        .from('cost_center_summary')
+        .select('*')
+        .order('total_cost', { ascending: false });
+
+      if (error) throw error;
+
+      if (costCenters) {
+        setCostCenterSummary(costCenters);
+        
+        const totalCost = costCenters.reduce((sum, cc) => sum + parseFloat(cc.total_cost || 0), 0);
+        const totalCenters = costCenters.length;
+        const totalAssignments = costCenters.reduce((sum, cc) => sum + parseInt(cc.total_assignments || 0), 0);
+
+        setCostCenterStats({
+          totalCost,
+          totalCenters,
+          totalAssignments,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading cost center data:', error);
     }
   };
 
@@ -640,6 +679,7 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
+              { id: 'cost-centers', label: 'Kaštų centrai', icon: DollarSign },
               ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
               ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
               { id: 'transport-services', label: 'Transporto paslaugos', icon: Car },
@@ -1580,6 +1620,140 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'cost-centers' && (
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StatCard
+                  title="Bendra kaštų centrų savikaina"
+                  value={`€${costCenterStats.totalCost.toFixed(2)}`}
+                  icon={DollarSign}
+                  trend={null}
+                  color="blue"
+                />
+                <StatCard
+                  title="Kaštų centrų skaičius"
+                  value={costCenterStats.totalCenters.toString()}
+                  icon={Package}
+                  trend={null}
+                  color="green"
+                />
+                <StatCard
+                  title="Priskyrimo įrašų skaičius"
+                  value={costCenterStats.totalAssignments.toString()}
+                  icon={FileText}
+                  trend={null}
+                  color="purple"
+                />
+              </div>
+
+              {/* Cost Centers Table */}
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h3 className="text-lg font-semibold text-gray-900">Kaštų centrų savikaina</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Kaštų centras
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Aprašymas
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Priskyrimo įrašų sk.
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Bendra savikaina
+                        </th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Veiksmai
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {costCenterSummary.map((cc) => (
+                        <>
+                          <tr key={cc.cost_center_id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div
+                                  className="w-3 h-3 rounded-full mr-3"
+                                  style={{ backgroundColor: cc.color || '#6B7280' }}
+                                />
+                                <div className="text-sm font-medium text-gray-900">
+                                  {cc.cost_center_name}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-600">
+                                {cc.description || '-'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <div className="text-sm text-gray-900">
+                                {cc.total_assignments || 0}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <div className="text-sm font-semibold text-gray-900">
+                                €{parseFloat(cc.total_cost || 0).toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <button
+                                onClick={() =>
+                                  setExpandedCostCenter(
+                                    expandedCostCenter === cc.cost_center_id ? null : cc.cost_center_id
+                                  )
+                                }
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              >
+                                {expandedCostCenter === cc.cost_center_id ? 'Slėpti' : 'Rodyti detales'}
+                              </button>
+                            </td>
+                          </tr>
+                          {expandedCostCenter === cc.cost_center_id && (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-4 bg-gray-50">
+                                <div className="space-y-2">
+                                  <div className="text-sm">
+                                    <span className="font-medium text-gray-700">Pirmas priskyrimas:</span>{' '}
+                                    <span className="text-gray-600">
+                                      {cc.first_assignment_date
+                                        ? new Date(cc.first_assignment_date).toLocaleDateString('lt-LT')
+                                        : '-'}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm">
+                                    <span className="font-medium text-gray-700">Paskutinis priskyrimas:</span>{' '}
+                                    <span className="text-gray-600">
+                                      {cc.last_assignment_date
+                                        ? new Date(cc.last_assignment_date).toLocaleDateString('lt-LT')
+                                        : '-'}
+                                    </span>
+                                  </div>
+                                  {cc.parent_id && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-gray-700">Turi tėvinį kaštų centrą</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

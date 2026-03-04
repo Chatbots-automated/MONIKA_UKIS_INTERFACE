@@ -56,9 +56,24 @@ interface MaintenanceSchedulesProps {
   activeTimeEntry?: any | null;
 }
 
+interface ServiceVisit {
+  id: string;
+  vehicle_id: string;
+  visit_datetime: string;
+  visit_type: string;
+  procedures: string[];
+  status: string;
+  vehicle: {
+    registration_number: string;
+    make: string;
+    model: string;
+  };
+}
+
 export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeEntry }: MaintenanceSchedulesProps = {}) {
   const { user, logAction } = useAuth();
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
+  const [serviceVisits, setServiceVisits] = useState<ServiceVisit[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -96,7 +111,7 @@ export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeE
   }, []);
 
   const loadData = async () => {
-    const [schedulesRes, vehiclesRes, productsRes] = await Promise.all([
+    const [schedulesRes, vehiclesRes, productsRes, serviceVisitsRes] = await Promise.all([
       supabase
         .from('maintenance_schedules')
         .select(`
@@ -115,11 +130,19 @@ export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeE
         .select('product_id, product_name, unit_type, total_qty')
         .gt('total_qty', 0)
         .order('product_name'),
+      supabase
+        .from('vehicle_service_visits')
+        .select(`
+          *,
+          vehicle:vehicles(registration_number, make, model)
+        `)
+        .order('visit_datetime', { ascending: false }),
     ]);
 
     if (schedulesRes.data) setSchedules(schedulesRes.data as any);
     if (vehiclesRes.data) setVehicles(vehiclesRes.data);
     if (productsRes.data) setProducts(productsRes.data);
+    if (serviceVisitsRes.data) setServiceVisits(serviceVisitsRes.data as any);
   };
 
   const handleOpenScheduleModal = (schedule?: MaintenanceSchedule) => {
@@ -620,8 +643,8 @@ export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeE
     hours: 'mval.',
   };
 
-  // Prepare calendar events
-  const calendarEvents = schedules
+  // Prepare calendar events from both schedules AND service visits
+  const scheduleEvents = schedules
     .filter(s => s.next_due_date)
     .map(schedule => {
       const today = new Date();
@@ -657,6 +680,39 @@ export function MaintenanceSchedules({ workerMode = false, workerId, activeTimeE
         },
       };
     });
+
+  const visitEvents = serviceVisits
+    .filter(v => v.status === 'Planuojamas' || v.status === 'Vykdomas')
+    .map(visit => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const visitDate = new Date(visit.visit_datetime);
+      visitDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.ceil((visitDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      let status: 'overdue' | 'today' | 'upcoming' | 'ok';
+      if (daysDiff < 0) {
+        status = 'overdue';
+      } else if (daysDiff === 0) {
+        status = 'today';
+      } else if (daysDiff <= 7) {
+        status = 'upcoming';
+      } else {
+        status = 'ok';
+      }
+
+      return {
+        id: visit.id,
+        title: visit.vehicle.registration_number,
+        date: visit.visit_datetime.split('T')[0],
+        status,
+        type: `${visit.visit_type === 'planinis' ? 'Planinis' : 'Neplaninis'} - ${visit.procedures.join(', ')}`,
+        details: `${visit.vehicle.make} ${visit.vehicle.model} - ${visit.procedures.join(', ')}`,
+        onClick: () => {},
+      };
+    });
+
+  const calendarEvents = [...scheduleEvents, ...visitEvents];
 
   return (
     <div className="space-y-6">

@@ -92,16 +92,15 @@ interface VisitPart {
   notes: string | null;
   product?: {
     name: string;
-    registration_code: string;
+    product_code: string | null;
   };
 }
 
 interface Product {
   id: string;
   name: string;
-  registration_code: string;
-  category: string;
-  primary_pack_unit: string;
+  product_code: string | null;
+  unit_type: string;
 }
 
 interface Batch {
@@ -172,9 +171,9 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
           .eq('vehicle_id', vehicle.id)
           .order('created_at', { ascending: false }),
         supabase
-          .from('products')
-          .select('id, name, registration_code, category, primary_pack_unit')
-          .eq('category', 'technical')
+          .from('equipment_products')
+          .select('id, name, product_code, unit_type')
+          .eq('is_active', true)
           .order('name'),
       ]);
 
@@ -201,7 +200,7 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
       .from('vehicle_visit_parts')
       .select(`
         *,
-        product:products(name, registration_code)
+        product:equipment_products(name, product_code)
       `)
       .in('visit_id', visitsList.map(v => v.id));
 
@@ -232,11 +231,11 @@ export function VehicleDetailSidebar({ vehicle, onClose, onUpdate }: VehicleDeta
 
   const loadBatchesForProduct = async (productId: string) => {
     const { data } = await supabase
-      .from('batches')
+      .from('equipment_batches')
       .select('*')
       .eq('product_id', productId)
       .gt('qty_left', 0)
-      .order('expiry_date', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (data) setBatches(data);
   };
@@ -1690,7 +1689,7 @@ function VisitDetailModal({
         .from('vehicle_visit_parts')
         .select(`
           *,
-          product:products(name, registration_code)
+          product:equipment_products(name, product_code)
         `)
         .eq('visit_id', visit.id);
 
@@ -1993,7 +1992,7 @@ function VisitDetailModal({
                         Produktas *
                       </label>
                       <SearchableSelect
-                        options={products.map(p => ({ value: p.id, label: `${p.name} ${p.registration_code ? `(${p.registration_code})` : ''}` }))}
+                        options={products.map(p => ({ value: p.id, label: `${p.name} ${p.product_code ? `(${p.product_code})` : ''}` }))}
                         value={newPart.product_id}
                         onChange={(value) => {
                           setNewPart(prev => ({ ...prev, product_id: value, batch_id: '' }));

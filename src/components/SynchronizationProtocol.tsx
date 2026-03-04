@@ -106,6 +106,8 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
     const syncData = syncList?.[0];
 
     if (syncData) {
+      console.log('🔍 Found sync for animal:', { status: syncData.status, id: syncData.id });
+      
       const { data: protocolData } = await supabase
         .from('synchronization_protocols')
         .select('*')
@@ -123,6 +125,8 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
         protocol: protocolData || undefined,
         steps: stepsData || [],
       });
+    } else {
+      console.log('🔍 No sync history for animal');
     }
   };
 
@@ -155,7 +159,10 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
       .eq('id', animalId)
       .single();
 
-    if (!animalData?.tag_no) return;
+    if (!animalData?.tag_no) {
+      console.log('🔍 No tag_no for animal:', animalId);
+      return;
+    }
 
     // Query new GEA system using ear_number (tag_no)
     const { data } = await supabase
@@ -167,7 +174,10 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
       .maybeSingle();
 
     if (data) {
+      console.log('🔍 GEA status for', animalData.tag_no, ':', data.cow_state);
       setGeaStatus(data.cow_state);
+    } else {
+      console.log('🔍 No GEA data for', animalData.tag_no);
     }
   };
 
@@ -708,7 +718,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
             </div>
           )}
 
-          {isCancelled && (
+          {(isCancelled || activeSync.status === 'Completed') && (
             <div className="mt-4 pt-4 border-t border-gray-300">
               <button
                 onClick={async () => {
@@ -717,7 +727,12 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
                   setActiveSync(null);
                   setShowCreateForm(true);
                 }}
-                className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center justify-center gap-2"
+                disabled={isApsek}
+                className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+                  isApsek
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
               >
                 <Plus className="w-5 h-5" />
                 Pradėti naują sinchronizacijos protokolą
