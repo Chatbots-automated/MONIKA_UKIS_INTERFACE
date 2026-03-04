@@ -66,8 +66,10 @@ BEGIN
       WHERE v.sync_step_id = NEW.id
       LIMIT 1;
 
-      -- If no treatment exists, we'll create usage_items without a treatment_id
-      -- (they'll be tracked but not linked to a specific treatment)
+      -- If no treatment exists, we can't create usage_items due to constraint
+      -- usage_items_source_check requires treatment_id, vaccination_id, or biocide_usage_id
+      -- For now, just deduct from batches without creating usage_items
+      -- This matches the old behavior
 
       -- Loop through batches (FIFO - oldest expiry first) and deduct quantities
       FOR v_batch IN
@@ -90,22 +92,25 @@ BEGIN
             updated_at = NOW()
         WHERE id = v_batch.id;
 
-        -- Create usage_item for tracking (like treatments do)
-        INSERT INTO usage_items (
-          treatment_id,
-          product_id,
-          batch_id,
-          qty,
-          unit,
-          purpose
-        ) VALUES (
-          v_treatment_id,  -- May be NULL if no treatment exists
-          NEW.medication_product_id,
-          v_batch.id,
-          v_batch_qty,
-          NEW.dosage_unit::unit,
-          'Sinchronizacija'
-        );
+        -- Create usage_item for tracking ONLY if we have a treatment_id
+        -- This is required by usage_items_source_check constraint
+        IF v_treatment_id IS NOT NULL THEN
+          INSERT INTO usage_items (
+            treatment_id,
+            product_id,
+            batch_id,
+            qty,
+            unit,
+            purpose
+          ) VALUES (
+            v_treatment_id,
+            NEW.medication_product_id,
+            v_batch.id,
+            v_batch_qty,
+            NEW.dosage_unit::unit,
+            'Sinchronizacija'
+          );
+        END IF;
 
         -- Reduce remaining quantity needed
         v_remaining_qty := v_remaining_qty - v_batch_qty;
