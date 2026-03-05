@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { FileText, Clock, User, Copy, Trash2, AlertTriangle, BarChart3, Edit2, Save, X, Plus, Settings } from 'lucide-react';
+import { FileText, Clock, User, Copy, Trash2, BarChart3, Edit2, Save, X, Plus, Settings } from 'lucide-react';
 
 interface Worker {
   id: string;
@@ -25,6 +25,13 @@ interface MeasurementUnit {
   worker_type: string;
   unit_name: string;
   unit_abbreviation: string;
+  work_location: string;
+}
+
+interface WorkDescription {
+  id: string;
+  worker_type: string;
+  description: string;
   work_location: string;
 }
 
@@ -142,6 +149,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [newUnitAbbr, setNewUnitAbbr] = useState('');
   const [newUnitWorkerType, setNewUnitWorkerType] = useState<'vairuotojas' | 'traktorininkas'>('vairuotojas');
   
+  // Work descriptions state
+  const [workDescriptions, setWorkDescriptions] = useState<WorkDescription[]>([]);
+  const [newWorkDesc, setNewWorkDesc] = useState('');
+  const [newWorkDescWorkerType, setNewWorkDescWorkerType] = useState<'vairuotojas' | 'traktorininkas'>('vairuotojas');
+  
   // Refs for auto-advancing inputs
   const timeInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
@@ -170,6 +182,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   useEffect(() => {
     loadWorkers();
     loadMeasurementUnits();
+    loadWorkDescriptions();
   }, [workLocation]);
 
   useEffect(() => {
@@ -268,14 +281,28 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       .eq('is_active', true)
       .order('worker_type')
       .order('unit_name');
-    
+
     if (workLocation) {
       query.or(`work_location.eq.${workLocation},work_location.eq.both`);
     }
-    
+
     const { data } = await query;
     if (data) {
       setMeasurementUnits(data);
+    }
+  };
+
+  const loadWorkDescriptions = async () => {
+    const { data } = await supabase
+      .from('work_descriptions')
+      .select('*')
+      .eq('work_location', workLocation)
+      .eq('is_active', true)
+      .order('worker_type')
+      .order('description');
+
+    if (data) {
+      setWorkDescriptions(data);
     }
   };
 
@@ -306,6 +333,57 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       setNewUnitAbbr('');
       loadMeasurementUnits();
       alert('Vienetas sėkmingai pridėtas!');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const addWorkDescription = async () => {
+    if (!newWorkDesc.trim()) {
+      alert('Įveskite darbo aprašymą');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_descriptions')
+        .insert({
+          work_location: workLocation,
+          worker_type: newWorkDescWorkerType,
+          description: newWorkDesc.trim(),
+        });
+
+      if (error) throw error;
+
+      await logAction('create_work_description', 'work_descriptions', null, null, {
+        description: newWorkDesc,
+        worker_type: newWorkDescWorkerType,
+      });
+
+      setNewWorkDesc('');
+      loadWorkDescriptions();
+      alert('Darbo aprašymas sėkmingai pridėtas!');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const deleteWorkDescription = async (descId: string) => {
+    if (!confirm('Ar tikrai norite ištrinti šį darbo aprašymą?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('work_descriptions')
+        .update({ is_active: false })
+        .eq('id', descId);
+
+      if (error) throw error;
+
+      await logAction('delete_work_description', 'work_descriptions', descId, null, null);
+      loadWorkDescriptions();
+      alert('Darbo aprašymas sėkmingai ištrintas!');
     } catch (error: any) {
       console.error('Error:', error);
       alert(`Klaida: ${error.message}`);
@@ -511,9 +589,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     })));
   };
 
-  const isUnusualHours = (hours: number): boolean => {
-    return hours > 0 && (hours < 4 || hours > 12);
-  };
 
   const saveEditedEntry = async () => {
     if (!editingEntry) return;
@@ -642,10 +717,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   );
   const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
   const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
-  const unusualDaysCount = dayEntries.filter(d => {
-    const h = calculateHours(d.start_time, d.end_time, d.lunch_type);
-    return isUnusualHours(h);
-  }).length;
 
   return (
     <div className="space-y-6">
@@ -844,7 +915,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       const dayName = DAY_NAMES[date.getDay()];
                       const hours = calculateHours(day.start_time, day.end_time, day.lunch_type);
                       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                      const unusual = isUnusualHours(hours);
                       const availableUnits = measurementUnits.filter(u => u.worker_type === day.worker_type);
                       
                       return (
@@ -912,6 +982,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               />
                             ) : (
                               <div className="flex gap-1">
+                                <select
+                                  value={day.work_description}
+                                  onChange={e => updateDayEntry(day.date, 'work_description', e.target.value)}
+                                  className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                >
+                                  <option value="">Pasirinkite darbą</option>
+                                  {workDescriptions
+                                    .filter(desc => desc.worker_type === day.worker_type)
+                                    .map(desc => (
+                                      <option key={desc.id} value={desc.description}>
+                                        {desc.description}
+                                      </option>
+                                    ))}
+                                </select>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -936,14 +1020,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             )}
                           </td>
                           <td className="px-2 py-2">
-                            <div className="flex items-center gap-1">
-                              <span className={`font-semibold text-xs ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                                {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
-                              </span>
-                              {unusual && (
-                                <AlertTriangle className="w-3 h-3 text-orange-500" title="Neįprastas valandų skaičius" />
-                              )}
-                            </div>
+                            <span className={`font-semibold text-xs ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                              {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
+                            </span>
                           </td>
                           <td className="px-2 py-2">
                             {index > 0 && (
@@ -987,15 +1066,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                     </div>
                     <div className="text-2xl font-bold text-purple-900">{avgHoursPerDay.toFixed(1)}h</div>
                   </div>
-                  {unusualDaysCount > 0 && (
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <AlertTriangle className="w-4 h-4 text-orange-600" />
-                        <div className="text-xs text-orange-700 font-medium">Neįprastos dienos</div>
-                      </div>
-                      <div className="text-2xl font-bold text-orange-900">{unusualDaysCount}</div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1077,10 +1147,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                         const date = new Date(entry.entry_date);
                         const dayName = DAY_NAMES[date.getDay()];
                         const isEditing = editingEntryId === entry.id;
-                        const unusual = isUnusualHours(entry.hours_worked);
-                        
+
                         return (
-                          <tr key={entry.id} className={`border-b border-gray-100 ${unusual ? 'bg-orange-50/50' : ''}`}>
+                          <tr key={entry.id} className="border-b border-gray-100">
                             <td className="px-3 py-3 whitespace-nowrap">
                               <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
                               {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
@@ -1138,6 +1207,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                     />
                                   ) : (
                                     <div className="flex gap-1">
+                                      <select
+                                        value={editingEntry.work_description || ''}
+                                        onChange={e => setEditingEntry({ ...editingEntry, work_description: e.target.value })}
+                                        className="flex-1 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                      >
+                                        <option value="">Pasirinkite darbą</option>
+                                        {workDescriptions
+                                          .filter(desc => desc.worker_type === editingEntry.worker_type)
+                                          .map(desc => (
+                                            <option key={desc.id} value={desc.description}>
+                                              {desc.description}
+                                            </option>
+                                          ))}
+                                      </select>
                                       <input
                                         type="number"
                                         step="0.01"
@@ -1214,12 +1297,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-green-700 text-sm">{entry.hours_worked.toFixed(1)}h</span>
-                                    {unusual && (
-                                      <AlertTriangle className="w-4 h-4 text-orange-500" title="Neįprastas valandų skaičius (<4h arba >12h)" />
-                                    )}
-                                  </div>
+                                  <span className="font-semibold text-green-700 text-sm">{entry.hours_worked.toFixed(1)}h</span>
                                 </td>
                                 <td className="px-3 py-3">
                                   <button
@@ -1269,17 +1347,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       {(savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0) / savedEntries.length).toFixed(1)}h
                     </div>
                   </div>
-                  {savedEntries.filter(e => isUnusualHours(e.hours_worked)).length > 0 && (
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <AlertTriangle className="w-4 h-4 text-orange-600" />
-                        <div className="text-xs text-orange-700 font-medium">Neįprastos dienos</div>
-                      </div>
-                      <div className="text-2xl font-bold text-orange-900">
-                        {savedEntries.filter(e => isUnusualHours(e.hours_worked)).length}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </>
             ) : (
@@ -1298,11 +1365,125 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       )}
 
       {activeTab === 'vienetai' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Matavimo vienetų valdymas</h3>
-          <p className="text-sm text-gray-600 mb-6">
-            Sukurkite ir tvarkykite matavimu vienetus vairuotojams ir traktorininkams.
-          </p>
+        <div className="space-y-6">
+          {/* Work Descriptions Management */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Darbo aprašymų valdymas</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Sukurkite ir tvarkykite darbo aprašymus vairuotojams ir traktorininkams.
+            </p>
+
+            {/* Add new work description form */}
+            <div className="mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+              <h4 className="font-semibold text-green-900 mb-3">Pridėti naują darbo aprašymą</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojo tipas</label>
+                  <select
+                    value={newWorkDescWorkerType}
+                    onChange={e => setNewWorkDescWorkerType(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="vairuotojas">Vairuotojas</option>
+                    <option value="traktorininkas">Traktorininkas</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Darbo aprašymas</label>
+                  <input
+                    type="text"
+                    value={newWorkDesc}
+                    onChange={e => setNewWorkDesc(e.target.value)}
+                    placeholder="pvz. Žemės darbai"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={addWorkDescription}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pridėti
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Work descriptions list */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Vairuotojas descriptions */}
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Vairuotojas
+                </h4>
+                <div className="space-y-2">
+                  {workDescriptions
+                    .filter(desc => desc.worker_type === 'vairuotojas')
+                    .map(desc => (
+                      <div
+                        key={desc.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="font-medium text-gray-800">{desc.description}</div>
+                        <button
+                          onClick={() => deleteWorkDescription(desc.id)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                          title="Ištrinti"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  {workDescriptions.filter(desc => desc.worker_type === 'vairuotojas').length === 0 && (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      Nėra sukurtų darbo aprašymų
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Traktorininkas descriptions */}
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Traktorininkas
+                </h4>
+                <div className="space-y-2">
+                  {workDescriptions
+                    .filter(desc => desc.worker_type === 'traktorininkas')
+                    .map(desc => (
+                      <div
+                        key={desc.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="font-medium text-gray-800">{desc.description}</div>
+                        <button
+                          onClick={() => deleteWorkDescription(desc.id)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                          title="Ištrinti"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  {workDescriptions.filter(desc => desc.worker_type === 'traktorininkas').length === 0 && (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      Nėra sukurtų darbo aprašymų
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Measurement Units Management */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Matavimo vienetų valdymas</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Sukurkite ir tvarkykite matavimu vienetus vairuotojams ir traktorininkams.
+            </p>
 
           {/* Add new unit form */}
           <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
@@ -1423,6 +1604,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>

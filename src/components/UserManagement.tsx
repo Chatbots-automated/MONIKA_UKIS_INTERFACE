@@ -17,6 +17,7 @@ export function UserManagement() {
   const [newUserRole, setNewUserRole] = useState<UserRole>('viewer');
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserWorkLocation, setNewUserWorkLocation] = useState<string>('warehouse');
+  const [newUserRequiresLogin, setNewUserRequiresLogin] = useState(true);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -100,17 +101,37 @@ export function UserManagement() {
     setError('');
 
     try {
-      const { data: newUserId, error: createError } = await supabase.rpc('create_user', {
-        p_email: newUserEmail,
-        p_password: newUserPassword,
-        p_role: newUserRole
-      });
+      let newUserId: string | null = null;
 
-      if (createError) throw createError;
+      if (newUserRequiresLogin) {
+        // Create user with auth
+        const { data, error: createError } = await supabase.rpc('create_user', {
+          p_email: newUserEmail,
+          p_password: newUserPassword,
+          p_role: newUserRole
+        });
+
+        if (createError) throw createError;
+        newUserId = data;
+      } else {
+        // Create user without auth (just in users table)
+        const { data, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            full_name: newUserFullName,
+            role: newUserRole,
+            requires_login: false
+          })
+          .select('id')
+          .single();
+
+        if (insertError) throw insertError;
+        newUserId = data?.id;
+      }
 
       if (newUserId) {
-        const updateData: any = { full_name: newUserFullName };
-        
+        const updateData: any = { full_name: newUserFullName, requires_login: newUserRequiresLogin };
+
         // Add work_location for worker roles
         if (newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') {
           updateData.work_location = newUserWorkLocation;
@@ -131,6 +152,7 @@ export function UserManagement() {
       setNewUserRole('viewer');
       setNewUserFullName('');
       setNewUserWorkLocation('warehouse');
+      setNewUserRequiresLogin(true);
       fetchUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -477,31 +499,51 @@ export function UserManagement() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  El. paštas
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!newUserRequiresLogin}
+                    onChange={(e) => setNewUserRequiresLogin(!e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    Šis vartotojas neprisijungs (tik grafikams)
+                  </span>
                 </label>
-                <input
-                  type="email"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Pažymėkite, jei darbuotojas bus naudojamas tik darbo grafikuose ir nereikės prisijungimo
+                </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Slaptažodis
-                </label>
-                <input
-                  type="password"
-                  value={newUserPassword}
-                  onChange={(e) => setNewUserPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                  minLength={6}
-                />
-              </div>
+              {newUserRequiresLogin && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      El. paštas
+                    </label>
+                    <input
+                      type="email"
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Slaptažodis
+                    </label>
+                    <input
+                      type="password"
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Rolė
@@ -559,6 +601,7 @@ export function UserManagement() {
                     setNewUserPassword('');
                     setNewUserRole('viewer');
                     setNewUserFullName('');
+                    setNewUserRequiresLogin(true);
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
                 >
