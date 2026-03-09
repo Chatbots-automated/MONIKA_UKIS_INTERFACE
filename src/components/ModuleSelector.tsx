@@ -1,4 +1,4 @@
-import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar, LogOut, Layers } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar, LogOut, Layers, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -572,6 +572,26 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
                   <div className="text-left">
                     <p className="font-semibold text-gray-900">Darbuotojai</p>
                     <p className="text-sm text-gray-600">Darbo grafikai ir ataskaitos</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Activity className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900">Ataskaitos</p>
+                    <p className="text-sm text-gray-600">Kaštų centrai ir analizė</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Truck className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900">Fermos įranga</p>
+                    <p className="text-sm text-gray-600">Aptarnavimai ir remontai</p>
                   </div>
                 </div>
               </div>

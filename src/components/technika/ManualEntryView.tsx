@@ -16,8 +16,11 @@ interface DayEntry {
   worker_type: 'darbuotojas' | 'vairuotojas' | 'traktorininkas';
   lunch_type: 'none' | 'half' | 'full';
   work_description: string;
+  work_descriptions: string[];
   measurement_value: string;
   measurement_unit_id: string;
+  comments: string;
+  non_driving_hours: string;
 }
 
 interface MeasurementUnit {
@@ -46,8 +49,11 @@ interface SavedEntry {
   worker_type: string;
   lunch_type: string;
   work_description: string;
+  work_descriptions?: string[];
   measurement_value: number;
   measurement_unit_id: string;
+  comments: string;
+  non_driving_hours: number;
   worker?: { full_name: string };
   measurement_unit?: { unit_name: string; unit_abbreviation: string };
 }
@@ -101,15 +107,18 @@ function getDaysInMonth(year: number, month: number): DayEntry[] {
   const lastDay = new Date(year, month + 1, 0).getDate();
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    days.push({ 
-      date: dateStr, 
-      start_time: '', 
+    days.push({
+      date: dateStr,
+      start_time: '',
       end_time: '',
       worker_type: 'darbuotojas',
       lunch_type: 'full',
       work_description: '',
+      work_descriptions: [],
       measurement_value: '',
-      measurement_unit_id: ''
+      measurement_unit_id: '',
+      comments: '',
+      non_driving_hours: ''
     });
   }
   return days;
@@ -129,7 +138,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [dayEntries, setDayEntries] = useState<DayEntry[]>([]);
   const [saving, setSaving] = useState(false);
-  const [skipWeekends, setSkipWeekends] = useState(true);
+  const [skipWeekends, setSkipWeekends] = useState(false);
   const [bulkStartTime, setBulkStartTime] = useState('');
   const [bulkEndTime, setBulkEndTime] = useState('');
   const [showBulkFill, setShowBulkFill] = useState(false);
@@ -142,6 +151,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<SavedEntry | null>(null);
+  const [showAllWorkers, setShowAllWorkers] = useState(true);
+  const [workerTypeFilter, setWorkerTypeFilter] = useState<'all' | 'darbuotojas' | 'vairuotojas' | 'traktorininkas'>('all');
+  const [allWorkersData, setAllWorkersData] = useState<any[]>([]);
+  const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
 
   // Measurement units state
   const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnit[]>([]);
@@ -202,7 +216,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let manualQuery = supabase
       .from('manual_time_entries')
-      .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id')
+      .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id, comments, non_driving_hours')
       .eq('worker_id', selectedWorker)
       .gte('entry_date', startDate.toISOString().split('T')[0])
       .lte('entry_date', endDate.toISOString().split('T')[0]);
@@ -220,8 +234,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
             worker_type: existing.worker_type || 'darbuotojas',
             lunch_type: existing.lunch_type || 'full',
             work_description: existing.work_description || '',
+            work_descriptions: existing.work_description ? existing.work_description.split(',').map((s: string) => s.trim()) : [],
             measurement_value: existing.measurement_value?.toString() || '',
-            measurement_unit_id: existing.measurement_unit_id || ''
+            measurement_unit_id: existing.measurement_unit_id || '',
+            comments: existing.comments || '',
+            non_driving_hours: existing.non_driving_hours?.toString() || ''
           } : d;
         })
       );
@@ -253,10 +270,14 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   };
 
   useEffect(() => {
-    if (activeTab === 'perziura' && viewWorker && viewMonth) {
-      loadSavedEntries();
+    if (activeTab === 'perziura') {
+      if (showAllWorkers && viewMonth) {
+        loadAllWorkersStats();
+      } else if (viewWorker && viewMonth) {
+        loadSavedEntries();
+      }
     }
-  }, [activeTab, viewWorker, viewMonth]);
+  }, [activeTab, viewWorker, viewMonth, showAllWorkers]);
 
   const loadWorkers = async () => {
     const query = supabase
@@ -409,6 +430,27 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     }
   };
 
+  const loadAllWorkersStats = async () => {
+    const startDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+    const endDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0);
+
+    let query = supabase
+      .from('manual_time_entries')
+      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
+      .gte('entry_date', startDate.toISOString().split('T')[0])
+      .lte('entry_date', endDate.toISOString().split('T')[0])
+      .order('entry_date', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error loading all workers stats:', error);
+      return;
+    }
+
+    setAllWorkersData(data || []);
+  };
+
   const loadSavedEntries = async () => {
     if (!viewWorker) return;
     const startDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
@@ -472,6 +514,22 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const updateDayEntry = (date: string, field: keyof DayEntry, value: string) => {
     setDayEntries(prev =>
       prev.map(d => (d.date === date ? { ...d, [field]: value } : d))
+    );
+  };
+
+  const toggleWorkDescription = (date: string, description: string) => {
+    setDayEntries(prev =>
+      prev.map(d => {
+        if (d.date !== date) return d;
+        const current = d.work_descriptions || [];
+        const exists = current.includes(description);
+        return {
+          ...d,
+          work_descriptions: exists 
+            ? current.filter(desc => desc !== description)
+            : [...current, description]
+        };
+      })
     );
   };
 
@@ -539,8 +597,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
               worker_type: prevDay.worker_type,
               lunch_type: prevDay.lunch_type,
               work_description: prevDay.work_description,
+              work_descriptions: [...prevDay.work_descriptions],
               measurement_value: prevDay.measurement_value,
-              measurement_unit_id: prevDay.measurement_unit_id
+              measurement_unit_id: prevDay.measurement_unit_id,
+              comments: prevDay.comments,
+              non_driving_hours: prevDay.non_driving_hours
             }
           : d
       )
@@ -584,11 +645,36 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       start_time: '', 
       end_time: '',
       work_description: '',
+      work_descriptions: [],
       measurement_value: '',
-      measurement_unit_id: ''
+      measurement_unit_id: '',
+      comments: '',
+      non_driving_hours: ''
     })));
   };
 
+
+  const deleteEntireDay = async (entryDate: string) => {
+    if (!confirm(`Ar tikrai norite ištrinti visus ${entryDate} įrašus?`)) return;
+    try {
+      await supabase
+        .from('manual_time_entries')
+        .delete()
+        .eq('worker_id', viewWorker)
+        .eq('entry_date', entryDate);
+
+      await supabase
+        .from('worker_schedules')
+        .delete()
+        .eq('worker_id', viewWorker)
+        .eq('date', entryDate);
+
+      loadSavedEntries();
+    } catch (error) {
+      console.error('Error deleting day:', error);
+      alert('Klaida trinant dieną');
+    }
+  };
 
   const saveEditedEntry = async () => {
     if (!editingEntry) return;
@@ -611,6 +697,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           work_description: editingEntry.work_description || null,
           measurement_value: editingEntry.measurement_value || null,
           measurement_unit_id: editingEntry.measurement_unit_id || null,
+          comments: editingEntry.comments || null,
+          non_driving_hours: editingEntry.non_driving_hours || null,
         })
         .eq('id', editingEntry.id);
 
@@ -677,9 +765,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         end_time: entry.end_time,
         worker_type: entry.worker_type,
         lunch_type: entry.lunch_type,
-        work_description: entry.work_description || null,
+        work_description: entry.work_descriptions.length > 0 ? entry.work_descriptions.join(', ') : (entry.work_description || null),
         measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
         measurement_unit_id: entry.measurement_unit_id || null,
+        comments: entry.comments || null,
+        non_driving_hours: entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : null,
         notes: 'Įvesta iš lapų',
       }));
 
@@ -697,8 +787,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         start_time: '', 
         end_time: '',
         work_description: '',
+        work_descriptions: [],
         measurement_value: '',
-        measurement_unit_id: ''
+        measurement_unit_id: '',
+        comments: '',
+        non_driving_hours: ''
       })));
       if (activeTab === 'perziura' && viewWorker === selectedWorker) {
         loadSavedEntries();
@@ -712,7 +805,12 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   };
 
   const totalHours = dayEntries.reduce(
-    (sum, d) => sum + calculateHours(d.start_time, d.end_time, d.lunch_type),
+    (sum, d) => {
+      if (d.worker_type === 'vairuotojas') {
+        return sum + (d.non_driving_hours ? parseFloat(d.non_driving_hours) : 0);
+      }
+      return sum + calculateHours(d.start_time, d.end_time, d.lunch_type);
+    },
     0
   );
   const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
@@ -906,6 +1004,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       <th className="px-2 py-2 text-left font-semibold text-gray-700">Pietūs</th>
                       <th className="px-2 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
                       <th className="px-2 py-2 text-left font-semibold text-gray-700">Val.</th>
+                      <th className="px-2 py-2 text-left font-semibold text-gray-700">Komentarai</th>
                       <th className="px-2 py-2 text-left font-semibold text-gray-700"></th>
                     </tr>
                   </thead>
@@ -981,48 +1080,90 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                 className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
                               />
                             ) : (
-                              <div className="flex gap-1">
-                                <select
-                                  value={day.work_description}
-                                  onChange={e => updateDayEntry(day.date, 'work_description', e.target.value)}
-                                  className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                >
-                                  <option value="">Pasirinkite darbą</option>
-                                  {workDescriptions
-                                    .filter(desc => desc.worker_type === day.worker_type)
-                                    .map(desc => (
-                                      <option key={desc.id} value={desc.description}>
-                                        {desc.description}
+                              <div className="flex flex-col gap-1">
+                                <div className="flex gap-1">
+                                  <select
+                                    value=""
+                                    onChange={e => {
+                                      if (e.target.value && !day.work_descriptions.includes(e.target.value)) {
+                                        toggleWorkDescription(day.date, e.target.value);
+                                      }
+                                    }}
+                                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  >
+                                    <option value="">+ Pridėti darbą</option>
+                                    {workDescriptions
+                                      .filter(desc => desc.worker_type === day.worker_type && !day.work_descriptions.includes(desc.description))
+                                      .map(desc => (
+                                        <option key={desc.id} value={desc.description}>
+                                          {desc.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={day.measurement_value}
+                                    onChange={e => updateDayEntry(day.date, 'measurement_value', e.target.value)}
+                                    placeholder="0"
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  />
+                                  <select
+                                    value={day.measurement_unit_id}
+                                    onChange={e => updateDayEntry(day.date, 'measurement_unit_id', e.target.value)}
+                                    className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  >
+                                    <option value="">Vnt.</option>
+                                    {availableUnits.map(unit => (
+                                      <option key={unit.id} value={unit.id}>
+                                        {unit.unit_abbreviation}
                                       </option>
                                     ))}
-                                </select>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={day.measurement_value}
-                                  onChange={e => updateDayEntry(day.date, 'measurement_value', e.target.value)}
-                                  placeholder="0"
-                                  className="w-16 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                />
-                                <select
-                                  value={day.measurement_unit_id}
-                                  onChange={e => updateDayEntry(day.date, 'measurement_unit_id', e.target.value)}
-                                  className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                >
-                                  <option value="">Vnt.</option>
-                                  {availableUnits.map(unit => (
-                                    <option key={unit.id} value={unit.id}>
-                                      {unit.unit_abbreviation}
-                                    </option>
-                                  ))}
-                                </select>
+                                  </select>
+                                </div>
+                                {day.work_descriptions.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {day.work_descriptions.map((desc, idx) => (
+                                      <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                        {desc}
+                                        <button
+                                          onClick={() => toggleWorkDescription(day.date, desc)}
+                                          className="hover:bg-blue-200 rounded-full p-0.5"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
                           <td className="px-2 py-2">
-                            <span className={`font-semibold text-xs ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                              {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
-                            </span>
+                            {day.worker_type === 'vairuotojas' ? (
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={day.non_driving_hours}
+                                onChange={e => updateDayEntry(day.date, 'non_driving_hours', e.target.value)}
+                                placeholder="0"
+                                className="w-16 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                title="Valandos nevairuojant"
+                              />
+                            ) : (
+                              <span className={`font-semibold text-xs ${hours > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                                {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={day.comments}
+                              onChange={e => updateDayEntry(day.date, 'comments', e.target.value)}
+                              placeholder="Pastabos"
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                            />
                           </td>
                           <td className="px-2 py-2">
                             {index > 0 && (
@@ -1098,19 +1239,35 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           </p>
 
           <div className="flex flex-wrap items-end gap-4 mb-6">
-            <div className="min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
-              <select
-                value={viewWorker}
-                onChange={e => setViewWorker(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Pasirinkite darbuotoją</option>
-                {workers.map(w => (
-                  <option key={w.id} value={w.id}>{w.full_name}</option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAllWorkers}
+                  onChange={e => {
+                    setShowAllWorkers(e.target.checked);
+                    if (e.target.checked) setViewWorker('');
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Rodyti visus darbuotojus</span>
+              </label>
             </div>
+            {!showAllWorkers && (
+              <div className="min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
+                <select
+                  value={viewWorker}
+                  onChange={e => setViewWorker(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Pasirinkite darbuotoją</option>
+                  {workers.map(w => (
+                    <option key={w.id} value={w.id}>{w.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Mėnuo</label>
               <input
@@ -1123,9 +1280,180 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
+            {showAllWorkers && (
+              <>
+                <div className="min-w-[150px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
+                  <select
+                    value={workerTypeFilter}
+                    onChange={e => setWorkerTypeFilter(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Visi</option>
+                    <option value="darbuotojas">Darbuotojai</option>
+                    <option value="vairuotojas">Vairuotojai</option>
+                    <option value="traktorininkas">Traktorininkai</option>
+                  </select>
+                </div>
+                <div className="min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
+                  <select
+                    value={selectedWorkerFilter}
+                    onChange={e => setSelectedWorkerFilter(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Visi darbuotojai</option>
+                    {workers.map(w => (
+                      <option key={w.id} value={w.id}>{w.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-[150px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={selectedDateFilter}
+                    onChange={e => setSelectedDateFilter(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
-          {viewWorker ? (
+          {showAllWorkers ? (
+            (() => {
+              const filteredData = allWorkersData
+                .filter(entry => {
+                  if (workerTypeFilter !== 'all' && entry.worker_type !== workerTypeFilter) return false;
+                  if (selectedWorkerFilter && entry.worker_id !== selectedWorkerFilter) return false;
+                  if (selectedDateFilter && entry.entry_date !== selectedDateFilter) return false;
+                  return true;
+                });
+
+              const workerStats = filteredData.reduce((acc: any, entry: any) => {
+                const workerId = entry.worker_id;
+                if (!acc[workerId]) {
+                  acc[workerId] = {
+                    worker_id: workerId,
+                    worker_name: entry.worker?.full_name || 'Unknown',
+                    worker_type: entry.worker_type,
+                    total_hours: 0,
+                    entries: []
+                  };
+                }
+                acc[workerId].total_hours += entry.hours_worked || 0;
+                acc[workerId].entries.push(entry);
+                return acc;
+              }, {});
+
+              const workersList = Object.values(workerStats);
+
+              return filteredData.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbuotojas</th>
+                          <th className="px-3 py-2 text-right font-semibold text-gray-700">Viso val.</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Data</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pradžia</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Tipas</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pietūs</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Val.</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Komentarai</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workersList.map((worker: any, workerIdx: number) => {
+                          const workerBg = workerIdx % 2 === 0 ? 'bg-blue-50/40' : 'bg-white';
+                          const workerBorder = 'border-blue-300';
+                          
+                          return (
+                            <>
+                              {worker.entries.map((entry: any, idx: number) => {
+                                const date = new Date(entry.entry_date);
+                                const dayName = DAY_NAMES[date.getDay()];
+                                return (
+                                  <tr key={entry.id} className={`border-b border-gray-200 hover:bg-blue-100/30 ${workerBg}`}>
+                                    {idx === 0 ? (
+                                      <>
+                                        <td rowSpan={worker.entries.length} className={`px-3 py-3 font-bold text-gray-900 border-r-4 ${workerBorder} ${workerBg}`}>
+                                          <div>{worker.worker_name}</div>
+                                          <div className="text-xs font-normal text-gray-600 mt-0.5">
+                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                                              {worker.worker_type === 'darbuotojas' ? 'Darb.' : worker.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td rowSpan={worker.entries.length} className={`px-3 py-3 text-right border-r-4 ${workerBorder} ${workerBg}`}>
+                                          <div className="text-2xl font-bold text-green-700">{worker.total_hours.toFixed(1)}h</div>
+                                          <div className="text-xs text-gray-600 mt-1">{worker.entries.length} įrašų</div>
+                                        </td>
+                                      </>
+                                    ) : null}
+                                  <td className="px-3 py-3 whitespace-nowrap">
+                                    <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
+                                    {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
+                                  </td>
+                                  <td className="px-3 py-3 font-mono text-sm">{entry.start_time}</td>
+                                  <td className="px-3 py-3 font-mono text-sm">{entry.end_time}</td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                      {entry.worker_type === 'darbuotojas' ? 'Darb.' : entry.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
+                                      {entry.lunch_type === 'none' ? 'Be' : entry.lunch_type === 'half' ? 'Pusė' : 'Pilni'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    {entry.worker_type === 'darbuotojas' ? (
+                                      <span className="text-xs text-gray-700">{entry.work_description || '-'}</span>
+                                    ) : (
+                                      <div className="text-xs text-gray-700">
+                                        <div>{entry.work_description || '-'}</div>
+                                        {entry.measurement_value && (
+                                          <div className="text-xs text-gray-500 mt-0.5">
+                                            {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="font-semibold text-green-700 text-sm">{entry.hours_worked?.toFixed(1) || '0.0'}h</span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-xs text-gray-600">{entry.comments || '-'}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {workerIdx < workersList.length - 1 && (
+                              <tr className="h-2 bg-gray-300">
+                                <td colSpan={10} className="p-0"></td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600">Nėra įrašų šiam mėnesiui</p>
+                </div>
+              );
+            })()
+          ) : viewWorker ? (
             savedEntries.length > 0 ? (
               <>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -1139,6 +1467,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Pietūs</th>
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Val.</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Komentarai</th>
                         <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
                       </tr>
                     </thead>
@@ -1206,50 +1535,113 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                       className="w-full px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
                                     />
                                   ) : (
-                                    <div className="flex gap-1">
-                                      <select
-                                        value={editingEntry.work_description || ''}
-                                        onChange={e => setEditingEntry({ ...editingEntry, work_description: e.target.value })}
-                                        className="flex-1 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                      >
-                                        <option value="">Pasirinkite darbą</option>
-                                        {workDescriptions
-                                          .filter(desc => desc.worker_type === editingEntry.worker_type)
-                                          .map(desc => (
-                                            <option key={desc.id} value={desc.description}>
-                                              {desc.description}
-                                            </option>
-                                          ))}
-                                      </select>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={editingEntry.measurement_value || ''}
-                                        onChange={e => setEditingEntry({ ...editingEntry, measurement_value: parseFloat(e.target.value) || 0 })}
-                                        placeholder="0"
-                                        className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                      />
-                                      <select
-                                        value={editingEntry.measurement_unit_id || ''}
-                                        onChange={e => setEditingEntry({ ...editingEntry, measurement_unit_id: e.target.value })}
-                                        className="w-20 px-1 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                      >
-                                        <option value="">Vnt.</option>
-                                        {measurementUnits
-                                          .filter(u => u.worker_type === editingEntry.worker_type)
-                                          .map(unit => (
-                                            <option key={unit.id} value={unit.id}>
-                                              {unit.unit_abbreviation}
-                                            </option>
-                                          ))}
-                                      </select>
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-1">
+                                        <select
+                                          value=""
+                                          onChange={e => {
+                                            if (e.target.value) {
+                                              const current = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
+                                              if (!current.includes(e.target.value)) {
+                                                const newDescs = [...current, e.target.value];
+                                                setEditingEntry({ 
+                                                  ...editingEntry, 
+                                                  work_descriptions: newDescs,
+                                                  work_description: newDescs.join(', ')
+                                                });
+                                              }
+                                            }
+                                          }}
+                                          className="flex-1 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                        >
+                                          <option value="">+ Pridėti darbą</option>
+                                          {workDescriptions
+                                            .filter(desc => {
+                                              const current = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
+                                              return desc.worker_type === editingEntry.worker_type && !current.includes(desc.description);
+                                            })
+                                            .map(desc => (
+                                              <option key={desc.id} value={desc.description}>
+                                                {desc.description}
+                                              </option>
+                                            ))}
+                                        </select>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={editingEntry.measurement_value || ''}
+                                          onChange={e => setEditingEntry({ ...editingEntry, measurement_value: parseFloat(e.target.value) || 0 })}
+                                          placeholder="0"
+                                          className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                        />
+                                        <select
+                                          value={editingEntry.measurement_unit_id || ''}
+                                          onChange={e => setEditingEntry({ ...editingEntry, measurement_unit_id: e.target.value })}
+                                          className="w-20 px-1 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                        >
+                                          <option value="">Vnt.</option>
+                                          {measurementUnits
+                                            .filter(u => u.worker_type === editingEntry.worker_type)
+                                            .map(unit => (
+                                              <option key={unit.id} value={unit.id}>
+                                                {unit.unit_abbreviation}
+                                              </option>
+                                            ))}
+                                        </select>
+                                      </div>
+                                      {(() => {
+                                        const workDescs = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
+                                        return workDescs.length > 0 && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {workDescs.map((desc, idx) => (
+                                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                                {desc}
+                                                <button
+                                                  onClick={() => {
+                                                    const newDescs = workDescs.filter(d => d !== desc);
+                                                    setEditingEntry({ 
+                                                      ...editingEntry, 
+                                                      work_descriptions: newDescs,
+                                                      work_description: newDescs.join(', ')
+                                                    });
+                                                  }}
+                                                  className="hover:bg-blue-200 rounded-full p-0.5"
+                                                >
+                                                  <X className="w-3 h-3" />
+                                                </button>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
-                                  <span className="font-semibold text-blue-700 text-xs">
-                                    {calculateHours(editingEntry.start_time, editingEntry.end_time, editingEntry.lunch_type as any).toFixed(1)}h
-                                  </span>
+                                  {editingEntry.worker_type === 'vairuotojas' ? (
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={editingEntry.non_driving_hours || ''}
+                                      onChange={e => setEditingEntry({ ...editingEntry, non_driving_hours: parseFloat(e.target.value) || 0 })}
+                                      placeholder="0"
+                                      className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                      title="Valandos nevairuojant"
+                                    />
+                                  ) : (
+                                    <span className="font-semibold text-blue-700 text-xs">
+                                      {calculateHours(editingEntry.start_time, editingEntry.end_time, editingEntry.lunch_type as any).toFixed(1)}h
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <input
+                                    type="text"
+                                    value={editingEntry.comments || ''}
+                                    onChange={e => setEditingEntry({ ...editingEntry, comments: e.target.value })}
+                                    placeholder="Pastabos"
+                                    className="w-full px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                                  />
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex gap-1">
@@ -1291,25 +1683,45 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                   {entry.worker_type === 'darbuotojas' ? (
                                     <span className="text-xs text-gray-700">{entry.work_description || '-'}</span>
                                   ) : (
-                                    <span className="text-xs text-gray-700">
-                                      {entry.measurement_value ? `${entry.measurement_value} ${entry.measurement_unit?.unit_abbreviation || ''}` : '-'}
-                                    </span>
+                                    <div className="text-xs text-gray-700">
+                                      <div>{entry.work_description || '-'}</div>
+                                      {entry.measurement_value && (
+                                        <div className="text-xs text-gray-500 mt-0.5">
+                                          {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
                                   <span className="font-semibold text-green-700 text-sm">{entry.hours_worked.toFixed(1)}h</span>
                                 </td>
                                 <td className="px-3 py-3">
-                                  <button
-                                    onClick={() => {
-                                      setEditingEntryId(entry.id);
-                                      setEditingEntry({ ...entry });
-                                    }}
-                                    className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                    title="Redaguoti"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
+                                  <span className="text-xs text-gray-600">{entry.comments || '-'}</span>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setEditingEntryId(entry.id);
+                                        setEditingEntry({ 
+                                          ...entry,
+                                          work_descriptions: entry.work_description ? entry.work_description.split(',').map(s => s.trim()) : []
+                                        });
+                                      }}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                      title="Redaguoti"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteEntireDay(entry.entry_date)}
+                                      className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                      title="Ištrinti visą dieną"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </>
                             )}
