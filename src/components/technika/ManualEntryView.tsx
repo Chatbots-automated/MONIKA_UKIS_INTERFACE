@@ -64,6 +64,30 @@ interface ManualEntryViewProps {
 
 const DAY_NAMES = ['Sk', 'Pr', 'An', 'Tr', 'Kt', 'Pn', 'Št'];
 
+// Lithuanian public holidays for 2026
+const HOLIDAYS_2026 = [
+  '2026-01-01', // Naujieji metai
+  '2026-02-16', // Lietuvos valstybės atkūrimo diena
+  '2026-03-11', // Lietuvos nepriklausomybės atkūrimo diena
+  '2026-04-12', // Velykos
+  '2026-04-13', // Antroji Velykų diena
+  '2026-05-01', // Tarptautinė darbo diena
+  '2026-05-03', // Motinos diena
+  '2026-06-07', // Joninės
+  '2026-06-24', // Rasos ir Joninių diena
+  '2026-07-06', // Valstybės (Lietuvos karaliaus Mindaugo karūnavimo) diena
+  '2026-08-15', // Žolinė (Švč. Mergelės Marijos ėmimo į dangų diena)
+  '2026-11-01', // Visų šventųjų diena
+  '2026-11-02', // Vėlinės
+  '2026-12-24', // Kūčios
+  '2026-12-25', // Kalėdos
+  '2026-12-26', // Antroji Kalėdų diena
+];
+
+function isHoliday(dateStr: string): boolean {
+  return HOLIDAYS_2026.includes(dateStr);
+}
+
 function normalizeTimeToHHMM(value: string): string {
   const v = value.trim();
   if (!v) return '';
@@ -132,6 +156,27 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     const entrytab = params.get('entrytab');
     return (entrytab as 'ivesti' | 'perziura' | 'vienetai') || 'ivesti';
   });
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @media print {
+        @page { size: landscape; margin: 0.5cm; }
+        body * { visibility: hidden; }
+        .print-container, .print-container * { visibility: visible; }
+        .print-container { position: absolute; left: 0; top: 0; width: 100%; }
+        .print-container table { font-size: 9pt; }
+        .print-container th, .print-container td { padding: 3px 5px !important; }
+        .print-hide { display: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   // Įvesti tab state
   const [selectedWorker, setSelectedWorker] = useState<string>('');
@@ -1014,13 +1059,16 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       const dayName = DAY_NAMES[date.getDay()];
                       const hours = calculateHours(day.start_time, day.end_time, day.lunch_type);
                       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                      const isHolidayDay = isHoliday(day.date);
                       const availableUnits = measurementUnits.filter(u => u.worker_type === day.worker_type);
                       
                       return (
-                        <tr key={day.date} className={`border-b border-gray-100 hover:bg-blue-50/50 ${isWeekend ? 'bg-gray-50' : ''}`}>
+                        <tr key={day.date} className={`border-b border-gray-100 hover:bg-blue-50/50 ${isHolidayDay ? 'bg-red-100' : isWeekend ? 'bg-gray-200' : ''}`}>
                           <td className="px-2 py-2 whitespace-nowrap">
-                            <span className={`text-xs uppercase ${isWeekend ? 'text-gray-400' : 'text-gray-500'}`}>{dayName}</span>{' '}
-                            {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
+                            <span className={`text-xs uppercase font-semibold ${isHolidayDay ? 'text-red-600' : isWeekend ? 'text-gray-600' : 'text-gray-500'}`}>{dayName}</span>{' '}
+                            <span className={isHolidayDay ? 'font-semibold text-red-700' : ''}>
+                              {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
+                            </span>
                           </td>
                           <td className="px-2 py-2">
                             <input
@@ -1232,42 +1280,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       )}
 
       {activeTab === 'perziura' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Peržiūra</h3>
-          <p className="text-sm text-gray-600 mb-6">
-            Pasirinkite darbuotoją ir mėnesį, kad peržiūrėtumėte įvestas valandas.
+        <div className="bg-white print:p-0">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 print-hide px-6 pt-6">Peržiūra</h3>
+          <p className="text-sm text-gray-600 mb-6 print-hide px-6">
+            Pasirinkite mėnesį, kad peržiūrėtumėte įvestas valandas. Spauskite ant valandų redagavimui.
           </p>
 
-          <div className="flex flex-wrap items-end gap-4 mb-6">
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showAllWorkers}
-                  onChange={e => {
-                    setShowAllWorkers(e.target.checked);
-                    if (e.target.checked) setViewWorker('');
-                  }}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Rodyti visus darbuotojus</span>
-              </label>
-            </div>
-            {!showAllWorkers && (
-              <div className="min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
-                <select
-                  value={viewWorker}
-                  onChange={e => setViewWorker(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Pasirinkite darbuotoją</option>
-                  {workers.map(w => (
-                    <option key={w.id} value={w.id}>{w.full_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="flex flex-wrap items-end gap-4 mb-6 print-hide px-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Mėnuo</label>
               <input
@@ -1280,466 +1299,180 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
-            {showAllWorkers && (
-              <>
-                <div className="min-w-[150px]">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
-                  <select
-                    value={workerTypeFilter}
-                    onChange={e => setWorkerTypeFilter(e.target.value as any)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">Visi</option>
-                    <option value="darbuotojas">Darbuotojai</option>
-                    <option value="vairuotojas">Vairuotojai</option>
-                    <option value="traktorininkas">Traktorininkai</option>
-                  </select>
-                </div>
-                <div className="min-w-[200px]">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
-                  <select
-                    value={selectedWorkerFilter}
-                    onChange={e => setSelectedWorkerFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Visi darbuotojai</option>
-                    {workers.map(w => (
-                      <option key={w.id} value={w.id}>{w.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="min-w-[150px]">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={selectedDateFilter}
-                    onChange={e => setSelectedDateFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </>
-            )}
+            <div className="min-w-[150px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
+              <select
+                value={workerTypeFilter}
+                onChange={e => setWorkerTypeFilter(e.target.value as any)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Visi</option>
+                <option value="darbuotojas">Darbuotojai</option>
+                <option value="vairuotojas">Vairuotojai</option>
+                <option value="traktorininkas">Traktorininkai</option>
+              </select>
+            </div>
+            <div className="min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
+              <select
+                value={selectedWorkerFilter}
+                onChange={e => setSelectedWorkerFilter(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Visi darbuotojai</option>
+                {workers.map(w => (
+                  <option key={w.id} value={w.id}>{w.full_name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Spausdinti
+            </button>
           </div>
 
-          {showAllWorkers ? (
-            (() => {
-              const filteredData = allWorkersData
-                .filter(entry => {
-                  if (workerTypeFilter !== 'all' && entry.worker_type !== workerTypeFilter) return false;
-                  if (selectedWorkerFilter && entry.worker_id !== selectedWorkerFilter) return false;
-                  if (selectedDateFilter && entry.entry_date !== selectedDateFilter) return false;
-                  return true;
-                });
+          {(() => {
+            const filteredData = allWorkersData
+              .filter(entry => {
+                if (workerTypeFilter !== 'all' && entry.worker_type !== workerTypeFilter) return false;
+                if (selectedWorkerFilter && entry.worker_id !== selectedWorkerFilter) return false;
+                return true;
+              });
 
-              const workerStats = filteredData.reduce((acc: any, entry: any) => {
-                const workerId = entry.worker_id;
-                if (!acc[workerId]) {
-                  acc[workerId] = {
-                    worker_id: workerId,
-                    worker_name: entry.worker?.full_name || 'Unknown',
-                    worker_type: entry.worker_type,
-                    total_hours: 0,
-                    entries: []
-                  };
-                }
-                acc[workerId].total_hours += entry.hours_worked || 0;
-                acc[workerId].entries.push(entry);
-                return acc;
-              }, {});
-
-              const workersList = Object.values(workerStats);
-
-              return filteredData.length > 0 ? (
-                <>
-                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbuotojas</th>
-                          <th className="px-3 py-2 text-right font-semibold text-gray-700">Viso val.</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Data</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pradžia</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Tipas</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Pietūs</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Val.</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Komentarai</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {workersList.map((worker: any, workerIdx: number) => {
-                          const workerBg = workerIdx % 2 === 0 ? 'bg-blue-50/40' : 'bg-white';
-                          const workerBorder = 'border-blue-300';
-                          
-                          return (
-                            <>
-                              {worker.entries.map((entry: any, idx: number) => {
-                                const date = new Date(entry.entry_date);
-                                const dayName = DAY_NAMES[date.getDay()];
-                                return (
-                                  <tr key={entry.id} className={`border-b border-gray-200 hover:bg-blue-100/30 ${workerBg}`}>
-                                    {idx === 0 ? (
-                                      <>
-                                        <td rowSpan={worker.entries.length} className={`px-3 py-3 font-bold text-gray-900 border-r-4 ${workerBorder} ${workerBg}`}>
-                                          <div>{worker.worker_name}</div>
-                                          <div className="text-xs font-normal text-gray-600 mt-0.5">
-                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
-                                              {worker.worker_type === 'darbuotojas' ? 'Darb.' : worker.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
-                                            </span>
-                                          </div>
-                                        </td>
-                                        <td rowSpan={worker.entries.length} className={`px-3 py-3 text-right border-r-4 ${workerBorder} ${workerBg}`}>
-                                          <div className="text-2xl font-bold text-green-700">{worker.total_hours.toFixed(1)}h</div>
-                                          <div className="text-xs text-gray-600 mt-1">{worker.entries.length} įrašų</div>
-                                        </td>
-                                      </>
-                                    ) : null}
-                                  <td className="px-3 py-3 whitespace-nowrap">
-                                    <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
-                                    {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
-                                  </td>
-                                  <td className="px-3 py-3 font-mono text-sm">{entry.start_time}</td>
-                                  <td className="px-3 py-3 font-mono text-sm">{entry.end_time}</td>
-                                  <td className="px-3 py-3">
-                                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
-                                      {entry.worker_type === 'darbuotojas' ? 'Darb.' : entry.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
-                                      {entry.lunch_type === 'none' ? 'Be' : entry.lunch_type === 'half' ? 'Pusė' : 'Pilni'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    {entry.worker_type === 'darbuotojas' ? (
-                                      <span className="text-xs text-gray-700">{entry.work_description || '-'}</span>
-                                    ) : (
-                                      <div className="text-xs text-gray-700">
-                                        <div>{entry.work_description || '-'}</div>
-                                        {entry.measurement_value && (
-                                          <div className="text-xs text-gray-500 mt-0.5">
-                                            {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    <span className="font-semibold text-green-700 text-sm">{entry.hours_worked?.toFixed(1) || '0.0'}h</span>
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    <span className="text-xs text-gray-600">{entry.comments || '-'}</span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                            {workerIdx < workersList.length - 1 && (
-                              <tr className="h-2 bg-gray-300">
-                                <td colSpan={10} className="p-0"></td>
-                              </tr>
-                            )}
-                          </>
-                        );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
+            if (filteredData.length === 0) {
+              return (
                 <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
                   <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                   <p className="text-gray-600">Nėra įrašų šiam mėnesiui</p>
                 </div>
               );
-            })()
-          ) : viewWorker ? (
-            savedEntries.length > 0 ? (
-              <>
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Data</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pradžia</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pabaiga</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Tipas</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Pietūs</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Darbas/Matavimas</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Val.</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Komentarai</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {savedEntries.map(entry => {
-                        const date = new Date(entry.entry_date);
-                        const dayName = DAY_NAMES[date.getDay()];
-                        const isEditing = editingEntryId === entry.id;
+            }
 
-                        return (
-                          <tr key={entry.id} className="border-b border-gray-100">
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <span className="text-gray-500 text-xs uppercase">{dayName}</span>{' '}
-                              {date.toLocaleDateString('lt-LT', { day: 'numeric', month: 'short' })}
-                            </td>
-                            {isEditing && editingEntry ? (
-                              <>
-                                <td className="px-3 py-3">
-                                  <input
-                                    type="text"
-                                    value={editingEntry.start_time}
-                                    onChange={e => setEditingEntry({ ...editingEntry, start_time: e.target.value })}
-                                    onBlur={() => setEditingEntry({ ...editingEntry, start_time: normalizeTimeToHHMM(editingEntry.start_time) })}
-                                    className="w-20 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-3">
-                                  <input
-                                    type="text"
-                                    value={editingEntry.end_time}
-                                    onChange={e => setEditingEntry({ ...editingEntry, end_time: e.target.value })}
-                                    onBlur={() => setEditingEntry({ ...editingEntry, end_time: normalizeTimeToHHMM(editingEntry.end_time) })}
-                                    className="w-20 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-3">
-                                  <select
-                                    value={editingEntry.worker_type}
-                                    onChange={e => setEditingEntry({ ...editingEntry, worker_type: e.target.value })}
-                                    className="w-28 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+            // Group entries by worker
+            const workerStats = filteredData.reduce((acc: any, entry: any) => {
+              const workerId = entry.worker_id;
+              if (!acc[workerId]) {
+                acc[workerId] = {
+                  worker_id: workerId,
+                  worker_name: entry.worker?.full_name || 'Unknown',
+                  worker_type: entry.worker_type,
+                  total_hours: 0,
+                  entriesByDate: {}
+                };
+              }
+              acc[workerId].total_hours += entry.hours_worked || 0;
+              acc[workerId].entriesByDate[entry.entry_date] = entry;
+              return acc;
+            }, {});
+
+            const workersList = Object.values(workerStats);
+
+            // Get all days in the month
+            const year = viewMonth.getFullYear();
+            const month = viewMonth.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const allDays = Array.from({ length: daysInMonth }, (_, i) => {
+              const day = i + 1;
+              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const date = new Date(year, month, day);
+              return {
+                day,
+                dateStr,
+                dayName: DAY_NAMES[date.getDay()]
+              };
+            });
+
+            return (
+              <>
+                <div className="print-container -mx-4 sm:-mx-6 lg:-mx-8 print:mx-0">
+                  <div className="mb-4 text-center print:block hidden">
+                    <h2 className="text-2xl font-bold">Darbuotojų darbo valandos</h2>
+                    <p className="text-base text-gray-600">
+                      {viewMonth.toLocaleDateString('lt-LT', { year: 'numeric', month: 'long' })}
+                      {workerTypeFilter !== 'all' && ` - ${workerTypeFilter === 'darbuotojas' ? 'Darbuotojai' : workerTypeFilter === 'vairuotojas' ? 'Vairuotojai' : 'Traktorininkai'}`}
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse border-2 border-gray-300">
+                      <thead className="bg-gray-50 print:bg-white">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-bold text-gray-800 border-r-2 border-gray-400 sticky left-0 bg-gray-50 print:bg-white print:sticky-none" style={{ width: '160px' }}>
+                            Darbuotojas
+                          </th>
+                          {allDays.map(({ day, dayName, dateStr }) => {
+                            const date = new Date(dateStr);
+                            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                            const isHolidayDay = isHoliday(dateStr);
+                            
+                            return (
+                              <th key={day} className={`px-1 py-2 text-center font-semibold border-r border-gray-300 ${isHolidayDay ? 'bg-red-100 text-red-700' : isWeekend ? 'bg-gray-200 text-gray-700' : 'text-gray-700'}`} style={{ width: '32px' }}>
+                                <div className="text-xs">{dayName}</div>
+                                <div className="font-bold text-sm">{day}</div>
+                              </th>
+                            );
+                          })}
+                          <th className="px-3 py-2 text-center font-bold text-gray-800 border-l-2 border-gray-400 bg-green-50 print:bg-gray-100" style={{ width: '80px' }}>
+                            Viso val.
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workersList.map((worker: any, workerIdx: number) => {
+                          const workerBg = workerIdx % 2 === 0 ? 'bg-blue-50/30' : 'bg-white';
+                          
+                          return (
+                            <tr key={worker.worker_id} className={`border-b border-gray-300 hover:bg-blue-100/30 print:hover:bg-transparent ${workerBg}`}>
+                              <td className={`px-3 py-2 font-semibold text-gray-900 border-r-2 border-gray-400 sticky left-0 print:sticky-none ${workerBg}`}>
+                                <div className="text-sm">{worker.worker_name}</div>
+                                <div className="text-xs text-gray-600 mt-0.5">
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs print:bg-transparent print:border print:border-gray-400">
+                                    {worker.worker_type === 'darbuotojas' ? 'Darb.' : worker.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
+                                  </span>
+                                </div>
+                              </td>
+                              {allDays.map(({ dateStr }) => {
+                                const entry = worker.entriesByDate[dateStr];
+                                const date = new Date(dateStr);
+                                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                                const isHolidayDay = isHoliday(dateStr);
+                                
+                                return (
+                                  <td 
+                                    key={dateStr} 
+                                    className={`px-1 py-2 text-center border-r border-gray-300 ${isHolidayDay ? 'bg-red-100 print:bg-red-200' : isWeekend ? 'bg-gray-200 print:bg-gray-300' : ''}`}
+                                    title={entry ? `${entry.start_time} - ${entry.end_time}${entry.work_description ? '\n' + entry.work_description : ''}${entry.comments ? '\n' + entry.comments : ''}` : ''}
                                   >
-                                    <option value="darbuotojas">Darbuotojas</option>
-                                    <option value="vairuotojas">Vairuotojas</option>
-                                    <option value="traktorininkas">Traktorininkas</option>
-                                  </select>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <select
-                                    value={editingEntry.lunch_type}
-                                    onChange={e => setEditingEntry({ ...editingEntry, lunch_type: e.target.value })}
-                                    className="w-24 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                  >
-                                    <option value="none">Be pietų</option>
-                                    <option value="half">Pusė (30min)</option>
-                                    <option value="full">Pilni (1h)</option>
-                                  </select>
-                                </td>
-                                <td className="px-3 py-3">
-                                  {editingEntry.worker_type === 'darbuotojas' ? (
-                                    <input
-                                      type="text"
-                                      value={editingEntry.work_description || ''}
-                                      onChange={e => setEditingEntry({ ...editingEntry, work_description: e.target.value })}
-                                      placeholder="Atliekamas darbas"
-                                      className="w-full px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                    />
-                                  ) : (
-                                    <div className="flex flex-col gap-1">
-                                      <div className="flex gap-1">
-                                        <select
-                                          value=""
-                                          onChange={e => {
-                                            if (e.target.value) {
-                                              const current = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
-                                              if (!current.includes(e.target.value)) {
-                                                const newDescs = [...current, e.target.value];
-                                                setEditingEntry({ 
-                                                  ...editingEntry, 
-                                                  work_descriptions: newDescs,
-                                                  work_description: newDescs.join(', ')
-                                                });
-                                              }
-                                            }
-                                          }}
-                                          className="flex-1 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                        >
-                                          <option value="">+ Pridėti darbą</option>
-                                          {workDescriptions
-                                            .filter(desc => {
-                                              const current = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
-                                              return desc.worker_type === editingEntry.worker_type && !current.includes(desc.description);
-                                            })
-                                            .map(desc => (
-                                              <option key={desc.id} value={desc.description}>
-                                                {desc.description}
-                                              </option>
-                                            ))}
-                                        </select>
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          value={editingEntry.measurement_value || ''}
-                                          onChange={e => setEditingEntry({ ...editingEntry, measurement_value: parseFloat(e.target.value) || 0 })}
-                                          placeholder="0"
-                                          className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                        />
-                                        <select
-                                          value={editingEntry.measurement_unit_id || ''}
-                                          onChange={e => setEditingEntry({ ...editingEntry, measurement_unit_id: e.target.value })}
-                                          className="w-20 px-1 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                        >
-                                          <option value="">Vnt.</option>
-                                          {measurementUnits
-                                            .filter(u => u.worker_type === editingEntry.worker_type)
-                                            .map(unit => (
-                                              <option key={unit.id} value={unit.id}>
-                                                {unit.unit_abbreviation}
-                                              </option>
-                                            ))}
-                                        </select>
+                                    {entry ? (
+                                      <div className="font-bold text-sm text-green-700 print:text-black">
+                                        {entry.hours_worked?.toFixed(1) || '0.0'}
                                       </div>
-                                      {(() => {
-                                        const workDescs = editingEntry.work_descriptions || (editingEntry.work_description ? editingEntry.work_description.split(',').map(s => s.trim()) : []);
-                                        return workDescs.length > 0 && (
-                                          <div className="flex flex-wrap gap-1">
-                                            {workDescs.map((desc, idx) => (
-                                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                                                {desc}
-                                                <button
-                                                  onClick={() => {
-                                                    const newDescs = workDescs.filter(d => d !== desc);
-                                                    setEditingEntry({ 
-                                                      ...editingEntry, 
-                                                      work_descriptions: newDescs,
-                                                      work_description: newDescs.join(', ')
-                                                    });
-                                                  }}
-                                                  className="hover:bg-blue-200 rounded-full p-0.5"
-                                                >
-                                                  <X className="w-3 h-3" />
-                                                </button>
-                                              </span>
-                                            ))}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-3">
-                                  {editingEntry.worker_type === 'vairuotojas' ? (
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      value={editingEntry.non_driving_hours || ''}
-                                      onChange={e => setEditingEntry({ ...editingEntry, non_driving_hours: parseFloat(e.target.value) || 0 })}
-                                      placeholder="0"
-                                      className="w-16 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                      title="Valandos nevairuojant"
-                                    />
-                                  ) : (
-                                    <span className="font-semibold text-blue-700 text-xs">
-                                      {calculateHours(editingEntry.start_time, editingEntry.end_time, editingEntry.lunch_type as any).toFixed(1)}h
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-3">
-                                  <input
-                                    type="text"
-                                    value={editingEntry.comments || ''}
-                                    onChange={e => setEditingEntry({ ...editingEntry, comments: e.target.value })}
-                                    placeholder="Pastabos"
-                                    className="w-full px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                                  />
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={saveEditedEntry}
-                                      className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                      title="Išsaugoti"
-                                    >
-                                      <Save className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setEditingEntryId(null);
-                                        setEditingEntry(null);
-                                      }}
-                                      className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                                      title="Atšaukti"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="px-3 py-3 font-mono text-sm">{entry.start_time}</td>
-                                <td className="px-3 py-3 font-mono text-sm">{entry.end_time}</td>
-                                <td className="px-3 py-3">
-                                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
-                                    {entry.worker_type === 'darbuotojas' ? 'Darb.' : entry.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
-                                    {entry.lunch_type === 'none' ? 'Be' : entry.lunch_type === 'half' ? 'Pusė' : 'Pilni'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-3">
-                                  {entry.worker_type === 'darbuotojas' ? (
-                                    <span className="text-xs text-gray-700">{entry.work_description || '-'}</span>
-                                  ) : (
-                                    <div className="text-xs text-gray-700">
-                                      <div>{entry.work_description || '-'}</div>
-                                      {entry.measurement_value && (
-                                        <div className="text-xs text-gray-500 mt-0.5">
-                                          {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-3">
-                                  <span className="font-semibold text-green-700 text-sm">{entry.hours_worked.toFixed(1)}h</span>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <span className="text-xs text-gray-600">{entry.comments || '-'}</span>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setEditingEntryId(entry.id);
-                                        setEditingEntry({ 
-                                          ...entry,
-                                          work_descriptions: entry.work_description ? entry.work_description.split(',').map(s => s.trim()) : []
-                                        });
-                                      }}
-                                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                      title="Redaguoti"
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => deleteEntireDay(entry.entry_date)}
-                                      className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
-                                      title="Ištrinti visą dieną"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                    ) : (
+                                      <span className="text-gray-300 print:text-gray-400 text-xs">-</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-3 py-2 text-center border-l-2 border-gray-400 bg-green-50 print:bg-gray-100">
+                                <div className="text-lg font-bold text-green-700 print:text-black">{worker.total_hours.toFixed(1)}</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                {/* Monthly Statistics for Peržiūra */}
-                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Summary Statistics */}
+                <div className="mt-6 grid grid-cols-3 gap-4 print:hidden px-4 sm:px-6 lg:px-8">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-1">
-                      <BarChart3 className="w-4 h-4 text-blue-600" />
-                      <div className="text-xs text-blue-700 font-medium">Darbo dienų</div>
+                      <User className="w-4 h-4 text-blue-600" />
+                      <div className="text-xs text-blue-700 font-medium">Darbuotojų</div>
                     </div>
-                    <div className="text-2xl font-bold text-blue-900">{savedEntries.length}</div>
+                    <div className="text-2xl font-bold text-blue-900">{workersList.length}</div>
                   </div>
                   <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-1">
@@ -1747,32 +1480,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                       <div className="text-xs text-green-700 font-medium">Viso valandų</div>
                     </div>
                     <div className="text-2xl font-bold text-green-900">
-                      {savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0).toFixed(1)}h
+                      {workersList.reduce((sum: number, w: any) => sum + w.total_hours, 0).toFixed(1)}h
                     </div>
                   </div>
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-1">
                       <BarChart3 className="w-4 h-4 text-purple-600" />
-                      <div className="text-xs text-purple-700 font-medium">Vidutiniškai/dieną</div>
+                      <div className="text-xs text-purple-700 font-medium">Įrašų</div>
                     </div>
-                    <div className="text-2xl font-bold text-purple-900">
-                      {(savedEntries.reduce((s, e) => s + (e.hours_worked || 0), 0) / savedEntries.length).toFixed(1)}h
-                    </div>
+                    <div className="text-2xl font-bold text-purple-900">{filteredData.length}</div>
                   </div>
                 </div>
               </>
-            ) : (
-              <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600">Nėra įrašų šiam darbuotojui ir mėnesiui</p>
-              </div>
-            )
-          ) : (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-              <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">Pasirinkite darbuotoją ir mėnesį</p>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
