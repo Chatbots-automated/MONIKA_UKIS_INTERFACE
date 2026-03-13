@@ -3,7 +3,7 @@ import { UserManagement } from './UserManagement';
 import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
 import { SecurityMonitor } from './SecurityMonitor';
-import { CriticalDataEditor } from './CriticalDataEditor';
+import { TreatmentTransfer } from './TreatmentTransfer';
 import { WorkerApprovals } from './admin/WorkerApprovals';
 import { Users, Activity, Shield, FileText, Settings, ClipboardCheck } from 'lucide-react';
 
@@ -82,7 +82,7 @@ export function AdminDashboard() {
         {activeTab === 'worker-approvals' && <WorkerApprovals />}
         {activeTab === 'audit' && <AuditLogViewer />}
         {activeTab === 'security' && <SecurityMonitor />}
-        {activeTab === 'maintenance' && <CriticalDataEditor />}
+        {activeTab === 'maintenance' && <TreatmentTransfer />}
       </div>
     </div>
   );
