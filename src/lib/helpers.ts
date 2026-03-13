@@ -162,6 +162,68 @@ export async function fetchLatestCollarNumbers(): Promise<Map<string, number>> {
 }
 
 /**
+ * Fetch latest group numbers for animals from GEA data
+ * Returns Map<animal_id, group_number>
+ */
+export async function fetchLatestGroupNumbers(): Promise<Map<string, string>> {
+  try {
+    // Get latest import
+    const { data: latestImport } = await supabase
+      .from('gea_daily_imports')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!latestImport) {
+      return new Map();
+    }
+
+    // Get all animals with their tag numbers
+    const animals = await fetchAllRows<{ id: string; tag_no: string }>(
+      'animals',
+      'id, tag_no',
+      'tag_no',
+      [{ column: 'active', value: true }]
+    );
+
+    // Get group numbers from ataskaita1 for the latest import
+    const { data: ataskaita1Data } = await supabase
+      .from('gea_daily_ataskaita1')
+      .select('ear_number, group_number')
+      .eq('import_id', latestImport.id);
+
+    if (!ataskaita1Data) {
+      return new Map();
+    }
+
+    // Build map: ear_number -> group_number
+    const earToGroup = new Map<string, string>();
+    ataskaita1Data.forEach((record) => {
+      if (record.ear_number && record.group_number) {
+        earToGroup.set(record.ear_number, record.group_number);
+      }
+    });
+
+    // Build final map: animal_id -> group_number
+    const groupMap = new Map<string, string>();
+    animals.forEach((animal) => {
+      if (animal.tag_no) {
+        const groupNumber = earToGroup.get(animal.tag_no);
+        if (groupNumber) {
+          groupMap.set(animal.id, groupNumber);
+        }
+      }
+    });
+
+    return groupMap;
+  } catch (error) {
+    console.error('Error fetching group numbers:', error);
+    return new Map();
+  }
+}
+
+/**
  * Fetch raw GEA tables and build latest avg_milk per tag_no client-side.
  * Avoids the slow gea_daily_cows_joined view - uses simple table fetches like Vaistų Panaudojimas.
  * Returns Map<tag_no, avg_milk_kg>

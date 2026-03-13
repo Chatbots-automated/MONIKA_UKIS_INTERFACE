@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchAllRows, normalizeNumberInput, fetchLatestCollarNumbers } from '../lib/helpers';
+import { fetchAllRows, normalizeNumberInput, fetchLatestCollarNumbers, fetchLatestGroupNumbers } from '../lib/helpers';
 import { Product, Animal, Batch, Unit } from '../lib/types';
 import { Syringe, Check, Search, CheckSquare, Square, Calendar, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,11 @@ interface GeaCollarData {
   snapshot_date: string;
 }
 
+interface GeaGroupData {
+  animal_id: string;
+  group_number: string;
+}
+
 export function Vaccinations() {
   const { logAction } = useAuth();
   const [vaccinations, setVaccinations] = useState<any[]>([]);
@@ -26,6 +31,7 @@ export function Vaccinations() {
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [geaCollars, setGeaCollars] = useState<Map<string, number>>(new Map());
+  const [geaGroups, setGeaGroups] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [neckNumberSearch, setNeckNumberSearch] = useState('');
@@ -38,6 +44,7 @@ export function Vaccinations() {
   const [filterAgeTo, setFilterAgeTo] = useState('');
   const [filterTagFrom, setFilterTagFrom] = useState('');
   const [filterTagTo, setFilterTagTo] = useState('');
+  const [filterGroupNumber, setFilterGroupNumber] = useState('');
 
   const [vacDateFrom, setVacDateFrom] = useState('');
   const [vacDateTo, setVacDateTo] = useState('');
@@ -77,15 +84,17 @@ export function Vaccinations() {
 
   const loadData = async () => {
     try {
-      const [vacsRes, prodsRes, animalsRes, batchesRes, collarMap] = await Promise.all([
+      const [vacsRes, prodsRes, animalsRes, batchesRes, collarMap, groupMap] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
         fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
         fetchLatestCollarNumbers(),
+        fetchLatestGroupNumbers(),
       ]);
 
       setGeaCollars(collarMap);
+      setGeaGroups(groupMap);
       setVaccinations(vacsRes.data || []);
       setProducts(prodsRes.data || []);
       setAnimals(animalsRes || []);
@@ -311,6 +320,13 @@ export function Vaccinations() {
       matchesNeck = collarNo ? collarNo.toString() === neckNumberSearch : false;
     }
 
+    // Filter by group number
+    let matchesGroup = true;
+    if (filterGroupNumber) {
+      const groupNumber = geaGroups.get(a.id);
+      matchesGroup = groupNumber ? groupNumber === filterGroupNumber : false;
+    }
+
     const matchesSex = !filterSex || a.sex?.toLowerCase() === filterSex.toLowerCase();
 
     const ageInMonths = a.age_months || 0;
@@ -331,7 +347,7 @@ export function Vaccinations() {
       return true;
     };
 
-    return matchesSearch && matchesNeck && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
+    return matchesSearch && matchesNeck && matchesGroup && matchesSex && matchesAgeFrom && matchesAgeTo && matchesTagRange();
   });
 
   const filteredVaccinations = vaccinations.filter(vac => {
@@ -601,7 +617,7 @@ export function Vaccinations() {
               <h4 className="font-bold text-gray-900">Filtruoti gyvūnus</h4>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Lytis</label>
                 <select
@@ -613,6 +629,20 @@ export function Vaccinations() {
                   <option value="Bulius">Bulius</option>
                   <option value="Karvė">Karvė</option>
                   <option value="Telyčaitė">Telyčaitė</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Grupė</label>
+                <select
+                  value={filterGroupNumber}
+                  onChange={(e) => setFilterGroupNumber(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Visos</option>
+                  {Array.from(new Set(Array.from(geaGroups.values()))).sort().map(group => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
                 </select>
               </div>
 
@@ -665,6 +695,7 @@ export function Vaccinations() {
               <button
                 onClick={() => {
                   setFilterSex('');
+                  setFilterGroupNumber('');
                   setFilterAgeFrom('');
                   setFilterAgeTo('');
                   setFilterTagFrom('');

@@ -197,23 +197,94 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         return;
       }
 
-      // Try new GEA system first (gea_daily_cows_joined view)
-      // NOTE: cow_number is the collar number, ear_number is the tag_no!
-      console.log('🔍 Querying gea_daily_cows_joined for ear_number:', animalData.tag_no);
-      const { data: newGeaData, error: newGeaError } = await supabase
-        .from('gea_daily_cows_joined')
-        .select('*')
-        .eq('ear_number', animalData.tag_no)
-        .order('import_created_at', { ascending: false })
+      // Get latest import ID first
+      const { data: latestImport } = await supabase
+        .from('gea_daily_imports')
+        .select('id, created_at')
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      console.log('🔍 Query result:', { newGeaData, newGeaError });
+      if (!latestImport) {
+        console.log('❌ No GEA imports found');
+        setLoading(false);
+        return;
+      }
 
-      if (newGeaData && !newGeaError) {
-        console.log('✅ New GEA data found:', newGeaData);
-        // Store raw data for full display
-        setRawGeaData(newGeaData);
+      console.log('🔍 Latest import:', latestImport);
+
+      // First get ataskaita1 to find the cow_number
+      const { data: a1Data } = await supabase
+        .from('gea_daily_ataskaita1')
+        .select('*')
+        .eq('import_id', latestImport.id)
+        .eq('ear_number', animalData.tag_no)
+        .maybeSingle();
+
+      if (!a1Data) {
+        console.log('❌ No ataskaita1 data found for this animal, trying old gea_daily table');
+        // Fall through to fallback below
+      } else {
+      const cowNumber = a1Data.cow_number;
+      console.log('🔍 Found cow_number:', cowNumber);
+
+      // Now get ataskaita2 and ataskaita3 using cow_number
+      const [a2Result, a3Result] = await Promise.all([
+        supabase
+          .from('gea_daily_ataskaita2')
+          .select('*')
+          .eq('import_id', latestImport.id)
+          .eq('cow_number', cowNumber)
+          .maybeSingle(),
+        supabase
+          .from('gea_daily_ataskaita3')
+          .select('*')
+          .eq('import_id', latestImport.id)
+          .eq('cow_number', cowNumber)
+          .maybeSingle(),
+      ]);
+
+      console.log('🔍 Ataskaita2 data:', a2Result.data);
+      console.log('🔍 Ataskaita3 data:', a3Result.data);
+
+      // Combine all data
+      const newGeaData = {
+        import_id: latestImport.id,
+        import_created_at: latestImport.created_at,
+        cow_number: cowNumber,
+        ear_number: a1Data.ear_number,
+        cow_state: a1Data.cow_state,
+        group_number: a1Data.group_number,
+        pregnant_since: a1Data.pregnant_since,
+        lactation_days: a1Data.lactation_days,
+        inseminated_at: a1Data.inseminated_at,
+        pregnant_days: a1Data.pregnant_days,
+        next_pregnancy_date: a1Data.next_pregnancy_date,
+        days_until_waiting_pregnancy: a1Data.days_until_waiting_pregnancy,
+        genetic_worth: a2Result.data?.genetic_worth,
+        blood_line: a2Result.data?.blood_line,
+        avg_milk_prod_weight: a2Result.data?.avg_milk_prod_weight,
+        produce_milk: a2Result.data?.produce_milk,
+        last_milking_date: a2Result.data?.last_milking_date,
+        last_milking_time: a2Result.data?.last_milking_time,
+        last_milking_weight: a2Result.data?.last_milking_weight,
+        milkings: a2Result.data?.milkings,
+        teat_missing_right_back: a3Result.data?.teat_missing_right_back,
+        teat_missing_back_left: a3Result.data?.teat_missing_back_left,
+        teat_missing_front_left: a3Result.data?.teat_missing_front_left,
+        teat_missing_front_right: a3Result.data?.teat_missing_front_right,
+        insemination_count: a3Result.data?.insemination_count,
+        bull_1: a3Result.data?.bull_1,
+        bull_2: a3Result.data?.bull_2,
+        bull_3: a3Result.data?.bull_3,
+        lactation_number: a3Result.data?.lactation_number,
+      };
+
+      console.log('✅ New GEA data assembled:', newGeaData);
+      console.log('📊 avg_milk_prod_weight:', newGeaData.avg_milk_prod_weight);
+      
+      // Store raw data for full display
+      setRawGeaData(newGeaData);
         
         // Transform new GEA data to old format for backwards compatibility
         const transformedData: GeaDaily = {
@@ -251,15 +322,15 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
           created_at: newGeaData.import_created_at,
         };
 
-        setGeaData(transformedData);
-        setPrevStatus(transformedData.statusas);
-        setLoading(false);
-        return;
+      setGeaData(transformedData);
+      setPrevStatus(transformedData.statusas);
+      setLoading(false);
+      return;
       }
 
-      // Fallback to old gea_daily table (if it still exists)
-      console.log('⚠️ No new GEA data, trying old gea_daily table');
-      const { data: oldGeaData, error: oldGeaError } = await supabase
+    // Fallback: try old gea_daily table when animal not in ataskaita1 (e.g. different tag format)
+    console.log('⚠️ No new GEA data, trying old gea_daily table');
+    const { data: oldGeaData, error: oldGeaError } = await supabase
         .from('gea_daily')
         .select('*')
         .eq('animal_id', animalId)
@@ -486,9 +557,9 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                     </span>
                   </div>
                   <div className="bg-white rounded-lg p-2 border border-purple-100 col-span-2">
-                    <span className="text-xs text-gray-500 block mb-0.5">Paskutinio melžimo kiekis</span>
+                    <span className="text-xs text-gray-500 block mb-0.5">Pieno vidurkis</span>
                     <span className="font-bold text-purple-600 text-base">
-                      {rawGeaData.last_milking_weight ? `${rawGeaData.last_milking_weight.toFixed(2)} kg` : '-'}
+                      {rawGeaData.avg_milk_prod_weight ? `${rawGeaData.avg_milk_prod_weight.toFixed(2)} kg` : '-'}
                     </span>
                   </div>
                 </div>
