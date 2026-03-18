@@ -378,6 +378,18 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       return;
     }
 
+    // Check if unit already exists
+    const existingUnit = measurementUnits.find(
+      u => u.work_location === (workLocation || 'both') && 
+           u.worker_type === newUnitWorkerType && 
+           u.unit_name.toLowerCase() === newUnitName.trim().toLowerCase()
+    );
+
+    if (existingUnit) {
+      alert('Toks vienetas jau egzistuoja šiam darbuotojo tipui ir vietai!');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('measurement_units')
@@ -388,12 +400,23 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           unit_abbreviation: newUnitAbbr.trim(),
         });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          alert('Toks vienetas jau egzistuoja! Pasirinkite kitą pavadinimą.');
+        } else {
+          throw error;
+        }
+        return;
+      }
 
-      await logAction('create_measurement_unit', 'measurement_units', null, null, {
-        unit_name: newUnitName,
-        worker_type: newUnitWorkerType,
-      });
+      try {
+        await logAction('create_measurement_unit', 'measurement_units', null, null, {
+          unit_name: newUnitName,
+          worker_type: newUnitWorkerType,
+        });
+      } catch (logError) {
+        console.warn('Failed to log action, but unit was created successfully:', logError);
+      }
 
       setNewUnitName('');
       setNewUnitAbbr('');
@@ -422,10 +445,14 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
       if (error) throw error;
 
-      await logAction('create_work_description', 'work_descriptions', null, null, {
-        description: newWorkDesc,
-        worker_type: newWorkDescWorkerType,
-      });
+      try {
+        await logAction('create_work_description', 'work_descriptions', null, null, {
+          description: newWorkDesc,
+          worker_type: newWorkDescWorkerType,
+        });
+      } catch (logError) {
+        console.warn('Failed to log action, but work description was created successfully:', logError);
+      }
 
       setNewWorkDesc('');
       loadWorkDescriptions();
@@ -447,7 +474,12 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
       if (error) throw error;
 
-      await logAction('delete_work_description', 'work_descriptions', descId, null, null);
+      try {
+        await logAction('delete_work_description', 'work_descriptions', descId, null, null);
+      } catch (logError) {
+        console.warn('Failed to log action, but work description was deleted successfully:', logError);
+      }
+      
       loadWorkDescriptions();
       alert('Darbo aprašymas sėkmingai ištrintas!');
     } catch (error: any) {
@@ -467,7 +499,12 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
       if (error) throw error;
 
-      await logAction('delete_measurement_unit', 'measurement_units', unitId);
+      try {
+        await logAction('delete_measurement_unit', 'measurement_units', unitId);
+      } catch (logError) {
+        console.warn('Failed to log action, but measurement unit was deleted successfully:', logError);
+      }
+      
       loadMeasurementUnits();
     } catch (error: any) {
       console.error('Error:', error);
@@ -861,6 +898,25 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
   const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
 
+  // Calculate measurement totals
+  const measurementTotals = dayEntries.reduce((acc: any, d) => {
+    if (d.measurement_value && d.measurement_unit_id) {
+      const value = parseFloat(d.measurement_value);
+      if (!isNaN(value)) {
+        if (!acc[d.measurement_unit_id]) {
+          const unit = measurementUnits.find(u => u.id === d.measurement_unit_id);
+          acc[d.measurement_unit_id] = {
+            total: 0,
+            unit_name: unit?.unit_name || '',
+            unit_abbreviation: unit?.unit_abbreviation || ''
+          };
+        }
+        acc[d.measurement_unit_id].total += value;
+      }
+    }
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-6">
       {/* Tabs */}
@@ -1233,28 +1289,45 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
               {/* Monthly Statistics */}
               {filledDays > 0 && (
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <BarChart3 className="w-4 h-4 text-blue-600" />
-                      <div className="text-xs text-blue-700 font-medium">Užpildyta dienų</div>
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <BarChart3 className="w-4 h-4 text-blue-600" />
+                        <div className="text-xs text-blue-700 font-medium">Užpildyta dienų</div>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-900">{filledDays}</div>
                     </div>
-                    <div className="text-2xl font-bold text-blue-900">{filledDays}</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock className="w-4 h-4 text-green-600" />
-                      <div className="text-xs text-green-700 font-medium">Viso valandų</div>
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-green-600" />
+                        <div className="text-xs text-green-700 font-medium">Viso valandų</div>
+                      </div>
+                      <div className="text-2xl font-bold text-green-900">{totalHours.toFixed(1)}h</div>
                     </div>
-                    <div className="text-2xl font-bold text-green-900">{totalHours.toFixed(1)}h</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <BarChart3 className="w-4 h-4 text-purple-600" />
-                      <div className="text-xs text-purple-700 font-medium">Vidutiniškai/dieną</div>
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <BarChart3 className="w-4 h-4 text-purple-600" />
+                        <div className="text-xs text-purple-700 font-medium">Vidutiniškai/dieną</div>
+                      </div>
+                      <div className="text-2xl font-bold text-purple-900">{avgHoursPerDay.toFixed(1)}h</div>
                     </div>
-                    <div className="text-2xl font-bold text-purple-900">{avgHoursPerDay.toFixed(1)}h</div>
                   </div>
+                  
+                  {/* Measurement Totals */}
+                  {Object.keys(measurementTotals).length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {Object.values(measurementTotals).map((mt: any, idx: number) => (
+                        <div key={idx} className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <BarChart3 className="w-4 h-4 text-orange-600" />
+                            <div className="text-xs text-orange-700 font-medium">Viso {mt.unit_name}</div>
+                          </div>
+                          <div className="text-2xl font-bold text-orange-900">{mt.total.toFixed(1)} {mt.unit_abbreviation}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1359,11 +1432,26 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                   worker_name: entry.worker?.full_name || 'Unknown',
                   worker_type: entry.worker_type,
                   total_hours: 0,
-                  entriesByDate: {}
+                  entriesByDate: {},
+                  measurementTotals: {}
                 };
               }
               acc[workerId].total_hours += entry.hours_worked || 0;
               acc[workerId].entriesByDate[entry.entry_date] = entry;
+              
+              // Track measurement totals
+              if (entry.measurement_value && entry.measurement_unit_id) {
+                const unitKey = entry.measurement_unit_id;
+                if (!acc[workerId].measurementTotals[unitKey]) {
+                  acc[workerId].measurementTotals[unitKey] = {
+                    total: 0,
+                    unit_name: entry.measurement_unit?.unit_name || '',
+                    unit_abbreviation: entry.measurement_unit?.unit_abbreviation || ''
+                  };
+                }
+                acc[workerId].measurementTotals[unitKey].total += entry.measurement_value;
+              }
+              
               return acc;
             }, {});
 
@@ -1390,7 +1478,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                   <div className="mb-4 text-center print:block hidden">
                     <h2 className="text-2xl font-bold">Darbuotojų darbo valandos</h2>
                     <p className="text-base text-gray-600">
-                      {viewMonth.toLocaleDateString('lt-LT', { year: 'numeric', month: 'long' })}
+                      {new Date(year, month, 15).toLocaleDateString('lt-LT', { year: 'numeric', month: 'long' })}
                       {workerTypeFilter !== 'all' && ` - ${workerTypeFilter === 'darbuotojas' ? 'Darbuotojai' : workerTypeFilter === 'vairuotojas' ? 'Vairuotojai' : 'Traktorininkai'}`}
                     </p>
                   </div>
@@ -1431,6 +1519,15 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                     {worker.worker_type === 'darbuotojas' ? 'Darb.' : worker.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
                                   </span>
                                 </div>
+                                {Object.keys(worker.measurementTotals).length > 0 && (
+                                  <div className="mt-1 text-xs text-gray-700">
+                                    {Object.values(worker.measurementTotals).map((mt: any, idx: number) => (
+                                      <div key={idx} className="text-purple-700 font-semibold">
+                                        {mt.total.toFixed(1)} {mt.unit_abbreviation}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </td>
                               {allDays.map(({ dateStr }) => {
                                 const entry = worker.entriesByDate[dateStr];
