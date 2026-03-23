@@ -1514,20 +1514,16 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             <tr key={worker.worker_id} className={`border-b border-gray-300 hover:bg-blue-100/30 print:hover:bg-transparent ${workerBg}`}>
                               <td className={`px-3 py-2 font-semibold text-gray-900 border-r-2 border-gray-400 sticky left-0 print:sticky-none ${workerBg}`}>
                                 <div className="text-sm">{worker.worker_name}</div>
-                                <div className="text-xs text-gray-600 mt-0.5">
+                                <div className="flex flex-wrap gap-1 mt-0.5">
                                   <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs print:bg-transparent print:border print:border-gray-400">
                                     {worker.worker_type === 'darbuotojas' ? 'Darb.' : worker.worker_type === 'vairuotojas' ? 'Vair.' : 'Trakt.'}
                                   </span>
+                                  {Object.values(worker.measurementTotals).map((mt: any, idx: number) => (
+                                    <span key={idx} className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-semibold print:bg-transparent print:border print:border-gray-400">
+                                      {mt.total.toFixed(1)} {mt.unit_abbreviation}
+                                    </span>
+                                  ))}
                                 </div>
-                                {Object.keys(worker.measurementTotals).length > 0 && (
-                                  <div className="mt-1 text-xs text-gray-700">
-                                    {Object.values(worker.measurementTotals).map((mt: any, idx: number) => (
-                                      <div key={idx} className="text-purple-700 font-semibold">
-                                        {mt.total.toFixed(1)} {mt.unit_abbreviation}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
                               </td>
                               {allDays.map(({ dateStr }) => {
                                 const entry = worker.entriesByDate[dateStr];
@@ -1542,8 +1538,15 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                     title={entry ? `${entry.start_time} - ${entry.end_time}${entry.work_description ? '\n' + entry.work_description : ''}${entry.comments ? '\n' + entry.comments : ''}` : ''}
                                   >
                                     {entry ? (
-                                      <div className="font-bold text-sm text-green-700 print:text-black">
-                                        {entry.hours_worked?.toFixed(1) || '0.0'}
+                                      <div className="flex flex-col items-center gap-0.5">
+                                        <div className="font-bold text-sm text-green-700 print:text-black">
+                                          {entry.hours_worked?.toFixed(1) || '0.0'}
+                                        </div>
+                                        {entry.measurement_value && (
+                                          <div className="text-xs text-purple-700 print:text-gray-600 font-semibold">
+                                            {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
+                                          </div>
+                                        )}
                                       </div>
                                     ) : (
                                       <span className="text-gray-300 print:text-gray-400 text-xs">-</span>

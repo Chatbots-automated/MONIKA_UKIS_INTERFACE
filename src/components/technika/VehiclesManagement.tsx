@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Truck, Plus, Search, AlertTriangle, Calendar, User, Gauge, Edit, Trash2, X, Save } from 'lucide-react';
+import { Truck, Plus, Search, AlertTriangle, Calendar, User, Gauge, Edit, Trash2, X, Save, Upload, FileText, Download } from 'lucide-react';
 import { VehicleDetailSidebar } from './VehicleDetailSidebar';
 
 interface Vehicle {
@@ -21,6 +21,14 @@ interface Vehicle {
     full_name: string;
   } | null;
   notes: string | null;
+  identification_number: string | null;
+  technical_passport_number: string | null;
+  kasko_insurance_expiry: string | null;
+  kasko_insurance_number: string | null;
+  civil_insurance_number: string | null;
+  road_tax_expiry: string | null;
+  tachograph_inspection_due: string | null;
+  license_expiry: string | null;
 }
 
 interface VehicleForm {
@@ -36,6 +44,14 @@ interface VehicleForm {
   technical_inspection_due_date: string;
   assigned_to: string;
   notes: string;
+  identification_number: string;
+  technical_passport_number: string;
+  kasko_insurance_expiry: string;
+  kasko_insurance_number: string;
+  civil_insurance_number: string;
+  road_tax_expiry: string;
+  tachograph_inspection_due: string;
+  license_expiry: string;
 }
 
 interface User {
@@ -73,6 +89,14 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
     technical_inspection_due_date: '',
     assigned_to: '',
     notes: '',
+    identification_number: '',
+    technical_passport_number: '',
+    kasko_insurance_expiry: '',
+    kasko_insurance_number: '',
+    civil_insurance_number: '',
+    road_tax_expiry: '',
+    tachograph_inspection_due: '',
+    license_expiry: '',
   });
   const [readingsForm, setReadingsForm] = useState({
     mileage: '',
@@ -82,10 +106,18 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
     Array<{ vehicle_id: string; engine_hours: string; mileage: string }>
   >([{ vehicle_id: '', engine_hours: '', mileage: '' }]);
   const [isSavingBulkReadings, setIsSavingBulkReadings] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [vehicleDocuments, setVehicleDocuments] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (editingVehicle) {
+      loadVehicleDocuments(editingVehicle.id);
+    }
+  }, [editingVehicle]);
 
   const loadData = async () => {
     const [vehiclesRes, usersRes] = await Promise.all([
@@ -123,6 +155,14 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
         technical_inspection_due_date: vehicle.technical_inspection_due_date || '',
         assigned_to: vehicle.assigned_to || '',
         notes: vehicle.notes || '',
+        identification_number: vehicle.identification_number || '',
+        technical_passport_number: vehicle.technical_passport_number || '',
+        kasko_insurance_expiry: vehicle.kasko_insurance_expiry || '',
+        kasko_insurance_number: vehicle.kasko_insurance_number || '',
+        civil_insurance_number: vehicle.civil_insurance_number || '',
+        road_tax_expiry: vehicle.road_tax_expiry || '',
+        tachograph_inspection_due: vehicle.tachograph_inspection_due || '',
+        license_expiry: vehicle.license_expiry || '',
       });
     } else {
       setEditingVehicle(null);
@@ -139,14 +179,22 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
         technical_inspection_due_date: '',
         assigned_to: '',
         notes: '',
+        identification_number: '',
+        technical_passport_number: '',
+        kasko_insurance_expiry: '',
+        kasko_insurance_number: '',
+        civil_insurance_number: '',
+        road_tax_expiry: '',
+        tachograph_inspection_due: '',
+        license_expiry: '',
       });
     }
     setShowVehicleModal(true);
   };
 
   const handleSaveVehicle = async () => {
-    if (!vehicleForm.registration_number || !vehicleForm.make || !vehicleForm.model) {
-      alert('Prašome užpildyti privalomas laukas');
+    if (!vehicleForm.registration_number) {
+      alert('Prašome įvesti valstybinį numerį');
       return;
     }
 
@@ -154,9 +202,9 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
       const vehicleData = {
         registration_number: vehicleForm.registration_number.toUpperCase(),
         vehicle_type: vehicleForm.vehicle_type,
-        make: vehicleForm.make,
-        model: vehicleForm.model,
-        year: parseInt(vehicleForm.year),
+        make: vehicleForm.make || null,
+        model: vehicleForm.model || null,
+        year: vehicleForm.year ? parseInt(vehicleForm.year) : null,
         status: vehicleForm.status,
         current_mileage: parseFloat(vehicleForm.current_mileage) || 0,
         current_engine_hours: parseFloat(vehicleForm.current_engine_hours) || 0,
@@ -164,6 +212,14 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
         technical_inspection_due_date: vehicleForm.technical_inspection_due_date || null,
         assigned_to: vehicleForm.assigned_to || null,
         notes: vehicleForm.notes || null,
+        identification_number: vehicleForm.identification_number || null,
+        technical_passport_number: vehicleForm.technical_passport_number || null,
+        kasko_insurance_expiry: vehicleForm.kasko_insurance_expiry || null,
+        kasko_insurance_number: vehicleForm.kasko_insurance_number || null,
+        civil_insurance_number: vehicleForm.civil_insurance_number || null,
+        road_tax_expiry: vehicleForm.road_tax_expiry || null,
+        tachograph_inspection_due: vehicleForm.tachograph_inspection_due || null,
+        license_expiry: vehicleForm.license_expiry || null,
       };
 
       if (editingVehicle) {
@@ -390,6 +446,133 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
     }
   };
 
+  const loadVehicleDocuments = async (vehicleId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_documents')
+        .select('*')
+        .eq('vehicle_id', vehicleId)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setVehicleDocuments(data || []);
+    } catch (error: any) {
+      console.error('Error loading documents:', error);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editingVehicle) {
+      alert('Pirmiausia išsaugokite transporto priemonę');
+      return;
+    }
+    
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${file.name}`;
+      const filePath = `vehicles/${editingVehicle.id}/${fileName}`;
+
+      console.log('Uploading file:', { fileName, filePath, size: file.size });
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('vehicle-documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('File uploaded successfully:', uploadData);
+
+      const { data: dbData, error: dbError } = await supabase
+        .from('vehicle_documents')
+        .insert({
+          vehicle_id: editingVehicle.id,
+          file_name: file.name,
+          file_path: filePath,
+          file_type: file.type,
+          file_size: file.size,
+          uploaded_by: user?.id || null,
+          document_type: 'other',
+          document_name: file.name,
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw dbError;
+      }
+
+      console.log('Document record created:', dbData);
+
+      alert('Failas sėkmingai įkeltas!');
+      loadVehicleDocuments(editingVehicle.id);
+      event.target.value = '';
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      alert(`Klaida įkeliant failą: ${error.message}`);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleDownloadFile = async (document: any) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('vehicle-documents')
+        .download(document.file_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = window.document.createElement('a');
+      a.href = url;
+      a.download = document.file_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error downloading file:', error);
+      alert(`Klaida atsisiunčiant failą: ${error.message}`);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!confirm('Ar tikrai norite ištrinti šį dokumentą?')) return;
+
+    try {
+      const doc = vehicleDocuments.find(d => d.id === documentId);
+      if (doc) {
+        await supabase.storage
+          .from('vehicle-documents')
+          .remove([doc.file_path]);
+      }
+
+      const { error } = await supabase
+        .from('vehicle_documents')
+        .delete()
+        .eq('id', documentId);
+
+      if (error) throw error;
+
+      alert('Dokumentas ištrintas!');
+      if (editingVehicle) {
+        loadVehicleDocuments(editingVehicle.id);
+      }
+    } catch (error: any) {
+      console.error('Error deleting document:', error);
+      alert(`Klaida trinant dokumentą: ${error.message}`);
+    }
+  };
+
   const filteredVehicles = vehicles.filter(vehicle => {
     const matchesSearch =
       vehicle.registration_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -538,7 +721,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                   {vehicle.insurance_expiry_date && (
                     <div className={`flex items-center gap-2 ${insuranceExpired ? 'text-red-600' : insuranceExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
                       <Calendar className="w-4 h-4" />
-                      <span>Draudimas: {vehicle.insurance_expiry_date}</span>
+                      <span>Civilinis dr.: {vehicle.insurance_expiry_date}</span>
                     </div>
                   )}
 
@@ -636,6 +819,10 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 border-b pb-2 mb-2">
+                <h4 className="font-semibold text-gray-800">Pagrindinė informacija</h4>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valstybinis numeris *</label>
                 <input
@@ -648,7 +835,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipas *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
                 <select
                   value={vehicleForm.vehicle_type}
                   onChange={e => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value })}
@@ -666,7 +853,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Markė *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Markė</label>
                 <input
                   type="text"
                   value={vehicleForm.make}
@@ -677,7 +864,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Modelis *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modelis</label>
                 <input
                   type="text"
                   value={vehicleForm.model}
@@ -688,7 +875,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Metai *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Metai</label>
                 <input
                   type="number"
                   value={vehicleForm.year}
@@ -713,6 +900,32 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Identifikavimo nr.</label>
+                <input
+                  type="text"
+                  value={vehicleForm.identification_number}
+                  onChange={e => setVehicleForm({ ...vehicleForm, identification_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="VIN arba kitas ID"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Techninio paso nr.</label>
+                <input
+                  type="text"
+                  value={vehicleForm.technical_passport_number}
+                  onChange={e => setVehicleForm({ ...vehicleForm, technical_passport_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="TP numeris"
+                />
+              </div>
+
+              <div className="col-span-2 border-b pb-2 mb-2 mt-4">
+                <h4 className="font-semibold text-gray-800">Rodmenys</h4>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Rida (km)</label>
                 <input
                   type="number"
@@ -734,13 +947,49 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                 />
               </div>
 
+              <div className="col-span-2 border-b pb-2 mb-2 mt-4">
+                <h4 className="font-semibold text-gray-800">Draudimai ir dokumentai</h4>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Draudimo galiojimas</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Civilinis draudimas (galiojimas)</label>
                 <input
                   type="date"
                   value={vehicleForm.insurance_expiry_date}
                   onChange={e => setVehicleForm({ ...vehicleForm, insurance_expiry_date: e.target.value })}
                   className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Civilinio draudimo nr.</label>
+                <input
+                  type="text"
+                  value={vehicleForm.civil_insurance_number}
+                  onChange={e => setVehicleForm({ ...vehicleForm, civil_insurance_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="Draudimo poliso nr."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kasko draudimas (galiojimas)</label>
+                <input
+                  type="date"
+                  value={vehicleForm.kasko_insurance_expiry}
+                  onChange={e => setVehicleForm({ ...vehicleForm, kasko_insurance_expiry: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kasko draudimo nr.</label>
+                <input
+                  type="text"
+                  value={vehicleForm.kasko_insurance_number}
+                  onChange={e => setVehicleForm({ ...vehicleForm, kasko_insurance_number: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="Kasko poliso nr."
                 />
               </div>
 
@@ -752,6 +1001,40 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                   onChange={e => setVehicleForm({ ...vehicleForm, technical_inspection_due_date: e.target.value })}
                   className="w-full border rounded px-3 py-2"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Keliai (galiojimas)</label>
+                <input
+                  type="date"
+                  value={vehicleForm.road_tax_expiry}
+                  onChange={e => setVehicleForm({ ...vehicleForm, road_tax_expiry: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tachografo patikra</label>
+                <input
+                  type="date"
+                  value={vehicleForm.tachograph_inspection_due}
+                  onChange={e => setVehicleForm({ ...vehicleForm, tachograph_inspection_due: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Licencija (galiojimas)</label>
+                <input
+                  type="date"
+                  value={vehicleForm.license_expiry}
+                  onChange={e => setVehicleForm({ ...vehicleForm, license_expiry: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="col-span-2 border-b pb-2 mb-2 mt-4">
+                <h4 className="font-semibold text-gray-800">Kita</h4>
               </div>
 
               <div className="col-span-2">
@@ -779,6 +1062,100 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                   rows={3}
                 />
               </div>
+
+              <div className="col-span-2 border-b pb-2 mb-2 mt-4">
+                <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Failai
+                </h4>
+              </div>
+
+              {editingVehicle ? (
+                <>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      Įkelti dokumentą (PDF, Word, Excel, nuotraukos ir kt.)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        onChange={handleFileUpload}
+                        disabled={uploadingFile}
+                        accept="*/*"
+                        className="flex-1 text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer cursor-pointer"
+                      />
+                      {uploadingFile && (
+                        <span className="text-sm text-blue-600 font-medium">Įkeliama...</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Galite įkelti bet kokio tipo failą</p>
+                  </div>
+
+                  {vehicleDocuments.length > 0 ? (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Įkelti dokumentai ({vehicleDocuments.length})
+                      </label>
+                      <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                        {vehicleDocuments.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate" title={doc.file_name}>
+                                  {doc.file_name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(doc.uploaded_at).toLocaleDateString('lt-LT', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })} · {(doc.file_size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => handleDownloadFile(doc)}
+                                className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                                title="Atsisiųsti"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                                title="Ištrinti"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="col-span-2">
+                      <div className="text-center py-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                        <FileText className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Nėra įkeltų dokumentų</p>
+                        <p className="text-xs text-gray-500 mt-1">Įkelkite dokumentus naudodami mygtuką aukščiau</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="col-span-2">
+                  <div className="text-center py-8 bg-blue-50 rounded-lg border-2 border-dashed border-blue-300">
+                    <Upload className="w-10 h-10 text-blue-600 mx-auto mb-2" />
+                    <p className="text-sm text-blue-700 font-medium">Failai galės būti įkelti po transporto sukūrimo</p>
+                    <p className="text-xs text-blue-600 mt-1">Pirmiausia išsaugokite transporto priemonę</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6">

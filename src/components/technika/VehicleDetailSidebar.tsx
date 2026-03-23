@@ -1312,62 +1312,203 @@ function DocumentsTab({
   onUploadDocument: () => void;
   onUpdate: () => void;
 }) {
-  const getDocumentTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      insurance: 'Draudimas',
-      technical_inspection: 'Techninė apžiūra',
-      service_record: 'Aptarnavimo įrašas',
-      manual: 'Instrukcija',
-      other: 'Kita',
-    };
-    return types[type] || type;
+  const { user } = useAuth();
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [vehicleFiles, setVehicleFiles] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadVehicleFiles();
+  }, [vehicle.id]);
+
+  const loadVehicleFiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_documents')
+        .select('*')
+        .eq('vehicle_id', vehicle.id)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setVehicleFiles(data || []);
+    } catch (error: any) {
+      console.error('Error loading files:', error);
+    }
   };
 
-  const expiredDocs = documents.filter(d => d.expiry_date && new Date(d.expiry_date) < new Date());
-  const activeDocs = documents.filter(d => !d.expiry_date || new Date(d.expiry_date) >= new Date());
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFile(true);
+    try {
+      const fileName = `${Date.now()}_${file.name}`;
+      const filePath = `vehicles/${vehicle.id}/${fileName}`;
+
+      console.log('Uploading file:', { fileName, filePath, size: file.size });
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('vehicle-documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('File uploaded successfully:', uploadData);
+
+      const { data: dbData, error: dbError } = await supabase
+        .from('vehicle_documents')
+        .insert({
+          vehicle_id: vehicle.id,
+          file_name: file.name,
+          file_path: filePath,
+          file_type: file.type,
+          file_size: file.size,
+          uploaded_by: user?.id || null,
+          document_type: 'other',
+          document_name: file.name,
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw dbError;
+      }
+
+      console.log('Document record created:', dbData);
+
+      alert('Failas sėkmingai įkeltas!');
+      loadVehicleFiles();
+      event.target.value = '';
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      alert(`Klaida įkeliant failą: ${error.message}`);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleDownloadFile = async (doc: any) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('vehicle-documents')
+        .download(doc.file_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = window.document.createElement('a');
+      a.href = url;
+      a.download = doc.file_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error downloading file:', error);
+      alert(`Klaida atsisiunčiant failą: ${error.message}`);
+    }
+  };
+
+  const handleDeleteFile = async (doc: any) => {
+    if (!confirm('Ar tikrai norite ištrinti šį failą?')) return;
+
+    try {
+      await supabase.storage
+        .from('vehicle-documents')
+        .remove([doc.file_path]);
+
+      const { error } = await supabase
+        .from('vehicle_documents')
+        .delete()
+        .eq('id', doc.id);
+
+      if (error) throw error;
+
+      alert('Failas ištrintas!');
+      loadVehicleFiles();
+    } catch (error: any) {
+      console.error('Error deleting file:', error);
+      alert(`Klaida trinant failą: ${error.message}`);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={onUploadDocument}
-        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-      >
-        <Upload className="w-5 h-5" />
-        Įkelti dokumentą
-      </button>
-
-      {expiredDocs.length > 0 && (
-        <div>
-          <h3 className="font-bold text-red-700 mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            Pasibaigę dokumentai
-          </h3>
-          <div className="space-y-3">
-            {expiredDocs.map(doc => (
-              <DocumentCard key={doc.id} document={doc} getDocumentTypeLabel={getDocumentTypeLabel} />
-            ))}
-          </div>
+      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+          <Upload className="w-5 h-5 text-blue-600" />
+          Įkelti dokumentą (PDF, Word, Excel, nuotraukos ir kt.)
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            onChange={handleFileUpload}
+            disabled={uploadingFile}
+            accept="*/*"
+            className="flex-1 text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer cursor-pointer"
+          />
+          {uploadingFile && (
+            <span className="text-sm text-blue-600 font-medium">Įkeliama...</span>
+          )}
         </div>
-      )}
+        <p className="text-xs text-gray-500 mt-2">Galite įkelti bet kokio tipo failą</p>
+      </div>
 
-      {activeDocs.length > 0 && (
+      {vehicleFiles.length > 0 ? (
         <div>
           <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
-            Aktyvūs dokumentai
+            Įkelti failai ({vehicleFiles.length})
           </h3>
           <div className="space-y-3">
-            {activeDocs.map(doc => (
-              <DocumentCard key={doc.id} document={doc} getDocumentTypeLabel={getDocumentTypeLabel} />
+            {vehicleFiles.map(doc => (
+              <div key={doc.id} className="flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <FileText className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate" title={doc.file_name}>
+                      {doc.file_name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(doc.uploaded_at).toLocaleDateString('lt-LT', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })} · {(doc.file_size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleDownloadFile(doc)}
+                    className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                    title="Atsisiųsti"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFile(doc)}
+                    className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                    title="Ištrinti"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
-      )}
-
-      {documents.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
+      ) : (
+        <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-          <p>Nėra dokumentų</p>
+          <p className="text-gray-600 font-medium">Nėra įkeltų failų</p>
+          <p className="text-sm text-gray-500 mt-1">Įkelkite dokumentus naudodami mygtuką aukščiau</p>
         </div>
       )}
     </div>
