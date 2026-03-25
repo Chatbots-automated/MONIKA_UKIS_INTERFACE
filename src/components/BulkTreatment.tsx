@@ -55,6 +55,7 @@ export function BulkTreatment() {
   const [formData, setFormData] = useState({
     treatment_date: new Date().toISOString().split('T')[0],
     vet_name: user?.full_name || user?.email || '',
+    clinical_diagnosis: '',
     notes: '',
   });
 
@@ -241,7 +242,7 @@ export function BulkTreatment() {
             animal_id: animal.id,
             vet_name: formData.vet_name,
             notes: formData.notes,
-            clinical_diagnosis: 'Masinis gydymas',
+            clinical_diagnosis: formData.clinical_diagnosis || 'Masinis gydymas',
           })
           .select()
           .single();
@@ -280,13 +281,14 @@ export function BulkTreatment() {
         setFormData({
           treatment_date: new Date().toISOString().split('T')[0],
           vet_name: user?.full_name || user?.email || '',
+          clinical_diagnosis: '',
           notes: '',
         });
         loadData();
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving bulk treatment:', error);
-      alert('Klaida išsaugant gydymą');
+      alert('Klaida išsaugant gydymą: ' + (error.message || error));
     } finally {
       setLoading(false);
     }
@@ -329,7 +331,7 @@ export function BulkTreatment() {
         {/* Basic Info */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Pagrindinė informacija</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Gydymo data
@@ -359,6 +361,18 @@ export function BulkTreatment() {
                   <option key={name} value={name} />
                 ))}
               </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Diagnozė / Būklė
+              </label>
+              <input
+                type="text"
+                value={formData.clinical_diagnosis}
+                onChange={(e) => setFormData({ ...formData, clinical_diagnosis: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Pvz.: Mastitas, Profilaktika"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

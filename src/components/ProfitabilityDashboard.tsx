@@ -285,35 +285,39 @@ export function ProfitabilityDashboard() {
 
   const loadDataWithDateFilter = async (startDateStr: string, endDateStr: string) => {
     // Query raw data with custom date range from new GEA system
-    const { data: geaData, error: geaError } = await supabase
-      .from('gea_daily_cows_joined')
-      .select(`
-        ear_number,
-        cow_number,
-        import_created_at,
-        milkings,
-        lactation_days,
-        group_number,
-        cow_state,
-        produce_milk
-      `)
-      .gte('import_created_at', startDateStr)
-      .lte('import_created_at', endDateStr);
-
-    if (geaError) {
-      console.error('Error loading GEA data:', geaError);
-    }
+    // Use fetchAllRows to handle pagination
+    const geaData = await fetchAllRows<{
+      ear_number: string;
+      cow_number: number;
+      import_created_at: string;
+      milkings: any;
+      lactation_days: number;
+      group_number: string;
+      cow_state: string;
+      produce_milk: boolean;
+    }>(
+      'gea_daily_cows_joined',
+      'ear_number, cow_number, import_created_at, milkings, lactation_days, group_number, cow_state, produce_milk',
+      ['import_created_at'],
+      [
+        { column: 'import_created_at', value: startDateStr, operator: 'gte' },
+        { column: 'import_created_at', value: endDateStr, operator: 'lte' }
+      ]
+    );
 
     // Map ear_number to animal_id
-    const { data: animals } = await supabase
-      .from('animals')
-      .select('id, tag_no')
-      .eq('active', true);
+    // Use fetchAllRows to handle pagination (>1000 animals)
+    const animals = await fetchAllRows<{ id: string; tag_no: string }>(
+      'animals',
+      'id, tag_no',
+      'tag_no',
+      [{ column: 'active', value: true }]
+    );
 
-    const animalTagMap = new Map(animals?.map(a => [a.tag_no, a.id]) || []);
+    const animalTagMap = new Map(animals.map(a => [a.tag_no, a.id]));
     
     let allGeaData: any[] = [];
-    if (geaData) {
+    if (geaData && geaData.length > 0) {
       allGeaData = geaData.map(gea => ({
         animal_id: animalTagMap.get(gea.ear_number),
         snapshot_date: gea.import_created_at,
@@ -470,22 +474,28 @@ export function ProfitabilityDashboard() {
     setRoiAnalysis(allRoiData);
 
     // Load GEA group data from new GEA system
-    const { data: geaGroupData, error: geaGroupError } = await supabase
-      .from('gea_daily_cows_joined')
-      .select('ear_number, group_number, cow_state, import_created_at')
-      .order('import_created_at', { ascending: false });
-
-    if (geaGroupError) {
-      console.error('Error loading GEA group data:', geaGroupError);
-    }
+    // Use fetchAllRows to handle pagination (can be >1000 rows)
+    const geaGroupData = await fetchAllRows<{
+      ear_number: string;
+      group_number: string;
+      cow_state: string;
+      import_created_at: string;
+    }>(
+      'gea_daily_cows_joined',
+      'ear_number, group_number, cow_state, import_created_at',
+      ['import_created_at']
+    );
 
     // Map ear_number to animal_id
-    const { data: animalsForGroupMap } = await supabase
-      .from('animals')
-      .select('id, tag_no')
-      .eq('active', true);
+    // Use fetchAllRows to handle pagination (>1000 animals)
+    const animalsForGroupMap = await fetchAllRows<{ id: string; tag_no: string }>(
+      'animals',
+      'id, tag_no',
+      'tag_no',
+      [{ column: 'active', value: true }]
+    );
 
-    const animalTagMapForGroups = new Map(animalsForGroupMap?.map(a => [a.tag_no, a.id]) || []);
+    const animalTagMapForGroups = new Map(animalsForGroupMap.map(a => [a.tag_no, a.id]));
     
     let allGeaGroupData: any[] = [];
     if (geaGroupData) {

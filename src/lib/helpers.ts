@@ -188,12 +188,15 @@ export async function fetchLatestGroupNumbers(): Promise<Map<string, string>> {
     );
 
     // Get group numbers from ataskaita1 for the latest import
-    const { data: ataskaita1Data } = await supabase
-      .from('gea_daily_ataskaita1')
-      .select('ear_number, group_number')
-      .eq('import_id', latestImport.id);
+    // Use fetchAllRows to handle pagination (more than 1000 animals)
+    const ataskaita1Data = await fetchAllRows<{ ear_number: string; group_number: string }>(
+      'gea_daily_ataskaita1',
+      'ear_number, group_number',
+      undefined,
+      [{ column: 'import_id', value: latestImport.id }]
+    );
 
-    if (!ataskaita1Data) {
+    if (!ataskaita1Data || ataskaita1Data.length === 0) {
       return new Map();
     }
 
