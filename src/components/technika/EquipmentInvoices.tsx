@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Upload, FileText, X, Check, AlertCircle, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2 } from 'lucide-react';
+import { Upload, FileText, X, Check, AlertCircle, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2, Send } from 'lucide-react';
+import { SecretarySystemExport } from './SecretarySystemExport';
 
 interface Supplier {
   id: string;
@@ -142,6 +143,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
   const [unassignedItems, setUnassignedItems] = useState<any[]>([]);
   const [showUnassignedSection, setShowUnassignedSection] = useState(false);
+  
+  // Secretary system export
+  const [showSecretaryExport, setShowSecretaryExport] = useState(false);
+  const [exportingInvoiceId, setExportingInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -1991,6 +1996,17 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   <p className="font-semibold text-gray-800">€{invoice.total_gross.toFixed(2)}</p>
                   <p className="text-sm text-gray-600">{invoice.status}</p>
                 </div>
+                <button
+                  onClick={() => {
+                    setExportingInvoiceId(invoice.id);
+                    setShowSecretaryExport(true);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
+                  title="Eksportuoti į sekretorės sistemą"
+                >
+                  <Send className="w-4 h-4" />
+                  Eksportuoti
+                </button>
               </div>
             </div>
           ))}
@@ -2504,6 +2520,20 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
             )}
           </div>
         </div>
+      )}
+
+      {/* Secretary System Export Modal */}
+      {showSecretaryExport && exportingInvoiceId && (
+        <SecretarySystemExport
+          invoiceId={exportingInvoiceId}
+          onClose={() => {
+            setShowSecretaryExport(false);
+            setExportingInvoiceId(null);
+          }}
+          onExportComplete={() => {
+            loadData();
+          }}
+        />
       )}
     </div>
   );
