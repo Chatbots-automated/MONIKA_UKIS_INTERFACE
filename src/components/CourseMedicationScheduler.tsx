@@ -126,18 +126,27 @@ export function CourseMedicationScheduler({
   };
 
   const addDate = () => {
-    const lastDate = selectedDates.length > 0
+    let lastDate = selectedDates.length > 0
       ? new Date(selectedDates[selectedDates.length - 1])
       : new Date(initialStartDate || new Date());
 
-    lastDate.setDate(lastDate.getDate() + 1);
-    const newDate = lastDate.toISOString().split('T')[0];
+    // Keep incrementing until we find a date that's not already selected
+    let newDate = '';
+    let attempts = 0;
+    do {
+      lastDate.setDate(lastDate.getDate() + 1);
+      newDate = lastDate.toISOString().split('T')[0];
+      attempts++;
+    } while (selectedDates.includes(newDate) && attempts < 365);
 
     if (!selectedDates.includes(newDate)) {
       setSelectedDates([...selectedDates, newDate]);
       const newSchedule = new Map(dateSchedule);
       newSchedule.set(newDate, []);
       setDateSchedule(newSchedule);
+      console.log('Added date:', newDate, 'Total dates:', selectedDates.length + 1);
+    } else {
+      console.warn('Could not add date - all dates already selected?');
     }
   };
 
