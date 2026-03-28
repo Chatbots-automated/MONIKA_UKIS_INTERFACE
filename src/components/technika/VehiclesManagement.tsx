@@ -666,7 +666,18 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
             const insuranceExpired = isExpired(vehicle.insurance_expiry_date);
             const taExpiring = isExpiringSoon(vehicle.technical_inspection_due_date);
             const taExpired = isExpired(vehicle.technical_inspection_due_date);
-            const hasWarnings = insuranceExpiring || insuranceExpired || taExpiring || taExpired;
+            const kaskoExpiring = isExpiringSoon(vehicle.kasko_insurance_expiry);
+            const kaskoExpired = isExpired(vehicle.kasko_insurance_expiry);
+            const roadTaxExpiring = isExpiringSoon(vehicle.road_tax_expiry);
+            const roadTaxExpired = isExpired(vehicle.road_tax_expiry);
+            const tachographExpiring = isExpiringSoon(vehicle.tachograph_inspection_due);
+            const tachographExpired = isExpired(vehicle.tachograph_inspection_due);
+            const licenseExpiring = isExpiringSoon(vehicle.license_expiry);
+            const licenseExpired = isExpired(vehicle.license_expiry);
+            
+            const hasWarnings = insuranceExpiring || insuranceExpired || taExpiring || taExpired ||
+                               kaskoExpiring || kaskoExpired || roadTaxExpiring || roadTaxExpired ||
+                               tachographExpiring || tachographExpired || licenseExpiring || licenseExpired;
 
             return (
               <div
@@ -725,10 +736,38 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                     </div>
                   )}
 
+                  {vehicle.kasko_insurance_expiry && (
+                    <div className={`flex items-center gap-2 ${kaskoExpired ? 'text-red-600' : kaskoExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
+                      <Calendar className="w-4 h-4" />
+                      <span>Kasko: {vehicle.kasko_insurance_expiry}</span>
+                    </div>
+                  )}
+
                   {vehicle.technical_inspection_due_date && (
                     <div className={`flex items-center gap-2 ${taExpired ? 'text-red-600' : taExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
                       <Calendar className="w-4 h-4" />
                       <span>TA: {vehicle.technical_inspection_due_date}</span>
+                    </div>
+                  )}
+
+                  {vehicle.road_tax_expiry && (
+                    <div className={`flex items-center gap-2 ${roadTaxExpired ? 'text-red-600' : roadTaxExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
+                      <Calendar className="w-4 h-4" />
+                      <span>Keliai: {vehicle.road_tax_expiry}</span>
+                    </div>
+                  )}
+
+                  {vehicle.tachograph_inspection_due && (
+                    <div className={`flex items-center gap-2 ${tachographExpired ? 'text-red-600' : tachographExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
+                      <Calendar className="w-4 h-4" />
+                      <span>Tachografas: {vehicle.tachograph_inspection_due}</span>
+                    </div>
+                  )}
+
+                  {vehicle.license_expiry && (
+                    <div className={`flex items-center gap-2 ${licenseExpired ? 'text-red-600' : licenseExpiring ? 'text-amber-600' : 'text-gray-600'}`}>
+                      <Calendar className="w-4 h-4" />
+                      <span>Licencija: {vehicle.license_expiry}</span>
                     </div>
                   )}
                 </div>
@@ -801,7 +840,20 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
         />
         <StatCard
           title="Reikia dėmesio"
-          value={vehicles.filter(v => isExpiringSoon(v.insurance_expiry_date) || isExpiringSoon(v.technical_inspection_due_date)).length.toString()}
+          value={vehicles.filter(v => 
+            isExpiringSoon(v.insurance_expiry_date) || 
+            isExpiringSoon(v.technical_inspection_due_date) ||
+            isExpiringSoon(v.kasko_insurance_expiry) ||
+            isExpiringSoon(v.road_tax_expiry) ||
+            isExpiringSoon(v.tachograph_inspection_due) ||
+            isExpiringSoon(v.license_expiry) ||
+            isExpired(v.insurance_expiry_date) ||
+            isExpired(v.technical_inspection_due_date) ||
+            isExpired(v.kasko_insurance_expiry) ||
+            isExpired(v.road_tax_expiry) ||
+            isExpired(v.tachograph_inspection_due) ||
+            isExpired(v.license_expiry)
+          ).length.toString()}
           color="red"
         />
       </div>

@@ -30,6 +30,12 @@ interface Vehicle {
   assignee?: {
     full_name: string;
   };
+  kasko_insurance_expiry: string | null;
+  kasko_insurance_number: string | null;
+  civil_insurance_number: string | null;
+  road_tax_expiry: string | null;
+  tachograph_inspection_due: string | null;
+  license_expiry: string | null;
 }
 
 interface ServiceVisit {
@@ -568,8 +574,30 @@ function OverviewTab({
   totalWorkOrderCost: number;
   partsUsedCost: number;
 }) {
-  const insuranceExpired = vehicle.insurance_expiry_date && new Date(vehicle.insurance_expiry_date) < new Date();
-  const inspectionExpired = vehicle.technical_inspection_due_date && new Date(vehicle.technical_inspection_due_date) < new Date();
+  const isExpiringSoon = (date: string | null) => {
+    if (!date) return false;
+    const daysUntil = Math.ceil((new Date(date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntil <= 30 && daysUntil >= 0;
+  };
+
+  const isExpired = (date: string | null) => {
+    if (!date) return false;
+    return new Date(date) < new Date();
+  };
+
+  const insuranceExpired = isExpired(vehicle.insurance_expiry_date);
+  const insuranceExpiring = isExpiringSoon(vehicle.insurance_expiry_date);
+  const inspectionExpired = isExpired(vehicle.technical_inspection_due_date);
+  const inspectionExpiring = isExpiringSoon(vehicle.technical_inspection_due_date);
+  const kaskoExpired = isExpired(vehicle.kasko_insurance_expiry);
+  const kaskoExpiring = isExpiringSoon(vehicle.kasko_insurance_expiry);
+  const roadTaxExpired = isExpired(vehicle.road_tax_expiry);
+  const roadTaxExpiring = isExpiringSoon(vehicle.road_tax_expiry);
+  const tachographExpired = isExpired(vehicle.tachograph_inspection_due);
+  const tachographExpiring = isExpiringSoon(vehicle.tachograph_inspection_due);
+  const licenseExpired = isExpired(vehicle.license_expiry);
+  const licenseExpiring = isExpiringSoon(vehicle.license_expiry);
+  
   const nextService = visits.find(v => new Date(v.visit_datetime) > new Date() && v.status === 'Planuojamas');
 
   return (
@@ -635,30 +663,96 @@ function OverviewTab({
         </div>
       </div>
 
-      <div className={`rounded-xl p-5 border-2 ${insuranceExpired ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-200'}`}>
+      <div className={`rounded-xl p-5 border-2 ${insuranceExpired ? 'bg-red-50 border-red-300' : insuranceExpiring ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
         <div className="flex items-center gap-2 mb-2">
-          {insuranceExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
-          <h4 className="font-semibold text-gray-900">Draudimas</h4>
+          {insuranceExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : insuranceExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
+          <h4 className="font-semibold text-gray-900">Civilinis draudimas</h4>
         </div>
         {vehicle.insurance_expiry_date ? (
-          <p className={`text-sm ${insuranceExpired ? 'text-red-700' : 'text-green-700'}`}>
-            {insuranceExpired ? 'Baigėsi: ' : 'Galioja iki: '}
+          <p className={`text-sm ${insuranceExpired ? 'text-red-700' : insuranceExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {insuranceExpired ? 'Baigėsi: ' : insuranceExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
             <strong>{formatDateLT(vehicle.insurance_expiry_date)}</strong>
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500">Nėra duomenų</p>
+        )}
+        {vehicle.civil_insurance_number && (
+          <p className="text-xs text-gray-600 mt-1">Nr.: {vehicle.civil_insurance_number}</p>
+        )}
+      </div>
+
+      <div className={`rounded-xl p-5 border-2 ${kaskoExpired ? 'bg-red-50 border-red-300' : kaskoExpiring ? 'bg-amber-50 border-amber-300' : vehicle.kasko_insurance_expiry ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {kaskoExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : kaskoExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : vehicle.kasko_insurance_expiry ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Calendar className="w-5 h-5 text-gray-400" />}
+          <h4 className="font-semibold text-gray-900">Kasko draudimas</h4>
+        </div>
+        {vehicle.kasko_insurance_expiry ? (
+          <p className={`text-sm ${kaskoExpired ? 'text-red-700' : kaskoExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {kaskoExpired ? 'Baigėsi: ' : kaskoExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
+            <strong>{formatDateLT(vehicle.kasko_insurance_expiry)}</strong>
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500">Nėra duomenų</p>
+        )}
+        {vehicle.kasko_insurance_number && (
+          <p className="text-xs text-gray-600 mt-1">Nr.: {vehicle.kasko_insurance_number}</p>
+        )}
+      </div>
+
+      <div className={`rounded-xl p-5 border-2 ${inspectionExpired ? 'bg-red-50 border-red-300' : inspectionExpiring ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {inspectionExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : inspectionExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
+          <h4 className="font-semibold text-gray-900">Techninė apžiūra (TA)</h4>
+        </div>
+        {vehicle.technical_inspection_due_date ? (
+          <p className={`text-sm ${inspectionExpired ? 'text-red-700' : inspectionExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {inspectionExpired ? 'Baigėsi: ' : inspectionExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
+            <strong>{formatDateLT(vehicle.technical_inspection_due_date)}</strong>
           </p>
         ) : (
           <p className="text-sm text-gray-500">Nėra duomenų</p>
         )}
       </div>
 
-      <div className={`rounded-xl p-5 border-2 ${inspectionExpired ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-200'}`}>
+      <div className={`rounded-xl p-5 border-2 ${roadTaxExpired ? 'bg-red-50 border-red-300' : roadTaxExpiring ? 'bg-amber-50 border-amber-300' : vehicle.road_tax_expiry ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
         <div className="flex items-center gap-2 mb-2">
-          {inspectionExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
-          <h4 className="font-semibold text-gray-900">Techninė apžiūra</h4>
+          {roadTaxExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : roadTaxExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : vehicle.road_tax_expiry ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Calendar className="w-5 h-5 text-gray-400" />}
+          <h4 className="font-semibold text-gray-900">Keliai</h4>
         </div>
-        {vehicle.technical_inspection_due_date ? (
-          <p className={`text-sm ${inspectionExpired ? 'text-red-700' : 'text-green-700'}`}>
-            {inspectionExpired ? 'Baigėsi: ' : 'Galioja iki: '}
-            <strong>{formatDateLT(vehicle.technical_inspection_due_date)}</strong>
+        {vehicle.road_tax_expiry ? (
+          <p className={`text-sm ${roadTaxExpired ? 'text-red-700' : roadTaxExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {roadTaxExpired ? 'Baigėsi: ' : roadTaxExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
+            <strong>{formatDateLT(vehicle.road_tax_expiry)}</strong>
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500">Nėra duomenų</p>
+        )}
+      </div>
+
+      <div className={`rounded-xl p-5 border-2 ${tachographExpired ? 'bg-red-50 border-red-300' : tachographExpiring ? 'bg-amber-50 border-amber-300' : vehicle.tachograph_inspection_due ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {tachographExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : tachographExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : vehicle.tachograph_inspection_due ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Calendar className="w-5 h-5 text-gray-400" />}
+          <h4 className="font-semibold text-gray-900">Tachografo patikra</h4>
+        </div>
+        {vehicle.tachograph_inspection_due ? (
+          <p className={`text-sm ${tachographExpired ? 'text-red-700' : tachographExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {tachographExpired ? 'Baigėsi: ' : tachographExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
+            <strong>{formatDateLT(vehicle.tachograph_inspection_due)}</strong>
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500">Nėra duomenų</p>
+        )}
+      </div>
+
+      <div className={`rounded-xl p-5 border-2 ${licenseExpired ? 'bg-red-50 border-red-300' : licenseExpiring ? 'bg-amber-50 border-amber-300' : vehicle.license_expiry ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {licenseExpired ? <AlertTriangle className="w-5 h-5 text-red-600" /> : licenseExpiring ? <AlertTriangle className="w-5 h-5 text-amber-600" /> : vehicle.license_expiry ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Calendar className="w-5 h-5 text-gray-400" />}
+          <h4 className="font-semibold text-gray-900">Licencija</h4>
+        </div>
+        {vehicle.license_expiry ? (
+          <p className={`text-sm ${licenseExpired ? 'text-red-700' : licenseExpiring ? 'text-amber-700' : 'text-green-700'}`}>
+            {licenseExpired ? 'Baigėsi: ' : licenseExpiring ? 'Baigiasi netrukus: ' : 'Galioja iki: '}
+            <strong>{formatDateLT(vehicle.license_expiry)}</strong>
           </p>
         ) : (
           <p className="text-sm text-gray-500">Nėra duomenų</p>
