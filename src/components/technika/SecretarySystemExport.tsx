@@ -223,17 +223,46 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete }: 
   };
 
   const loadLookupData = async () => {
-    const [suppliersRes, personsRes, operationsRes, materialsRes] = await Promise.all([
-      supabase.from('secretary_suppliers').select('*').eq('is_active', true).order('name'),
-      supabase.from('secretary_responsible_persons').select('*').eq('is_active', true).order('name'),
-      supabase.from('secretary_accounting_operations').select('*').eq('is_active', true).order('name'),
-      supabase.from('secretary_materials').select('*').eq('is_active', true).order('name'),
-    ]);
+    // Load all data with pagination to bypass 1000 row limit
+    const loadAllRows = async (table: string) => {
+      const allData: any[] = [];
+      let from = 0;
+      const batchSize = 1000;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .eq('is_active', true)
+          .order('name')
+          .range(from, from + batchSize - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allData.push(...data);
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      
+      return allData;
+    };
 
-    if (suppliersRes.data) setSecretarySuppliers(suppliersRes.data);
-    if (personsRes.data) setResponsiblePersons(personsRes.data);
-    if (operationsRes.data) setAccountingOperations(operationsRes.data);
-    if (materialsRes.data) setSecretaryMaterials(materialsRes.data);
+    try {
+      const [suppliers, persons, operations, materials] = await Promise.all([
+        loadAllRows('secretary_suppliers'),
+        loadAllRows('secretary_responsible_persons'),
+        loadAllRows('secretary_accounting_operations'),
+        loadAllRows('secretary_materials'),
+      ]);
+
+      setSecretarySuppliers(suppliers);
+      setResponsiblePersons(persons);
+      setAccountingOperations(operations);
+      setSecretaryMaterials(materials);
+    } catch (error) {
+      console.error('Error loading lookup data:', error);
+    }
   };
 
   const handleSupplierSelect = (supplier: SecretarySupplier) => {
