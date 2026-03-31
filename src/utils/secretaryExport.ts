@@ -141,13 +141,28 @@ export function generateSecretaryExportPayload(
     payload.L075 = formatDateForSecretary(invoice.payment_due_date);
   }
   
-  // L078-L081: Only for reverse VAT purchases (foreign, electronics, round timber, construction)
-  // When these fields are needed, use specific values:
-  if (invoice.pvm_debtor_code || invoice.reverse_vat_indicator) {
+  // L078-L081: Complex logic based on purchase type
+  // 1. Foreign purchases: Fill L078-L081
+  // 2. Lithuanian Article 96 (construction, electronics, timber, bankruptcy): Fill L078-L081 + L069
+  // 3. Lithuanian normal purchases: Fill ONLY L078-L079
+  // 4. Non-VAT payer: Don't fill any
+  
+  if (invoice.pvm_debtor_code) {
+    // User explicitly enabled reverse VAT checkbox
     payload.L078 = 'GautPVM';
     payload.L079 = 'VMI prie LR FM';
     payload.L080 = 'MokPVM';
     payload.L081 = 'VMI prie LR FM';
+  } else if (invoice.reverse_vat_indicator && invoice.reverse_vat_indicator !== '1') {
+    // Article 96 cases (codes 2-9) - fill all four
+    payload.L078 = 'GautPVM';
+    payload.L079 = 'VMI prie LR FM';
+    payload.L080 = 'MokPVM';
+    payload.L081 = 'VMI prie LR FM';
+  } else if (invoice.reverse_vat_indicator === '1') {
+    // Normal EU purchase - fill only L078-L079
+    payload.L078 = 'GautPVM';
+    payload.L079 = 'VMI prie LR FM';
   }
   
   if (invoice.oss_system_document) {
@@ -205,7 +220,7 @@ export function generateSecretaryExportPayload(
     }
 
     const lineItem: SecretaryInvoiceLineItem = {
-      L009: item.product_service_flag ?? 0,
+      // L009 is NOT filled - their system determines product/service from accounting codes
       L010: truncateField(item.product_code, 20),
       L011: truncateField(item.description, 35),
       L012: truncateField(item.unit_type || 'vnt', 4),
@@ -367,22 +382,30 @@ export function formatPayloadForDisplay(payload: SecretaryInvoiceExportPayload):
 export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayload): string {
   const lines: string[] = [];
   
-  const escapeCSV = (value: any): string => {
-    if (value === null || value === undefined) return '';
+  const escapeCSV = (value: any, isNumeric: boolean = false): string => {
+    if (value === null || value === undefined || value === '') return '';
     const str = String(value);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
+    
+    // Numeric fields don't need quotes unless they contain special chars
+    if (isNumeric) {
+      return str;
     }
-    return str;
+    
+    // Text fields always wrapped in quotes
+    return `"${str.replace(/"/g, '""')}"`;
   };
   
-  // Header row with all L-fields
+  // Header row with ALL L-fields (L001-L084)
   const headers = [
     'L001', 'L002', 'L003', 'L004', 'L005', 'L006', 'L007', 'L008',
     'L009', 'L010', 'L011', 'L012', 'L013', 'L014', 'L015', 'L016', 'L017',
     'L018', 'L019', 'L020', 'L021', 'L022', 'L023', 'L024', 'L025', 'L026', 'L027',
     'L028', 'L029', 'L030', 'L031', 'L032', 'L033', 'L034', 'L035', 'L036', 'L037', 'L038', 'L039',
-    'L064', 'L068', 'L069', 'L070', 'L071', 'L072', 'L075', 'L078', 'L079', 'L080', 'L081', 'L082', 'L083', 'L084'
+    'L040', 'L041', 'L042', 'L043', 'L044', 'L045', 'L046', 'L047', 'L048', 'L049',
+    'L050', 'L051', 'L052', 'L053', 'L054', 'L055', 'L056', 'L057', 'L058',
+    'L059', 'L060', 'L061',
+    'L064', 'L065', 'L066', 'L067', 'L068', 'L069', 'L070', 'L071', 'L072', 'L073', 'L074', 'L075', 'L076', 'L077',
+    'L078', 'L079', 'L080', 'L081', 'L082', 'L083', 'L084'
   ];
   lines.push(headers.join(','));
   
@@ -391,63 +414,96 @@ export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayloa
     const fields: string[] = [];
     
     // Header fields (repeated for each line)
-    fields.push(escapeCSV(payload.L001));
-    fields.push(escapeCSV(payload.L002));
-    fields.push(escapeCSV(payload.L003 || ''));
-    fields.push(escapeCSV(payload.L004 || ''));
-    fields.push(escapeCSV(payload.L005));
-    fields.push(escapeCSV(payload.L006));
-    fields.push(escapeCSV(payload.L007));
-    fields.push(escapeCSV(payload.L008));
+    fields.push(escapeCSV(payload.L001, true));  // Numeric: branch number
+    fields.push(escapeCSV(payload.L002, true));  // Numeric: document type
+    fields.push(escapeCSV(payload.L003 || ''));  // Text: series + number
+    fields.push(escapeCSV(payload.L004 || '', true));  // Numeric: number only
+    fields.push(escapeCSV(payload.L005, true));  // Numeric: date (yyyymmdd)
+    fields.push(escapeCSV(payload.L006, true));  // Numeric: supplier code
+    fields.push(escapeCSV(payload.L007));  // Text: supplier name
+    fields.push(escapeCSV(payload.L008));  // Text: currency
     
-    // Line item fields
-    fields.push(escapeCSV(item.L009));
-    fields.push(escapeCSV(item.L010));
-    fields.push(escapeCSV(item.L011));
-    fields.push(escapeCSV(item.L012));
-    fields.push(escapeCSV(item.L013));
-    fields.push(escapeCSV(item.L014));
-    fields.push(escapeCSV(item.L015));
-    fields.push(escapeCSV(item.L016));
-    fields.push(escapeCSV(item.L017));
-    fields.push(escapeCSV(item.L018 || ''));
-    fields.push(escapeCSV(item.L019 || ''));
-    fields.push(escapeCSV(item.L020 || ''));
-    fields.push(escapeCSV(item.L021 || ''));
-    fields.push(escapeCSV(item.L022));
-    fields.push(escapeCSV(item.L023));
-    fields.push(escapeCSV(item.L024 || ''));
-    fields.push(escapeCSV(item.L025 || ''));
-    fields.push(escapeCSV(item.L026 || ''));
-    fields.push(escapeCSV(item.L027 || ''));
-    fields.push(escapeCSV(item.L028));
-    fields.push(escapeCSV(item.L029));
-    fields.push(escapeCSV(item.L030 || ''));
-    fields.push(escapeCSV(item.L031 || ''));
-    fields.push(escapeCSV(item.L032 || ''));
-    fields.push(escapeCSV(item.L033 || ''));
-    fields.push(escapeCSV(item.L034 || ''));
-    fields.push(escapeCSV(item.L035 || ''));
-    fields.push(escapeCSV(item.L036 || ''));
-    fields.push(escapeCSV(item.L037 || ''));
-    fields.push(escapeCSV(item.L038 || ''));
-    fields.push(escapeCSV(item.L039 || ''));
+    // Line item fields (L009-L039)
+    fields.push(escapeCSV(item.L009 ?? '', true));  // Numeric: product/service flag (empty)
+    fields.push(escapeCSV(item.L010, true));  // Numeric: product code
+    fields.push(escapeCSV(item.L011));  // Text: description
+    fields.push(escapeCSV(item.L012));  // Text: unit type
+    fields.push(escapeCSV(item.L013, true));  // Numeric: quantity sign
+    fields.push(escapeCSV(item.L014, true));  // Numeric: quantity * 1000
+    fields.push(escapeCSV(item.L015, true));  // Numeric: sum * 100
+    fields.push(escapeCSV(item.L016, true));  // Numeric: VAT rate * 100
+    fields.push(escapeCSV(item.L017, true));  // Numeric: VAT sum * 100
+    fields.push(escapeCSV(item.L018 || '', true));  // Numeric: receiving branch
+    fields.push(escapeCSV(item.L019 || ''));  // Text: buyer company code
+    fields.push(escapeCSV(item.L020 || ''));  // Text: buyer VAT code
+    fields.push(escapeCSV(item.L021 || ''));  // Text: buyer address
+    fields.push(escapeCSV(item.L022, true));  // Numeric: responsible person code
+    fields.push(escapeCSV(item.L023));  // Text: responsible person name
+    fields.push(escapeCSV(item.L024 || '', true));  // Numeric: structural unit code
+    fields.push(escapeCSV(item.L025 || ''));  // Text: structural unit name
+    fields.push(escapeCSV(item.L026 || '', true));  // Numeric: object code
+    fields.push(escapeCSV(item.L027 || ''));  // Text: object name
+    fields.push(escapeCSV(item.L028, true));  // Numeric: accounting debit
+    fields.push(escapeCSV(item.L029, true));  // Numeric: accounting credit
+    fields.push(escapeCSV(item.L030 || '', true));  // Numeric: expense structure
+    fields.push(escapeCSV(item.L031 || ''));  // Text: expense structure name
+    fields.push(escapeCSV(item.L032 || '', true));  // Numeric: realization direction
+    fields.push(escapeCSV(item.L033 || ''));  // Text: realization direction name
+    fields.push(escapeCSV(item.L034 || '', true));  // Numeric: 2nd op debit
+    fields.push(escapeCSV(item.L035 || '', true));  // Numeric: 2nd op credit
+    fields.push(escapeCSV(item.L036 || '', true));  // Numeric: 2nd op expense structure
+    fields.push(escapeCSV(item.L037 || ''));  // Text: 2nd op expense structure name
+    fields.push(escapeCSV(item.L038 || '', true));  // Numeric: 2nd op realization direction
+    fields.push(escapeCSV(item.L039 || ''));  // Text: 2nd op realization direction name
     
-    // Optional header fields
-    fields.push(escapeCSV(payload.L064 || ''));
-    fields.push(escapeCSV(payload.L068 || ''));
-    fields.push(escapeCSV(payload.L069 || ''));
-    fields.push(escapeCSV(payload.L070 || ''));
-    fields.push(escapeCSV(payload.L071 || ''));
-    fields.push(escapeCSV(payload.L072 || ''));
-    fields.push(escapeCSV(payload.L075 || ''));
-    fields.push(escapeCSV(payload.L078 || ''));
-    fields.push(escapeCSV(payload.L079 || ''));
-    fields.push(escapeCSV(payload.L080 || ''));
-    fields.push(escapeCSV(payload.L081 || ''));
-    fields.push(escapeCSV(payload.L082 || ''));
-    fields.push(escapeCSV(payload.L083 || ''));
-    fields.push(escapeCSV(payload.L084 || ''));
+    // Tourism accounting fields (L040-L058) - empty for non-tourism
+    fields.push(escapeCSV(payload.L040 || '', true));  // Numeric: 3rd op debit
+    fields.push(escapeCSV(payload.L041 || '', true));  // Numeric: 3rd op credit
+    fields.push(escapeCSV(payload.L042 || '', true));  // Numeric: 3rd op expense structure
+    fields.push(escapeCSV(payload.L043 || ''));  // Text: 3rd op expense structure name
+    fields.push(escapeCSV(payload.L044 || '', true));  // Numeric: 3rd op realization direction
+    fields.push(escapeCSV(payload.L045 || ''));  // Text: 3rd op realization direction name
+    fields.push(escapeCSV(payload.L046 || '', true));  // Numeric: 4th op debit
+    fields.push(escapeCSV(payload.L047 || '', true));  // Numeric: 4th op credit
+    fields.push(escapeCSV(payload.L048 || '', true));  // Numeric: 4th op expense structure
+    fields.push(escapeCSV(payload.L049 || ''));  // Text: 4th op expense structure name
+    fields.push(escapeCSV(payload.L050 || '', true));  // Numeric: 4th op realization direction
+    fields.push(escapeCSV(payload.L051 || ''));  // Text: 4th op realization direction name
+    fields.push(escapeCSV(payload.L052 || '', true));  // Numeric: supplier code (tourism)
+    fields.push(escapeCSV(payload.L053 || ''));  // Text: supplier name (tourism)
+    fields.push(escapeCSV(payload.L054 || ''));  // Text: supplier currency (tourism)
+    fields.push(escapeCSV(payload.L055 || '', true));  // Numeric: buyer currency rate
+    fields.push(escapeCSV(payload.L056 || '', true));  // Numeric: supplier currency rate
+    fields.push(escapeCSV(payload.L057 || '', true));  // Numeric: discount sum
+    fields.push(escapeCSV(payload.L058 || '', true));  // Numeric: markup sum
+    
+    // Cash payment fields (L059-L061) - empty for non-cash
+    fields.push(escapeCSV(payload.L059 || '', true));  // Numeric: accountable person code
+    fields.push(escapeCSV(payload.L060 || ''));  // Text: accountable person name
+    fields.push(escapeCSV(payload.L061 || ''));  // Text: accountable person currency
+    
+    // Document classification and VAT fields (L064-L084)
+    fields.push(escapeCSV(payload.L064 || ''));  // Text: document type flag
+    fields.push(escapeCSV(payload.L065 || ''));  // Text: payer VAT code
+    fields.push(escapeCSV(payload.L066 || '', true));  // Numeric: payer company code
+    fields.push(escapeCSV(payload.L067 || ''));  // Text: payer address
+    fields.push(escapeCSV(payload.L068 || '', true));  // Numeric: order number
+    fields.push(escapeCSV(payload.L069 || '', true));  // Numeric: reverse VAT indicator
+    fields.push(escapeCSV(payload.L070 || '', true));  // Numeric: non-VAT flag
+    fields.push(escapeCSV(payload.L071 || ''));  // Text: buyer bank account
+    fields.push(escapeCSV(payload.L072 || ''));  // Text: supplier bank account
+    fields.push(escapeCSV(payload.L073 || '', true));  // Numeric: total taxable amount
+    fields.push(escapeCSV(payload.L074 || '', true));  // Numeric: total VAT amount
+    fields.push(escapeCSV(payload.L075 || '', true));  // Numeric: payment due date
+    fields.push(escapeCSV(payload.L076 || '', true));  // Numeric: sales manager code
+    fields.push(escapeCSV(payload.L077 || ''));  // Text: sales manager name
+    fields.push(escapeCSV(payload.L078 || ''));  // Text: VAT debtor code
+    fields.push(escapeCSV(payload.L079 || ''));  // Text: VAT debtor name
+    fields.push(escapeCSV(payload.L080 || ''));  // Text: VAT creditor code
+    fields.push(escapeCSV(payload.L081 || ''));  // Text: VAT creditor name
+    fields.push(escapeCSV(payload.L082 || '', true));  // Numeric: OSS flag
+    fields.push(escapeCSV(payload.L083 || ''));  // Text: contact email
+    fields.push(escapeCSV(payload.L084 || ''));  // Text: OSS country code
     
     lines.push(fields.join(','));
   });

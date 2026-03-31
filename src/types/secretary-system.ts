@@ -145,7 +145,7 @@ export interface SecretaryInvoiceExportPayload {
 }
 
 export interface SecretaryInvoiceLineItem {
-  L009: number; // Product/Service flag (0=product, 1=service, NOT fillable by user)
+  L009?: number; // Product/Service flag (0=product, 1=service) - DO NOT FILL, their system determines from accounting codes
   L010: string; // Product/service unique code (up to 20 chars, mandatory, UNIQUE - SKU)
   L011: string; // Product/service name (up to 35 chars, mandatory)
   L012: string; // Unit of measure (up to 4 chars, mandatory)

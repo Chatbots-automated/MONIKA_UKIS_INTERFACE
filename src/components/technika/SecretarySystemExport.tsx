@@ -643,7 +643,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete }: 
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Pirkimui iš ES - "1", kitais atvejais pasitarkite su buhalteriu
+                  "1" = ES pirkimas (įprastas), "2-9" = 96-to str. atvejai (statybos, elektronika, mediena)
                 </p>
               </div>
 
@@ -739,7 +739,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete }: 
                   </span>
                 </label>
                 <p className="text-xs text-gray-500 mt-1 ml-6">
-                  Pažymėkite tik jei pirkimas iš užsienio, elektronika, apvali mediena, ar statybos darbai
+                  Pažymėkite jei: užsienio pirkimas, 96-to str. prekės/paslaugos (statybos, elektronika, mediena, bankrotas)
                 </p>
               </div>
               {invoice.pvm_debtor_code && (
