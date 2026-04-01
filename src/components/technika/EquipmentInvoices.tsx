@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Upload, FileText, X, Check, AlertCircle, Trash2, Package, PlusCircle, CheckCircle as LucideCheckCircle, Edit2, Link2, Send } from 'lucide-react';
 import { SecretarySystemExport } from './SecretarySystemExport';
+import { SecretaryBulkExport } from './SecretaryBulkExport';
 
 interface Supplier {
   id: string;
@@ -147,6 +148,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   // Secretary system export
   const [showSecretaryExport, setShowSecretaryExport] = useState(false);
   const [exportingInvoiceId, setExportingInvoiceId] = useState<string | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const [showBulkExport, setShowBulkExport] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -1980,11 +1983,55 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Paskutinės sąskaitos</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold text-gray-800">Paskutinės sąskaitos</h3>
+            {invoices.length > 0 && (
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedInvoiceIds.size === invoices.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedInvoiceIds(new Set(invoices.map(inv => inv.id)));
+                    } else {
+                      setSelectedInvoiceIds(new Set());
+                    }
+                  }}
+                  className="w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                Pasirinkti visas
+              </label>
+            )}
+          </div>
+          {selectedInvoiceIds.size > 0 && (
+            <button
+              onClick={() => setShowBulkExport(true)}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2 shadow-sm"
+            >
+              <Send className="w-4 h-4" />
+              Eksportuoti {selectedInvoiceIds.size} sąskaitas
+            </button>
+          )}
+        </div>
         <div className="space-y-2">
           {invoices.map(invoice => (
             <div key={invoice.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-4">
+                <input
+                  type="checkbox"
+                  checked={selectedInvoiceIds.has(invoice.id)}
+                  onChange={(e) => {
+                    const newSelected = new Set(selectedInvoiceIds);
+                    if (e.target.checked) {
+                      newSelected.add(invoice.id);
+                    } else {
+                      newSelected.delete(invoice.id);
+                    }
+                    setSelectedInvoiceIds(newSelected);
+                  }}
+                  className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                />
                 <FileText className="w-8 h-8 text-slate-600" />
                 <div>
                   <p className="font-medium text-gray-800">{invoice.invoice_number}</p>
@@ -2532,6 +2579,17 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           }}
           onExportComplete={() => {
             loadData();
+          }}
+        />
+      )}
+
+      {/* Bulk Export Modal */}
+      {showBulkExport && (
+        <SecretaryBulkExport
+          invoiceIds={Array.from(selectedInvoiceIds)}
+          onClose={() => {
+            setShowBulkExport(false);
+            setSelectedInvoiceIds(new Set());
           }}
         />
       )}

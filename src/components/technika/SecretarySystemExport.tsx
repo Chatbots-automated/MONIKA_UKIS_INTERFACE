@@ -34,7 +34,8 @@ import {
 interface SecretarySystemExportProps {
   invoiceId: string;
   onClose: () => void;
-  onExportComplete?: () => void;
+  onExportComplete?: (payload?: SecretaryInvoiceExportPayload) => void;
+  bulkMode?: boolean;
 }
 
 interface InvoiceWithItems {
@@ -90,7 +91,7 @@ interface InvoiceItemWithFields {
   object_name?: string;
 }
 
-export function SecretarySystemExport({ invoiceId, onClose, onExportComplete }: SecretarySystemExportProps) {
+export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bulkMode = false }: SecretarySystemExportProps) {
   const [invoice, setInvoice] = useState<InvoiceWithItems | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1368,20 +1369,29 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete }: 
                     <FileDown className="w-5 h-5" />
                     Atsisiųsti JSON
                   </button>
+                  {!bulkMode && (
+                    <button
+                      onClick={handleDownloadCSV}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                    >
+                      <FileDown className="w-5 h-5" />
+                      Atsisiųsti CSV
+                    </button>
+                  )}
                   <button
-                    onClick={handleDownloadCSV}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-                  >
-                    <FileDown className="w-5 h-5" />
-                    Atsisiųsti CSV
-                  </button>
-                  <button
-                    onClick={handleExportToSecretary}
+                    onClick={() => {
+                      if (bulkMode && previewPayload) {
+                        onExportComplete?.(previewPayload);
+                        setShowPreview(false);
+                      } else {
+                        handleExportToSecretary();
+                      }
+                    }}
                     disabled={exporting || validationErrors.length > 0}
                     className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     <Send className="w-5 h-5" />
-                    {exporting ? 'Eksportuojama...' : 'Patvirtinti ir eksportuoti'}
+                    {bulkMode ? 'Patvirtinti šią sąskaitą' : (exporting ? 'Eksportuojama...' : 'Patvirtinti ir eksportuoti')}
                   </button>
                 </div>
               </div>
