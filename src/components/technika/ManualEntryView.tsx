@@ -720,19 +720,66 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     setBulkEndTime('');
   };
 
-  const clearAllTimes = () => {
-    if (!confirm('Ar tikrai norite išvalyti visus laikus?')) return;
-    setDayEntries(prev => prev.map(d => ({ 
-      ...d, 
-      start_time: '', 
-      end_time: '',
-      work_description: '',
-      work_descriptions: [],
-      measurement_value: '',
-      measurement_unit_id: '',
-      comments: '',
-      non_driving_hours: ''
-    })));
+  const clearAllTimes = async () => {
+    if (!selectedWorker) {
+      alert('Pasirinkite darbuotoją');
+      return;
+    }
+
+    if (!confirm('Ar tikrai norite išvalyti visus šio mėnesio įrašus? Tai ištrins duomenis iš duomenų bazės.')) return;
+
+    setSaving(true);
+    try {
+      const startDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+      const endDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      // Delete from both tables for this worker and month
+      await supabase
+        .from('manual_time_entries')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .gte('entry_date', startDateStr)
+        .lte('entry_date', endDateStr);
+
+      await supabase
+        .from('worker_schedules')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .gte('date', startDateStr)
+        .lte('date', endDateStr);
+
+      await logAction('clear_manual_schedules', 'worker_schedules', null, null, {
+        worker_id: selectedWorker,
+        month: selectedMonth.toISOString(),
+      });
+
+      // Clear UI state
+      setDayEntries(prev => prev.map(d => ({ 
+        ...d, 
+        start_time: '', 
+        end_time: '',
+        work_description: '',
+        work_descriptions: [],
+        measurement_value: '',
+        measurement_unit_id: '',
+        comments: '',
+        non_driving_hours: ''
+      })));
+
+      // Refresh the view tab if it's showing this worker
+      if (activeTab === 'perziura' && viewWorker === selectedWorker) {
+        loadSavedEntries();
+      }
+
+      alert('Visi įrašai sėkmingai išvalyti!');
+    } catch (error: any) {
+      console.error('Error clearing entries:', error);
+      alert(`Klaida išvalant įrašus: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
 
