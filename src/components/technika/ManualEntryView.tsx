@@ -1594,11 +1594,6 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                             {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
                                           </div>
                                         )}
-                                        {entry.work_description && (
-                                          <div className="text-xs text-gray-600 print:text-gray-700 font-medium mt-0.5 max-w-[80px] truncate">
-                                            {entry.work_description}
-                                          </div>
-                                        )}
                                       </div>
                                     ) : (
                                       <span className="text-gray-300 print:text-gray-400 text-xs">-</span>
