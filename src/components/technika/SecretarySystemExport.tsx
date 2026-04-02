@@ -20,6 +20,7 @@ import {
   SecretaryResponsiblePerson,
   SecretaryAccountingOperation,
   SecretaryMaterial,
+  SecretaryService,
   REVERSE_VAT_OPTIONS,
   DOCUMENT_TYPE_OPTIONS,
   VAT_SPECIAL_CODES,
@@ -102,6 +103,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
   const [responsiblePersons, setResponsiblePersons] = useState<SecretaryResponsiblePerson[]>([]);
   const [accountingOperations, setAccountingOperations] = useState<SecretaryAccountingOperation[]>([]);
   const [secretaryMaterials, setSecretaryMaterials] = useState<SecretaryMaterial[]>([]);
+  const [secretaryServices, setSecretaryServices] = useState<SecretaryService[]>([]);
   
   // Search states
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -126,16 +128,19 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
   }, [invoiceId]);
   
   useEffect(() => {
-    if (!invoice || secretaryMaterials.length === 0 || accountingOperations.length === 0) return;
+    if (!invoice || (secretaryMaterials.length === 0 && secretaryServices.length === 0) || accountingOperations.length === 0) return;
     
     const newMaterialSearch = new Map<number, string>();
     const newAccountingOpSearch = new Map<number, string>();
     
     invoice.items.forEach((item, idx) => {
       if (item.product_code) {
-        const material = secretaryMaterials.find(m => String(m.code) === item.product_code);
-        if (material) {
-          newMaterialSearch.set(idx, material.name);
+        // Check if it's a service or material based on accounting code
+        const isService = item.accounting_op1_debit?.startsWith('6');
+        const lookupList = isService ? secretaryServices : secretaryMaterials;
+        const found = lookupList.find((m: any) => String(m.code) === item.product_code);
+        if (found) {
+          newMaterialSearch.set(idx, found.name);
         }
       }
       
@@ -149,7 +154,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     
     if (newMaterialSearch.size > 0) setMaterialSearch(newMaterialSearch);
     if (newAccountingOpSearch.size > 0) setAccountingOpSearch(newAccountingOpSearch);
-  }, [invoice?.items, secretaryMaterials, accountingOperations]);
+  }, [invoice?.items, secretaryMaterials, secretaryServices, accountingOperations]);
   
   useEffect(() => {
     const handleClickOutside = () => {
@@ -250,17 +255,19 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     };
 
     try {
-      const [suppliers, persons, operations, materials] = await Promise.all([
+      const [suppliers, persons, operations, materials, services] = await Promise.all([
         loadAllRows('secretary_suppliers'),
         loadAllRows('secretary_responsible_persons'),
         loadAllRows('secretary_accounting_operations'),
         loadAllRows('secretary_materials'),
+        loadAllRows('secretary_services'),
       ]);
 
       setSecretarySuppliers(suppliers);
       setResponsiblePersons(persons);
       setAccountingOperations(operations);
       setSecretaryMaterials(materials);
+      setSecretaryServices(services);
     } catch (error) {
       console.error('Error loading lookup data:', error);
     }
@@ -268,6 +275,9 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
 
   const handleSupplierSelect = (supplier: SecretarySupplier) => {
     if (!invoice) return;
+    
+    // Detect if supplier is foreign based on VAT code
+    const isForeignSupplier = supplier.vat_code && !supplier.vat_code.startsWith('LT');
     
     setInvoice({
       ...invoice,
@@ -277,7 +287,8 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
       supplier_vat_code: supplier.vat_code || undefined,
       supplier_address: supplier.address || undefined,
       supplier_currency: supplier.currency || 'EUR',
-      supplier_bank_account: supplier.bank_account || undefined,
+      // Auto-set L069 based on supplier country
+      reverse_vat_indicator: isForeignSupplier ? '1' : '',
     });
     
     setSupplierSearch(supplier.name);
@@ -324,7 +335,6 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
           reverse_vat_indicator: invoice.reverse_vat_indicator,
           non_vat_invoice: invoice.non_vat_invoice,
           buyer_bank_account: invoice.buyer_bank_account,
-          supplier_bank_account: invoice.supplier_bank_account,
           payment_due_date: invoice.payment_due_date,
           pvm_debtor_code: invoice.pvm_debtor_code,
           pvm_debtor_name: invoice.pvm_debtor_name,
@@ -596,6 +606,15 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <span className="text-xs text-gray-600">PVM kodas: </span>
                       <span className="font-mono text-sm font-semibold">{invoice.supplier_vat_code}</span>
+                      {invoice.supplier_vat_code.startsWith('LT') ? (
+                        <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded">
+                          🇱🇹 LIETUVOS TIEKĖJAS
+                        </span>
+                      ) : (
+                        <span className="ml-3 px-2 py-1 bg-orange-100 text-orange-800 text-xs font-bold rounded">
+                          🌍 UŽSIENIO TIEKĖJAS
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -662,19 +681,24 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   L069: Atvirkštinio PVM požymis
                 </label>
+                <div className="mb-2 p-3 bg-amber-50 border-2 border-amber-300 rounded-lg">
+                  <p className="text-sm font-bold text-amber-900">⚠️ SVARBU!</p>
+                  <p className="text-xs text-amber-800 mt-1">
+                    <strong>Lietuvos tiekėjas</strong> (pvz., Kalnapilis) → Palikite <strong>TUŠČIĄ</strong><br/>
+                    <strong>Užsienio ES tiekėjas</strong> (pvz., Latvija, Lenkija) → Pasirinkite <strong>"1"</strong><br/>
+                    <strong>96-to str. atvejai</strong> (statybos, elektronika, mediena) → Pasirinkite <strong>"2-9"</strong>
+                  </p>
+                </div>
                 <select
-                  value={invoice.reverse_vat_indicator || '1'}
+                  value={invoice.reverse_vat_indicator || ''}
                   onChange={(e) => setInvoice({ ...invoice, reverse_vat_indicator: e.target.value })}
                   className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="">Nėra</option>
+                  <option value="">TUŠČIAS - Lietuvos tiekėjas (pvz., Kalnapilis)</option>
                   {REVERSE_VAT_OPTIONS.map(opt => (
                     <option key={opt.code} value={opt.code}>{opt.code} - {opt.label}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  "1" = ES pirkimas (įprastas), "2-9" = 96-to str. atvejai (statybos, elektronika, mediena)
-                </p>
               </div>
 
               <div>
@@ -706,19 +730,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  L072: Tiekėjo banko sąskaita
-                </label>
-                <input
-                  type="text"
-                  value={invoice.supplier_bank_account || ''}
-                  onChange={(e) => setInvoice({ ...invoice, supplier_bank_account: e.target.value })}
-                  maxLength={20}
-                  placeholder="LT..."
-                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 font-mono"
-                />
-              </div>
+              {/* L072: Tiekėjo banko sąskaita - HIDDEN, not needed */}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -870,84 +882,102 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                         {/* Product Code (L010) - Material Lookup */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="relative">
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              L010: Produkto kodas <span className="text-red-600">*</span>
-                            </label>
-                            <div className="relative" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="text"
-                                value={materialSearch.get(index) ?? ''}
-                                onChange={(e) => {
-                                  const newSearch = new Map(materialSearch);
-                                  newSearch.set(index, e.target.value);
-                                  setMaterialSearch(newSearch);
-                                  setShowMaterialDropdown(index);
-                                }}
-                                onFocus={() => setShowMaterialDropdown(index)}
-                                placeholder="Ieškoti medžiagos pagal pavadinimą..."
-                                className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                              />
-                              <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
-                            </div>
-                            
-                            {itemData.product_code && (
-                              <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
-                                <p className="text-xs text-gray-600">Pasirinkta:</p>
-                                <p className="font-mono font-bold text-blue-600">
-                                  {itemData.product_code} - {secretaryMaterials.find(m => String(m.code) === itemData.product_code)?.name || 'Įkeliama...'}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {showMaterialDropdown === index && materialSearch.get(index) && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border-2 border-blue-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                {secretaryMaterials
-                                  .filter(m => 
-                                    m.name.toLowerCase().includes(materialSearch.get(index)?.toLowerCase() || '') ||
-                                    String(m.code).includes(materialSearch.get(index) || '')
-                                  )
-                                  .slice(0, 50)
-                                  .map(material => (
-                                    <button
-                                      key={material.id}
-                                      onClick={() => {
-                                        if (!invoice) return;
-                                        
-                                        const updatedItems = [...invoice.items];
-                                        updatedItems[index] = { 
-                                          ...updatedItems[index], 
-                                          product_code: String(material.code),
-                                          description: material.name,
-                                          unit_type: material.unit_type
-                                        };
-                                        setInvoice({ ...invoice, items: updatedItems });
-                                        
-                                        const currentEdits = itemEdits.get(index) || {};
-                                        const newEdits = new Map(itemEdits);
-                                        newEdits.set(index, { 
-                                          ...currentEdits, 
-                                          product_code: String(material.code),
-                                          description: material.name,
-                                          unit_type: material.unit_type
-                                        });
-                                        setItemEdits(newEdits);
-                                        
+                            {(() => {
+                              const isService = itemData.accounting_op1_debit?.startsWith('6');
+                              const lookupList = isService ? secretaryServices : secretaryMaterials;
+                              const listType = isService ? 'paslaugos' : 'medžiagos';
+                              
+                              return (
+                                <>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    L010: {isService ? 'Paslaugos' : 'Produkto'} kodas <span className="text-red-600">*</span>
+                                  </label>
+                                  {!itemData.accounting_op1_debit && (
+                                    <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                                      ⚠️ Pirmiausia pasirinkite ūkinę operaciją (L028)
+                                    </div>
+                                  )}
+                                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="text"
+                                      value={materialSearch.get(index) ?? ''}
+                                      onChange={(e) => {
                                         const newSearch = new Map(materialSearch);
-                                        newSearch.set(index, material.name);
+                                        newSearch.set(index, e.target.value);
                                         setMaterialSearch(newSearch);
-                                        setShowMaterialDropdown(null);
+                                        setShowMaterialDropdown(index);
                                       }}
-                                      className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0"
-                                    >
-                                      <div className="font-mono text-sm font-bold text-blue-600">
-                                        {material.code}
-                                      </div>
-                                      <div className="text-sm text-gray-900">{material.name}</div>
-                                      <div className="text-xs text-gray-500">{material.unit_type} | {material.price} EUR</div>
-                                    </button>
-                                  ))}
-                              </div>
-                            )}
+                                      onFocus={() => setShowMaterialDropdown(index)}
+                                      placeholder={`Ieškoti ${listType} pagal pavadinimą...`}
+                                      className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      disabled={!itemData.accounting_op1_debit}
+                                    />
+                                    <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                                  </div>
+                                  
+                                  {itemData.product_code && (
+                                    <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                                      <p className="text-xs text-gray-600">Pasirinkta ({isService ? 'paslauga' : 'produktas'}):</p>
+                                      <p className="font-mono font-bold text-blue-600">
+                                        {itemData.product_code} - {lookupList.find((m: any) => String(m.code) === itemData.product_code)?.name || 'Įkeliama...'}
+                                      </p>
+                                    </div>
+                                  )}
+                                  
+                                  {showMaterialDropdown === index && materialSearch.get(index) && itemData.accounting_op1_debit && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-blue-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                      {lookupList
+                                        .filter((m: any) => 
+                                          m.name.toLowerCase().includes(materialSearch.get(index)?.toLowerCase() || '') ||
+                                          String(m.code).includes(materialSearch.get(index) || '')
+                                        )
+                                        .slice(0, 50)
+                                        .map((item: any) => (
+                                          <button
+                                            key={item.id}
+                                            onClick={() => {
+                                              if (!invoice) return;
+                                              
+                                              const updatedItems = [...invoice.items];
+                                              updatedItems[index] = { 
+                                                ...updatedItems[index], 
+                                                product_code: String(item.code),
+                                                description: item.name,
+                                                unit_type: item.unit_type || 'vnt'
+                                              };
+                                              setInvoice({ ...invoice, items: updatedItems });
+                                              
+                                              const currentEdits = itemEdits.get(index) || {};
+                                              const newEdits = new Map(itemEdits);
+                                              newEdits.set(index, { 
+                                                ...currentEdits, 
+                                                product_code: String(item.code),
+                                                description: item.name,
+                                                unit_type: item.unit_type || 'vnt'
+                                              });
+                                              setItemEdits(newEdits);
+                                              
+                                              const newSearch = new Map(materialSearch);
+                                              newSearch.set(index, item.name);
+                                              setMaterialSearch(newSearch);
+                                              setShowMaterialDropdown(null);
+                                            }}
+                                            className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                          >
+                                            <div className="font-mono text-sm font-bold text-blue-600">
+                                              {item.code}
+                                            </div>
+                                            <div className="text-sm text-gray-900">{item.name}</div>
+                                            <div className="text-xs text-gray-500">
+                                              {item.unit_type || 'vnt'} {item.price && `| ${item.price} EUR`}
+                                            </div>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
 
                           <div>

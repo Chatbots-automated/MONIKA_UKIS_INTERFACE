@@ -2007,7 +2007,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           {selectedInvoiceIds.size > 0 && (
             <button
               onClick={() => setShowBulkExport(true)}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
             >
               <Send className="w-4 h-4" />
               Eksportuoti {selectedInvoiceIds.size} sąskaitas

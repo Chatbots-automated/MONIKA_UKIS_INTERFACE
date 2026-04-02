@@ -121,9 +121,12 @@ export function generateSecretaryExportPayload(
     payload.L064 = 'K';
   }
   
-  // L069: "1" for EU purchases (default), other codes for special cases
-  // Most common case is EU purchases, so default to "1" if not specified
-  payload.L069 = invoice.reverse_vat_indicator || '1';
+  // L069: Only fill for foreign/special cases
+  // "1" = foreign EU purchase, "2-9" = Article 96 cases
+  // EMPTY for normal Lithuanian suppliers
+  if (invoice.reverse_vat_indicator) {
+    payload.L069 = invoice.reverse_vat_indicator;
+  }
   
   if (invoice.non_vat_invoice) {
     payload.L070 = '1';
@@ -133,36 +136,34 @@ export function generateSecretaryExportPayload(
     payload.L071 = truncateField(invoice.buyer_bank_account, 20);
   }
   
-  if (invoice.supplier_bank_account) {
-    payload.L072 = truncateField(invoice.supplier_bank_account, 20);
-  }
+  // L072 (supplier bank account) - DO NOT FILL, not needed by their system
   
   if (invoice.payment_due_date) {
     payload.L075 = formatDateForSecretary(invoice.payment_due_date);
   }
   
   // L078-L081: Complex logic based on purchase type
-  // 1. Foreign purchases: Fill L078-L081
-  // 2. Lithuanian Article 96 (construction, electronics, timber, bankruptcy): Fill L078-L081 + L069
-  // 3. Lithuanian normal purchases: Fill ONLY L078-L079
+  // 1. Foreign purchases (L069="1"): Fill L078-L081 with specific values
+  // 2. Lithuanian Article 96 (L069="2-9"): Fill L078-L081 with specific values
+  // 3. Lithuanian normal (L069 empty): Fill ONLY L078-L079
   // 4. Non-VAT payer: Don't fill any
   
-  if (invoice.pvm_debtor_code) {
-    // User explicitly enabled reverse VAT checkbox
-    payload.L078 = 'GautPVM';
-    payload.L079 = 'VMI prie LR FM';
-    payload.L080 = 'MokPVM';
-    payload.L081 = 'VMI prie LR FM';
+  if (invoice.reverse_vat_indicator === '1') {
+    // Foreign EU purchase - fill all four with FOREIGN-specific values
+    payload.L078 = 'PVMPIRK';
+    payload.L079 = 'Pirkimo PVM';
+    payload.L080 = 'PVMMOK';
+    payload.L081 = 'Mokėtino PVM';
   } else if (invoice.reverse_vat_indicator && invoice.reverse_vat_indicator !== '1') {
     // Article 96 cases (codes 2-9) - fill all four
     payload.L078 = 'GautPVM';
     payload.L079 = 'VMI prie LR FM';
     payload.L080 = 'MokPVM';
     payload.L081 = 'VMI prie LR FM';
-  } else if (invoice.reverse_vat_indicator === '1') {
-    // Normal EU purchase - fill only L078-L079
+  } else if (invoice.pvm_debtor_code) {
+    // Lithuanian normal purchase with checkbox - fill only L078-L079
     payload.L078 = 'GautPVM';
-    payload.L079 = 'VMI prie LR FM';
+    payload.L079 = 'Pirkimo PVM';
   }
   
   if (invoice.oss_system_document) {
@@ -219,8 +220,12 @@ export function generateSecretaryExportPayload(
       vatAmount = item.total_price * (item.vat_rate / 100);
     }
 
+    // Determine L009 (product/service flag) from accounting code L028
+    // If L028 starts with 6xxx = service (1), otherwise = product (0)
+    const isService = item.accounting_op1_debit.startsWith('6');
+    
     const lineItem: SecretaryInvoiceLineItem = {
-      // L009 is NOT filled - their system determines product/service from accounting codes
+      L009: isService ? 1 : 0, // MANDATORY: 0=product, 1=service (determined from L028)
       L010: truncateField(item.product_code, 20),
       L011: truncateField(item.description, 35),
       L012: truncateField(item.unit_type || 'vnt', 4),
