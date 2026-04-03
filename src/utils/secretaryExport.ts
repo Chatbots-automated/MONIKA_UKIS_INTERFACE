@@ -220,12 +220,14 @@ export function generateSecretaryExportPayload(
       vatAmount = item.total_price * (item.vat_rate / 100);
     }
 
-    // Determine L009 (product/service flag) from accounting code L028
-    // If L028 starts with 6xxx = service (1), otherwise = product (0)
-    const isService = item.accounting_op1_debit.startsWith('6');
+    // L009 must be manually selected by user (0=product, 1=service)
+    // Validate it's filled
+    if (item.product_service_flag === undefined || item.product_service_flag === null) {
+      throw new Error(`Trūksta L009 (produktas/paslauga) eilutėje: ${item.description}`);
+    }
     
     const lineItem: SecretaryInvoiceLineItem = {
-      L009: isService ? 1 : 0, // MANDATORY: 0=product, 1=service (determined from L028)
+      L009: item.product_service_flag, // MANDATORY: 0=product, 1=service (USER selects)
       L010: truncateField(item.product_code, 20),
       L011: truncateField(item.description, 35),
       L012: truncateField(item.unit_type || 'vnt', 4),
@@ -274,7 +276,11 @@ export function generateSecretaryExportPayload(
     }
     
     if (item.accounting_op1_expense_structure) {
-      lineItem.L030 = truncateField(item.accounting_op1_expense_structure, 4);
+      // L030 must be numeric (up to 4 digits), skip if text
+      const expenseStructure = String(item.accounting_op1_expense_structure).trim();
+      if (/^\d{1,4}$/.test(expenseStructure)) {
+        lineItem.L030 = expenseStructure;
+      }
     }
     
     if (item.accounting_op1_expense_structure_name) {
@@ -429,7 +435,7 @@ export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayloa
     fields.push(escapeCSV(payload.L008));  // Text: currency
     
     // Line item fields (L009-L039)
-    fields.push(escapeCSV(item.L009 ?? '', true));  // Numeric: product/service flag (empty)
+    fields.push(escapeCSV(item.L009, true));  // Numeric: product/service flag (MANDATORY)
     fields.push(escapeCSV(item.L010, true));  // Numeric: product code
     fields.push(escapeCSV(item.L011));  // Text: description
     fields.push(escapeCSV(item.L012));  // Text: unit type

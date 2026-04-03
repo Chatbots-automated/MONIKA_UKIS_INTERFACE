@@ -88,6 +88,13 @@ function isHoliday(dateStr: string): boolean {
   return HOLIDAYS_2026.includes(dateStr);
 }
 
+function formatDateForDB(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeTimeToHHMM(value: string): string {
   const v = value.trim();
   if (!v) return '';
@@ -98,9 +105,20 @@ function normalizeTimeToHHMM(value: string): string {
     m = parseInt(match[2], 10);
   } else {
     const digits = v.replace(/\D/g, '');
-    if (digits.length < 3) return v;
-    h = parseInt(digits.slice(0, 2) || '0', 10);
-    m = parseInt(digits.slice(2, 4) || '0', 10);
+    if (digits.length === 0) return '';
+    if (digits.length === 1) {
+      h = parseInt(digits, 10);
+      m = 0;
+    } else if (digits.length === 2) {
+      h = parseInt(digits, 10);
+      m = 0;
+    } else if (digits.length === 3) {
+      h = parseInt(digits.slice(0, 1), 10);
+      m = parseInt(digits.slice(1, 3), 10);
+    } else {
+      h = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+    }
   }
   h = Math.min(23, Math.max(0, h));
   m = Math.min(59, Math.max(0, m));
@@ -263,8 +281,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       .from('manual_time_entries')
       .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id, comments, non_driving_hours')
       .eq('worker_id', selectedWorker)
-      .gte('entry_date', startDate.toISOString().split('T')[0])
-      .lte('entry_date', endDate.toISOString().split('T')[0]);
+      .gte('entry_date', formatDateForDB(startDate))
+      .lte('entry_date', formatDateForDB(endDate));
 
     const { data: manualData } = await manualQuery;
 
@@ -295,8 +313,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       .select('date, shift_start, shift_end')
       .eq('worker_id', selectedWorker)
       .eq('schedule_type', 'work')
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0]);
+      .gte('date', formatDateForDB(startDate))
+      .lte('date', formatDateForDB(endDate));
 
     if (workLocation) {
       scheduleQuery.eq('work_location', workLocation);
@@ -519,8 +537,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     let query = supabase
       .from('manual_time_entries')
       .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
-      .gte('entry_date', startDate.toISOString().split('T')[0])
-      .lte('entry_date', endDate.toISOString().split('T')[0])
+      .gte('entry_date', formatDateForDB(startDate))
+      .lte('entry_date', formatDateForDB(endDate))
       .order('entry_date', { ascending: true });
 
     const { data, error } = await query;
@@ -542,8 +560,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       .from('manual_time_entries')
       .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
       .eq('worker_id', viewWorker)
-      .gte('entry_date', startDate.toISOString().split('T')[0])
-      .lte('entry_date', endDate.toISOString().split('T')[0])
+      .gte('entry_date', formatDateForDB(startDate))
+      .lte('entry_date', formatDateForDB(endDate))
       .order('entry_date', { ascending: true });
 
     const { data: manualData, error: manualError } = await manualQuery;
@@ -558,8 +576,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       .select(`id, worker_id, date, shift_start, shift_end, notes, users!worker_id(full_name)`)
       .eq('worker_id', viewWorker)
       .eq('schedule_type', 'work')
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0])
+      .gte('date', formatDateForDB(startDate))
+      .lte('date', formatDateForDB(endDate))
       .order('date', { ascending: true });
 
     if (workLocation) {
@@ -732,8 +750,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     try {
       const startDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
       const endDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const startDateStr = formatDateForDB(startDate);
+      const endDateStr = formatDateForDB(endDate);
 
       // Delete from both tables for this worker and month
       await supabase
@@ -911,17 +929,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       });
 
       alert('Grafikai sėkmingai išsaugoti!');
-      setDayEntries(prev => prev.map(d => ({ 
-        ...d, 
-        start_time: '', 
-        end_time: '',
-        work_description: '',
-        work_descriptions: [],
-        measurement_value: '',
-        measurement_unit_id: '',
-        comments: '',
-        non_driving_hours: ''
-      })));
+      
+      // Regenerate empty days for the month and reload saved entries
+      const days = getDaysInMonth(selectedMonth.getFullYear(), selectedMonth.getMonth());
+      setDayEntries(days);
+      await loadExistingEntriesForMonth();
+      
+      // Also update perziura tab if viewing the same worker
       if (activeTab === 'perziura' && viewWorker === selectedWorker) {
         loadSavedEntries();
       }

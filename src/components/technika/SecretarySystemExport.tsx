@@ -49,6 +49,7 @@ interface InvoiceWithItems {
   supplier_company_code?: string;
   supplier_vat_code?: string;
   supplier_address?: string;
+  supplier_accounting_account?: string;
   branch_number?: string;
   document_series_number?: string;
   document_number_only?: string;
@@ -127,6 +128,22 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     loadLookupData();
   }, [invoiceId]);
   
+  // Auto-check L078-L081 checkbox when L069 is filled
+  useEffect(() => {
+    if (!invoice) return;
+    
+    // If L069 is filled and L078-L081 are not set, auto-check them
+    if (invoice.reverse_vat_indicator && invoice.reverse_vat_indicator !== '' && !invoice.pvm_debtor_code) {
+      setInvoice({
+        ...invoice,
+        pvm_debtor_code: 'auto',
+        pvm_debtor_name: 'auto',
+        pvm_creditor_code: 'auto',
+        pvm_creditor_name: 'auto'
+      });
+    }
+  }, [invoice?.reverse_vat_indicator]);
+  
   useEffect(() => {
     if (!invoice || (secretaryMaterials.length === 0 && secretaryServices.length === 0) || accountingOperations.length === 0) return;
     
@@ -135,8 +152,8 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     
     invoice.items.forEach((item, idx) => {
       if (item.product_code) {
-        // Check if it's a service or material based on accounting code
-        const isService = item.accounting_op1_debit?.startsWith('6');
+        // Check if it's a service or material based on L009 selection
+        const isService = item.product_service_flag === 1;
         const lookupList = isService ? secretaryServices : secretaryMaterials;
         const found = lookupList.find((m: any) => String(m.code) === item.product_code);
         if (found) {
@@ -192,8 +209,23 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
         setSupplierSearch(invoiceData.supplier_name);
       }
       
+      // Get supplier's accounting account for L029
+      let supplierAccountingAccount = invoiceData.supplier_accounting_account;
+      if (invoiceData.supplier_unique_code && !supplierAccountingAccount) {
+        const { data: supplierData } = await supabase
+          .from('secretary_suppliers')
+          .select('accounting_account')
+          .eq('code', parseInt(invoiceData.supplier_unique_code))
+          .single();
+        
+        if (supplierData?.accounting_account) {
+          supplierAccountingAccount = String(supplierData.accounting_account);
+        }
+      }
+      
       setInvoice({
         ...invoiceData,
+        supplier_accounting_account: supplierAccountingAccount,
         document_series_number: invoiceData.document_series_number || invoiceData.invoice_number,
         items: itemsData.map(item => ({
           id: item.id,
@@ -211,7 +243,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
           responsible_person_code: item.responsible_person_code,
           responsible_person_name: item.responsible_person_name,
           accounting_op1_debit: item.accounting_op1_debit,
-          accounting_op1_credit: item.accounting_op1_credit || '451',
+          accounting_op1_credit: item.accounting_op1_credit || supplierAccountingAccount || '451',
           accounting_op1_expense_structure: item.accounting_op1_expense_structure,
           structural_unit_code: item.structural_unit_code,
           structural_unit_name: item.structural_unit_name,
@@ -279,6 +311,9 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     // Detect if supplier is foreign based on VAT code
     const isForeignSupplier = supplier.vat_code && !supplier.vat_code.startsWith('LT');
     
+    // Get supplier's accounting account (column P) for L029
+    const supplierAccountingAccount = supplier.accounting_account ? String(supplier.accounting_account) : undefined;
+    
     setInvoice({
       ...invoice,
       supplier_unique_code: String(supplier.code),
@@ -287,8 +322,14 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
       supplier_vat_code: supplier.vat_code || undefined,
       supplier_address: supplier.address || undefined,
       supplier_currency: supplier.currency || 'EUR',
+      supplier_accounting_account: supplierAccountingAccount,
       // Auto-set L069 based on supplier country
       reverse_vat_indicator: isForeignSupplier ? '1' : '',
+      // Auto-set L029 for all items from supplier's accounting account (column P)
+      items: invoice.items.map(item => ({
+        ...item,
+        accounting_op1_credit: supplierAccountingAccount || item.accounting_op1_credit || '451'
+      }))
     });
     
     setSupplierSearch(supplier.name);
@@ -603,17 +644,26 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                     </div>
                   </div>
                   {invoice.supplier_vat_code && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <span className="text-xs text-gray-600">PVM kodas: </span>
-                      <span className="font-mono text-sm font-semibold">{invoice.supplier_vat_code}</span>
-                      {invoice.supplier_vat_code.startsWith('LT') ? (
-                        <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded">
-                          🇱🇹 LIETUVOS TIEKĖJAS
-                        </span>
-                      ) : (
-                        <span className="ml-3 px-2 py-1 bg-orange-100 text-orange-800 text-xs font-bold rounded">
-                          🌍 UŽSIENIO TIEKĖJAS
-                        </span>
+                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                      <div>
+                        <span className="text-xs text-gray-600">PVM kodas: </span>
+                        <span className="font-mono text-sm font-semibold">{invoice.supplier_vat_code}</span>
+                        {invoice.supplier_vat_code.startsWith('LT') ? (
+                          <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded">
+                            🇱🇹 LIETUVOS TIEKĖJAS
+                          </span>
+                        ) : (
+                          <span className="ml-3 px-2 py-1 bg-orange-100 text-orange-800 text-xs font-bold rounded">
+                            🌍 UŽSIENIO TIEKĖJAS
+                          </span>
+                        )}
+                      </div>
+                      {invoice.supplier_accounting_account && (
+                        <div>
+                          <span className="text-xs text-gray-600">L029 (Kreditas): </span>
+                          <span className="font-mono text-sm font-bold text-purple-600">{invoice.supplier_accounting_account}</span>
+                          <span className="ml-2 text-xs text-gray-500">(iš stulpelio P)</span>
+                        </div>
                       )}
                     </div>
                   )}
@@ -691,7 +741,29 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                 </div>
                 <select
                   value={invoice.reverse_vat_indicator || ''}
-                  onChange={(e) => setInvoice({ ...invoice, reverse_vat_indicator: e.target.value })}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    // Auto-check L078-L081 if L069 is filled (not empty)
+                    if (newValue && newValue !== '') {
+                      setInvoice({ 
+                        ...invoice, 
+                        reverse_vat_indicator: newValue,
+                        pvm_debtor_code: 'auto',
+                        pvm_debtor_name: 'auto',
+                        pvm_creditor_code: 'auto',
+                        pvm_creditor_name: 'auto'
+                      });
+                    } else {
+                      setInvoice({ 
+                        ...invoice, 
+                        reverse_vat_indicator: newValue,
+                        pvm_debtor_code: undefined,
+                        pvm_debtor_name: undefined,
+                        pvm_creditor_code: undefined,
+                        pvm_creditor_name: undefined
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="">TUŠČIAS - Lietuvos tiekėjas (pvz., Kalnapilis)</option>
@@ -879,11 +951,41 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
 
                     {isEditing && (
                       <div className="space-y-4 pt-4 border-t-2 border-gray-200">
-                        {/* Product Code (L010) - Material Lookup */}
+                        {/* L009 - Product/Service Flag - MANUAL SELECTION */}
+                        <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-4">
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">
+                            L009: Produktas ar paslauga? <span className="text-red-600">*</span>
+                          </label>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                checked={itemData.product_service_flag === 0}
+                                onChange={() => handleItemFieldUpdate(index, 'product_service_flag', 0)}
+                                className="w-4 h-4 text-purple-600"
+                              />
+                              <span className="font-semibold">0 - Produktas (vertybė)</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                checked={itemData.product_service_flag === 1}
+                                onChange={() => handleItemFieldUpdate(index, 'product_service_flag', 1)}
+                                className="w-4 h-4 text-purple-600"
+                              />
+                              <span className="font-semibold">1 - Paslauga</span>
+                            </label>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-2">
+                            Pasirinkite rankiniu būdu. Nuo šio priklauso L010 sąrašas (vertybių ar paslaugų).
+                          </p>
+                        </div>
+
+                        {/* Product Code (L010) - Material/Service Lookup */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="relative">
                             {(() => {
-                              const isService = itemData.accounting_op1_debit?.startsWith('6');
+                              const isService = itemData.product_service_flag === 1;
                               const lookupList = isService ? secretaryServices : secretaryMaterials;
                               const listType = isService ? 'paslaugos' : 'medžiagos';
                               
@@ -892,9 +994,9 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                                     L010: {isService ? 'Paslaugos' : 'Produkto'} kodas <span className="text-red-600">*</span>
                                   </label>
-                                  {!itemData.accounting_op1_debit && (
+                                  {itemData.product_service_flag === undefined && (
                                     <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                                      ⚠️ Pirmiausia pasirinkite ūkinę operaciją (L028)
+                                      ⚠️ Pirmiausia pasirinkite L009 (produktas ar paslauga)
                                     </div>
                                   )}
                                   <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -910,7 +1012,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                                       onFocus={() => setShowMaterialDropdown(index)}
                                       placeholder={`Ieškoti ${listType} pagal pavadinimą...`}
                                       className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                      disabled={!itemData.accounting_op1_debit}
+                                      disabled={itemData.product_service_flag === undefined}
                                     />
                                     <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
                                   </div>
@@ -1165,7 +1267,8 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                                         if (!invoice) return;
                                         
                                         const debitValue = String(operation.debit || '').replace('.0', '');
-                                        const creditValue = String(operation.credit || '').replace('.0', '');
+                                        // L029 comes from SUPPLIER's accounting account, not from operation
+                                        const creditValue = invoice?.supplier_accounting_account || '451';
                                         const expenseValue = String(operation.expense_structure || '').replace('.0', '');
                                         
                                         const updatedItems = [...invoice.items];
@@ -1218,14 +1321,20 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-semibold text-gray-700 mb-2">L029: Kreditas</label>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                L029: Kreditas
+                                <span className="text-xs text-gray-500 ml-2">(iš tiekėjo įrašo)</span>
+                              </label>
                               <input
                                 type="text"
-                                value={itemData.accounting_op1_credit || '451'}
-                                onChange={(e) => handleItemFieldUpdate(index, 'accounting_op1_credit', e.target.value)}
+                                value={itemData.accounting_op1_credit || invoice?.supplier_accounting_account || '451'}
+                                disabled
                                 maxLength={9}
-                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono"
+                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg font-mono bg-gray-100 text-gray-700"
                               />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Automatiškai iš tiekėjo buhalterinės sąskaitos (stulpelis P)
+                              </p>
                             </div>
                           </div>
                         </div>
