@@ -548,7 +548,19 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       return;
     }
 
-    setAllWorkersData(data || []);
+    // Recalculate hours_worked on the frontend to handle overnight shifts correctly
+    const correctedData = (data || []).map((entry: any) => ({
+      ...entry,
+      hours_worked: entry.worker_type === 'vairuotojas' 
+        ? (entry.non_driving_hours || 0)
+        : calculateHours(
+            entry.start_time?.slice(0, 5) || '', 
+            entry.end_time?.slice(0, 5) || '', 
+            entry.lunch_type || 'full'
+          )
+    }));
+
+    setAllWorkersData(correctedData);
   };
 
   const loadSavedEntries = async () => {
@@ -567,7 +579,24 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     const { data: manualData, error: manualError } = await manualQuery;
 
     if (!manualError && manualData && manualData.length > 0) {
-      setSavedEntries(manualData);
+      // Recalculate hours_worked on the frontend to handle overnight shifts correctly
+      const correctedData = manualData.map((entry: any) => {
+        const recalculatedHours = entry.worker_type === 'vairuotojas' 
+          ? (entry.non_driving_hours || 0)
+          : calculateHours(
+              entry.start_time?.slice(0, 5) || '', 
+              entry.end_time?.slice(0, 5) || '', 
+              entry.lunch_type || 'full'
+            );
+        
+        console.log(`Entry ${entry.entry_date}: DB hours=${entry.hours_worked}, Recalculated=${recalculatedHours}, Start=${entry.start_time}, End=${entry.end_time}, Lunch=${entry.lunch_type}`);
+        
+        return {
+          ...entry,
+          hours_worked: recalculatedHours
+        };
+      });
+      setSavedEntries(correctedData);
       return;
     }
 

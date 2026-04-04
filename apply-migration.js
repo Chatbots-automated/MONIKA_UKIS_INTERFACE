@@ -1,54 +1,47 @@
-const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-require('dotenv').config();
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      persistSession: false
-    }
-  }
-);
+const supabaseUrl = 'https://olxnahsxvyiadknybagt.supabase.co';
+const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9seG5haHN4dnlpYWRrbnliYWd0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mjc3MTc4NiwiZXhwIjoyMDY4MzQ3Nzg2fQ.PvB43f77FD-zVVO8Kf_OxJ5pUQg3xbDA7nuL4S3Dt5U';
 
-async function applyMigration() {
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+async function runMigration(filename) {
+  console.log(`\nRunning migration: ${filename}`);
+  const sql = fs.readFileSync(path.join('supabase', 'migrations', filename), 'utf8');
+  
   try {
-    const migrationSQL = fs.readFileSync('./supabase/migrations/20251230000000_fix_vaccination_stock_deduction.sql', 'utf8');
-
-    console.log('🔧 Applying vaccination stock deduction fix...\n');
-
-    // Execute the entire migration as one transaction
-    const { data, error } = await supabase
-      .from('_migrations')
-      .select('*')
-      .limit(1);
-
-    if (error && error.code !== 'PGRST204') {
-      console.log('Note: Cannot access migrations table, will try direct execution\n');
+    const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
+    if (error) {
+      console.error(`Error in ${filename}:`, error);
+      return false;
     }
-
-    // For Supabase, we need to execute via the SQL editor or use pg library
-    // Let's use pg library
-    const { Client } = require('pg');
-
-    // Construct connection string
-    const projectRef = 'olxnahsxvyiadknybagt';
-    const connectionString = `postgresql://postgres.${projectRef}:${process.env.VITE_SUPABASE_SERVICE_ROLE_KEY.substring(0, 20)}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`;
-
-    console.log('⚠️  Direct PostgreSQL connection requires database password.');
-    console.log('Please apply the migration using one of these methods:\n');
-    console.log('1. 📊 Supabase Dashboard SQL Editor:');
-    console.log('   - Visit: https://supabase.com/dashboard/project/olxnahsxvyiadknybagt/sql/new');
-    console.log('   - Copy contents from: supabase/migrations/20251230000000_fix_vaccination_stock_deduction.sql');
-    console.log('   - Click "Run"\n');
-    console.log('2. 🔧 Supabase CLI:');
-    console.log('   - Run: supabase db push\n');
-    console.log('3. 💻 Or I can show you the SQL to run manually\n');
-
+    console.log(`✓ ${filename} completed successfully`);
+    return true;
   } catch (err) {
-    console.error('❌ Error:', err.message);
+    console.error(`Exception in ${filename}:`, err);
+    return false;
   }
 }
 
-applyMigration();
+async function main() {
+  const migrations = [
+    '20260213000007_fix_overnight_hours_step1.sql',
+    '20260213000008_fix_overnight_hours_step2.sql',
+    '20260213000009_fix_overnight_hours_step3.sql',
+    '20260213000010_fix_overnight_hours_step4.sql'
+  ];
+
+  for (const migration of migrations) {
+    const success = await runMigration(migration);
+    if (!success) {
+      console.log('\nStopping due to error.');
+      process.exit(1);
+    }
+  }
+
+  console.log('\n✓ All migrations completed successfully!');
+}
+
+main();
