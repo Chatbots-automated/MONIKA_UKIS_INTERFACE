@@ -27,12 +27,13 @@ import { InvoiceViewer } from './components/InvoiceViewer';
 import { TechnikaSelector } from './components/TechnikaSelector';
 import { WorkerSchedulesSelector } from './components/WorkerSchedulesSelector';
 import { WorkerPortal } from './components/worker/WorkerPortal';
+import { FoodManagement } from './components/FoodManagement';
 import { NotificationToast, setNotificationCallback, NotificationType } from './components/NotificationToast';
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro, Droplets } from 'lucide-react';
 
-type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | null;
+type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food' | null;
 
 interface Notification {
   id: string;
@@ -236,6 +237,28 @@ function App() {
           />
         )}
       </RealtimeProvider>
+    );
+  }
+
+  if (selectedModule === 'food') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50">
+        <div className="max-w-7xl mx-auto p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Pietūs</h1>
+              <p className="text-gray-600">Darbuotojų maitinimo valdymas</p>
+            </div>
+            <button
+              onClick={() => setSelectedModule(null)}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              Grįžti į modulius
+            </button>
+          </div>
+          <FoodManagement />
+        </div>
+      </div>
     );
   }
 

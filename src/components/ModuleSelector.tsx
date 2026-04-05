@@ -1,9 +1,9 @@
-import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar, LogOut, Layers, Building2 } from 'lucide-react';
+import { Stethoscope, Euro, ArrowRight, Package, Shield, Users, Droplets, Beaker, Activity, Settings, Wrench, Truck, Calendar, LogOut, Layers, Building2, UtensilsCrossed } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
 interface ModuleSelectorProps {
-  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules') => void;
+  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food') => void;
 }
 
 type ModuleGroup = 'core' | 'infrastructure' | null;
@@ -316,7 +316,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mx-auto max-w-4xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 mx-auto max-w-6xl">
             <button
               onClick={() => onSelectModule('technika')}
               className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
@@ -427,6 +427,64 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
                 </div>
 
                 <div className="flex items-center justify-center gap-2 text-indigo-600 font-semibold group-hover:gap-4 transition-all">
+                  <span>Atidaryti sistemą</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => onSelectModule('food')}
+              className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2"
+            >
+              <div className="bg-gradient-to-br from-orange-600 to-amber-700 p-6 lg:p-8 text-center">
+                <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <UtensilsCrossed className="w-14 h-14 text-orange-600" />
+                </div>
+                <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
+                  Pietūs
+                </h2>
+                <p className="text-sm lg:text-base text-orange-100">
+                  Maitinimo Valdymas
+                </p>
+              </div>
+
+              <div className="p-6 lg:p-8">
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center mt-0.5">
+                      <Users className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Darbuotojų užsakymai</p>
+                      <p className="text-sm text-gray-600">Kas nori pietų šiandien</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center mt-0.5">
+                      <Calendar className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Savaitės planavimas</p>
+                      <p className="text-sm text-gray-600">Iš anksto užsakyti maistą</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center mt-0.5">
+                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Ataskaitos</p>
+                      <p className="text-sm text-gray-600">Dienos suvestinės virtuvei</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-orange-600 font-semibold group-hover:gap-4 transition-all">
                   <span>Atidaryti sistemą</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </div>

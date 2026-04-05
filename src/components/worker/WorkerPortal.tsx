@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, Briefcase, LogOut, Clock, User, Tractor, Warehouse } from 'lucide-react';
+import { Calendar, Briefcase, LogOut, Clock, Tractor, Warehouse, UtensilsCrossed } from 'lucide-react';
 import { WorkerScheduleView } from './WorkerScheduleView';
 import { WorkerTechnikaModule } from './WorkerTechnikaModule';
+import { WorkerFoodPreferences } from './WorkerFoodPreferences';
 import { supabase } from '../../lib/supabase';
 
-type WorkerView = 'schedule' | 'technika';
+type WorkerView = 'schedule' | 'technika' | 'food';
 
 export function WorkerPortal() {
   const { user, signOut, isFarmWorker, isWarehouseWorker } = useAuth();
@@ -144,6 +145,17 @@ export function WorkerPortal() {
               <Briefcase className="w-5 h-5" />
               Darbo vieta
             </button>
+            <button
+              onClick={() => setCurrentView('food')}
+              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
+                currentView === 'food'
+                  ? 'border-orange-600 text-orange-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              <UtensilsCrossed className="w-5 h-5" />
+              Pietūs
+            </button>
           </nav>
         </div>
       </div>
@@ -161,6 +173,11 @@ export function WorkerPortal() {
           <WorkerTechnikaModule
             workLocation={workLocation}
             activeTimeEntry={activeTimeEntry}
+          />
+        )}
+        {currentView === 'food' && (
+          <WorkerFoodPreferences
+            workLocation={workLocation}
           />
         )}
       </div>
