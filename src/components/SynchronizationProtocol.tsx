@@ -484,6 +484,7 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
   };
 
   const selectedProtocol = protocols.find(p => p.id === selectedProtocolId);
+  const isApsek = geaStatus === 'APSĖK';
 
   if (activeSync) {
     const completedSteps = activeSync.steps?.filter(s => s.completed).length || 0;
@@ -743,8 +744,6 @@ export function SynchronizationProtocolComponent({ animalId, onProtocolCreated }
       </div>
     );
   }
-
-  const isApsek = geaStatus === 'APSĖK';
 
   return (
     <div className="space-y-4">

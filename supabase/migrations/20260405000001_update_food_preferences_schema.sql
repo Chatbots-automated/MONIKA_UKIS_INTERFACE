@@ -1,29 +1,54 @@
--- Food Preferences System (Pietūs Module)
--- Allows workers to mark if they want food for each day
--- Admins can view and manage food orders
+-- Update Food Preferences System to support lunch and supper separately
+-- This migration updates the existing schema
 
--- 1. Create worker_food_preferences table
-CREATE TABLE IF NOT EXISTS worker_food_preferences (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  worker_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  date date NOT NULL,
-  wants_lunch boolean DEFAULT false,
-  wants_supper boolean DEFAULT false,
-  work_location text CHECK (work_location IN ('farm', 'warehouse', 'administration')),
-  
-  -- Tracking
-  marked_at timestamptz,
-  marked_by uuid REFERENCES users(id), -- worker themselves or admin override
-  notes text,
-  
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  
-  -- One preference per worker per day
-  UNIQUE(worker_id, date)
-);
+-- 1. Drop the old view first
+DROP VIEW IF EXISTS daily_food_summary;
 
--- 2. Create admin manual food counts table
+-- 2. Drop the old function
+DROP FUNCTION IF EXISTS set_weekly_food_preferences(uuid, date, date, boolean, text);
+
+-- 3. Check if table exists and alter it, or create new
+DO $$ 
+BEGIN
+  -- Check if wants_food column exists (old schema)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'worker_food_preferences' 
+    AND column_name = 'wants_food'
+  ) THEN
+    -- Old schema exists, update it
+    ALTER TABLE worker_food_preferences 
+      DROP COLUMN IF EXISTS wants_food,
+      ADD COLUMN IF NOT EXISTS wants_lunch boolean DEFAULT false,
+      ADD COLUMN IF NOT EXISTS wants_supper boolean DEFAULT false;
+    
+    -- Update work_location constraint
+    ALTER TABLE worker_food_preferences 
+      DROP CONSTRAINT IF EXISTS worker_food_preferences_work_location_check;
+    
+    ALTER TABLE worker_food_preferences 
+      ADD CONSTRAINT worker_food_preferences_work_location_check 
+      CHECK (work_location IN ('farm', 'warehouse', 'administration'));
+  ELSE
+    -- Table doesn't exist or already has new schema, create it
+    CREATE TABLE IF NOT EXISTS worker_food_preferences (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      worker_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      date date NOT NULL,
+      wants_lunch boolean DEFAULT false,
+      wants_supper boolean DEFAULT false,
+      work_location text CHECK (work_location IN ('farm', 'warehouse', 'administration')),
+      marked_at timestamptz,
+      marked_by uuid REFERENCES users(id),
+      notes text,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now(),
+      UNIQUE(worker_id, date)
+    );
+  END IF;
+END $$;
+
+-- 4. Create admin manual food counts table
 CREATE TABLE IF NOT EXISTS admin_food_counts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   date date NOT NULL,
@@ -33,12 +58,12 @@ CREATE TABLE IF NOT EXISTS admin_food_counts (
   notes text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
-  
-  -- One entry per location per day
   UNIQUE(date, location)
 );
 
--- 3. Add indexes for performance
+-- 5. Add/update indexes
+DROP INDEX IF EXISTS idx_food_prefs_wants_food;
+
 CREATE INDEX IF NOT EXISTS idx_food_prefs_worker_date ON worker_food_preferences(worker_id, date);
 CREATE INDEX IF NOT EXISTS idx_food_prefs_date ON worker_food_preferences(date);
 CREATE INDEX IF NOT EXISTS idx_food_prefs_location ON worker_food_preferences(work_location);
@@ -48,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_food_prefs_wants_supper ON worker_food_preference
 CREATE INDEX IF NOT EXISTS idx_admin_counts_date ON admin_food_counts(date);
 CREATE INDEX IF NOT EXISTS idx_admin_counts_location ON admin_food_counts(location);
 
--- 4. Add comments
+-- 6. Add comments
 COMMENT ON TABLE worker_food_preferences IS 'Worker food preferences - tracks who wants lunch and supper each day';
 COMMENT ON COLUMN worker_food_preferences.wants_lunch IS 'True if worker wants lunch for this date';
 COMMENT ON COLUMN worker_food_preferences.wants_supper IS 'True if worker wants supper for this date';
@@ -59,11 +84,11 @@ COMMENT ON TABLE admin_food_counts IS 'Manual food counts entered by admin for a
 COMMENT ON COLUMN admin_food_counts.lunch_count IS 'Number of people wanting lunch';
 COMMENT ON COLUMN admin_food_counts.supper_count IS 'Number of people wanting supper';
 
--- 5. Disable RLS (using custom auth system)
+-- 7. Disable RLS (using custom auth system)
 ALTER TABLE worker_food_preferences DISABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_food_counts DISABLE ROW LEVEL SECURITY;
 
--- 6. Create view for daily food summary
+-- 8. Create updated view for daily food summary
 CREATE OR REPLACE VIEW daily_food_summary AS
 SELECT 
   fp.date,
@@ -86,7 +111,7 @@ GROUP BY fp.date, fp.work_location;
 
 COMMENT ON VIEW daily_food_summary IS 'Daily summary of lunch and supper preferences by location';
 
--- 7. Grant permissions
+-- 9. Grant permissions
 GRANT ALL ON worker_food_preferences TO anon;
 GRANT ALL ON worker_food_preferences TO authenticated;
 GRANT ALL ON worker_food_preferences TO service_role;
@@ -97,7 +122,7 @@ GRANT SELECT ON daily_food_summary TO anon;
 GRANT SELECT ON daily_food_summary TO authenticated;
 GRANT SELECT ON daily_food_summary TO service_role;
 
--- 8. Create function to bulk set food preferences for a week
+-- 10. Create updated function to bulk set food preferences for a week
 CREATE OR REPLACE FUNCTION set_weekly_food_preferences(
   p_worker_id uuid,
   p_start_date date,
@@ -110,11 +135,9 @@ RETURNS void AS $$
 DECLARE
   v_date date;
 BEGIN
-  -- Loop through each date in the range
   FOR v_date IN 
     SELECT generate_series(p_start_date, p_end_date, '1 day'::interval)::date
   LOOP
-    -- Insert or update preference
     INSERT INTO worker_food_preferences (
       worker_id,
       date,

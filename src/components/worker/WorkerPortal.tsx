@@ -1,23 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, Briefcase, LogOut, Clock, Tractor, Warehouse, UtensilsCrossed } from 'lucide-react';
-import { WorkerScheduleView } from './WorkerScheduleView';
-import { WorkerTechnikaModule } from './WorkerTechnikaModule';
+import { LogOut, Clock, Tractor, Warehouse, UtensilsCrossed } from 'lucide-react';
 import { WorkerFoodPreferences } from './WorkerFoodPreferences';
 import { supabase } from '../../lib/supabase';
 
-type WorkerView = 'schedule' | 'technika' | 'food';
-
 export function WorkerPortal() {
-  const { user, signOut, isFarmWorker, isWarehouseWorker } = useAuth();
-  const [currentView, setCurrentView] = useState<WorkerView>('schedule');
+  const { user, signOut, isFarmWorker } = useAuth();
   const [activeTimeEntry, setActiveTimeEntry] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   const workLocation = isFarmWorker ? 'farm' : 'warehouse';
   const locationLabel = isFarmWorker ? 'Ferma' : 'Technikos kiemas';
   const LocationIcon = isFarmWorker ? Tractor : Warehouse;
-  const themeColor = isFarmWorker ? 'green' : 'slate';
 
   useEffect(() => {
     loadActiveTimeEntry();
@@ -119,42 +113,16 @@ export function WorkerPortal() {
         </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation - Only Food Tab */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-1">
             <button
-              onClick={() => setCurrentView('schedule')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
-                currentView === 'schedule'
-                  ? `${isFarmWorker ? 'border-green-600 text-green-600' : 'border-slate-600 text-slate-600'}`
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-              }`}
-            >
-              <Calendar className="w-5 h-5" />
-              Mano grafikas
-            </button>
-            <button
-              onClick={() => setCurrentView('technika')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
-                currentView === 'technika'
-                  ? `${isFarmWorker ? 'border-green-600 text-green-600' : 'border-slate-600 text-slate-600'}`
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-              }`}
-            >
-              <Briefcase className="w-5 h-5" />
-              Darbo vieta
-            </button>
-            <button
               onClick={() => setCurrentView('food')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
-                currentView === 'food'
-                  ? 'border-orange-600 text-orange-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-              }`}
+              className="flex items-center gap-2 px-6 py-4 font-medium border-b-2 border-orange-600 text-orange-600"
             >
               <UtensilsCrossed className="w-5 h-5" />
-              Pietūs
+              Pietūs ir vakarienė
             </button>
           </nav>
         </div>
@@ -162,24 +130,9 @@ export function WorkerPortal() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'schedule' && (
-          <WorkerScheduleView
-            workLocation={workLocation}
-            activeTimeEntry={activeTimeEntry}
-            onTimeEntryChange={loadActiveTimeEntry}
-          />
-        )}
-        {currentView === 'technika' && (
-          <WorkerTechnikaModule
-            workLocation={workLocation}
-            activeTimeEntry={activeTimeEntry}
-          />
-        )}
-        {currentView === 'food' && (
-          <WorkerFoodPreferences
-            workLocation={workLocation}
-          />
-        )}
+        <WorkerFoodPreferences
+          workLocation={workLocation}
+        />
       </div>
     </div>
   );

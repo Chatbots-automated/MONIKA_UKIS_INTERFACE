@@ -829,6 +829,62 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     }
   };
 
+  const deleteSingleDay = async (date: string) => {
+    if (!selectedWorker) {
+      alert('Pasirinkite darbuotoją');
+      return;
+    }
+
+    if (!confirm(`Ar tikrai norite ištrinti ${date} įrašą?`)) return;
+
+    setSaving(true);
+    try {
+      // Delete from both tables for this specific date
+      await supabase
+        .from('manual_time_entries')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .eq('entry_date', date);
+
+      await supabase
+        .from('worker_schedules')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .eq('date', date);
+
+      await logAction('delete_manual_entry', 'worker_schedules', null, null, {
+        worker_id: selectedWorker,
+        date: date,
+      });
+
+      // Clear the day in UI
+      setDayEntries(prev => prev.map(d => 
+        d.date === date ? { 
+          ...d, 
+          start_time: '', 
+          end_time: '',
+          work_description: '',
+          work_descriptions: [],
+          measurement_value: '',
+          measurement_unit_id: '',
+          comments: '',
+          non_driving_hours: ''
+        } : d
+      ));
+
+      // Refresh the view tab if it's showing this worker
+      if (activeTab === 'perziura' && viewWorker === selectedWorker) {
+        loadSavedEntries();
+      }
+
+      alert('Įrašas sėkmingai ištrintas!');
+    } catch (error: any) {
+      console.error('Error deleting entry:', error);
+      alert(`Klaida trinant įrašą: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const deleteEntireDay = async (entryDate: string) => {
     if (!confirm(`Ar tikrai norite ištrinti visus ${entryDate} įrašus?`)) return;
@@ -1360,15 +1416,26 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             />
                           </td>
                           <td className="px-2 py-2">
-                            {index > 0 && (
-                              <button
-                                onClick={() => copyFromPreviousDay(day.date)}
-                                className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                title="Kopijuoti iš ankstesnės dienos"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            )}
+                            <div className="flex gap-1">
+                              {index > 0 && (
+                                <button
+                                  onClick={() => copyFromPreviousDay(day.date)}
+                                  className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                  title="Kopijuoti iš ankstesnės dienos"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                              )}
+                              {(day.start_time || day.end_time) && (
+                                <button
+                                  onClick={() => deleteSingleDay(day.date)}
+                                  className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                  title="Ištrinti šios dienos įrašą"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

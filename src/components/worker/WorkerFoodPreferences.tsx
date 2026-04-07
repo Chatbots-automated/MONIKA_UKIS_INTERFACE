@@ -10,7 +10,8 @@ interface WorkerFoodPreferencesProps {
 interface FoodPreference {
   id?: string;
   date: string;
-  wants_food: boolean;
+  wants_lunch: boolean;
+  wants_supper: boolean;
   marked_at?: string;
   notes?: string;
 }
@@ -72,7 +73,8 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
         prefsMap[pref.date] = {
           id: pref.id,
           date: pref.date,
-          wants_food: pref.wants_food,
+          wants_lunch: pref.wants_lunch,
+          wants_supper: pref.wants_supper,
           marked_at: pref.marked_at,
           notes: pref.notes
         };
@@ -86,17 +88,20 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
     }
   };
 
-  const toggleFoodPreference = async (date: string, wantsFood: boolean) => {
+  const toggleFoodPreference = async (date: string, mealType: 'lunch' | 'supper', wants: boolean) => {
     if (!user) return;
     
     setSaving(true);
     try {
-      const { data, error } = await supabase
+      const currentPref = preferences[date] || { wants_lunch: false, wants_supper: false };
+      
+      const { data, error} = await supabase
         .from('worker_food_preferences')
         .upsert({
           worker_id: user.id,
           date: date,
-          wants_food: wantsFood,
+          wants_lunch: mealType === 'lunch' ? wants : currentPref.wants_lunch,
+          wants_supper: mealType === 'supper' ? wants : currentPref.wants_supper,
           work_location: workLocation,
           marked_at: new Date().toISOString(),
           marked_by: user.id,
@@ -114,7 +119,8 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
         [date]: {
           id: data.id,
           date: data.date,
-          wants_food: data.wants_food,
+          wants_lunch: data.wants_lunch,
+          wants_supper: data.wants_supper,
           marked_at: data.marked_at,
           notes: data.notes
         }
@@ -127,21 +133,27 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
     }
   };
 
-  const setWeekPreferences = async (wantsFood: boolean) => {
+  const setWeekPreferences = async (mealType: 'lunch' | 'supper' | 'both', wants: boolean) => {
     if (!user) return;
     
     setSaving(true);
     try {
       const weekDates = getWeekDates();
-      const updates = weekDates.map(date => ({
-        worker_id: user.id,
-        date: formatDate(date),
-        wants_food: wantsFood,
-        work_location: workLocation,
-        marked_at: new Date().toISOString(),
-        marked_by: user.id,
-        updated_at: new Date().toISOString()
-      }));
+      const updates = weekDates.map(date => {
+        const dateStr = formatDate(date);
+        const currentPref = preferences[dateStr] || { wants_lunch: false, wants_supper: false };
+        
+        return {
+          worker_id: user.id,
+          date: dateStr,
+          wants_lunch: mealType === 'lunch' || mealType === 'both' ? wants : currentPref.wants_lunch,
+          wants_supper: mealType === 'supper' || mealType === 'both' ? wants : currentPref.wants_supper,
+          work_location: workLocation,
+          marked_at: new Date().toISOString(),
+          marked_by: user.id,
+          updated_at: new Date().toISOString()
+        };
+      });
 
       const { error } = await supabase
         .from('worker_food_preferences')
@@ -199,8 +211,8 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
             <UtensilsCrossed className="w-6 h-6 text-orange-600" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Pietūs</h2>
-            <p className="text-sm text-gray-600">Pažymėkite, ar norite pietų</p>
+            <h2 className="text-2xl font-bold text-gray-900">Pietūs ir vakarienė</h2>
+            <p className="text-sm text-gray-600">Pažymėkite, ko norite šiandien</p>
           </div>
         </div>
 
@@ -231,71 +243,107 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
 
       {/* Today View */}
       {viewMode === 'today' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Šiandien - {new Date().toLocaleDateString('lt-LT', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}</h3>
+              </div>
+            </div>
+
+            {/* Lunch */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-700 mb-3">Pietūs</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => toggleFoodPreference(today, 'lunch', true)}
+                  disabled={saving}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    todayPreference?.wants_lunch
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      todayPreference?.wants_lunch ? 'bg-blue-500' : 'bg-gray-200'
+                    }`}>
+                      <Check className={`w-6 h-6 ${todayPreference?.wants_lunch ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className="font-semibold">Taip</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => toggleFoodPreference(today, 'lunch', false)}
+                  disabled={saving}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    todayPreference && !todayPreference.wants_lunch
+                      ? 'border-gray-400 bg-gray-50'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      todayPreference && !todayPreference.wants_lunch ? 'bg-gray-400' : 'bg-gray-200'
+                    }`}>
+                      <X className={`w-6 h-6 ${todayPreference && !todayPreference.wants_lunch ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className="font-semibold">Ne</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Supper */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Šiandien - {new Date().toLocaleDateString('lt-LT', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}</h3>
-              {todayPreference?.marked_at && (
-                <p className="text-sm text-gray-500 mt-1">
-                  <Clock className="w-4 h-4 inline mr-1" />
-                  Pažymėta: {new Date(todayPreference.marked_at).toLocaleString('lt-LT')}
-                </p>
-              )}
+              <h4 className="text-md font-semibold text-gray-700 mb-3">Vakarienė</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => toggleFoodPreference(today, 'supper', true)}
+                  disabled={saving}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    todayPreference?.wants_supper
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      todayPreference?.wants_supper ? 'bg-purple-500' : 'bg-gray-200'
+                    }`}>
+                      <Check className={`w-6 h-6 ${todayPreference?.wants_supper ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className="font-semibold">Taip</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => toggleFoodPreference(today, 'supper', false)}
+                  disabled={saving}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    todayPreference && !todayPreference.wants_supper
+                      ? 'border-gray-400 bg-gray-50'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      todayPreference && !todayPreference.wants_supper ? 'bg-gray-400' : 'bg-gray-200'
+                    }`}>
+                      <X className={`w-6 h-6 ${todayPreference && !todayPreference.wants_supper ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className="font-semibold">Ne</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => toggleFoodPreference(today, true)}
-              disabled={saving}
-              className={`p-6 rounded-xl border-2 transition-all ${
-                todayPreference?.wants_food
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'
-              } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <div className="flex flex-col items-center gap-3">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                  todayPreference?.wants_food ? 'bg-green-500' : 'bg-gray-200'
-                }`}>
-                  <Check className={`w-8 h-8 ${todayPreference?.wants_food ? 'text-white' : 'text-gray-400'}`} />
-                </div>
-                <span className="text-lg font-semibold">Noriu pietų</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => toggleFoodPreference(today, false)}
-              disabled={saving}
-              className={`p-6 rounded-xl border-2 transition-all ${
-                todayPreference && !todayPreference.wants_food
-                  ? 'border-red-500 bg-red-50'
-                  : 'border-gray-200 hover:border-red-300 hover:bg-red-50/50'
-              } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <div className="flex flex-col items-center gap-3">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                  todayPreference && !todayPreference.wants_food ? 'bg-red-500' : 'bg-gray-200'
-                }`}>
-                  <X className={`w-8 h-8 ${todayPreference && !todayPreference.wants_food ? 'text-white' : 'text-gray-400'}`} />
-                </div>
-                <span className="text-lg font-semibold">Nenoriu pietų</span>
-              </div>
-            </button>
-          </div>
-
-          {!todayPreference && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                <strong>Svarbu:</strong> Jei nepažymėsite iki 10:00, pietūs nebus paruošti.
-              </p>
-            </div>
-          )}
         </div>
       )}
 
@@ -335,22 +383,45 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
             </div>
 
             {/* Bulk Actions */}
-            <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+            <div className="space-y-2 mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm font-medium text-gray-700 mb-2">Nustatyti visai savaitei:</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setWeekPreferences('lunch', true)}
+                  disabled={saving}
+                  className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  Pietūs: Taip
+                </button>
+                <button
+                  onClick={() => setWeekPreferences('lunch', false)}
+                  disabled={saving}
+                  className="px-3 py-2 bg-gray-400 text-white text-sm rounded-lg hover:bg-gray-500 transition-colors disabled:opacity-50"
+                >
+                  Pietūs: Ne
+                </button>
+                <button
+                  onClick={() => setWeekPreferences('supper', true)}
+                  disabled={saving}
+                  className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  Vakarienė: Taip
+                </button>
+                <button
+                  onClick={() => setWeekPreferences('supper', false)}
+                  disabled={saving}
+                  className="px-3 py-2 bg-gray-400 text-white text-sm rounded-lg hover:bg-gray-500 transition-colors disabled:opacity-50"
+                >
+                  Vakarienė: Ne
+                </button>
+              </div>
               <button
-                onClick={() => setWeekPreferences(true)}
+                onClick={() => setWeekPreferences('both', true)}
                 disabled={saving}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
               >
                 <Check className="w-4 h-4 inline mr-2" />
-                Noriu pietų visą savaitę
-              </button>
-              <button
-                onClick={() => setWeekPreferences(false)}
-                disabled={saving}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                <X className="w-4 h-4 inline mr-2" />
-                Nenoriu pietų visą savaitę
+                Abu: Taip visą savaitę
               </button>
             </div>
           </div>
@@ -397,31 +468,57 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
                       )}
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleFoodPreference(dateStr, true)}
-                        disabled={saving}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                          pref?.wants_food
-                            ? 'bg-green-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-green-100 hover:text-green-700'
-                        } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <Check className="w-4 h-4 inline mr-1" />
-                        Taip
-                      </button>
-                      <button
-                        onClick={() => toggleFoodPreference(dateStr, false)}
-                        disabled={saving}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                          pref && !pref.wants_food
-                            ? 'bg-red-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700'
-                        } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <X className="w-4 h-4 inline mr-1" />
-                        Ne
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs font-medium text-gray-600 w-16">Pietūs:</span>
+                        <button
+                          onClick={() => toggleFoodPreference(dateStr, 'lunch', true)}
+                          disabled={saving}
+                          className={`flex-1 px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                            pref?.wants_lunch
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700'
+                          } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          Taip
+                        </button>
+                        <button
+                          onClick={() => toggleFoodPreference(dateStr, 'lunch', false)}
+                          disabled={saving}
+                          className={`flex-1 px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                            pref && !pref.wants_lunch
+                              ? 'bg-gray-400 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          Ne
+                        </button>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs font-medium text-gray-600 w-16">Vakarienė:</span>
+                        <button
+                          onClick={() => toggleFoodPreference(dateStr, 'supper', true)}
+                          disabled={saving}
+                          className={`flex-1 px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                            pref?.wants_supper
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-purple-100 hover:text-purple-700'
+                          } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          Taip
+                        </button>
+                        <button
+                          onClick={() => toggleFoodPreference(dateStr, 'supper', false)}
+                          disabled={saving}
+                          className={`flex-1 px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                            pref && !pref.wants_supper
+                              ? 'bg-gray-400 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          Ne
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
