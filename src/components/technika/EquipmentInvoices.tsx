@@ -2444,6 +2444,20 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   {/* General Categories */}
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'stock', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'stock'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Atsarginėms dalims</p>
+                        <p className="text-xs text-gray-500 mt-1">Į sandėlį kaip atsargas</p>
+                      </div>
+                    </button>
+
+                    <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'tool', invoiceItemId: invoiceItems[0].id })}
                       className={`p-4 border-2 rounded-lg transition-all ${
                         assignmentForm.assignmentType === 'tool'

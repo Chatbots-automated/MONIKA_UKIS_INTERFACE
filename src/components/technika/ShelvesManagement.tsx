@@ -19,13 +19,15 @@ interface Shelf {
 }
 
 interface Compartment {
-  id: string;
+  id?: string;
+  compartment_id?: string;
   shelf_id: string;
   compartment_code: string;
-  description: string | null;
+  description?: string | null;
+  compartment_description?: string | null;
   vehicle_category: 'tractor' | 'heavy_transport' | null;
-  notes: string | null;
-  is_active: boolean;
+  notes?: string | null;
+  is_active?: boolean;
   items_count?: number;
   total_value?: number;
 }
@@ -40,6 +42,8 @@ export function ShelvesManagement() {
   const [showCompartmentModal, setShowCompartmentModal] = useState(false);
   const [editingShelf, setEditingShelf] = useState<Shelf | null>(null);
   const [editingCompartment, setEditingCompartment] = useState<Compartment | null>(null);
+  const [expandedCompartment, setExpandedCompartment] = useState<string | null>(null);
+  const [compartmentProducts, setCompartmentProducts] = useState<any[]>([]);
 
   const [shelfForm, setShelfForm] = useState({
     shelf_number: '',
@@ -92,6 +96,33 @@ export function ShelvesManagement() {
       console.error('Error loading compartments:', error);
     } else if (data) {
       setCompartments(data);
+    }
+  };
+
+  const loadCompartmentProducts = async (compartmentId: string) => {
+    const { data, error } = await supabase
+      .from('equipment_shelf_compartment_contents')
+      .select('*')
+      .eq('compartment_id', compartmentId)
+      .order('invoice_date', { ascending: false });
+
+    if (error) {
+      console.error('Error loading compartment products:', error);
+    } else if (data) {
+      setCompartmentProducts(data);
+    }
+  };
+
+  const handleToggleCompartment = async (compartment: Compartment) => {
+    const compartmentId = compartment.id || compartment.compartment_id;
+    if (!compartmentId) return;
+    
+    if (expandedCompartment === compartmentId) {
+      setExpandedCompartment(null);
+      setCompartmentProducts([]);
+    } else {
+      setExpandedCompartment(compartmentId);
+      await loadCompartmentProducts(compartmentId);
     }
   };
 
@@ -428,60 +459,133 @@ export function ShelvesManagement() {
 
             {selectedShelf ? (
               compartments.length > 0 ? (
-                compartments.map(compartment => (
+                compartments.map(compartment => {
+                  const compartmentId = compartment.id || compartment.compartment_id;
+                  return (
                   <div
-                    key={compartment.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                    key={compartmentId}
+                    className="border border-gray-200 rounded-lg overflow-hidden"
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{compartment.compartment_code}</span>
-                          {compartment.vehicle_category && (
-                            <span className={`px-2 py-0.5 text-xs rounded ${
-                              compartment.vehicle_category === 'tractor'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-purple-100 text-purple-700'
-                            }`}>
-                              {compartment.vehicle_category === 'tractor' ? 'Traktorius' : 'Sunkvežimis'}
-                            </span>
+                    <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => handleToggleCompartment(compartment)}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">{compartment.compartment_code}</span>
+                            {compartment.vehicle_category && (
+                              <span className={`px-2 py-0.5 text-xs rounded ${
+                                compartment.vehicle_category === 'tractor'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {compartment.vehicle_category === 'tractor' ? '🚜 Traktorius' : '🚛 Sunkvežimis'}
+                              </span>
+                            )}
+                          </div>
+                          {(compartment.description || compartment.compartment_description) && (
+                            <p className="text-sm text-gray-600 mt-1">{compartment.description || compartment.compartment_description}</p>
+                          )}
+                          {compartment.notes && (
+                            <p className="text-xs text-gray-500 mt-1 italic">{compartment.notes}</p>
                           )}
                         </div>
-                        {compartment.description && (
-                          <p className="text-sm text-gray-600 mt-1">{compartment.description}</p>
-                        )}
-                        {compartment.notes && (
-                          <p className="text-xs text-gray-500 mt-1 italic">{compartment.notes}</p>
-                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCompartmentModal(compartment);
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCompartment(compartment);
+                            }}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleOpenCompartmentModal(compartment)}
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCompartment(compartment)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-center">
+                          <p className="text-xs text-gray-600">Prekės</p>
+                          <p className="font-semibold text-gray-900">{compartment.items_count || 0}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-600">Vertė</p>
+                          <p className="font-semibold text-green-600">€{(compartment.total_value || 0).toFixed(2)}</p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600">Prekės</p>
-                        <p className="font-semibold text-gray-900">{compartment.items_count || 0}</p>
+                    {/* Expanded Products List */}
+                    {expandedCompartment === compartmentId && (
+                      <div className="border-t bg-gray-50 p-4">
+                        <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <Package className="w-4 h-4" />
+                          Prekės šiame skyriuje
+                        </h5>
+                        {compartmentProducts.length > 0 ? (
+                          <div className="space-y-2">
+                            {compartmentProducts.map((item: any, idx: number) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="font-medium text-gray-900">{item.product_name || item.item_description}</p>
+                                      {item.invoice_number && (
+                                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                                          {item.invoice_number}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {item.product_code && (
+                                      <p className="text-xs text-gray-500 mt-1">Kodas: {item.product_code}</p>
+                                    )}
+                                    {item.category_name && (
+                                      <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                        {item.category_name}
+                                      </span>
+                                    )}
+                                    <p className="text-sm text-gray-600 mt-2">
+                                      Data: {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                    </p>
+                                    {item.supplier_name && (
+                                      <p className="text-sm text-gray-600">Tiekėjas: {item.supplier_name}</p>
+                                    )}
+                                    {item.assignment_notes && (
+                                      <p className="text-sm text-gray-500 mt-1 italic">{item.assignment_notes}</p>
+                                    )}
+                                    <p className="text-xs text-gray-400 mt-1">
+                                      Priskirta: {new Date(item.assigned_at).toLocaleDateString('lt-LT')}
+                                      {item.assigned_by_name && ` • ${item.assigned_by_name}`}
+                                    </p>
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    <p className="text-sm text-gray-600">Kiekis</p>
+                                    <p className="font-medium text-gray-900">{item.quantity} {item.unit_type}</p>
+                                    <p className="text-sm text-gray-600 mt-2">Kaina</p>
+                                    <p className="font-bold text-green-600">€{parseFloat(item.total_price || 0).toFixed(2)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-gray-500">
+                            <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm">Šiame skyriuje nėra prekių</p>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-600">Vertė</p>
-                        <p className="font-semibold text-green-600">€{(compartment.total_value || 0).toFixed(2)}</p>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <Grid3x3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
