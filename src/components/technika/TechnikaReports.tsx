@@ -56,7 +56,7 @@ interface TechnikaReportsProps {
 }
 
 export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers' | 'assignments'>(() => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers' | 'assignments' | 'invoices'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     return (tab as any) || 'overview';
@@ -142,6 +142,18 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     totalShelfCost: 0,
   });
 
+  // Invoices data
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<any[]>([]);
+  const [invoiceStats, setInvoiceStats] = useState({
+    totalInvoices: 0,
+    totalValue: 0,
+    totalItems: 0,
+    assignedItems: 0,
+    unassignedItems: 0,
+  });
+
   // Update URL when tab changes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -178,6 +190,9 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     }
     if (activeTab === 'assignments') {
       loadAssignmentsData();
+    }
+    if (activeTab === 'invoices') {
+      loadInvoicesData();
     }
   }, [activeTab, dateFilter, locationFilter, assignmentType, vehicleCategory]);
 
@@ -516,6 +531,89 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
       console.error('Error loading assignments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInvoicesData = async () => {
+    setLoading(true);
+    try {
+      // Load all invoices with their items and assignments
+      const { data: invoicesData, error } = await supabase
+        .from('equipment_invoices')
+        .select(`
+          *,
+          equipment_invoice_items(
+            id,
+            description,
+            quantity,
+            unit_price,
+            total_price,
+            product_id,
+            equipment_products(name, product_code, unit_type),
+            equipment_invoice_item_assignments(
+              id,
+              assignment_type,
+              assigned_at,
+              notes,
+              cost_center_id,
+              worker_id,
+              vehicle_id,
+              compartment_id,
+              tool_id,
+              cost_centers(name),
+              worker:users!worker_id(full_name),
+              vehicles(registration_number, make, model),
+              equipment_shelf_compartments(compartment_code, equipment_shelves(shelf_number, name)),
+              tools(name, tool_number)
+            )
+          )
+        `)
+        .order('invoice_date', { ascending: false });
+
+      if (error) throw error;
+
+      // Calculate stats
+      const totalInvoices = invoicesData?.length || 0;
+      const totalValue = invoicesData?.reduce((sum, inv) => sum + parseFloat(inv.total_gross || 0), 0) || 0;
+      const allItems = invoicesData?.flatMap(inv => inv.equipment_invoice_items || []) || [];
+      const totalItems = allItems.length;
+      const assignedItems = allItems.filter(item => item.equipment_invoice_item_assignments?.length > 0).length;
+      const unassignedItems = totalItems - assignedItems;
+
+      setInvoices(invoicesData || []);
+      setInvoiceStats({
+        totalInvoices,
+        totalValue,
+        totalItems,
+        assignedItems,
+        unassignedItems,
+      });
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('equipment_invoices')
+        .select('pdf_url')
+        .eq('id', invoiceId)
+        .single();
+
+      if (error) throw error;
+
+      if (data?.pdf_url) {
+        // Open PDF URL in new tab or download
+        window.open(data.pdf_url, '_blank');
+      } else {
+        alert('Sąskaitos failas nerastas. Failas nebuvo įkeltas arba URL negalioja.');
+      }
+    } catch (error: any) {
+      console.error('Error downloading invoice:', error);
+      alert('Klaida atsisiunčiant sąskaitą: ' + error.message);
     }
   };
 
@@ -909,6 +1007,7 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
               { id: 'assignments', label: 'Priskyrimas', icon: Users },
+              { id: 'invoices', label: 'Sąskaitos', icon: FileText },
               { id: 'cost-centers', label: 'Kaštų centrai', icon: DollarSign },
               ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
               ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
@@ -2538,6 +2637,206 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'invoices' && (
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <StatCard
+                  title="Iš viso sąskaitų"
+                  value={invoiceStats.totalInvoices.toString()}
+                  icon={FileText}
+                  color="blue"
+                />
+                <StatCard
+                  title="Bendra vertė"
+                  value={`€${invoiceStats.totalValue.toFixed(2)}`}
+                  icon={DollarSign}
+                  color="green"
+                />
+                <StatCard
+                  title="Iš viso prekių"
+                  value={invoiceStats.totalItems.toString()}
+                  icon={Package}
+                  color="purple"
+                />
+                <StatCard
+                  title="Priskirta prekių"
+                  value={invoiceStats.assignedItems.toString()}
+                  icon={ChevronRight}
+                  color="green"
+                />
+                <StatCard
+                  title="Nepriskirta prekių"
+                  value={invoiceStats.unassignedItems.toString()}
+                  icon={AlertTriangle}
+                  color="amber"
+                />
+              </div>
+
+              {/* Invoices List */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-gray-900">Visos sąskaitos</h3>
+                {invoices.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">Sąskaitų nerasta</p>
+                  </div>
+                ) : (
+                  invoices.map((invoice) => (
+                    <div key={invoice.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedInvoice(
+                          expandedInvoice === invoice.id ? null : invoice.id
+                        )}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          {expandedInvoice === invoice.id ? (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                          )}
+                          <FileText className="w-6 h-6 text-blue-600" />
+                          <div className="text-left">
+                            <h4 className="font-semibold text-gray-900">{invoice.invoice_number}</h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-sm text-gray-600">{invoice.supplier_name}</p>
+                              <span className="text-sm text-gray-400">•</span>
+                              <p className="text-sm text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString('lt-LT')}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 text-sm">
+                          <div className="text-right">
+                            <p className="text-gray-600">Prekių</p>
+                            <p className="font-semibold text-gray-900">{invoice.equipment_invoice_items?.length || 0}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-gray-600">Bendra suma</p>
+                            <p className="font-bold text-green-600">€{parseFloat(invoice.total_gross || 0).toFixed(2)}</p>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadInvoice(invoice.id, invoice.invoice_number);
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                            title="Atsisiųsti sąskaitą"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </button>
+
+                      {expandedInvoice === invoice.id && (
+                        <div className="border-t p-4 bg-gray-50">
+                          <div className="mb-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-600">Tiekėjas</p>
+                              <p className="font-medium text-gray-900">{invoice.supplier_name}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Sąskaitos data</p>
+                              <p className="font-medium text-gray-900">{new Date(invoice.invoice_date).toLocaleDateString('lt-LT')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Suma be PVM</p>
+                              <p className="font-medium text-gray-900">€{parseFloat(invoice.total_net || 0).toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Suma su PVM</p>
+                              <p className="font-medium text-green-600">€{parseFloat(invoice.total_gross || 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+
+                          <h5 className="font-semibold text-gray-900 mb-3">Prekės ir jų paskyrimas</h5>
+                          <div className="space-y-2">
+                            {invoice.equipment_invoice_items?.map((item: any, idx: number) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">
+                                      {item.equipment_products?.name || item.description}
+                                    </p>
+                                    {item.equipment_products?.product_code && (
+                                      <p className="text-xs text-gray-500 mt-1">Kodas: {item.equipment_products.product_code}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    <p className="text-sm text-gray-600">Kiekis</p>
+                                    <p className="font-medium text-gray-900">{item.quantity} {item.equipment_products?.unit_type || 'vnt'}</p>
+                                    <p className="text-sm text-gray-600 mt-1">Kaina</p>
+                                    <p className="font-bold text-green-600">€{parseFloat(item.total_price || 0).toFixed(2)}</p>
+                                  </div>
+                                </div>
+
+                                {/* Assignment Info */}
+                                {item.equipment_invoice_item_assignments && item.equipment_invoice_item_assignments.length > 0 ? (
+                                  <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <p className="text-xs font-semibold text-gray-700 mb-2">Priskirta:</p>
+                                    {item.equipment_invoice_item_assignments.map((assignment: any, aIdx: number) => (
+                                      <div key={aIdx} className="bg-blue-50 rounded p-2 mb-2">
+                                        <div className="flex items-center gap-2">
+                                          {assignment.assignment_type === 'worker' && assignment.worker && (
+                                            <span className="text-sm text-blue-800">
+                                              👤 Darbuotojui: <span className="font-semibold">{assignment.worker.full_name}</span>
+                                            </span>
+                                          )}
+                                          {assignment.assignment_type === 'vehicle' && assignment.vehicles && (
+                                            <span className="text-sm text-blue-800">
+                                              🚗 Transportui: <span className="font-semibold">{assignment.vehicles.registration_number} ({assignment.vehicles.make} {assignment.vehicles.model})</span>
+                                            </span>
+                                          )}
+                                          {assignment.assignment_type === 'cost_center' && assignment.cost_centers && (
+                                            <span className="text-sm text-blue-800">
+                                              💰 Kaštų centrui: <span className="font-semibold">{assignment.cost_centers.name}</span>
+                                            </span>
+                                          )}
+                                          {assignment.assignment_type === 'shelf' && assignment.equipment_shelf_compartments && (
+                                            <span className="text-sm text-blue-800">
+                                              📦 Stalažui: <span className="font-semibold">{assignment.equipment_shelf_compartments.equipment_shelves?.shelf_number}-{assignment.equipment_shelf_compartments.compartment_code}</span>
+                                            </span>
+                                          )}
+                                          {assignment.assignment_type === 'tool' && assignment.tools && (
+                                            <span className="text-sm text-blue-800">
+                                              🔧 Įrankiui: <span className="font-semibold">{assignment.tools.name}</span>
+                                            </span>
+                                          )}
+                                          {['building', 'general_farm', 'transport_service'].includes(assignment.assignment_type) && (
+                                            <span className="text-sm text-blue-800">
+                                              📍 {assignment.assignment_type === 'building' ? 'Pastatui' : assignment.assignment_type === 'general_farm' ? 'Bendrai fermai' : 'Transporto paslaugoms'}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {assignment.notes && (
+                                          <p className="text-xs text-gray-600 mt-1 italic">{assignment.notes}</p>
+                                        )}
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          {new Date(assignment.assigned_at).toLocaleDateString('lt-LT')} {new Date(assignment.assigned_at).toLocaleTimeString('lt-LT')}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Nepriskirta
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

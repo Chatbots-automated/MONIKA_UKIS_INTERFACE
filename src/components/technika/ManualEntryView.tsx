@@ -646,18 +646,25 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     );
   };
 
-  const toggleWorkDescription = (date: string, description: string) => {
+  const toggleWorkDescription = (date: string, description: string, remove: boolean = false, indexToRemove?: number) => {
     setDayEntries(prev =>
       prev.map(d => {
         if (d.date !== date) return d;
         const current = d.work_descriptions || [];
-        const exists = current.includes(description);
-        return {
-          ...d,
-          work_descriptions: exists 
-            ? current.filter(desc => desc !== description)
-            : [...current, description]
-        };
+        
+        if (remove && indexToRemove !== undefined) {
+          // Remove specific instance by index
+          return {
+            ...d,
+            work_descriptions: current.filter((_, idx) => idx !== indexToRemove)
+          };
+        } else {
+          // Always add (allow duplicates)
+          return {
+            ...d,
+            work_descriptions: [...current, description]
+          };
+        }
       })
     );
   };
@@ -1335,15 +1342,16 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                   <select
                                     value=""
                                     onChange={e => {
-                                      if (e.target.value && !day.work_descriptions.includes(e.target.value)) {
+                                      if (e.target.value) {
                                         toggleWorkDescription(day.date, e.target.value);
+                                        e.target.value = ''; // Reset dropdown
                                       }
                                     }}
                                     className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
                                   >
                                     <option value="">+ Pridėti darbą</option>
                                     {workDescriptions
-                                      .filter(desc => desc.worker_type === day.worker_type && !day.work_descriptions.includes(desc.description))
+                                      .filter(desc => desc.worker_type === day.worker_type)
                                       .map(desc => (
                                         <option key={desc.id} value={desc.description}>
                                           {desc.description}
@@ -1377,7 +1385,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                       <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
                                         {desc}
                                         <button
-                                          onClick={() => toggleWorkDescription(day.date, desc)}
+                                          onClick={() => toggleWorkDescription(day.date, desc, true, idx)}
                                           className="hover:bg-blue-200 rounded-full p-0.5"
                                         >
                                           <X className="w-3 h-3" />

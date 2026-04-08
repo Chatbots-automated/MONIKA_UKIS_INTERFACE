@@ -1,8 +1,9 @@
-import { Package, Plus, Search, Upload, Users, ArrowRight, User, CornerUpLeft } from 'lucide-react';
+import { Package, Plus, Search, Upload, Users, ArrowRight, User, CornerUpLeft, Warehouse } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { EquipmentReceiveStock } from './EquipmentReceiveStock';
+import { ShelvesManagement } from './ShelvesManagement';
 
 interface WarehouseStock {
   product_id: string;
@@ -54,7 +55,7 @@ interface UserOption {
   email: string;
 }
 
-type Tab = 'inventory' | 'receive' | 'issue' | 'on-loan';
+type Tab = 'inventory' | 'receive' | 'issue' | 'on-loan' | 'shelves';
 
 interface EquipmentInventoryProps {
   locationFilter?: 'farm' | 'warehouse';
@@ -490,6 +491,17 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
         <div className="border-b border-gray-200">
           <div className="flex flex-wrap">
             <button
+              onClick={() => setActiveTab('shelves')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'shelves'
+                  ? 'border-slate-600 text-slate-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Warehouse className="w-4 h-4 inline-block mr-2" />
+              Stalažai
+            </button>
+            <button
               onClick={() => setActiveTab('inventory')}
               className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
                 activeTab === 'inventory'
@@ -664,6 +676,8 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
           )}
 
           {activeTab === 'receive' && <EquipmentReceiveStock onReceived={loadData} />}
+
+          {activeTab === 'shelves' && <ShelvesManagement />}
         </div>
       </div>
 

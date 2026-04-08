@@ -18,9 +18,7 @@ import {
   Star,
   Target,
   Shield,
-  FolderKanban,
-  Layers,
-  Warehouse
+  FolderKanban
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TechnikaDashboard } from './technika/TechnikaDashboard';
@@ -42,20 +40,17 @@ import { ProductQuality } from './technika/ProductQuality';
 import { CostCentersManagement } from './technika/CostCentersManagement';
 import { ReminderNotification } from './technika/ReminderNotification';
 import { ReminderCalendarView } from './technika/ReminderCalendarView';
-import { ShelvesManagement } from './technika/ShelvesManagement';
 
 interface TechnikaProps {
   onBackToModules: () => void;
 }
 
-// Menu items for Technika module - Updated 2026-04-08 v2
 const menuItems = [
   { id: 'dashboard', label: 'Pagrindinis', icon: BarChart3 },
   { id: 'invoices', label: 'Sąskaitos', icon: FileText },
   { id: 'products', label: 'Produktai', icon: Box },
   { id: 'cost-centers', label: 'Kaštų centrai', icon: Target },
   { id: 'kaupiniai', label: 'Kaupiniai', icon: FolderKanban },
-  { id: 'shelves', label: 'Stalažai', icon: Warehouse },
   { id: 'tools', label: 'Įrankiai', icon: Wrench },
   { id: 'ppe', label: 'Drabužiai/PPE', icon: HardHat },
   { id: 'vehicles', label: 'Transportas', icon: Truck },
@@ -75,10 +70,6 @@ export function Technika({ onBackToModules }: TechnikaProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showReminderCalendar, setShowReminderCalendar] = useState(false);
   const { user, signOut } = useAuth();
-
-  // Debug: Log menu items to verify Stalažai is included
-  console.log('Technika menuItems count:', menuItems.length);
-  console.log('Stalažai item:', menuItems.find(item => item.id === 'shelves'));
 
   const currentMenuItem = menuItems.find(item => item.id === currentView);
 
@@ -100,8 +91,6 @@ export function Technika({ onBackToModules }: TechnikaProps) {
         return <ProductsManagement />;
       case 'cost-centers':
         return <CostCentersManagement />;
-      case 'shelves':
-        return <ShelvesManagement />;
       case 'tools':
         return <ToolsManagement />;
       case 'ppe':

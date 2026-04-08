@@ -4,12 +4,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Package, Plus, Search, Edit, Trash2, X, Save, Grid3x3, Layers } from 'lucide-react';
 
 interface Shelf {
-  id: string;
+  id?: string;
+  shelf_id?: string;
   shelf_number: string;
-  name: string;
+  name?: string;
+  shelf_name?: string;
   description: string | null;
   location: string | null;
-  is_active: boolean;
+  is_active?: boolean;
   total_compartments?: number;
   active_compartments?: number;
   total_items_stored?: number;
@@ -58,8 +60,11 @@ export function ShelvesManagement() {
   }, []);
 
   useEffect(() => {
-    if (selectedShelf) {
-      loadCompartments(selectedShelf.id);
+    const shelfId = selectedShelf?.id || selectedShelf?.shelf_id;
+    if (shelfId) {
+      loadCompartments(shelfId);
+    } else {
+      setCompartments([]);
     }
   }, [selectedShelf]);
 
@@ -95,7 +100,7 @@ export function ShelvesManagement() {
       setEditingShelf(shelf);
       setShelfForm({
         shelf_number: shelf.shelf_number,
-        name: shelf.name,
+        name: shelf.name || shelf.shelf_name || '',
         description: shelf.description || '',
         location: shelf.location || '',
       });
@@ -161,16 +166,20 @@ export function ShelvesManagement() {
     }
 
     try {
+      const shelfId = shelf.id || shelf.shelf_id;
+      if (!shelfId) return;
+
       const { error } = await supabase
         .from('equipment_shelves')
         .update({ is_active: false })
-        .eq('id', shelf.id);
+        .eq('id', shelfId);
 
       if (error) throw error;
-      await logAction('delete_shelf', 'equipment_shelves', shelf.id);
+      await logAction('delete_shelf', 'equipment_shelves', shelfId);
       alert('Stalažas ištrintas');
       loadShelves();
-      if (selectedShelf?.id === shelf.id) {
+      const selectedShelfId = selectedShelf?.id || selectedShelf?.shelf_id;
+      if (selectedShelfId === shelfId) {
         setSelectedShelf(null);
         setCompartments([]);
       }
@@ -207,8 +216,11 @@ export function ShelvesManagement() {
   };
 
   const handleSaveCompartment = async () => {
-    if (!selectedShelf) {
-      alert('Pasirinkite stalažą');
+    const shelfId = selectedShelf?.id || selectedShelf?.shelf_id;
+    
+    if (!shelfId) {
+      alert('Pasirinkite stalažą iš kairės pusės');
+      setShowCompartmentModal(false);
       return;
     }
 
@@ -219,7 +231,7 @@ export function ShelvesManagement() {
 
     try {
       const compartmentData = {
-        shelf_id: selectedShelf.id,
+        shelf_id: shelfId,
         compartment_code: compartmentForm.compartment_code.toUpperCase(),
         description: compartmentForm.description || null,
         vehicle_category: compartmentForm.vehicle_category || null,
@@ -249,7 +261,9 @@ export function ShelvesManagement() {
 
       setShowCompartmentModal(false);
       setEditingCompartment(null);
-      loadCompartments(selectedShelf.id);
+      if (shelfId) {
+        loadCompartments(shelfId);
+      }
       loadShelves(); // Refresh summary
     } catch (error: any) {
       console.error('Error:', error);
@@ -283,7 +297,7 @@ export function ShelvesManagement() {
 
   const filteredShelves = shelves.filter(shelf =>
     shelf.shelf_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    shelf.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (shelf.name || shelf.shelf_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -320,12 +334,15 @@ export function ShelvesManagement() {
               <Layers className="w-5 h-5" />
               Stalažai ({filteredShelves.length})
             </h4>
-            {filteredShelves.map(shelf => (
+            {filteredShelves.map(shelf => {
+              const shelfId = shelf.id || shelf.shelf_id;
+              const selectedShelfId = selectedShelf?.id || selectedShelf?.shelf_id;
+              return (
               <div
-                key={shelf.id}
+                key={shelfId}
                 onClick={() => setSelectedShelf(shelf)}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                  selectedShelf?.id === shelf.id
+                  selectedShelfId === shelfId
                     ? 'border-blue-500 bg-blue-50 shadow-md'
                     : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                 }`}
@@ -334,7 +351,7 @@ export function ShelvesManagement() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-lg text-gray-900">{shelf.shelf_number}</span>
-                      <span className="text-gray-700">{shelf.name}</span>
+                      <span className="text-gray-700">{shelf.name || shelf.shelf_name}</span>
                     </div>
                     {shelf.location && (
                       <p className="text-sm text-gray-600 mt-1">📍 {shelf.location}</p>
@@ -380,7 +397,8 @@ export function ShelvesManagement() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {filteredShelves.length === 0 && (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
@@ -580,7 +598,7 @@ export function ShelvesManagement() {
             <div className="space-y-4">
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  Stalažas: <span className="font-semibold">{selectedShelf?.shelf_number} - {selectedShelf?.name}</span>
+                  Stalažas: <span className="font-semibold">{selectedShelf?.shelf_number} - {selectedShelf?.name || selectedShelf?.shelf_name}</span>
                 </p>
               </div>
 

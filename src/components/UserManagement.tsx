@@ -354,6 +354,10 @@ export function UserManagement() {
         return <Tractor className="w-4 h-4" />;
       case 'warehouse_worker':
         return <Warehouse className="w-4 h-4" />;
+      case 'sandelininkas':
+        return <Warehouse className="w-4 h-4" />;
+      case 'buhaltere':
+        return <Mail className="w-4 h-4" />;
       case 'custom':
         return <Settings className="w-4 h-4" />;
     }
@@ -373,6 +377,10 @@ export function UserManagement() {
         return 'bg-green-100 text-green-800 border-green-200';
       case 'warehouse_worker':
         return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'sandelininkas':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'buhaltere':
+        return 'bg-pink-100 text-pink-800 border-pink-200';
       case 'custom':
         return 'bg-purple-100 text-purple-800 border-purple-200';
     }
@@ -390,6 +398,10 @@ export function UserManagement() {
         return 'Stebėtojas';
       case 'farm_worker':
         return 'Fermos darbuotojas';
+      case 'sandelininkas':
+        return 'Sandėlininkas';
+      case 'buhaltere':
+        return 'Buhalterė';
       case 'warehouse_worker':
         return 'Technikos kiemo darbuotojas';
       case 'custom':
@@ -566,6 +578,8 @@ export function UserManagement() {
                   <optgroup label="Technikos modulis">
                     <option value="farm_worker">Fermos darbuotojas</option>
                     <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
+                    <option value="sandelininkas">Sandėlininkas (Warehouse Manager)</option>
+                    <option value="buhaltere">Buhalterė (Secretary)</option>
                   </optgroup>
                   <optgroup label="Pasirinktinė prieiga">
                     <option value="custom">Pasirinktinė prieiga (Custom Permissions)</option>

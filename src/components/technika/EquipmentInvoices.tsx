@@ -171,11 +171,15 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   }, []);
 
   const loadData = async () => {
+    // Secretary and warehouse manager can see ALL invoices, others see limited
+    const canSeeAllInvoices = user?.role === 'admin' || user?.role === 'buhaltere' || user?.role === 'sandelininkas';
+    const invoiceLimit = canSeeAllInvoices ? 1000 : 20;
+
     const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes, workersRes, vehiclesRes, shelvesRes, compartmentsRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
-      supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
+      supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(invoiceLimit),
       supabase.from('tools').select('id, name, tool_number').order('name'),
       supabase.from('cost_centers').select('id, name, description, color, parent_id').eq('is_active', true).order('name'),
       supabase.from('users').select('id, full_name, email').eq('is_frozen', false).order('full_name'),
@@ -2049,7 +2053,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
               </label>
             )}
           </div>
-          {selectedInvoiceIds.size > 0 && (
+          {(user?.role === 'admin' || user?.role === 'buhaltere') && selectedInvoiceIds.size > 0 && (
             <button
               onClick={() => setShowBulkExport(true)}
               className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
@@ -2063,20 +2067,22 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           {invoices.map(invoice => (
             <div key={invoice.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-4">
-                <input
-                  type="checkbox"
-                  checked={selectedInvoiceIds.has(invoice.id)}
-                  onChange={(e) => {
-                    const newSelected = new Set(selectedInvoiceIds);
-                    if (e.target.checked) {
-                      newSelected.add(invoice.id);
-                    } else {
-                      newSelected.delete(invoice.id);
-                    }
-                    setSelectedInvoiceIds(newSelected);
-                  }}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
-                />
+                {(user?.role === 'admin' || user?.role === 'buhaltere') && (
+                  <input
+                    type="checkbox"
+                    checked={selectedInvoiceIds.has(invoice.id)}
+                    onChange={(e) => {
+                      const newSelected = new Set(selectedInvoiceIds);
+                      if (e.target.checked) {
+                        newSelected.add(invoice.id);
+                      } else {
+                        newSelected.delete(invoice.id);
+                      }
+                      setSelectedInvoiceIds(newSelected);
+                    }}
+                    className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                  />
+                )}
                 <FileText className="w-8 h-8 text-slate-600" />
                 <div>
                   <p className="font-medium text-gray-800">{invoice.invoice_number}</p>
@@ -2088,17 +2094,19 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   <p className="font-semibold text-gray-800">€{invoice.total_gross.toFixed(2)}</p>
                   <p className="text-sm text-gray-600">{invoice.status}</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setExportingInvoiceId(invoice.id);
-                    setShowSecretaryExport(true);
-                  }}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
-                  title="Eksportuoti į sekretorės sistemą"
-                >
-                  <Send className="w-4 h-4" />
-                  Eksportuoti
-                </button>
+                {(user?.role === 'admin' || user?.role === 'buhaltere') && (
+                  <button
+                    onClick={() => {
+                      setExportingInvoiceId(invoice.id);
+                      setShowSecretaryExport(true);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
+                    title="Eksportuoti į sekretorės sistemą"
+                  >
+                    <Send className="w-4 h-4" />
+                    Eksportuoti
+                  </button>
+                )}
               </div>
             </div>
           ))}
