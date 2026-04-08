@@ -8,6 +8,7 @@ interface Vehicle {
   id: string;
   registration_number: string;
   vehicle_type: string;
+  vehicle_category: string | null;
   make: string;
   model: string;
   year: number;
@@ -34,6 +35,7 @@ interface Vehicle {
 interface VehicleForm {
   registration_number: string;
   vehicle_type: string;
+  vehicle_category: string;
   make: string;
   model: string;
   year: string;
@@ -79,6 +81,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
     registration_number: '',
     vehicle_type: 'tractor',
+    vehicle_category: 'tractor',
     make: '',
     model: '',
     year: new Date().getFullYear().toString(),
@@ -145,6 +148,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
       setVehicleForm({
         registration_number: vehicle.registration_number,
         vehicle_type: vehicle.vehicle_type,
+        vehicle_category: vehicle.vehicle_category || (vehicle.vehicle_type === 'tractor' ? 'tractor' : vehicle.vehicle_type === 'truck' ? 'heavy_transport' : ''),
         make: vehicle.make,
         model: vehicle.model,
         year: vehicle.year.toString(),
@@ -169,6 +173,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
       setVehicleForm({
         registration_number: '',
         vehicle_type: 'tractor',
+        vehicle_category: 'tractor',
         make: '',
         model: '',
         year: new Date().getFullYear().toString(),
@@ -202,6 +207,7 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
       const vehicleData = {
         registration_number: vehicleForm.registration_number.toUpperCase(),
         vehicle_type: vehicleForm.vehicle_type,
+        vehicle_category: vehicleForm.vehicle_category || null,
         make: vehicleForm.make || null,
         model: vehicleForm.model || null,
         year: vehicleForm.year ? parseInt(vehicleForm.year) : null,
@@ -890,7 +896,12 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
                 <select
                   value={vehicleForm.vehicle_type}
-                  onChange={e => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value })}
+                  onChange={e => {
+                    const newType = e.target.value;
+                    const newCategory = newType === 'tractor' ? 'tractor' : 
+                                       (newType === 'truck' || newType === 'semi_trailer') ? 'heavy_transport' : '';
+                    setVehicleForm({ ...vehicleForm, vehicle_type: newType, vehicle_category: newCategory });
+                  }}
                   className="w-full border rounded px-3 py-2"
                 >
                   <option value="tractor">Traktorius</option>
@@ -900,8 +911,23 @@ export function VehiclesManagement({ workerMode = false }: VehiclesManagementPro
                   <option value="sprayer">Purkštuvas</option>
                   <option value="loader">Krautuvas</option>
                   <option value="trailer">Priekaba</option>
+                  <option value="semi_trailer">Puspriekabė</option>
                   <option value="other">Kita</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kategorija (Technikos kiemas)</label>
+                <select
+                  value={vehicleForm.vehicle_category}
+                  onChange={e => setVehicleForm({ ...vehicleForm, vehicle_category: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">-- Nenurodyta --</option>
+                  <option value="tractor">Traktorius</option>
+                  <option value="heavy_transport">Sunkvežimis (Heavy Transport)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Naudojama priskiriant produktus transportui</p>
               </div>
 
               <div>

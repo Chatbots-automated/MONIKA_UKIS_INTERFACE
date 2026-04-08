@@ -56,7 +56,7 @@ interface TechnikaReportsProps {
 }
 
 export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers'>(() => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'workers' | 'categories' | 'timeline' | 'farm-equipment' | 'transport-services' | 'cost-centers' | 'assignments'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     return (tab as any) || 'overview';
@@ -126,6 +126,22 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     totalAssignments: 0,
   });
 
+  // Assignments data
+  const [assignmentType, setAssignmentType] = useState<'worker' | 'vehicle' | 'shelf'>('vehicle');
+  const [vehicleCategory, setVehicleCategory] = useState<'tractor' | 'heavy_transport' | 'all'>('all');
+  const [workerAssignments, setWorkerAssignments] = useState<any[]>([]);
+  const [vehicleAssignments, setVehicleAssignments] = useState<any[]>([]);
+  const [shelfAssignments, setShelfAssignments] = useState<any[]>([]);
+  const [expandedAssignment, setExpandedAssignment] = useState<string | null>(null);
+  const [assignmentStats, setAssignmentStats] = useState({
+    totalWorkerAssignments: 0,
+    totalWorkerCost: 0,
+    totalVehicleAssignments: 0,
+    totalVehicleCost: 0,
+    totalShelfAssignments: 0,
+    totalShelfCost: 0,
+  });
+
   // Update URL when tab changes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -160,7 +176,10 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
     if (activeTab === 'cost-centers') {
       loadCostCenterData();
     }
-  }, [activeTab, dateFilter, locationFilter]);
+    if (activeTab === 'assignments') {
+      loadAssignmentsData();
+    }
+  }, [activeTab, dateFilter, locationFilter, assignmentType, vehicleCategory]);
 
   useEffect(() => {
     if (activeTab === 'farm-equipment') {
@@ -343,6 +362,158 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
       });
     } catch (error) {
       console.error('Error loading transport services:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAssignmentsData = async () => {
+    setLoading(true);
+    try {
+      if (assignmentType === 'worker') {
+        // Load worker assignments
+        const { data, error } = await supabase
+          .from('worker_equipment_assignments')
+          .select('*')
+          .order('assigned_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Group by worker
+        const workerMap = new Map<string, any>();
+        let totalCost = 0;
+
+        data?.forEach((assignment: any) => {
+          const workerId = assignment.worker_id;
+          const cost = parseFloat(assignment.total_price || 0);
+          totalCost += cost;
+
+          if (!workerMap.has(workerId)) {
+            workerMap.set(workerId, {
+              worker_id: workerId,
+              worker_name: assignment.worker_name,
+              worker_email: assignment.worker_email,
+              totalCost: 0,
+              assignmentCount: 0,
+              items: [],
+            });
+          }
+
+          const worker = workerMap.get(workerId);
+          worker.totalCost += cost;
+          worker.assignmentCount++;
+          worker.items.push(assignment);
+        });
+
+        const workers = Array.from(workerMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+        setWorkerAssignments(workers);
+        setAssignmentStats(prev => ({
+          ...prev,
+          totalWorkerAssignments: data?.length || 0,
+          totalWorkerCost: totalCost,
+        }));
+      } else if (assignmentType === 'vehicle') {
+        // Load vehicle assignments
+        let query = supabase
+          .from('vehicle_equipment_assignments')
+          .select('*')
+          .order('assigned_at', { ascending: false });
+
+        // Filter by category if not 'all'
+        if (vehicleCategory !== 'all') {
+          query = query.eq('vehicle_category', vehicleCategory);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        // Group by vehicle
+        const vehicleMap = new Map<string, any>();
+        let totalCost = 0;
+
+        data?.forEach((assignment: any) => {
+          const vehicleId = assignment.vehicle_id;
+          const cost = parseFloat(assignment.total_price || 0);
+          totalCost += cost;
+
+          if (!vehicleMap.has(vehicleId)) {
+            vehicleMap.set(vehicleId, {
+              vehicle_id: vehicleId,
+              registration_number: assignment.registration_number,
+              vehicle_type: assignment.vehicle_type,
+              vehicle_category: assignment.vehicle_category,
+              make: assignment.make,
+              model: assignment.model,
+              year: assignment.year,
+              totalCost: 0,
+              assignmentCount: 0,
+              items: [],
+            });
+          }
+
+          const vehicle = vehicleMap.get(vehicleId);
+          vehicle.totalCost += cost;
+          vehicle.assignmentCount++;
+          vehicle.items.push(assignment);
+        });
+
+        const vehicles = Array.from(vehicleMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+        setVehicleAssignments(vehicles);
+        setAssignmentStats(prev => ({
+          ...prev,
+          totalVehicleAssignments: data?.length || 0,
+          totalVehicleCost: totalCost,
+        }));
+      } else if (assignmentType === 'shelf') {
+        // Load shelf assignments
+        const { data, error } = await supabase
+          .from('equipment_shelf_compartment_contents')
+          .select('*')
+          .order('assigned_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Group by shelf and compartment
+        const shelfMap = new Map<string, any>();
+        let totalCost = 0;
+
+        data?.forEach((assignment: any) => {
+          const key = `${assignment.shelf_id}_${assignment.compartment_id}`;
+          const cost = parseFloat(assignment.total_price || 0);
+          totalCost += cost;
+
+          if (!shelfMap.has(key)) {
+            shelfMap.set(key, {
+              shelf_id: assignment.shelf_id,
+              compartment_id: assignment.compartment_id,
+              shelf_number: assignment.shelf_number,
+              shelf_name: assignment.shelf_name,
+              compartment_code: assignment.compartment_code,
+              compartment_description: assignment.compartment_description,
+              compartment_vehicle_category: assignment.compartment_vehicle_category,
+              totalCost: 0,
+              assignmentCount: 0,
+              items: [],
+            });
+          }
+
+          const shelf = shelfMap.get(key);
+          shelf.totalCost += cost;
+          shelf.assignmentCount++;
+          shelf.items.push(assignment);
+        });
+
+        const shelves = Array.from(shelfMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+        setShelfAssignments(shelves);
+        setAssignmentStats(prev => ({
+          ...prev,
+          totalShelfAssignments: data?.length || 0,
+          totalShelfCost: totalCost,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading assignments:', error);
     } finally {
       setLoading(false);
     }
@@ -737,6 +908,7 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
               { id: 'items', label: 'Prekių istorija', icon: Package },
               { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
+              { id: 'assignments', label: 'Priskyrimas', icon: Users },
               { id: 'cost-centers', label: 'Kaštų centrai', icon: DollarSign },
               ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
               ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
@@ -1679,6 +1851,461 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'assignments' && (
+            <div className="space-y-6">
+              {/* Filter Buttons */}
+              <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Rodyti:</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAssignmentType('worker')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        assignmentType === 'worker'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 inline mr-2" />
+                      Darbuotojai
+                    </button>
+                    <button
+                      onClick={() => setAssignmentType('vehicle')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        assignmentType === 'vehicle'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Car className="w-4 h-4 inline mr-2" />
+                      Transportas
+                    </button>
+                    <button
+                      onClick={() => setAssignmentType('shelf')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        assignmentType === 'shelf'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Package className="w-4 h-4 inline mr-2" />
+                      Stalažai
+                    </button>
+                  </div>
+                </div>
+
+                {assignmentType === 'vehicle' && (
+                  <div className="flex items-center gap-2 border-l pl-4">
+                    <label className="text-sm font-medium text-gray-700">Kategorija:</label>
+                    <select
+                      value={vehicleCategory}
+                      onChange={(e) => setVehicleCategory(e.target.value as any)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="all">Visi</option>
+                      <option value="tractor">Traktoriai</option>
+                      <option value="heavy_transport">Sunkvežimiai</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {assignmentType === 'worker' ? (
+                  <>
+                    <StatCard
+                      title="Darbuotojų su priskyrimais"
+                      value={workerAssignments.length.toString()}
+                      icon={Users}
+                      color="green"
+                    />
+                    <StatCard
+                      title="Iš viso priskyrimų"
+                      value={assignmentStats.totalWorkerAssignments.toString()}
+                      icon={Package}
+                      color="blue"
+                    />
+                    <StatCard
+                      title="Bendra vertė"
+                      value={`€${assignmentStats.totalWorkerCost.toFixed(2)}`}
+                      icon={DollarSign}
+                      color="purple"
+                    />
+                  </>
+                ) : assignmentType === 'vehicle' ? (
+                  <>
+                    <StatCard
+                      title="Transporto priemonių su priskyrimais"
+                      value={vehicleAssignments.length.toString()}
+                      icon={Car}
+                      color="purple"
+                    />
+                    <StatCard
+                      title="Iš viso priskyrimų"
+                      value={assignmentStats.totalVehicleAssignments.toString()}
+                      icon={Package}
+                      color="blue"
+                    />
+                    <StatCard
+                      title="Bendra vertė"
+                      value={`€${assignmentStats.totalVehicleCost.toFixed(2)}`}
+                      icon={DollarSign}
+                      color="green"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <StatCard
+                      title="Stalažų skyrių su prekėmis"
+                      value={shelfAssignments.length.toString()}
+                      icon={Package}
+                      color="indigo"
+                    />
+                    <StatCard
+                      title="Iš viso prekių"
+                      value={assignmentStats.totalShelfAssignments.toString()}
+                      icon={Package}
+                      color="blue"
+                    />
+                    <StatCard
+                      title="Bendra vertė"
+                      value={`€${assignmentStats.totalShelfCost.toFixed(2)}`}
+                      icon={DollarSign}
+                      color="green"
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* Worker Assignments */}
+              {assignmentType === 'worker' && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Darbuotojų priskyrimas</h3>
+                  {workerAssignments.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">Nėra priskyrimų darbuotojams</p>
+                    </div>
+                  ) : (
+                    workerAssignments.map((worker) => (
+                      <div key={worker.worker_id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setExpandedAssignment(
+                            expandedAssignment === worker.worker_id ? null : worker.worker_id
+                          )}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            {expandedAssignment === worker.worker_id ? (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            )}
+                            <div className="text-left">
+                              <h4 className="font-semibold text-gray-900">{worker.worker_name}</h4>
+                              <p className="text-sm text-gray-600">{worker.worker_email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="text-right">
+                              <p className="text-gray-600">Priskyrimo įrašų</p>
+                              <p className="font-semibold text-gray-900">{worker.assignmentCount}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Bendra vertė</p>
+                              <p className="font-bold text-green-600">€{worker.totalCost.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </button>
+
+                        {expandedAssignment === worker.worker_id && (
+                          <div className="border-t p-4 bg-gray-50">
+                            <h5 className="font-semibold text-gray-900 mb-3">Priskirti produktai</h5>
+                            <div className="space-y-2">
+                              {worker.items.map((item: any, idx: number) => (
+                                <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-gray-900">{item.product_name || item.item_description}</p>
+                                        {item.invoice_number && (
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                                            {item.invoice_number}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {item.product_code && (
+                                        <p className="text-xs text-gray-500 mt-1">Kodas: {item.product_code}</p>
+                                      )}
+                                      {item.category_name && (
+                                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                          {item.category_name}
+                                        </span>
+                                      )}
+                                      <p className="text-sm text-gray-600 mt-2">
+                                        Data: {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                      </p>
+                                      {item.supplier_name && (
+                                        <p className="text-sm text-gray-600">Tiekėjas: {item.supplier_name}</p>
+                                      )}
+                                      {item.assignment_notes && (
+                                        <p className="text-sm text-gray-500 mt-1 italic">{item.assignment_notes}</p>
+                                      )}
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Priskirta: {new Date(item.assigned_at).toLocaleDateString('lt-LT')} {new Date(item.assigned_at).toLocaleTimeString('lt-LT')}
+                                        {item.assigned_by_name && ` • ${item.assigned_by_name}`}
+                                      </p>
+                                    </div>
+                                    <div className="text-right ml-4">
+                                      <p className="text-sm text-gray-600">Kiekis</p>
+                                      <p className="font-medium text-gray-900">{item.quantity} {item.unit_type}</p>
+                                      <p className="text-sm text-gray-600 mt-2">Kaina</p>
+                                      <p className="font-bold text-green-600">€{parseFloat(item.total_price || 0).toFixed(2)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Vehicle Assignments */}
+              {assignmentType === 'vehicle' && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Transporto priskyrimas
+                    {vehicleCategory === 'tractor' && ' - Traktoriai'}
+                    {vehicleCategory === 'heavy_transport' && ' - Sunkvežimiai'}
+                  </h3>
+                  {vehicleAssignments.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <Car className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">Nėra priskyrimų transportui</p>
+                    </div>
+                  ) : (
+                    vehicleAssignments.map((vehicle) => (
+                      <div key={vehicle.vehicle_id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setExpandedAssignment(
+                            expandedAssignment === vehicle.vehicle_id ? null : vehicle.vehicle_id
+                          )}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            {expandedAssignment === vehicle.vehicle_id ? (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            )}
+                            <div className="text-left">
+                              <h4 className="font-semibold text-gray-900">{vehicle.registration_number}</h4>
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="text-sm text-gray-600">{vehicle.make} {vehicle.model}</p>
+                                {vehicle.year && <span className="text-sm text-gray-500">• {vehicle.year} m.</span>}
+                                {vehicle.vehicle_category && (
+                                  <span className={`px-2 py-0.5 text-xs rounded ${
+                                    vehicle.vehicle_category === 'tractor'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {vehicle.vehicle_category === 'tractor' ? 'Traktorius' : 'Sunkvežimis'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="text-right">
+                              <p className="text-gray-600">Priskyrimo įrašų</p>
+                              <p className="font-semibold text-gray-900">{vehicle.assignmentCount}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-600">Bendra vertė</p>
+                              <p className="font-bold text-green-600">€{vehicle.totalCost.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </button>
+
+                        {expandedAssignment === vehicle.vehicle_id && (
+                          <div className="border-t p-4 bg-gray-50">
+                            <h5 className="font-semibold text-gray-900 mb-3">Priskirti produktai</h5>
+                            <div className="space-y-2">
+                              {vehicle.items.map((item: any, idx: number) => (
+                                <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-gray-900">{item.product_name || item.item_description}</p>
+                                        {item.invoice_number && (
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                                            {item.invoice_number}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {item.product_code && (
+                                        <p className="text-xs text-gray-500 mt-1">Kodas: {item.product_code}</p>
+                                      )}
+                                      {item.category_name && (
+                                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                          {item.category_name}
+                                        </span>
+                                      )}
+                                      <p className="text-sm text-gray-600 mt-2">
+                                        Data: {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                      </p>
+                                      {item.supplier_name && (
+                                        <p className="text-sm text-gray-600">Tiekėjas: {item.supplier_name}</p>
+                                      )}
+                                      {item.assignment_notes && (
+                                        <p className="text-sm text-gray-500 mt-1 italic">{item.assignment_notes}</p>
+                                      )}
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Priskirta: {new Date(item.assigned_at).toLocaleDateString('lt-LT')} {new Date(item.assigned_at).toLocaleTimeString('lt-LT')}
+                                        {item.assigned_by_name && ` • ${item.assigned_by_name}`}
+                                      </p>
+                                    </div>
+                                    <div className="text-right ml-4">
+                                      <p className="text-sm text-gray-600">Kiekis</p>
+                                      <p className="font-medium text-gray-900">{item.quantity} {item.unit_type}</p>
+                                      <p className="text-sm text-gray-600 mt-2">Kaina</p>
+                                      <p className="font-bold text-green-600">€{parseFloat(item.total_price || 0).toFixed(2)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Shelf Assignments */}
+              {assignmentType === 'shelf' && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Stalažų priskyrimas</h3>
+                  {shelfAssignments.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">Nėra priskyrimų stalažams</p>
+                    </div>
+                  ) : (
+                    shelfAssignments.map((shelf) => {
+                      const key = `${shelf.shelf_id}_${shelf.compartment_id}`;
+                      return (
+                        <div key={key} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setExpandedAssignment(
+                              expandedAssignment === key ? null : key
+                            )}
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-4">
+                              {expandedAssignment === key ? (
+                                <ChevronDown className="w-5 h-5 text-gray-400" />
+                              ) : (
+                                <ChevronRight className="w-5 h-5 text-gray-400" />
+                              )}
+                              <div className="text-left">
+                                <h4 className="font-semibold text-gray-900">
+                                  Stalažas {shelf.shelf_number} - {shelf.compartment_code}
+                                </h4>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <p className="text-sm text-gray-600">{shelf.shelf_name}</p>
+                                  {shelf.compartment_description && (
+                                    <span className="text-sm text-gray-500">• {shelf.compartment_description}</span>
+                                  )}
+                                  {shelf.compartment_vehicle_category && (
+                                    <span className={`px-2 py-0.5 text-xs rounded ${
+                                      shelf.compartment_vehicle_category === 'tractor'
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-purple-100 text-purple-700'
+                                    }`}>
+                                      {shelf.compartment_vehicle_category === 'tractor' ? '🚜 Traktorius' : '🚛 Sunkvežimis'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-6 text-sm">
+                              <div className="text-right">
+                                <p className="text-gray-600">Prekių</p>
+                                <p className="font-semibold text-gray-900">{shelf.assignmentCount}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-gray-600">Bendra vertė</p>
+                                <p className="font-bold text-green-600">€{shelf.totalCost.toFixed(2)}</p>
+                              </div>
+                            </div>
+                          </button>
+
+                          {expandedAssignment === key && (
+                            <div className="border-t p-4 bg-gray-50">
+                              <h5 className="font-semibold text-gray-900 mb-3">Prekės šiame skyriuje</h5>
+                              <div className="space-y-2">
+                                {shelf.items.map((item: any, idx: number) => (
+                                  <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <p className="font-medium text-gray-900">{item.product_name || item.item_description}</p>
+                                          {item.invoice_number && (
+                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                                              {item.invoice_number}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {item.product_code && (
+                                          <p className="text-xs text-gray-500 mt-1">Kodas: {item.product_code}</p>
+                                        )}
+                                        {item.category_name && (
+                                          <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                            {item.category_name}
+                                          </span>
+                                        )}
+                                        <p className="text-sm text-gray-600 mt-2">
+                                          Data: {new Date(item.invoice_date).toLocaleDateString('lt-LT')}
+                                        </p>
+                                        {item.supplier_name && (
+                                          <p className="text-sm text-gray-600">Tiekėjas: {item.supplier_name}</p>
+                                        )}
+                                        {item.assignment_notes && (
+                                          <p className="text-sm text-gray-500 mt-1 italic">{item.assignment_notes}</p>
+                                        )}
+                                        <p className="text-xs text-gray-400 mt-1">
+                                          Priskirta: {new Date(item.assigned_at).toLocaleDateString('lt-LT')} {new Date(item.assigned_at).toLocaleTimeString('lt-LT')}
+                                          {item.assigned_by_name && ` • ${item.assigned_by_name}`}
+                                        </p>
+                                      </div>
+                                      <div className="text-right ml-4">
+                                        <p className="text-sm text-gray-600">Kiekis</p>
+                                        <p className="font-medium text-gray-900">{item.quantity} {item.unit_type}</p>
+                                        <p className="text-sm text-gray-600 mt-2">Kaina</p>
+                                        <p className="font-bold text-green-600">€{parseFloat(item.total_price || 0).toFixed(2)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           )}
 

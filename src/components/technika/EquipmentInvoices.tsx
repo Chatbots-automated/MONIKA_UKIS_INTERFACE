@@ -51,6 +51,12 @@ interface CostCenter {
   parent_id?: string | null;
 }
 
+interface User {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
 interface InvoiceItem {
   id: string;
   product_id: string | null;
@@ -124,20 +130,28 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [workers, setWorkers] = useState<User[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [shelves, setShelves] = useState<any[]>([]);
+  const [compartments, setCompartments] = useState<any[]>([]);
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
     vehicleId: string;
+    workerId: string;
     toolId: string;
     costCenterId: string;
+    compartmentId: string;
     transportCompany: string;
     notes: string;
   }>({
     invoiceItemId: '',
     assignmentType: '',
     vehicleId: '',
+    workerId: '',
     toolId: '',
     costCenterId: '',
+    compartmentId: '',
     transportCompany: '',
     notes: '',
   });
@@ -157,13 +171,17 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   }, []);
 
   const loadData = async () => {
-    const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes, workersRes, vehiclesRes, shelvesRes, compartmentsRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('tools').select('id, name, tool_number').order('name'),
       supabase.from('cost_centers').select('id, name, description, color, parent_id').eq('is_active', true).order('name'),
+      supabase.from('users').select('id, full_name, email').eq('is_frozen', false).order('full_name'),
+      supabase.from('vehicles').select('id, registration_number, vehicle_type, vehicle_category, make, model').eq('is_active', true).order('registration_number'),
+      supabase.from('equipment_shelves').select('id, shelf_number, name').eq('is_active', true).order('shelf_number'),
+      supabase.from('equipment_shelf_compartments').select('id, shelf_id, compartment_code, description, vehicle_category').eq('is_active', true).order('compartment_code'),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
@@ -172,6 +190,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     if (invoicesRes.data) setInvoices(invoicesRes.data);
     if (toolsRes.data) setTools(toolsRes.data);
     if (costCentersRes.data) setCostCenters(costCentersRes.data);
+    if (workersRes.data) setWorkers(workersRes.data);
+    if (vehiclesRes.data) setVehicles(vehiclesRes.data);
+    if (shelvesRes.data) setShelves(shelvesRes.data);
+    if (compartmentsRes.data) setCompartments(compartmentsRes.data);
   };
 
   const loadUnassignedItems = async () => {
@@ -701,8 +723,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       invoiceItemId: item.id,
       assignmentType: '',
       vehicleId: '',
+      workerId: '',
       toolId: '',
       costCenterId: '',
+      compartmentId: '',
       transportCompany: '',
       notes: '',
     });
@@ -720,8 +744,23 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       return;
     }
 
+    if (assignmentForm.assignmentType === 'worker' && !assignmentForm.workerId) {
+      alert('Prašome pasirinkti darbuotoją');
+      return;
+    }
+
+    if (assignmentForm.assignmentType === 'vehicle' && !assignmentForm.vehicleId) {
+      alert('Prašome pasirinkti transporto priemonę');
+      return;
+    }
+
     if (assignmentForm.assignmentType === 'cost_center' && !assignmentForm.costCenterId) {
       alert('Prašome pasirinkti kaštų centrą');
+      return;
+    }
+
+    if (assignmentForm.assignmentType === 'shelf' && !assignmentForm.compartmentId) {
+      alert('Prašome pasirinkti stalažo skyrių');
       return;
     }
 
@@ -735,8 +774,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         invoice_item_id: assignmentForm.invoiceItemId,
         assignment_type: assignmentForm.assignmentType,
         vehicle_id: assignmentForm.vehicleId || null,
+        worker_id: assignmentForm.workerId || null,
         tool_id: assignmentForm.toolId || null,
         cost_center_id: assignmentForm.costCenterId || null,
+        compartment_id: assignmentForm.compartmentId || null,
         transport_company: assignmentForm.transportCompany || null,
         notes: assignmentForm.notes || null,
         assigned_by: user?.id || null,
@@ -758,8 +799,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         invoiceItemId: '',
         assignmentType: '',
         vehicleId: '',
+        workerId: '',
         toolId: '',
         costCenterId: '',
+        compartmentId: '',
         transportCompany: '',
         notes: '',
       });
@@ -788,8 +831,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       invoiceItemId: '',
       assignmentType: '',
       vehicleId: '',
+      workerId: '',
       toolId: '',
       costCenterId: '',
+      compartmentId: '',
       transportCompany: '',
       notes: '',
     });
@@ -2261,6 +2306,40 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Paskyrimo tipas</label>
                   
+                  {/* Worker and Vehicle Assignment Sections */}
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-semibold text-blue-900 mb-3">Priskirti darbuotojui arba transportui</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'worker', invoiceItemId: invoiceItems[0].id })}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          assignmentForm.assignmentType === 'worker'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <p className="font-semibold text-gray-900">Darbuotojui</p>
+                          <p className="text-xs text-gray-500 mt-1">Asmeninės priemonės, įrankiai</p>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'vehicle', invoiceItemId: invoiceItems[0].id })}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          assignmentForm.assignmentType === 'vehicle'
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <p className="font-semibold text-gray-900">Transportui</p>
+                          <p className="text-xs text-gray-500 mt-1">Traktoriui, sunkvežimiui</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Farm Equipment Specific Categories */}
                   {locationFilter === 'farm' && (
                     <>
@@ -2413,6 +2492,20 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         <p className="text-xs text-gray-500 mt-1">Bendros paskirties dalys</p>
                       </div>
                     </button>
+
+                    <button
+                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'shelf', invoiceItemId: invoiceItems[0].id })}
+                      className={`p-4 border-2 rounded-lg transition-all ${
+                        assignmentForm.assignmentType === 'shelf'
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className="font-semibold text-gray-900">Stalažui</p>
+                        <p className="text-xs text-gray-500 mt-1">Sandėlio stalažo skyriui</p>
+                      </div>
+                    </button>
                   </div>
 
                   {costCenters.length > 0 && (
@@ -2503,6 +2596,93 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   )}
                 </div>
 
+                {assignmentForm.assignmentType === 'worker' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite darbuotoją</label>
+                    <select
+                      value={assignmentForm.workerId}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, workerId: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2"
+                    >
+                      <option value="">-- Pasirinkite darbuotoją --</option>
+                      {workers.map(worker => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.full_name} ({worker.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {assignmentForm.assignmentType === 'vehicle' && (
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite transporto priemonę</label>
+                    
+                    {/* Tractors Section */}
+                    {vehicles.filter(v => v.vehicle_category === 'tractor').length > 0 && (
+                      <div className="border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Traktoriai</p>
+                        <select
+                          value={assignmentForm.vehicleId}
+                          onChange={(e) => setAssignmentForm({ ...assignmentForm, vehicleId: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2"
+                        >
+                          <option value="">-- Pasirinkite traktorių --</option>
+                          {vehicles
+                            .filter(v => v.vehicle_category === 'tractor')
+                            .map(vehicle => (
+                              <option key={vehicle.id} value={vehicle.id}>
+                                {vehicle.registration_number} - {vehicle.make} {vehicle.model}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Heavy Transport Section */}
+                    {vehicles.filter(v => v.vehicle_category === 'heavy_transport').length > 0 && (
+                      <div className="border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Sunkvežimiai (Heavy Transport)</p>
+                        <select
+                          value={assignmentForm.vehicleId}
+                          onChange={(e) => setAssignmentForm({ ...assignmentForm, vehicleId: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2"
+                        >
+                          <option value="">-- Pasirinkite sunkvežimį --</option>
+                          {vehicles
+                            .filter(v => v.vehicle_category === 'heavy_transport')
+                            .map(vehicle => (
+                              <option key={vehicle.id} value={vehicle.id}>
+                                {vehicle.registration_number} - {vehicle.make} {vehicle.model}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Other Vehicles (no category) */}
+                    {vehicles.filter(v => !v.vehicle_category).length > 0 && (
+                      <div className="border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Kiti transportai</p>
+                        <select
+                          value={assignmentForm.vehicleId}
+                          onChange={(e) => setAssignmentForm({ ...assignmentForm, vehicleId: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2"
+                        >
+                          <option value="">-- Pasirinkite transportą --</option>
+                          {vehicles
+                            .filter(v => !v.vehicle_category)
+                            .map(vehicle => (
+                              <option key={vehicle.id} value={vehicle.id}>
+                                {vehicle.registration_number} - {vehicle.make} {vehicle.model} ({vehicle.vehicle_type})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {assignmentForm.assignmentType === 'tool' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite įrankį/įrangą</label>
@@ -2518,6 +2698,61 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {assignmentForm.assignmentType === 'shelf' && (
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite stalažo skyrių</label>
+                    
+                    {shelves.map(shelf => {
+                      const shelfCompartments = compartments.filter(c => c.shelf_id === shelf.id);
+                      if (shelfCompartments.length === 0) return null;
+
+                      return (
+                        <div key={shelf.id} className="border border-gray-200 rounded-lg p-3">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">
+                            Stalažas {shelf.shelf_number} - {shelf.name}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {shelfCompartments.map(compartment => (
+                              <button
+                                key={compartment.id}
+                                onClick={() => setAssignmentForm({ ...assignmentForm, compartmentId: compartment.id })}
+                                className={`p-3 border-2 rounded-lg transition-all text-left ${
+                                  assignmentForm.compartmentId === compartment.id
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : 'border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-gray-900">{compartment.compartment_code}</span>
+                                  {compartment.vehicle_category && (
+                                    <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                      compartment.vehicle_category === 'tractor'
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-purple-100 text-purple-700'
+                                    }`}>
+                                      {compartment.vehicle_category === 'tractor' ? '🚜' : '🚛'}
+                                    </span>
+                                  )}
+                                </div>
+                                {compartment.description && (
+                                  <p className="text-xs text-gray-600 mt-1">{compartment.description}</p>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {shelves.length === 0 && (
+                      <div className="text-center py-6 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600">Nėra sukurtų stalažų</p>
+                        <p className="text-xs text-gray-500 mt-1">Pirmiausia sukurkite stalažus "Stalažai" skiltyje</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
