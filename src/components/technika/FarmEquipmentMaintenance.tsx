@@ -3,9 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Plus, Edit2, Trash2, AlertTriangle, CheckCircle, 
-  Clock, Calendar, ChevronDown, ChevronRight, Settings 
+  Clock, Calendar, ChevronDown, ChevronRight, Settings, Target 
 } from 'lucide-react';
 import { MaintenanceCalendar } from './MaintenanceCalendar';
+import { CostCentersManagement } from './CostCentersManagement';
 
 interface FarmEquipment {
   id: string;
@@ -100,6 +101,7 @@ export function FarmEquipmentMaintenance() {
   const [expandedEquipment, setExpandedEquipment] = useState<string | null>(null);
   const [showCalendar, setShowCalendar] = useState(true);
   const [allItems, setAllItems] = useState<FarmEquipmentItem[]>([]);
+  const [currentView, setCurrentView] = useState<'maintenance' | 'cost_centers'>('maintenance');
   
   // Modals
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
@@ -696,29 +698,59 @@ export function FarmEquipmentMaintenance() {
 
   return (
     <div className="space-y-6">
-      {/* Calendar */}
-      {showCalendar && (
-        <MaintenanceCalendar
-          events={calendarEvents}
-          onClose={() => setShowCalendar(false)}
-        />
-      )}
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Fermos įrangos aptarnavimai</h2>
-          <p className="text-gray-600 mt-1">
-            Tvarkykite fermos įrangos ir sistemų aptarnavimą
-          </p>
-        </div>
+      {/* View Toggle */}
+      <div className="bg-white rounded-xl border border-gray-200 p-2 inline-flex gap-2">
         <button
-          onClick={() => handleOpenEquipmentModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+          onClick={() => setCurrentView('maintenance')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
+            currentView === 'maintenance'
+              ? 'bg-slate-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          Nauja įranga
+          <Settings className="w-4 h-4" />
+          Aptarnavimai
+        </button>
+        <button
+          onClick={() => setCurrentView('cost_centers')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
+            currentView === 'cost_centers'
+              ? 'bg-slate-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Target className="w-4 h-4" />
+          Kaštų centrai
         </button>
       </div>
+
+      {currentView === 'cost_centers' ? (
+        <CostCentersManagement moduleType="farm_equipment" />
+      ) : (
+        <>
+          {/* Calendar */}
+          {showCalendar && (
+            <MaintenanceCalendar
+              events={calendarEvents}
+              onClose={() => setShowCalendar(false)}
+            />
+          )}
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Fermos įrangos aptarnavimai</h2>
+              <p className="text-gray-600 mt-1">
+                Tvarkykite fermos įrangos ir sistemų aptarnavimą
+              </p>
+            </div>
+            <button
+              onClick={() => handleOpenEquipmentModal()}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nauja įranga
+            </button>
+          </div>
 
       {/* Priority Items Section */}
       {priorityItems.length > 0 && (
@@ -1371,6 +1403,8 @@ export function FarmEquipmentMaintenance() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

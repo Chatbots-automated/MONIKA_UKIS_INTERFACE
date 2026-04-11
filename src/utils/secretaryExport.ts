@@ -240,6 +240,7 @@ export function generateSecretaryExportPayload(
       L023: truncateField(item.responsible_person_name, 35),
       L028: truncateField(item.accounting_op1_debit, 9),
       L029: truncateField(item.accounting_op1_credit, 9),
+      L086: item.accounting_operation_code ? String(item.accounting_operation_code) : undefined,
     };
 
     // Add optional item fields
@@ -406,7 +407,7 @@ export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayloa
     return `"${str.replace(/"/g, '""')}"`;
   };
   
-  // Header row with ALL L-fields (L001-L084)
+  // Header row with ALL L-fields (L001-L084, L086)
   const headers = [
     'L001', 'L002', 'L003', 'L004', 'L005', 'L006', 'L007', 'L008',
     'L009', 'L010', 'L011', 'L012', 'L013', 'L014', 'L015', 'L016', 'L017',
@@ -416,7 +417,7 @@ export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayloa
     'L050', 'L051', 'L052', 'L053', 'L054', 'L055', 'L056', 'L057', 'L058',
     'L059', 'L060', 'L061',
     'L064', 'L065', 'L066', 'L067', 'L068', 'L069', 'L070', 'L071', 'L072', 'L073', 'L074', 'L075', 'L076', 'L077',
-    'L078', 'L079', 'L080', 'L081', 'L082', 'L083', 'L084'
+    'L078', 'L079', 'L080', 'L081', 'L082', 'L083', 'L084', 'L086'
   ];
   lines.push(headers.join(','));
   
@@ -515,6 +516,7 @@ export function convertPayloadToImportFile(payload: SecretaryInvoiceExportPayloa
     fields.push(escapeCSV(payload.L082 || '', true));  // Numeric: OSS flag
     fields.push(escapeCSV(payload.L083 || ''));  // Text: contact email
     fields.push(escapeCSV(payload.L084 || ''));  // Text: OSS country code
+    fields.push(escapeCSV(item.L086 || '', true));  // Numeric: Accounting operation code
     
     lines.push(fields.join(','));
   });

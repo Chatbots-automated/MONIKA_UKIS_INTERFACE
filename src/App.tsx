@@ -23,7 +23,7 @@ import { TreatmentHistory } from './components/TreatmentHistory';
 import { TreatmentCostTab } from './components/TreatmentCostTab';
 import { AuthForm } from './components/AuthForm';
 import { ModuleSelector } from './components/ModuleSelector';
-import { InvoiceViewer } from './components/InvoiceViewer';
+import { Buhalterija } from './components/Buhalterija';
 import { TechnikaSelector } from './components/TechnikaSelector';
 import { WorkerSchedulesSelector } from './components/WorkerSchedulesSelector';
 import { WorkerPortal } from './components/worker/WorkerPortal';
@@ -33,7 +33,7 @@ import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro, Droplets } from 'lucide-react';
 
-type Module = 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food' | null;
+type Module = 'veterinarija' | 'buhalterija' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food' | null;
 
 interface Notification {
   id: string;
@@ -146,19 +146,19 @@ function App() {
     return <ModuleSelector onSelectModule={setSelectedModule} />;
   }
 
-  if (selectedModule === 'islaidos') {
+  if (selectedModule === 'buhalterija') {
     return (
       <RealtimeProvider>
-        <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50">
           <div className="max-w-7xl mx-auto p-8">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
                   <Euro className="w-10 h-10 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Išlaidų Valdymas</h1>
-                  <p className="text-gray-600">Finansų apskaita ir kontrolė</p>
+                  <h1 className="text-3xl font-bold text-gray-900">Buhalterija</h1>
+                  <p className="text-gray-600">Sąskaitų valdymas ir eksportavimas</p>
                 </div>
               </div>
               <button
@@ -170,7 +170,7 @@ function App() {
             </div>
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <InvoiceViewer />
+              <Buhalterija />
             </div>
           </div>
         </div>

@@ -16,6 +16,7 @@ interface Product {
   is_active: boolean;
   created_at: string;
   default_location_type?: string;
+  warranty_period_months?: number;
   category?: { name: string };
 }
 
@@ -62,6 +63,7 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
     description: '',
     min_stock_level: '0',
     default_location: 'warehouse', // 'farm' or 'warehouse'
+    warranty_period_months: '',
   });
 
   useEffect(() => {
@@ -141,6 +143,7 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
         min_stock_level: parseFloat(productForm.min_stock_level) || 0,
         is_active: true,
         default_location_type: productForm.default_location,
+        warranty_period_months: productForm.warranty_period_months ? parseInt(productForm.warranty_period_months) : null,
       };
 
       if (editingProduct) {
@@ -172,6 +175,7 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
         description: '',
         min_stock_level: '0',
         default_location: 'warehouse',
+        warranty_period_months: '',
       });
       loadData();
     } catch (error: any) {
@@ -239,6 +243,7 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                   description: '',
                   min_stock_level: '0',
                   default_location: 'warehouse',
+                  warranty_period_months: '',
                 });
                 setShowAddModal(true);
               }}
@@ -354,6 +359,7 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                               description: product.description || '',
                               min_stock_level: product.min_stock_level.toString(),
                               default_location: product.default_location_type || 'warehouse',
+                              warranty_period_months: (product as any).warranty_period_months?.toString() || '',
                             });
                             setShowAddModal(true);
                           }}
@@ -543,6 +549,21 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                   value={productForm.min_stock_level}
                   onChange={(e) => setProductForm({ ...productForm, min_stock_level: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Garantinis (mėnesiais)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={productForm.warranty_period_months}
+                  onChange={(e) => setProductForm({ ...productForm, warranty_period_months: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="Pvz.: 12, 24, 36"
                 />
               </div>
 

@@ -14,6 +14,7 @@ interface Tool {
   current_holder: string | null;
   product_id: string | null;
   notes: string;
+  warranty_period_months?: number | null;
   product: {
     name: string;
   } | null;
@@ -67,6 +68,7 @@ export function ToolsManagement() {
     condition: 'good',
     location_id: '',
     notes: '',
+    warranty_period_months: '',
   });
 
   useEffect(() => {
@@ -445,8 +447,9 @@ export function ToolsManagement() {
           .from('equipment_products')
           .insert({
             name: newToolForm.name,
-            unit_type: 'pcs', // default; can be refined later in Produktai
+            unit_type: 'set', // komplektas - tools are now treated as sets
             is_active: true,
+            warranty_period_months: newToolForm.warranty_period_months ? parseInt(newToolForm.warranty_period_months) : null,
           })
           .select()
           .single();
@@ -470,6 +473,7 @@ export function ToolsManagement() {
         current_location_id: newToolForm.location_id || null,
         notes: newToolForm.notes || null,
         is_available: true,
+        warranty_period_months: newToolForm.warranty_period_months ? parseInt(newToolForm.warranty_period_months) : null,
       });
 
       if (toolError) throw toolError;
@@ -485,6 +489,7 @@ export function ToolsManagement() {
         condition: 'good',
         location_id: '',
         notes: '',
+        warranty_period_months: '',
       });
       loadData();
       alert('Įrankis sėkmingai pridėtas');
@@ -762,6 +767,19 @@ export function ToolsManagement() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Garantinis (mėnesiais)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={newToolForm.warranty_period_months}
+                  onChange={(e) => setNewToolForm({ ...newToolForm, warranty_period_months: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="Pvz.: 12, 24, 36"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
                 <textarea
                   value={newToolForm.notes}
@@ -785,6 +803,7 @@ export function ToolsManagement() {
                     condition: 'good',
                     location_id: '',
                     notes: '',
+                    warranty_period_months: '',
                   });
                 }}
                 className="px-4 py-2 border rounded hover:bg-gray-50"

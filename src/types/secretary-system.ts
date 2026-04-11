@@ -142,12 +142,16 @@ export interface SecretaryInvoiceExportPayload {
   L082?: string; // OSS system document (1 = OSS)
   L083?: string; // Contact email (245 chars)
   L084?: string; // OSS country code (2 chars, letters only)
+  
+  // Accounting operation ID from their system
+  L086?: string; // Accounting operation code (from secretary_accounting_operations.code)
 }
 
 export interface SecretaryInvoiceLineItem {
   L009: number; // Product/Service flag (0=product, 1=service) - MANDATORY, USER MUST SELECT MANUALLY
   L010: string; // Product/service unique code (up to 20 chars, mandatory, UNIQUE - SKU)
   L011: string; // Product/service name (up to 35 chars, mandatory)
+  L086?: string; // Accounting operation code from their system (secretary_accounting_operations.code)
   L012: string; // Unit of measure (up to 4 chars, mandatory)
   L013: number; // Quantity/sum sign (0=positive, 1=negative, mandatory)
   L014: number; // Quantity * 1000 (up to 12 digits, integer, mandatory)

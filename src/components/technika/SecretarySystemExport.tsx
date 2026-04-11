@@ -34,6 +34,7 @@ import {
 
 interface SecretarySystemExportProps {
   invoiceId: string;
+  invoiceModule?: 'veterinarija' | 'technika'; // Which module the invoice is from
   onClose: () => void;
   onExportComplete?: (payload?: SecretaryInvoiceExportPayload) => void;
   bulkMode?: boolean;
@@ -87,13 +88,14 @@ interface InvoiceItemWithFields {
   accounting_op1_debit?: string;
   accounting_op1_credit?: string;
   accounting_op1_expense_structure?: string;
+  accounting_operation_code?: number; // L086 - Accounting operation code from secretary_accounting_operations
   structural_unit_code?: string;
   structural_unit_name?: string;
   object_code?: string;
   object_name?: string;
 }
 
-export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bulkMode = false }: SecretarySystemExportProps) {
+export function SecretarySystemExport({ invoiceId, invoiceModule = 'technika', onClose, onExportComplete, bulkMode = false }: SecretarySystemExportProps) {
   const [invoice, setInvoice] = useState<InvoiceWithItems | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -117,6 +119,26 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
   // Edit mode
   const [editingItem, setEditingItem] = useState<number | null>(null);
   const [itemEdits, setItemEdits] = useState<Map<number, Partial<InvoiceItemWithFields>>>(new Map());
+  
+  // Bulk item selection and configuration
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [showBulkConfig, setShowBulkConfig] = useState(false);
+  const [bulkConfig, setBulkConfig] = useState<{
+    product_code?: string;
+    product_service_flag?: number;
+    responsible_person_code?: string;
+    responsible_person_name?: string;
+    accounting_op1_debit?: string;
+    accounting_op1_credit?: string;
+    accounting_op1_expense_structure?: string;
+    accounting_operation_code?: number;
+  }>({});
+  const [bulkMaterialSearch, setBulkMaterialSearch] = useState('');
+  const [bulkResponsibleSearch, setBulkResponsibleSearch] = useState('');
+  const [bulkAccountingOpSearch, setBulkAccountingOpSearch] = useState('');
+  const [showBulkMaterialDropdown, setShowBulkMaterialDropdown] = useState(false);
+  const [showBulkResponsibleDropdown, setShowBulkResponsibleDropdown] = useState(false);
+  const [showBulkAccountingOpDropdown, setShowBulkAccountingOpDropdown] = useState(false);
   
   // Preview
   const [showPreview, setShowPreview] = useState(false);
@@ -186,22 +208,28 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
 
   const loadInvoiceData = async () => {
     try {
+      // Query the correct table based on invoice module
+      const invoiceTable = invoiceModule === 'veterinarija' ? 'invoices' : 'equipment_invoices';
+      const itemsTable = invoiceModule === 'veterinarija' ? 'invoice_items' : 'equipment_invoice_items';
+
       const { data: invoiceData, error: invoiceError } = await supabase
-        .from('equipment_invoices')
+        .from(invoiceTable)
         .select('*')
         .eq('id', invoiceId)
         .single();
 
       if (invoiceError) throw invoiceError;
 
+      // Query items with appropriate product relation
+      const itemsSelect = invoiceModule === 'veterinarija' 
+        ? `*, product:products(name)` // SKU is in invoice_items table, not products
+        : `*, product:equipment_products(name, product_code, unit_type)`;
+
       const { data: itemsData, error: itemsError } = await supabase
-        .from('equipment_invoice_items')
-        .select(`
-          *,
-          product:equipment_products(name, product_code, unit_type)
-        `)
+        .from(itemsTable)
+        .select(itemsSelect)
         .eq('invoice_id', invoiceId)
-        .order('line_no');
+        .order(invoiceModule === 'veterinarija' ? 'id' : 'line_no');
 
       if (itemsError) throw itemsError;
 
@@ -229,8 +257,12 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
         document_series_number: invoiceData.document_series_number || invoiceData.invoice_number,
         items: itemsData.map(item => ({
           id: item.id,
-          product_code: item.product_code || item.product?.product_code || '',
-          description: item.description,
+          product_code: invoiceModule === 'veterinarija' 
+            ? (item.sku || '') // SKU is directly in invoice_items table
+            : (item.product_code || item.product?.product_code || ''),
+          description: invoiceModule === 'veterinarija'
+            ? (item.product?.name || item.description)
+            : item.description,
           unit_type: item.unit_type || item.product?.unit_type || 'vnt',
           quantity: item.quantity,
           quantity_sign: item.quantity_sign ?? 0,
@@ -245,6 +277,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
           accounting_op1_debit: item.accounting_op1_debit,
           accounting_op1_credit: item.accounting_op1_credit || supplierAccountingAccount || '451',
           accounting_op1_expense_structure: item.accounting_op1_expense_structure,
+          accounting_operation_code: item.accounting_operation_code,
           structural_unit_code: item.structural_unit_code,
           structural_unit_name: item.structural_unit_name,
           object_code: item.object_code,
@@ -336,6 +369,55 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     setShowSupplierDropdown(false);
   };
 
+  const toggleItemSelection = (index: number) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.size === invoice?.items.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(invoice?.items.map((_, idx) => idx) || []));
+    }
+  };
+
+  const applyBulkConfig = () => {
+    if (!invoice || selectedItems.size === 0) return;
+
+    const updatedItems = [...invoice.items];
+    selectedItems.forEach(index => {
+      updatedItems[index] = {
+        ...updatedItems[index],
+        ...(bulkConfig.product_code !== undefined && { product_code: bulkConfig.product_code }),
+        ...(bulkConfig.product_service_flag !== undefined && { product_service_flag: bulkConfig.product_service_flag }),
+        ...(bulkConfig.responsible_person_code !== undefined && { responsible_person_code: bulkConfig.responsible_person_code }),
+        ...(bulkConfig.responsible_person_name !== undefined && { responsible_person_name: bulkConfig.responsible_person_name }),
+        ...(bulkConfig.accounting_op1_debit !== undefined && { accounting_op1_debit: bulkConfig.accounting_op1_debit }),
+        ...(bulkConfig.accounting_op1_credit !== undefined && { accounting_op1_credit: bulkConfig.accounting_op1_credit }),
+        ...(bulkConfig.accounting_op1_expense_structure !== undefined && { accounting_op1_expense_structure: bulkConfig.accounting_op1_expense_structure }),
+        ...(bulkConfig.accounting_operation_code !== undefined && { accounting_operation_code: bulkConfig.accounting_operation_code }),
+      };
+
+      // Also update edits map
+      const currentEdits = itemEdits.get(index) || {};
+      const newEdits = new Map(itemEdits);
+      newEdits.set(index, { ...currentEdits, ...bulkConfig });
+      setItemEdits(newEdits);
+    });
+
+    setInvoice({ ...invoice, items: updatedItems });
+    setShowBulkConfig(false);
+    setBulkConfig({});
+    setSelectedItems(new Set());
+    alert(`Pakeitimai pritaikyti ${selectedItems.size} eilutėms!`);
+  };
+
   const handleItemFieldUpdate = (index: number, field: string, value: any) => {
     if (!invoice) return;
     
@@ -360,9 +442,12 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
     setSaving(true);
     
     try {
-      // Update invoice header
+      // Update invoice header in the correct table
+      const invoiceTable = invoiceModule === 'veterinarija' ? 'invoices' : 'equipment_invoices';
+      const itemsTable = invoiceModule === 'veterinarija' ? 'invoice_items' : 'equipment_invoice_items';
+      
       const { error: invoiceError } = await supabase
-        .from('equipment_invoices')
+        .from(invoiceTable)
         .update({
           supplier_unique_code: invoice.supplier_unique_code,
           supplier_currency: invoice.supplier_currency,
@@ -389,12 +474,12 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
 
       if (invoiceError) throw invoiceError;
 
-      // Update invoice items
+      // Update invoice items in the correct table
       for (const [index, item] of invoice.items.entries()) {
         const itemData = getItemData(item, index);
         
         const { error: itemError } = await supabase
-          .from('equipment_invoice_items')
+          .from(itemsTable)
           .update({
             product_code: itemData.product_code,
             unit_type: itemData.unit_type,
@@ -408,6 +493,7 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
             accounting_op1_debit: itemData.accounting_op1_debit,
             accounting_op1_credit: itemData.accounting_op1_credit,
             accounting_op1_expense_structure: itemData.accounting_op1_expense_structure,
+            accounting_operation_code: itemData.accounting_operation_code,
             structural_unit_code: itemData.structural_unit_code,
             structural_unit_name: itemData.structural_unit_name,
             object_code: itemData.object_code,
@@ -901,30 +987,60 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
 
           {/* Invoice Items Section */}
           <div className="mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-6 h-6 text-blue-600" />
-              <h3 className="text-lg font-bold text-gray-800">Sąskaitos eilutės ({invoice.items.length})</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-6 h-6 text-blue-600" />
+                <h3 className="text-lg font-bold text-gray-800">Sąskaitos eilutės ({invoice.items.length})</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSelectAll}
+                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {selectedItems.size === invoice.items.length ? 'Atžymėti visas' : 'Pažymėti visas'}
+                </button>
+                {selectedItems.size > 0 && (
+                  <button
+                    onClick={() => setShowBulkConfig(true)}
+                    className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all flex items-center gap-2 shadow-sm font-medium"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Konfigūruoti ({selectedItems.size})
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">
               {invoice.items.map((item, index) => {
                 const itemData = item;
                 const isEditing = editingItem === index;
+                const isSelected = selectedItems.has(index);
 
                 return (
-                  <div key={item.id} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-xl p-5">
+                  <div key={item.id} className={`bg-gradient-to-br from-white to-gray-50 border-2 rounded-xl p-5 transition-all ${
+                    isSelected ? 'border-green-500 shadow-lg' : 'border-gray-200'
+                  }`}>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold">
-                            #{index + 1}
-                          </span>
-                          <h4 className="font-bold text-gray-900 text-lg">{itemData.description}</h4>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>Kiekis: <span className="font-semibold">{itemData.quantity}</span></span>
-                          <span>Vienetas: <span className="font-semibold">{itemData.unit_type}</span></span>
-                          <span>Suma: <span className="font-semibold">{itemData.total_price.toFixed(2)} EUR</span></span>
+                      <div className="flex items-center gap-3 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleItemSelection(index)}
+                          className="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                              #{index + 1}
+                            </span>
+                            <h4 className="font-bold text-gray-900 text-lg">{itemData.description}</h4>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span>Kiekis: <span className="font-semibold">{itemData.quantity}</span></span>
+                            <span>Vienetas: <span className="font-semibold">{itemData.unit_type}</span></span>
+                            <span>Suma: <span className="font-semibold">{itemData.total_price.toFixed(2)} EUR</span></span>
+                          </div>
                         </div>
                       </div>
                       <button
@@ -1270,13 +1386,15 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                                         // L029 comes from SUPPLIER's accounting account, not from operation
                                         const creditValue = invoice?.supplier_accounting_account || '451';
                                         const expenseValue = String(operation.expense_structure || '').replace('.0', '');
+                                        const operationCode = operation.code; // L086 - Accounting operation code
                                         
                                         const updatedItems = [...invoice.items];
                                         updatedItems[index] = { 
                                           ...updatedItems[index], 
                                           accounting_op1_debit: debitValue,
                                           accounting_op1_credit: creditValue,
-                                          accounting_op1_expense_structure: expenseValue
+                                          accounting_op1_expense_structure: expenseValue,
+                                          accounting_operation_code: operationCode
                                         };
                                         setInvoice({ ...invoice, items: updatedItems });
                                         
@@ -1286,7 +1404,8 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                                           ...currentEdits, 
                                           accounting_op1_debit: debitValue,
                                           accounting_op1_credit: creditValue,
-                                          accounting_op1_expense_structure: expenseValue
+                                          accounting_op1_expense_structure: expenseValue,
+                                          accounting_operation_code: operationCode
                                         });
                                         setItemEdits(newEdits);
                                         
@@ -1533,6 +1652,256 @@ export function SecretarySystemExport({ invoiceId, onClose, onExportComplete, bu
                     {bulkMode ? 'Patvirtinti šią sąskaitą' : (exporting ? 'Eksportuojama...' : 'Patvirtinti ir eksportuoti')}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Configuration Modal */}
+      {showBulkConfig && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">Masinis konfigūravimas</h3>
+                  <p className="text-green-100">Konfigūruoti {selectedItems.size} eilučių</p>
+                </div>
+                <button
+                  onClick={() => setShowBulkConfig(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* L009 - Product/Service Flag */}
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  L009: Produktas ar paslauga? <span className="text-red-600">*</span>
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={bulkConfig.product_service_flag === 0}
+                      onChange={() => setBulkConfig({ ...bulkConfig, product_service_flag: 0 })}
+                      className="w-4 h-4 text-purple-600"
+                    />
+                    <span className="font-semibold">0 - Produktas (vertybė)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={bulkConfig.product_service_flag === 1}
+                      onChange={() => setBulkConfig({ ...bulkConfig, product_service_flag: 1 })}
+                      className="w-4 h-4 text-purple-600"
+                    />
+                    <span className="font-semibold">1 - Paslauga</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* L010 - Product/Service Code */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  L010: {bulkConfig.product_service_flag === 1 ? 'Paslaugos' : 'Produkto'} kodas <span className="text-red-600">*</span>
+                </label>
+                {bulkConfig.product_service_flag === undefined && (
+                  <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                    ⚠️ Pirmiausia pasirinkite L009 (produktas ar paslauga)
+                  </div>
+                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={bulkMaterialSearch}
+                    onChange={(e) => setBulkMaterialSearch(e.target.value)}
+                    onFocus={() => setShowBulkMaterialDropdown(true)}
+                    placeholder={`Ieškoti ${bulkConfig.product_service_flag === 1 ? 'paslaugos' : 'produkto'} pagal pavadinimą...`}
+                    className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    disabled={bulkConfig.product_service_flag === undefined}
+                  />
+                  <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                  
+                  {showBulkMaterialDropdown && bulkMaterialSearch && bulkConfig.product_service_flag !== undefined && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-blue-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      {(bulkConfig.product_service_flag === 1 ? secretaryServices : secretaryMaterials)
+                        .filter((m: any) =>
+                          m.name.toLowerCase().includes(bulkMaterialSearch.toLowerCase()) ||
+                          String(m.code).includes(bulkMaterialSearch)
+                        )
+                        .slice(0, 50)
+                        .map((item: any) => (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setBulkConfig({
+                                ...bulkConfig,
+                                product_code: String(item.code)
+                              });
+                              setBulkMaterialSearch(item.name);
+                              setShowBulkMaterialDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                          >
+                            <div className="font-bold text-blue-600">{item.code}</div>
+                            <div className="text-sm text-gray-900">{item.name}</div>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                {bulkConfig.product_code && (
+                  <p className="text-xs text-green-600 mt-1">✓ Pasirinkta: {bulkConfig.product_code}</p>
+                )}
+              </div>
+
+              {/* L022-L023 - Responsible Person */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Materialiai atsakingas asmuo (L022-L023) <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={bulkResponsibleSearch}
+                    onChange={(e) => setBulkResponsibleSearch(e.target.value)}
+                    onFocus={() => setShowBulkResponsibleDropdown(true)}
+                    placeholder="Ieškoti atsakingo asmens..."
+                    className="w-full px-3 py-2 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  />
+                  <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                  
+                  {showBulkResponsibleDropdown && bulkResponsibleSearch && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-green-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      {responsiblePersons
+                        .filter(person =>
+                          person.name.toLowerCase().includes(bulkResponsibleSearch.toLowerCase()) ||
+                          String(person.code).includes(bulkResponsibleSearch)
+                        )
+                        .slice(0, 50)
+                        .map(person => (
+                          <button
+                            key={person.id}
+                            onClick={() => {
+                              setBulkConfig({
+                                ...bulkConfig,
+                                responsible_person_code: String(person.code),
+                                responsible_person_name: person.name
+                              });
+                              setBulkResponsibleSearch(person.name);
+                              setShowBulkResponsibleDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-green-50 border-b border-gray-100 last:border-0"
+                          >
+                            <div className="font-bold text-green-600">{person.code}</div>
+                            <div className="text-sm text-gray-900">{person.name}</div>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                {bulkConfig.responsible_person_code && (
+                  <p className="text-xs text-green-600 mt-1">✓ Pasirinkta: {bulkConfig.responsible_person_code} - {bulkConfig.responsible_person_name}</p>
+                )}
+              </div>
+
+              {/* L028-L029, L086 - Accounting Operation */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  1-a ūkinė operacija (L028-L029, L086) <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={bulkAccountingOpSearch}
+                    onChange={(e) => setBulkAccountingOpSearch(e.target.value)}
+                    onFocus={() => setShowBulkAccountingOpDropdown(true)}
+                    placeholder="Ieškoti ūkinės operacijos..."
+                    className="w-full px-3 py-2 border-2 border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                  />
+                  <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                  
+                  {showBulkAccountingOpDropdown && bulkAccountingOpSearch && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      {accountingOperations
+                        .filter(op =>
+                          op.name.toLowerCase().includes(bulkAccountingOpSearch.toLowerCase()) ||
+                          String(op.code).includes(bulkAccountingOpSearch) ||
+                          op.debit?.includes(bulkAccountingOpSearch) ||
+                          op.credit?.includes(bulkAccountingOpSearch)
+                        )
+                        .slice(0, 50)
+                        .map(operation => (
+                          <button
+                            key={operation.id}
+                            onClick={() => {
+                              const debitValue = String(operation.debit || '').replace('.0', '');
+                              const creditValue = invoice?.supplier_accounting_account || '451';
+                              const expenseValue = String(operation.expense_structure || '').replace('.0', '');
+                              const operationCode = operation.code;
+                              
+                              setBulkConfig({
+                                ...bulkConfig,
+                                accounting_op1_debit: debitValue,
+                                accounting_op1_credit: creditValue,
+                                accounting_op1_expense_structure: expenseValue,
+                                accounting_operation_code: operationCode
+                              });
+                              setBulkAccountingOpSearch(operation.name);
+                              setShowBulkAccountingOpDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-amber-50 border-b border-gray-100 last:border-0"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-amber-600">{operation.code}</span>
+                              <span className="text-xs font-mono text-gray-500">
+                                D:{String(operation.debit || '-').replace('.0', '')} K:{String(operation.credit || '-').replace('.0', '')}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-900">{operation.name}</div>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                {bulkConfig.accounting_op1_debit && (
+                  <div className="mt-2 p-2 bg-amber-100 rounded border border-amber-300">
+                    <p className="text-xs text-gray-600">Pasirinkta:</p>
+                    <p className="font-mono text-sm">
+                      <span className="font-bold">L028 (D): {bulkConfig.accounting_op1_debit}</span>
+                      {' / '}
+                      <span className="font-bold">L029 (K): {bulkConfig.accounting_op1_credit}</span>
+                      {' / '}
+                      <span className="font-bold">L086: {bulkConfig.accounting_operation_code}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  onClick={() => {
+                    setShowBulkConfig(false);
+                    setBulkConfig({});
+                  }}
+                  className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={applyBulkConfig}
+                  disabled={!bulkConfig.product_code || !bulkConfig.responsible_person_code || !bulkConfig.accounting_op1_debit}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Pritaikyti visiems
+                </button>
               </div>
             </div>
           </div>

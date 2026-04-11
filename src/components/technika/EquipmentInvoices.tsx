@@ -181,7 +181,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       supabase.from('equipment_categories').select('*').order('name'),
       supabase.from('equipment_invoices').select('*').order('created_at', { ascending: false }).limit(invoiceLimit),
       supabase.from('tools').select('id, name, tool_number').order('name'),
-      supabase.from('cost_centers').select('id, name, description, color, parent_id').eq('is_active', true).order('name'),
+      supabase.from('cost_centers').select('id, name, description, color, parent_id').eq('is_active', true).eq('module_type', locationFilter === 'farm' ? 'farm_equipment' : 'technika').order('name'),
       supabase.from('users').select('id, full_name, email').eq('is_frozen', false).order('full_name'),
       supabase.from('vehicles').select('id, registration_number, vehicle_type, vehicle_category, make, model').eq('is_active', true).order('registration_number'),
       supabase.from('equipment_shelves').select('id, shelf_number, name').eq('is_active', true).order('shelf_number'),
@@ -2031,85 +2031,16 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold text-gray-800">Paskutinės sąskaitos</h3>
-            {invoices.length > 0 && (
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedInvoiceIds.size === invoices.length}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedInvoiceIds(new Set(invoices.map(inv => inv.id)));
-                    } else {
-                      setSelectedInvoiceIds(new Set());
-                    }
-                  }}
-                  className="w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
-                />
-                Pasirinkti visas
-              </label>
-            )}
+      {/* Invoice list hidden - moved to Buhalterija module */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div className="flex items-center gap-3">
+          <FileText className="w-6 h-6 text-blue-600" />
+          <div>
+            <h3 className="font-semibold text-gray-900">Sąskaitų peržiūra perkelta</h3>
+            <p className="text-sm text-gray-600">
+              Visos sąskaitos ir jų eksportavimas dabar prieinami <span className="font-semibold">Buhalterija</span> modulyje
+            </p>
           </div>
-          {(user?.role === 'admin' || user?.role === 'buhaltere') && selectedInvoiceIds.size > 0 && (
-            <button
-              onClick={() => setShowBulkExport(true)}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
-            >
-              <Send className="w-4 h-4" />
-              Eksportuoti {selectedInvoiceIds.size} sąskaitas
-            </button>
-          )}
-        </div>
-        <div className="space-y-2">
-          {invoices.map(invoice => (
-            <div key={invoice.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-4">
-                {(user?.role === 'admin' || user?.role === 'buhaltere') && (
-                  <input
-                    type="checkbox"
-                    checked={selectedInvoiceIds.has(invoice.id)}
-                    onChange={(e) => {
-                      const newSelected = new Set(selectedInvoiceIds);
-                      if (e.target.checked) {
-                        newSelected.add(invoice.id);
-                      } else {
-                        newSelected.delete(invoice.id);
-                      }
-                      setSelectedInvoiceIds(newSelected);
-                    }}
-                    className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
-                  />
-                )}
-                <FileText className="w-8 h-8 text-slate-600" />
-                <div>
-                  <p className="font-medium text-gray-800">{invoice.invoice_number}</p>
-                  <p className="text-sm text-gray-600">{invoice.supplier_name} · {invoice.invoice_date}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="font-semibold text-gray-800">€{invoice.total_gross.toFixed(2)}</p>
-                  <p className="text-sm text-gray-600">{invoice.status}</p>
-                </div>
-                {(user?.role === 'admin' || user?.role === 'buhaltere') && (
-                  <button
-                    onClick={() => {
-                      setExportingInvoiceId(invoice.id);
-                      setShowSecretaryExport(true);
-                    }}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-sm"
-                    title="Eksportuoti į sekretorės sistemą"
-                  >
-                    <Send className="w-4 h-4" />
-                    Eksportuoti
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -2285,7 +2216,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
-                Priskiriate produktus transporto priemonėms, įrankiams ar bendrai fermai. Tai leis sekti kiekvieno objekto dalių naudojimą ir išlaidas.
+                Priskiriate produktus transporto priemonėms, darbuotojams ar sandėliui. Tai leis sekti kiekvieno objekto dalių naudojimą ir išlaidas.
               </p>
             </div>
 
@@ -2457,34 +2388,6 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                       </div>
                     </button>
 
-                    <button
-                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'tool', invoiceItemId: invoiceItems[0].id })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        assignmentForm.assignmentType === 'tool'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">Įrankiui/Įrangai</p>
-                        <p className="text-xs text-gray-500 mt-1">Melžimo įrangai, generatoriui ir kt.</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'building', invoiceItemId: invoiceItems[0].id })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        assignmentForm.assignmentType === 'building'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">Pastatui</p>
-                        <p className="text-xs text-gray-500 mt-1">Tvartui, sandėliui ir kt.</p>
-                      </div>
-                    </button>
-
                     {!locationFilter && (
                       <button
                         onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'transport_service', invoiceItemId: invoiceItems[0].id, transportCompany: invoiceData?.supplier || '' })}
@@ -2500,20 +2403,6 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         </div>
                       </button>
                     )}
-
-                    <button
-                      onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'general_farm', invoiceItemId: invoiceItems[0].id })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        assignmentForm.assignmentType === 'general_farm'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">Bendrai fermai</p>
-                        <p className="text-xs text-gray-500 mt-1">Bendros paskirties dalys</p>
-                      </div>
-                    </button>
 
                     <button
                       onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'shelf', invoiceItemId: invoiceItems[0].id })}

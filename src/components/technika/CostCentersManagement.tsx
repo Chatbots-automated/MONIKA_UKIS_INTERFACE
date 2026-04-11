@@ -10,6 +10,7 @@ interface CostCenter {
   color: string;
   parent_id: string | null;
   is_active: boolean;
+  module_type: 'technika' | 'farm_equipment';
   is_service: boolean;
   service_type: 'our_workers' | 'external_company' | null;
   service_worker_ids: string[] | null;
@@ -60,7 +61,11 @@ const PRESET_COLORS = [
   { name: 'Emerald', value: '#059669' },
 ];
 
-export function CostCentersManagement() {
+interface CostCentersManagementProps {
+  moduleType?: 'technika' | 'farm_equipment';
+}
+
+export function CostCentersManagement({ moduleType = 'technika' }: CostCentersManagementProps = {}) {
   const { user, logAction } = useAuth();
   const [costCenters, setCostCenters] = useState<CostCenterSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +113,7 @@ export function CostCentersManagement() {
     const { data, error } = await supabase
       .from('cost_center_summary')
       .select('*')
+      .eq('module_type', moduleType)
       .order('cost_center_name');
 
     if (error) {
@@ -360,6 +366,7 @@ export function CostCentersManagement() {
           .from('cost_centers')
           .insert({
             ...dataToSave,
+            module_type: moduleType,
             created_by: user?.id,
           });
 
@@ -444,13 +451,18 @@ export function CostCentersManagement() {
     );
   }
 
+  const moduleTitle = moduleType === 'farm_equipment' ? 'Fermos įrangos kaštų centrai' : 'Technikos kaštų centrai';
+  const moduleDescription = moduleType === 'farm_equipment' 
+    ? 'Sukurkite ir tvarkykite kaštų centrus fermos įrangos aptarnavimui ir remontui'
+    : 'Sukurkite ir tvarkykite kaštų centrus produktų priskyrimui';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Kaštų centrai</h2>
+          <h2 className="text-2xl font-bold text-gray-900">{moduleTitle}</h2>
           <p className="text-gray-600 mt-1">
-            Sukurkite ir tvarkykite kaštų centrus produktų priskyrimui
+            {moduleDescription}
           </p>
         </div>
         <button

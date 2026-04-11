@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
 interface ModuleSelectorProps {
-  onSelectModule: (module: 'veterinarija' | 'islaidos' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food') => void;
+  onSelectModule: (module: 'veterinarija' | 'buhalterija' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food') => void;
 }
 
 type ModuleGroup = 'core' | 'infrastructure' | null;
@@ -107,18 +107,18 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             </button>
 
             <button
-              onClick={() => onSelectModule('islaidos')}
+              onClick={() => onSelectModule('buhalterija')}
               className="group bg-white rounded-2xl shadow-2xl overflow-hidden hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2 relative"
             >
-              <div className="bg-gradient-to-br from-amber-600 to-amber-700 p-6 lg:p-8 text-center">
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-6 lg:p-8 text-center">
                 <div className="w-24 h-24 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Euro className="w-14 h-14 text-amber-600" />
+                  <Euro className="w-14 h-14 text-blue-600" />
                 </div>
                 <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">
-                  Išlaidos
+                  Buhalterija
                 </h2>
-                <p className="text-sm lg:text-base text-amber-100">
-                  Finansų Valdymas
+                <p className="text-sm lg:text-base text-blue-100">
+                  Sąskaitų Valdymas
                 </p>
               </div>
 
@@ -555,12 +555,12 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center mt-0.5">
-                    <Euro className="w-4 h-4 text-amber-600" />
+                  <div className="flex-shrink-0 w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Euro className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-gray-900">Išlaidos</p>
-                    <p className="text-sm text-gray-600">Finansų valdymas ir apskaita</p>
+                    <p className="font-semibold text-gray-900">Buhalterija</p>
+                    <p className="text-sm text-gray-600">Sąskaitų valdymas ir eksportavimas</p>
                   </div>
                 </div>
 
