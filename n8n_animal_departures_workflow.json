@@ -1,0 +1,225 @@
+{
+  "name": "Animal Departures Import",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "schedule-trigger",
+      "webhookId": "",
+      "credentials": {},
+      "notes": "Runs daily at 8 AM"
+    },
+    {
+      "parameters": {
+        "filePath": "c:\\automations\\downloads\\{{ $now.format('YYYY-MM-DD') }}_GZ2_Isvezimas.xlsx",
+        "options": {}
+      },
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "read-excel",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "binaryPropertyName": "data",
+        "options": {
+          "sheetName": "Sheet1",
+          "range": ""
+        }
+      },
+      "name": "Parse Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "parse-excel",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_PROJECT.supabase.co/rest/v1/rpc/batch_upsert_animal_departures",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ p_payload: $input.all().map(item => item.json) }) }}",
+        "options": {}
+      },
+      "name": "Batch Upsert to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300],
+      "id": "batch-upsert",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Supabase Header Auth"
+        }
+      },
+      "notes": "Batch upsert all animals at once"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.conflicts_detected }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check for Conflicts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "check-conflicts",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@yourfarm.com",
+        "toEmail": "admin@yourfarm.com",
+        "subject": "⚠️ Karencijos konfliktai - {{ $json.conflicts_detected }} gyvūnų",
+        "text": "Aptikta {{ $json.conflicts_detected }} karencijos konfliktų iš {{ $json.total_processed }} išvežtų gyvūnų.\n\nGyvūnų su konfliktais sąrašas:\n{{ $json.results.filter(r => r.has_conflict).map(r => `- ${r.animal_number} (${r.departure_date}): ${r.conflict_message}`).join('\\n') }}\n\n---\nAutomatinis pranešimas iš Oksana Interface",
+        "options": {}
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "id": "send-email",
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP Account"
+        }
+      },
+      "notes": "Only sent when has_conflict = true"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Conflicts Log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}",
+            "Total Processed": "={{ $json.total_processed }}",
+            "Conflicts Detected": "={{ $json.conflicts_detected }}",
+            "Animals Found": "={{ $json.animals_found }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1450, 400],
+      "id": "log-sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "notes": "Optional: Log conflicts to Google Sheets"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel File": {
+      "main": [
+        [
+          {
+            "node": "Parse Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Excel": {
+      "main": [
+        [
+          {
+            "node": "Batch Upsert to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Upsert to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Check for Conflicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Conflicts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-12T00:00:00.000Z",
+  "versionId": "1"
+}

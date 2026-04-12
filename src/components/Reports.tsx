@@ -18,7 +18,11 @@ import {
   X,
   RefreshCw,
   Printer,
-  Heart
+  Heart,
+  Truck,
+  CheckCircle,
+  XCircle,
+  Info
 } from 'lucide-react';
 import {
   TreatedAnimalsReport,
@@ -47,7 +51,7 @@ interface AnalyticsData {
   inventoryByCategory: Array<{ category: string; value: number }>;
 }
 
-type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices';
+type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices' | 'animal_departures';
 
 // Get current month's first and last day
 const getCurrentMonthDates = () => {
@@ -399,6 +403,20 @@ export function Reports() {
           if (filterAnimal) query = query.eq('animal_id', filterAnimal);
 
           const { data, error } = await query;
+          if (error) throw error;
+          result = data || [];
+          break;
+        }
+
+        case 'animal_departures': {
+          let query = supabase.from('vw_animal_departures_with_conflicts').select('*');
+          
+          if (dateFrom) query = query.gte('departure_date', dateFrom);
+          if (dateTo) query = query.lte('departure_date', dateTo);
+
+          const { data, error } = await query.order('departure_date', { ascending: false });
+          if (error) throw error;
+          result = data || [];
           if (error) throw error;
 
           result = data || [];
@@ -752,9 +770,253 @@ export function Reports() {
         return <BiocideJournalReport data={data} />;
       case 'insemination_journal':
         return <InseminationJournalReport data={data} />;
+      case 'animal_departures':
+        return renderAnimalDepartures();
       default:
         return null;
     }
+  };
+
+  const renderAnimalDepartures = () => {
+    const stats = {
+      total: data.length,
+      conflicts: data.filter(d => d.has_withdrawal_conflict).length,
+      notFound: data.filter(d => !d.animal_id).length,
+      clean: data.filter(d => d.animal_id && !d.has_withdrawal_conflict).length,
+    };
+
+    const conflictRate = stats.total > 0 ? ((stats.conflicts / stats.total) * 100).toFixed(1) : '0';
+
+    return (
+      <div className="space-y-4">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Truck className="w-4 h-4 text-gray-600" />
+              <span className="text-xs font-medium text-gray-600">Viso</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-600" />
+              <span className="text-xs font-medium text-gray-600">Konfliktai</span>
+            </div>
+            <p className="text-2xl font-bold text-red-600">{stats.conflicts}</p>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-xs font-medium text-gray-600">Be konfliktų</span>
+            </div>
+            <p className="text-2xl font-bold text-green-600">{stats.clean}</p>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Info className="w-4 h-4 text-gray-600" />
+              <span className="text-xs font-medium text-gray-600">Nerasta DB</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{stats.notFound}</p>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="w-4 h-4 text-gray-600" />
+              <span className="text-xs font-medium text-gray-600">Konfliktų %</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{conflictRate}%</p>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Truck className="w-6 h-6 text-gray-700" />
+                <h3 className="text-lg font-bold text-gray-900">Išvežtų Gyvūnų Sąrašas</h3>
+              </div>
+              <span className="text-sm text-gray-600 font-medium">
+                Rodoma: <strong>{data.length}</strong> įrašų
+              </span>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Statusas
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Gyvūno Nr.
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Lytis / Gimimo Data
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Išvežimo Data
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Paskutinis Gydymas
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Pieno Karencija
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Mėsos Karencija
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Vieta / Bandos Nr.
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Konflikto Aprašymas
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Įvedėjas
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {data.map((departure: any) => (
+                  <tr
+                    key={departure.id}
+                    className={
+                      departure.has_withdrawal_conflict
+                        ? 'bg-red-50 hover:bg-red-100 border-l-4 border-red-500'
+                        : !departure.animal_id
+                        ? 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500'
+                        : 'hover:bg-gray-50 border-l-4 border-transparent'
+                    }
+                  >
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      {departure.has_withdrawal_conflict ? (
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-red-200 text-red-900 border border-red-400">
+                          <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                          KONFLIKTAS
+                        </span>
+                      ) : !departure.animal_id ? (
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-yellow-200 text-yellow-900 border border-yellow-400">
+                          <Info className="w-3.5 h-3.5 mr-1.5" />
+                          NERASTA
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-green-200 text-green-900 border border-green-400">
+                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                          OK
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-gray-900">{departure.animal_number}</div>
+                      {departure.vet_reason_code && (
+                        <div className="text-xs text-gray-500">Vet. priež.: {departure.vet_reason_code}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{departure.gender || '-'}</div>
+                      {departure.birth_date && (
+                        <div className="text-xs text-gray-500">{new Date(departure.birth_date).toLocaleDateString('lt-LT')}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-gray-900">
+                        {new Date(departure.departure_date).toLocaleDateString('lt-LT')}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(departure.departure_date).toLocaleDateString('lt-LT', { weekday: 'short' })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {departure.last_treatment_date ? (
+                        <div>
+                          <div className="text-gray-900 font-medium">
+                            {new Date(departure.last_treatment_date).toLocaleDateString('lt-LT')}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Prieš {Math.floor((new Date(departure.departure_date).getTime() - new Date(departure.last_treatment_date).getTime()) / (1000 * 60 * 60 * 24))} d.
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-sm">Nėra duomenų</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {departure.last_withdrawal_milk ? (
+                        <div>
+                          <div className={`font-medium ${departure.milk_conflict_days > 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                            {new Date(departure.last_withdrawal_milk).toLocaleDateString('lt-LT')}
+                          </div>
+                          {departure.milk_conflict_days > 0 && (
+                            <div className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded mt-1 inline-block">
+                              ⚠ +{departure.milk_conflict_days} d.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {departure.last_withdrawal_meat ? (
+                        <div>
+                          <div className={`font-medium ${departure.meat_conflict_days > 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                            {new Date(departure.last_withdrawal_meat).toLocaleDateString('lt-LT')}
+                          </div>
+                          {departure.meat_conflict_days > 0 && (
+                            <div className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded mt-1 inline-block">
+                              ⚠ +{departure.meat_conflict_days} d.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm">
+                      <div className="max-w-xs">
+                        <div className="text-gray-900 font-medium truncate" title={departure.destination_name || ''}>
+                          {departure.destination_name || '-'}
+                        </div>
+                        {departure.destination_herd_number && (
+                          <div className="text-xs text-gray-500">Bandos: {departure.destination_herd_number}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-sm">
+                      <div className="max-w-md">
+                        {departure.has_withdrawal_conflict ? (
+                          <div className="text-red-700 font-medium leading-relaxed">
+                            {departure.conflict_details}
+                          </div>
+                        ) : (
+                          <div className="text-gray-600">
+                            {departure.conflict_details || '-'}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <div className="text-gray-900 font-medium">{departure.entered_by || '-'}</div>
+                      {departure.created_at && (
+                        <div className="text-xs text-gray-500">
+                          {new Date(departure.created_at).toLocaleDateString('lt-LT')}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const reportTypeInfo = {
@@ -765,6 +1027,7 @@ export function Reports() {
     biocide_journal: { name: 'Biocidų žurnalas', icon: Package, color: 'purple' },
     insemination_journal: { name: 'Sėklinimo žurnalas', icon: Heart, color: 'rose' },
     medical_waste: { name: 'Medicininių atliekų žurnalas', icon: AlertTriangle, color: 'orange' },
+    animal_departures: { name: 'Išvežti Gyvūnai', icon: Truck, color: 'red' },
   };
 
   const currentReport = reportTypeInfo[reportType];
