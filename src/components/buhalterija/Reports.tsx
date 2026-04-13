@@ -339,7 +339,7 @@ export function Reports() {
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                        className="bg-gray-700 h-3 rounded-full transition-all duration-500"
                         style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
@@ -347,23 +347,23 @@ export function Reports() {
                 );
               })}
             </div>
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-sm text-gray-600">Vidutinis mėnuo</p>
-                  <p className="text-lg font-bold text-blue-600">
+                  <p className="text-lg font-bold text-gray-900">
                     €{(reportData.monthly.reduce((sum, m) => sum + m.total, 0) / reportData.monthly.length).toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Didžiausias</p>
-                  <p className="text-lg font-bold text-green-600">
+                  <p className="text-lg font-bold text-gray-900">
                     €{Math.max(...reportData.monthly.map(m => m.total)).toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Mažiausias</p>
-                  <p className="text-lg font-bold text-amber-600">
+                  <p className="text-lg font-bold text-gray-900">
                     €{Math.min(...reportData.monthly.map(m => m.total)).toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
@@ -376,21 +376,21 @@ export function Reports() {
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4">PVM ataskaita</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6">
-                <p className="text-sm text-blue-600 font-medium mb-2">Bendra suma (su PVM)</p>
-                <p className="text-3xl font-bold text-blue-900">
+              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                <p className="text-sm text-gray-600 font-medium mb-2">Bendra suma (su PVM)</p>
+                <p className="text-3xl font-bold text-gray-900">
                   €{reportData.taxSummary.totalGross.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6">
-                <p className="text-sm text-green-600 font-medium mb-2">Suma be PVM</p>
-                <p className="text-3xl font-bold text-green-900">
+              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                <p className="text-sm text-gray-600 font-medium mb-2">Suma be PVM</p>
+                <p className="text-3xl font-bold text-gray-900">
                   €{reportData.taxSummary.totalNet.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6">
-                <p className="text-sm text-purple-600 font-medium mb-2">PVM suma</p>
-                <p className="text-3xl font-bold text-purple-900">
+              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                <p className="text-sm text-gray-600 font-medium mb-2">PVM suma</p>
+                <p className="text-3xl font-bold text-gray-900">
                   €{reportData.taxSummary.totalVAT.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
                 </p>
               </div>

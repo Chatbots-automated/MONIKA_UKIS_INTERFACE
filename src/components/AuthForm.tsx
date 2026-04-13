@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Stethoscope, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Stethoscope, Mail, Lock, ArrowRight, Key } from 'lucide-react';
+
+type LoginMode = 'email' | 'code';
 
 export function AuthForm() {
+  const [loginMode, setLoginMode] = useState<LoginMode>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [workerCode, setWorkerCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, signInWithCode } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,7 +19,11 @@ export function AuthForm() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      if (loginMode === 'code') {
+        await signInWithCode(workerCode);
+      } else {
+        await signIn(email, password);
+      }
     } catch (err: any) {
       setError(err.message || 'Įvyko klaida');
     } finally {
@@ -62,47 +70,109 @@ export function AuthForm() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  El. paštas
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="jusu.email@example.com"
-                    required
-                  />
-                </div>
-              </div>
+            {/* Login Mode Toggle */}
+            <div className="flex gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('email');
+                  setError('');
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  loginMode === 'email'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Mail className="w-4 h-4 inline mr-2" />
+                El. paštas
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('code');
+                  setError('');
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  loginMode === 'code'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Key className="w-4 h-4 inline mr-2" />
+                Kodas
+              </button>
+            </div>
 
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Slaptažodis
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400" />
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {loginMode === 'email' ? (
+                <>
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                      El. paštas
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Mail className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        placeholder="jusu.email@example.com"
+                        required
+                      />
+                    </div>
                   </div>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                  />
+
+                  <div>
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                      Slaptažodis
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Lock className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label htmlFor="workerCode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Darbuotojo kodas
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Key className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="workerCode"
+                      type="text"
+                      value={workerCode}
+                      onChange={(e) => setWorkerCode(e.target.value.toUpperCase())}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono text-lg tracking-wider"
+                      placeholder="GG2007"
+                      required
+                      maxLength={20}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Įveskite jums suteiktą prisijungimo kodą
+                  </p>
                 </div>
-              </div>
+              )}
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">

@@ -30,6 +30,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithCode: (code: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (action: string) => boolean;
   hasModulePermission: (moduleName: string, permissionType?: 'view' | 'edit' | 'delete' | 'create') => boolean;
@@ -120,6 +121,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (error: any) {
       console.error('Sign in error:', error);
+      throw error;
+    }
+  };
+
+  const signInWithCode = async (code: string) => {
+    try {
+      // Verify the code and get worker info
+      const { data: codeData, error: codeError } = await supabase
+        .from('worker_login_codes')
+        .select(`
+          *,
+          worker:users!worker_login_codes_worker_id_fkey(id, full_name, work_location, role)
+        `)
+        .eq('code', code.toUpperCase())
+        .eq('is_active', true)
+        .single();
+
+      if (codeError || !codeData) {
+        throw new Error('Neteisingas kodas arba kodas neaktyvus');
+      }
+
+      // Update last_used_at
+      await supabase
+        .from('worker_login_codes')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', codeData.id);
+
+      // Get full user data
+      const { data: fullUser, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', codeData.worker_id)
+        .single();
+
+      if (userError || !fullUser) {
+        throw new Error('Nepavyko rasti darbuotojo duomenų');
+      }
+
+      setUser(fullUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(fullUser));
+
+      // Log the action
+      try {
+        await supabase.rpc('log_user_action', {
+          p_user_id: fullUser.id,
+          p_action: 'worker_code_login',
+          p_table_name: 'worker_login_codes',
+          p_record_id: codeData.id,
+          p_old_data: null,
+          p_new_data: { code: code, worker_name: fullUser.full_name, work_location: fullUser.work_location },
+        });
+      } catch (logError) {
+        console.warn('Failed to log worker code login:', logError);
+      }
+    } catch (error: any) {
+      console.error('Sign in with code error:', error);
       throw error;
     }
   };
@@ -292,6 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       loading,
       signIn,
+      signInWithCode,
       signOut,
       hasPermission,
       hasModulePermission,

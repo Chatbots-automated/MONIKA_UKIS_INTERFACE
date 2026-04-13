@@ -624,6 +624,15 @@ export function WriteOffActs() {
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      {/* Info note */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-gray-700">
+                        <p className="font-medium text-blue-900 mb-1">ℹ️ Stulpelių paaiškinimas:</p>
+                        <ul className="text-xs space-y-1 text-gray-600">
+                          <li><strong>Panaudota:</strong> Kiekis panaudotas per šį ataskaitinį periodą iš konkrečios partijos</li>
+                          <li><strong>Likutis:</strong> Kiek liko šioje konkrečioje partijoje (Gauta - Panaudota iš viso = Likutis)</li>
+                        </ul>
+                      </div>
+
                       {/* Re-populate button for draft acts with items */}
                       {act.status === 'draft' && (
                         <div className="flex justify-between items-center mb-4">
@@ -730,15 +739,13 @@ export function WriteOffActs() {
                                           <p className="font-medium text-gray-900">
                                             {item.quantity_used.toFixed(2)} {item.unit_type}
                                           </p>
-                                          {item.received_qty && (
-                                            <p className="text-xs text-gray-500">
-                                              iš {item.received_qty.toFixed(2)}
-                                            </p>
-                                          )}
+                                          <p className="text-xs text-gray-500">
+                                            šiame periode
+                                          </p>
                                         </div>
                                       </td>
                                       <td className="px-3 py-2 text-right">
-                                        <div>
+                                        <div className="space-y-1">
                                           <p className={`font-medium ${
                                             (item.qty_remaining || 0) === 0 
                                               ? 'text-red-600' 
@@ -749,13 +756,19 @@ export function WriteOffActs() {
                                             {(item.qty_remaining || 0).toFixed(2)} {item.unit_type}
                                           </p>
                                           {item.received_qty && (
-                                            <div className="w-16 bg-gray-200 rounded-full h-1 mt-1 mx-auto">
-                                              <div
-                                                className={`h-1 rounded-full ${
-                                                  usagePercent > 80 ? 'bg-red-500' : usagePercent > 50 ? 'bg-yellow-500' : 'bg-green-500'
-                                                }`}
-                                                style={{ width: `${usagePercent}%` }}
-                                              ></div>
+                                            <div className="text-xs text-gray-500 space-y-0.5">
+                                              <div className="flex justify-between gap-2">
+                                                <span>Gauta:</span>
+                                                <span className="font-medium">{item.received_qty.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between gap-2">
+                                                <span>Panaudota iš viso:</span>
+                                                <span className="font-medium">{(item.received_qty - item.qty_remaining).toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between gap-2 border-t border-gray-300 pt-0.5">
+                                                <span>Liko:</span>
+                                                <span className="font-medium">{item.qty_remaining.toFixed(2)}</span>
+                                              </div>
                                             </div>
                                           )}
                                         </div>
@@ -859,61 +872,61 @@ export function WriteOffActs() {
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => handleSetPeriodPreset('today')}
-                    className="px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Šiandien
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('yesterday')}
-                    className="px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Vakar
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('last7days')}
-                    className="px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Paskutinės 7d.
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('thisweek')}
-                    className="px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Ši savaitė
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('lastweek')}
-                    className="px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Praeita savaitė
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('last30days')}
-                    className="px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Paskutinės 30d.
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('thismonth')}
-                    className="px-3 py-1.5 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Šis mėnuo
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('lastmonth')}
-                    className="px-3 py-1.5 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Praėjęs mėnuo
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('thisquarter')}
-                    className="px-3 py-1.5 text-sm bg-amber-50 hover:bg-amber-100 text-amber-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Šis ketvirtis
                   </button>
                   <button
                     onClick={() => handleSetPeriodPreset('thisyear')}
-                    className="px-3 py-1.5 text-sm bg-amber-50 hover:bg-amber-100 text-amber-700 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-200"
                   >
                     Šie metai
                   </button>

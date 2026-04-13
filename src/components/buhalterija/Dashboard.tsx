@@ -185,8 +185,8 @@ export function Dashboard() {
             onClick={() => setSelectedPeriod('month')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               selectedPeriod === 'month'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-gray-900 text-white'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Mėnuo
@@ -195,8 +195,8 @@ export function Dashboard() {
             onClick={() => setSelectedPeriod('quarter')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               selectedPeriod === 'quarter'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-gray-900 text-white'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Ketvirtis
@@ -205,8 +205,8 @@ export function Dashboard() {
             onClick={() => setSelectedPeriod('year')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               selectedPeriod === 'year'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-gray-900 text-white'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Metai
@@ -217,68 +217,68 @@ export function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Spending */}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-white/20 rounded-lg">
-              <DollarSign className="w-6 h-6" />
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <DollarSign className="w-6 h-6 text-blue-600" />
             </div>
-            <Calendar className="w-5 h-5 opacity-70" />
+            <Calendar className="w-5 h-5 text-gray-400" />
           </div>
-          <p className="text-sm opacity-90 mb-1">Bendros išlaidos</p>
-          <p className="text-3xl font-bold">€{stats.totalSpending.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}</p>
+          <p className="text-sm text-gray-600 mb-1">Bendros išlaidos</p>
+          <p className="text-3xl font-bold text-gray-900">€{stats.totalSpending.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}</p>
           <div className="mt-3 flex items-center gap-2">
             {monthlyChange >= 0 ? (
-              <TrendingUp className="w-4 h-4" />
+              <TrendingUp className="w-4 h-4 text-green-600" />
             ) : (
-              <TrendingDown className="w-4 h-4" />
+              <TrendingDown className="w-4 h-4 text-red-600" />
             )}
-            <span className="text-sm">
+            <span className={`text-sm font-medium ${monthlyChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {Math.abs(monthlyChange).toFixed(1)}% {monthlyChange >= 0 ? 'daugiau' : 'mažiau'}
             </span>
           </div>
         </div>
 
         {/* Monthly Spending */}
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-white/20 rounded-lg">
-              <TrendingUp className="w-6 h-6" />
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-gray-700" />
             </div>
-            <Calendar className="w-5 h-5 opacity-70" />
+            <Calendar className="w-5 h-5 text-gray-400" />
           </div>
-          <p className="text-sm opacity-90 mb-1">Šio mėnesio</p>
-          <p className="text-3xl font-bold">€{stats.monthlySpending.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}</p>
-          <p className="text-sm mt-3 opacity-90">
+          <p className="text-sm text-gray-600 mb-1">Šio mėnesio</p>
+          <p className="text-3xl font-bold text-gray-900">€{stats.monthlySpending.toLocaleString('lt-LT', { minimumFractionDigits: 2 })}</p>
+          <p className="text-sm mt-3 text-gray-500">
             {new Date().toLocaleDateString('lt-LT', { month: 'long', year: 'numeric' })}
           </p>
         </div>
 
         {/* Invoice Count */}
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-white/20 rounded-lg">
-              <FileText className="w-6 h-6" />
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <FileText className="w-6 h-6 text-gray-700" />
             </div>
-            <Package className="w-5 h-5 opacity-70" />
+            <Package className="w-5 h-5 text-gray-400" />
           </div>
-          <p className="text-sm opacity-90 mb-1">Sąskaitų skaičius</p>
-          <p className="text-3xl font-bold">{stats.invoiceCount}</p>
-          <p className="text-sm mt-3 opacity-90">
+          <p className="text-sm text-gray-600 mb-1">Sąskaitų skaičius</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.invoiceCount}</p>
+          <p className="text-sm mt-3 text-gray-500">
             Vidutinė suma: €{(stats.totalSpending / stats.invoiceCount).toLocaleString('lt-LT', { minimumFractionDigits: 2 })}
           </p>
         </div>
 
         {/* Pending Write-offs */}
-        <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-white/20 rounded-lg">
-              <AlertCircle className="w-6 h-6" />
+            <div className="p-3 bg-amber-50 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
             </div>
-            <FileText className="w-5 h-5 opacity-70" />
+            <FileText className="w-5 h-5 text-gray-400" />
           </div>
-          <p className="text-sm opacity-90 mb-1">Laukiantys aktai</p>
-          <p className="text-3xl font-bold">{stats.pendingWriteOffs}</p>
-          <p className="text-sm mt-3 opacity-90">
+          <p className="text-sm text-gray-600 mb-1">Laukiantys aktai</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.pendingWriteOffs}</p>
+          <p className="text-sm mt-3 text-gray-500">
             Reikia patvirtinimo
           </p>
         </div>
@@ -306,7 +306,7 @@ export function Dashboard() {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
+                      className="bg-gray-700 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -333,7 +333,7 @@ export function Dashboard() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full"
+                  className="bg-green-600 h-3 rounded-full"
                   style={{ 
                     width: `${(stats.moduleComparison.veterinarija / stats.totalSpending) * 100}%` 
                   }}
@@ -354,7 +354,7 @@ export function Dashboard() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-gradient-to-r from-slate-500 to-slate-600 h-3 rounded-full"
+                  className="bg-slate-600 h-3 rounded-full"
                   style={{ 
                     width: `${(stats.moduleComparison.technika / stats.totalSpending) * 100}%` 
                   }}

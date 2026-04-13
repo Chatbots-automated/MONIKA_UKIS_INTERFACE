@@ -246,8 +246,8 @@ export function Buhalterija() {
             onClick={() => setActiveTab('dashboard')}
             className={`flex-1 px-4 py-3 font-medium transition-all rounded-lg ${
               activeTab === 'dashboard'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-gray-900 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -259,8 +259,8 @@ export function Buhalterija() {
             onClick={() => setActiveTab('invoices')}
             className={`flex-1 px-4 py-3 font-medium transition-all rounded-lg ${
               activeTab === 'invoices'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-gray-900 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -272,8 +272,8 @@ export function Buhalterija() {
             onClick={() => setActiveTab('writeoffs')}
             className={`flex-1 px-4 py-3 font-medium transition-all rounded-lg ${
               activeTab === 'writeoffs'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-gray-900 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -285,8 +285,8 @@ export function Buhalterija() {
             onClick={() => setActiveTab('reports')}
             className={`flex-1 px-4 py-3 font-medium transition-all rounded-lg ${
               activeTab === 'reports'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-gray-900 text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
