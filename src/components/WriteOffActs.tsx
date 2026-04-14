@@ -807,6 +807,40 @@ export function WriteOffActs() {
                           </div>
                         </div>
                       ))}
+
+                      {/* Grand Total Summary */}
+                      {act.items && act.items.length > 0 && (
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
+                          <h4 className="text-lg font-bold text-gray-900 mb-4">Bendra suvestinė</h4>
+                          
+                          {/* Category Totals */}
+                          <div className="space-y-2 mb-4">
+                            {Object.entries(
+                              act.items.reduce((acc, item) => {
+                                const cat = item.category_name || 'Kita';
+                                if (!acc[cat]) acc[cat] = 0;
+                                acc[cat] += item.total_price;
+                                return acc;
+                              }, {} as Record<string, number>)
+                            ).map(([category, total]) => (
+                              <div key={category} className="flex justify-between items-center py-2 border-b border-blue-200">
+                                <span className="font-medium text-gray-700">{category}:</span>
+                                <span className="font-semibold text-gray-900">
+                                  €{total.toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Grand Total */}
+                          <div className="flex justify-between items-center pt-4 border-t-2 border-blue-300">
+                            <span className="text-xl font-bold text-gray-900">VISO:</span>
+                            <span className="text-2xl font-bold text-blue-600">
+                              €{act.items.reduce((sum, item) => sum + item.total_price, 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
