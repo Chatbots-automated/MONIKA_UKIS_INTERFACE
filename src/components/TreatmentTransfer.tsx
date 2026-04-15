@@ -86,11 +86,12 @@ export function TreatmentTransfer() {
   const loadAnimals = async () => {
     console.log('Loading animals...');
     try {
+      // Load ALL animals (active and inactive) since we might need to transfer treatments from departed animals
       const data = await fetchAllRows<Animal>(
         'animals',
-        'id, tag_no, species, holder_name',
+        'id, tag_no, species, holder_name, active',
         'tag_no',
-        [{ column: 'active', value: true }]
+        [] // No filter - load all animals
       );
       console.log('Loaded animals:', data.length);
       setAnimals(data);
@@ -101,18 +102,41 @@ export function TreatmentTransfer() {
   };
 
   const loadTreatments = async () => {
+    // Don't load anything if no search term
+    if (!searchTerm || searchTerm.length < 3) {
+      setTreatments([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      // Only load treatments with ACTIVE withdrawal periods (karencija)
+      // Search for animals first by tag number
+      const { data: searchedAnimals, error: animalError } = await supabase
+        .from('animals')
+        .select('id, tag_no, species, holder_name, active')
+        .ilike('tag_no', `%${searchTerm}%`)
+        .limit(20);
+
+      if (animalError) throw animalError;
+
+      if (!searchedAnimals || searchedAnimals.length === 0) {
+        setTreatments([]);
+        setLoading(false);
+        return;
+      }
+
+      const animalIds = searchedAnimals.map(a => a.id);
+
+      // Now load treatments only for these animals
       let query = supabase
         .from('treatments')
         .select(`
           *,
-          animals!inner(tag_no, species, holder_name),
           diseases(name)
         `)
-        .or(`withdrawal_until_meat.gte.${new Date().toISOString().split('T')[0]},withdrawal_until_milk.gte.${new Date().toISOString().split('T')[0]}`)
-        .order('reg_date', { ascending: false });
+        .in('animal_id', animalIds)
+        .order('reg_date', { ascending: false })
+        .limit(100);
 
       if (dateFrom) {
         query = query.gte('reg_date', dateFrom);
@@ -127,6 +151,9 @@ export function TreatmentTransfer() {
 
       const treatmentsWithDetails = await Promise.all(
         (data || []).map(async (treatment: any) => {
+          // Find the animal from our search results
+          const animal = searchedAnimals.find(a => a.id === treatment.animal_id);
+
           // Load usage items
           const { data: usageItems } = await supabase
             .from('usage_items')
@@ -179,9 +206,9 @@ export function TreatmentTransfer() {
             vet_name: treatment.vet_name,
             notes: treatment.notes,
             created_at: treatment.created_at,
-            animal_tag: treatment.animals.tag_no,
-            species: treatment.animals.species,
-            holder_name: treatment.animals.holder_name,
+            animal_tag: animal?.tag_no || '',
+            species: animal?.species || '',
+            holder_name: animal?.holder_name || null,
             disease_name: treatment.diseases?.name || null,
             products_used: usageItems || [],
             courses: courses || [],
@@ -190,17 +217,7 @@ export function TreatmentTransfer() {
         })
       );
 
-      const filtered = treatmentsWithDetails.filter((t) => {
-        if (!searchTerm) return true;
-        const search = searchTerm.toLowerCase();
-        return (
-          t.animal_tag?.toLowerCase().includes(search) ||
-          t.holder_name?.toLowerCase().includes(search) ||
-          t.disease_name?.toLowerCase().includes(search)
-        );
-      });
-
-      setTreatments(filtered);
+      setTreatments(treatmentsWithDetails);
     } catch (error) {
       console.error('Error loading treatments:', error);
     } finally {
@@ -211,18 +228,19 @@ export function TreatmentTransfer() {
   useEffect(() => {
     if (authenticated) {
       loadAnimals();
-      loadTreatments();
     }
-  }, [authenticated, dateFrom, dateTo]);
+  }, [authenticated]);
 
   useEffect(() => {
-    if (authenticated && searchTerm !== undefined) {
+    if (authenticated && searchTerm && searchTerm.length >= 3) {
       const timer = setTimeout(() => {
         loadTreatments();
       }, 300);
       return () => clearTimeout(timer);
+    } else if (authenticated && searchTerm && searchTerm.length < 3) {
+      setTreatments([]);
     }
-  }, [searchTerm]);
+  }, [searchTerm, dateFrom, dateTo, authenticated]);
 
   const handleStartTransfer = (treatment: TreatmentWithDetails) => {
     setTransferringId(treatment.id);
@@ -441,9 +459,17 @@ Ar tikrai tęsti?`;
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           </div>
+        ) : !searchTerm || searchTerm.length < 3 ? (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 font-medium">Įveskite bent 3 simbolius gyvūno numeryje</p>
+            <p className="text-gray-400 text-sm mt-2">Pvz.: LT000044420428</p>
+          </div>
         ) : treatments.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            Gydymų nerasta. Pakeiskite paieškos parametrus.
+            <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="font-medium">Gydymų nerasta šiam gyvūnui</p>
+            <p className="text-sm mt-2">Pakeiskite paieškos parametrus arba datos filtrą</p>
           </div>
         ) : (
           <div className="space-y-4">
