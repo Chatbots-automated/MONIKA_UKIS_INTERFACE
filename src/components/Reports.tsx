@@ -105,6 +105,33 @@ export function Reports() {
     }
   }, [reportType, dateFrom, dateTo]);
 
+  // Realtime subscription for animal_departures
+  useEffect(() => {
+    if (reportType !== 'animal_departures') return;
+
+    // Subscribe to changes in animal_departures table
+    const channel = supabase
+      .channel('animal_departures_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'animal_departures'
+        },
+        (payload) => {
+          console.log('Animal departure change detected:', payload);
+          // Reload the report when any change happens
+          loadReport();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [reportType, dateFrom, dateTo]);
+
   const loadFilterOptions = async () => {
     try {
       const [animalsRes, productsRes, diseasesRes] = await Promise.all([
