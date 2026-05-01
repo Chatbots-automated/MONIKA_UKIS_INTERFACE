@@ -551,10 +551,15 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
                   </div>
                   <div className="bg-white rounded-lg p-2 border border-purple-100">
                     <span className="text-xs text-gray-500 block mb-0.5">Paskutinis melžimas</span>
-                    <span className="font-semibold text-gray-900 text-xs">
+                    <span className="font-semibold text-gray-900 text-xs block">
                       {rawGeaData.last_milking_date ? formatDateLT(rawGeaData.last_milking_date) : '-'}
                       {rawGeaData.last_milking_time && ` ${rawGeaData.last_milking_time.substring(0, 5)}`}
                     </span>
+                    {rawGeaData.last_milking_weight && (
+                      <span className="font-bold text-purple-600 text-sm">
+                        {rawGeaData.last_milking_weight.toFixed(1)} kg
+                      </span>
+                    )}
                   </div>
                   <div className="bg-white rounded-lg p-2 border border-purple-100 col-span-2">
                     <span className="text-xs text-gray-500 block mb-0.5">Pieno vidurkis</span>
