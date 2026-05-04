@@ -17,6 +17,15 @@ interface ReportData {
   monthly: Array<{ month: string; total: number; count: number }>;
   costCenters: Array<{ name: string; total: number }>;
   taxSummary: { totalVAT: number; totalNet: number; totalGross: number };
+  exportedAnimals: Array<{
+    animal_number: string;
+    departure_date: string;
+    gender: string;
+    economic_group_name: string;
+    economic_group_color: string;
+    destination_name: string;
+    has_withdrawal_conflict: boolean;
+  }>;
 }
 
 export function Reports() {
@@ -27,7 +36,7 @@ export function Reports() {
     end: new Date().toISOString().split('T')[0]
   });
   const [selectedModule, setSelectedModule] = useState<'all' | 'veterinarija' | 'technika'>('all');
-  const [activeReport, setActiveReport] = useState<'suppliers' | 'categories' | 'monthly' | 'tax'>('suppliers');
+  const [activeReport, setActiveReport] = useState<'suppliers' | 'categories' | 'monthly' | 'tax' | 'exported-animals'>('suppliers');
 
   useEffect(() => {
     loadReportData();
@@ -105,12 +114,21 @@ export function Reports() {
         totalGross: allInvoices.reduce((sum, inv) => sum + (inv.total_gross || 0), 0)
       };
 
+      // Load exported animals data
+      const { data: exportedAnimalsData } = await supabase
+        .from('vw_animal_departures_with_conflicts')
+        .select('animal_number, departure_date, gender, economic_group_name, economic_group_color, destination_name, has_withdrawal_conflict')
+        .gte('departure_date', dateRange.start)
+        .lte('departure_date', dateRange.end)
+        .order('departure_date', { ascending: false });
+
       setReportData({
         suppliers,
         categories: [], // Will implement with category data
         monthly,
         costCenters: [], // Will implement with cost center data
-        taxSummary
+        taxSummary,
+        exportedAnimals: exportedAnimalsData || []
       });
     } catch (error) {
       console.error('Error loading report data:', error);
@@ -146,6 +164,13 @@ export function Reports() {
         csvContent += `"Suma be PVM",${reportData.taxSummary.totalNet.toFixed(2)}\n`;
         csvContent += `"PVM suma",${reportData.taxSummary.totalVAT.toFixed(2)}\n`;
         filename = 'pvm_ataskaita.csv';
+        break;
+      case 'exported-animals':
+        csvContent = 'Gyvūno Nr.,Išvežimo data,Lytis,Ekonominė grupė,Vieta,Statusas\n';
+        reportData.exportedAnimals.forEach(a => {
+          csvContent += `"${a.animal_number}","${new Date(a.departure_date).toLocaleDateString('lt-LT')}","${a.gender || '-'}","${a.economic_group_name || '-'}","${a.destination_name || '-'}","${a.has_withdrawal_conflict ? 'Konfliktas' : 'OK'}"\n`;
+        });
+        filename = 'isvežti_gyvunai.csv';
         break;
     }
 
@@ -258,6 +283,17 @@ export function Reports() {
         >
           <DollarSign className="w-4 h-4 inline mr-2" />
           PVM ataskaita
+        </button>
+        <button
+          onClick={() => setActiveReport('exported-animals')}
+          className={`px-4 py-3 font-medium transition-colors ${
+            activeReport === 'exported-animals'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Package className="w-4 h-4 inline mr-2" />
+          Išvežti gyvūnai
         </button>
       </div>
 
@@ -411,6 +447,77 @@ export function Reports() {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeReport === 'exported-animals' && reportData && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Išvežti gyvūnai</h3>
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Viso išvežta gyvūnų:</strong> {reportData.exportedAnimals.length}
+              </p>
+              <p className="text-sm text-blue-800 mt-1">
+                <strong>Su konfliktais:</strong> {reportData.exportedAnimals.filter(a => a.has_withdrawal_conflict).length}
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvūno Nr.</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Išvežimo data</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lytis</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ekonominė grupė</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vieta</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statusas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {reportData.exportedAnimals.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                        Nėra išvežtų gyvūnų pasirinktam laikotarpiui
+                      </td>
+                    </tr>
+                  ) : (
+                    reportData.exportedAnimals.map((animal, idx) => (
+                      <tr key={idx} className={animal.has_withdrawal_conflict ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{animal.animal_number}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {new Date(animal.departure_date).toLocaleDateString('lt-LT')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{animal.gender || '-'}</td>
+                        <td className="px-4 py-3">
+                          {animal.economic_group_name ? (
+                            <span
+                              className="inline-flex items-center px-2 py-1 rounded text-xs font-medium text-white"
+                              style={{ backgroundColor: animal.economic_group_color }}
+                            >
+                              {animal.economic_group_name}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{animal.destination_name || '-'}</td>
+                        <td className="px-4 py-3">
+                          {animal.has_withdrawal_conflict ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              Konfliktas
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              OK
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

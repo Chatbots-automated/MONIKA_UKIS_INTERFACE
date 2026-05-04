@@ -22,7 +22,11 @@ import {
   Truck,
   CheckCircle,
   XCircle,
-  Info
+  Info,
+  Plus,
+  Edit2,
+  Save,
+  Trash2
 } from 'lucide-react';
 import {
   TreatedAnimalsReport,
@@ -49,6 +53,14 @@ interface AnalyticsData {
   vaccinationsByMonth: Array<{ month: string; count: number }>;
   outcomeStats: Array<{ outcome: string; count: number }>;
   inventoryByCategory: Array<{ category: string; value: number }>;
+}
+
+interface EconomicGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  is_active: boolean;
 }
 
 type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices' | 'animal_departures';
@@ -86,6 +98,16 @@ export function Reports() {
   const [animals, setAnimals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
+
+  const [economicGroups, setEconomicGroups] = useState<EconomicGroup[]>([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<EconomicGroup | null>(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState('#3B82F6');
+  const [selectedAnimals, setSelectedAnimals] = useState<Set<string>>(new Set());
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkAssignGroupId, setBulkAssignGroupId] = useState<string>('');
 
   useEffect(() => {
     loadFilterOptions();
@@ -143,8 +165,179 @@ export function Reports() {
       if (animalsRes) setAnimals(animalsRes);
       if (productsRes.data) setProducts(productsRes.data);
       if (diseasesRes.data) setDiseases(diseasesRes.data);
+
+      // Load economic groups when animal_departures report is active
+      if (reportType === 'animal_departures') {
+        await loadEconomicGroups();
+      }
     } catch (error) {
       console.error('Error loading filter options:', error);
+    }
+  };
+
+  const loadEconomicGroups = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('economic_groups')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setEconomicGroups(data || []);
+    } catch (error) {
+      console.error('Error fetching economic groups:', error);
+    }
+  };
+
+  const updateEconomicGroup = async (departureId: string, groupId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('animal_departures')
+        .update({ economic_group_id: groupId, updated_at: new Date().toISOString() })
+        .eq('id', departureId);
+
+      if (error) throw error;
+      
+      // Reload the report data to show updated group
+      await loadReport();
+    } catch (error) {
+      console.error('Error updating economic group:', error);
+      alert('Klaida atnaujinant ekonominę grupę');
+    }
+  };
+
+  const saveEconomicGroup = async () => {
+    if (!newGroupName.trim()) {
+      alert('Įveskite grupės pavadinimą');
+      return;
+    }
+
+    try {
+      if (editingGroup) {
+        // Update existing group
+        const { error } = await supabase
+          .from('economic_groups')
+          .update({
+            name: newGroupName,
+            description: newGroupDescription,
+            color: newGroupColor,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingGroup.id);
+
+        if (error) throw error;
+      } else {
+        // Create new group
+        const { error } = await supabase
+          .from('economic_groups')
+          .insert({
+            name: newGroupName,
+            description: newGroupDescription,
+            color: newGroupColor
+          });
+
+        if (error) throw error;
+      }
+
+      // Refresh groups and close modal
+      await loadEconomicGroups();
+      setShowGroupModal(false);
+      setEditingGroup(null);
+      setNewGroupName('');
+      setNewGroupDescription('');
+      setNewGroupColor('#3B82F6');
+    } catch (error) {
+      console.error('Error saving economic group:', error);
+      alert('Klaida išsaugant ekonominę grupę');
+    }
+  };
+
+  const deleteEconomicGroup = async (groupId: string, groupName: string) => {
+    if (!confirm(`Ar tikrai norite ištrinti grupę "${groupName}"?\n\nGyvūnai, priskirti šiai grupei, liks be grupės.`)) {
+      return;
+    }
+
+    try {
+      // Set is_active to false instead of deleting (soft delete)
+      const { error } = await supabase
+        .from('economic_groups')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      // Refresh groups list
+      await loadEconomicGroups();
+      alert('Grupė sėkmingai ištrinta');
+    } catch (error) {
+      console.error('Error deleting economic group:', error);
+      alert('Klaida trinant grupę');
+    }
+  };
+
+  const openGroupModal = (group?: EconomicGroup) => {
+    if (group) {
+      setEditingGroup(group);
+      setNewGroupName(group.name);
+      setNewGroupDescription(group.description || '');
+      setNewGroupColor(group.color);
+    } else {
+      setEditingGroup(null);
+      setNewGroupName('');
+      setNewGroupDescription('');
+      setNewGroupColor('#3B82F6');
+    }
+    setShowGroupModal(true);
+  };
+
+  const toggleAnimalSelection = (animalId: string) => {
+    const newSelection = new Set(selectedAnimals);
+    if (newSelection.has(animalId)) {
+      newSelection.delete(animalId);
+    } else {
+      newSelection.add(animalId);
+    }
+    setSelectedAnimals(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedAnimals.size === data.length) {
+      setSelectedAnimals(new Set());
+    } else {
+      setSelectedAnimals(new Set(data.map((d: any) => d.id)));
+    }
+  };
+
+  const bulkAssignEconomicGroup = async () => {
+    if (!bulkAssignGroupId || selectedAnimals.size === 0) {
+      alert('Pasirinkite grupę ir bent vieną gyvūną');
+      return;
+    }
+
+    try {
+      const updates = Array.from(selectedAnimals).map(animalId => 
+        supabase
+          .from('animal_departures')
+          .update({ 
+            economic_group_id: bulkAssignGroupId, 
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', animalId)
+      );
+
+      await Promise.all(updates);
+
+      // Clear selection and reload
+      setSelectedAnimals(new Set());
+      setShowBulkAssignModal(false);
+      setBulkAssignGroupId('');
+      await loadReport();
+      
+      alert(`Sėkmingai priskirta ${selectedAnimals.size} gyvūnų`);
+    } catch (error) {
+      console.error('Error bulk assigning economic group:', error);
+      alert('Klaida masiškai priskiriant ekonominę grupę');
     }
   };
 
@@ -867,9 +1060,27 @@ export function Reports() {
                 <Truck className="w-6 h-6 text-gray-700" />
                 <h3 className="text-lg font-bold text-gray-900">Išvežtų Gyvūnų Sąrašas</h3>
               </div>
-              <span className="text-sm text-gray-600 font-medium">
-                Rodoma: <strong>{data.length}</strong> įrašų
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 font-medium">
+                  Rodoma: <strong>{data.length}</strong> įrašų
+                </span>
+                {selectedAnimals.size > 0 && (
+                  <button
+                    onClick={() => setShowBulkAssignModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Priskirti grupę ({selectedAnimals.size})
+                  </button>
+                )}
+                <button
+                  onClick={() => openGroupModal()}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Valdyti grupes
+                </button>
+              </div>
             </div>
           </div>
           
@@ -877,6 +1088,14 @@ export function Reports() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-100">
                 <tr>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnimals.size === data.length && data.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Statusas
                   </th>
@@ -888,6 +1107,9 @@ export function Reports() {
                   </th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Išvežimo Data
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Ekonominė grupė
                   </th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Paskutinis Gydymas
@@ -918,9 +1140,19 @@ export function Reports() {
                         ? 'bg-red-50 hover:bg-red-100 border-l-4 border-red-500'
                         : !departure.animal_id
                         ? 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500'
+                        : selectedAnimals.has(departure.id)
+                        ? 'bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500'
                         : 'hover:bg-gray-50 border-l-4 border-transparent'
                     }
                   >
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnimals.has(departure.id)}
+                        onChange={() => toggleAnimalSelection(departure.id)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       {departure.has_withdrawal_conflict ? (
                         <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-red-200 text-red-900 border border-red-400">
@@ -958,6 +1190,30 @@ export function Reports() {
                       <div className="text-xs text-gray-500">
                         {new Date(departure.departure_date).toLocaleDateString('lt-LT', { weekday: 'short' })}
                       </div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <select
+                        value={departure.economic_group_id || ''}
+                        onChange={(e) => updateEconomicGroup(departure.id, e.target.value || null)}
+                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1 w-full"
+                      >
+                        <option value="">Nepriskirta</option>
+                        {economicGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                      {departure.economic_group_name && (
+                        <div>
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white"
+                            style={{ backgroundColor: departure.economic_group_color }}
+                          >
+                            {departure.economic_group_name}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                       {departure.last_treatment_date ? (
@@ -1042,6 +1298,239 @@ export function Reports() {
             </table>
           </div>
         </div>
+
+        {/* Economic Groups Management Modal */}
+        {showGroupModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {editingGroup ? 'Redaguoti ekonominę grupę' : 'Ekonominių grupių valdymas'}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowGroupModal(false);
+                      setEditingGroup(null);
+                      setNewGroupName('');
+                      setNewGroupDescription('');
+                      setNewGroupColor('#3B82F6');
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Create/Edit Group Form */}
+                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                  <h4 className="font-semibold text-gray-900 mb-3">
+                    {editingGroup ? 'Redaguoti grupę' : 'Sukurti naują grupę'}
+                  </h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Pavadinimas *
+                      </label>
+                      <input
+                        type="text"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                        placeholder="Pvz., Pelningos karvės"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Aprašymas
+                      </label>
+                      <textarea
+                        value={newGroupDescription}
+                        onChange={(e) => setNewGroupDescription(e.target.value)}
+                        placeholder="Pasirenkamas aprašymas..."
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Spalva
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={newGroupColor}
+                          onChange={(e) => setNewGroupColor(e.target.value)}
+                          className="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <span className="text-sm text-gray-600">{newGroupColor}</span>
+                        <span
+                          className="inline-flex items-center px-3 py-1 rounded text-sm font-medium text-white"
+                          style={{ backgroundColor: newGroupColor }}
+                        >
+                          Pavyzdys
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveEconomicGroup}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Save className="w-4 h-4" />
+                        {editingGroup ? 'Išsaugoti' : 'Sukurti'}
+                      </button>
+                      {editingGroup && (
+                        <button
+                          onClick={() => {
+                            setEditingGroup(null);
+                            setNewGroupName('');
+                            setNewGroupDescription('');
+                            setNewGroupColor('#3B82F6');
+                          }}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                        >
+                          Atšaukti
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Existing Groups List */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Esamos grupės</h4>
+                  <div className="space-y-2">
+                    {economicGroups.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        Nėra sukurtų ekonominių grupių
+                      </p>
+                    ) : (
+                      economicGroups.map((group) => (
+                        <div
+                          key={group.id}
+                          className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="inline-flex items-center px-3 py-1 rounded text-sm font-medium text-white"
+                              style={{ backgroundColor: group.color }}
+                            >
+                              {group.name}
+                            </span>
+                            {group.description && (
+                              <span className="text-sm text-gray-600">{group.description}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openGroupModal(group)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Redaguoti"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteEconomicGroup(group.id, group.name)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Ištrinti"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Assignment Modal */}
+        {showBulkAssignModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  Masiškai priskirti ekonominę grupę
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowBulkAssignModal(false);
+                    setBulkAssignGroupId('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    Pasirinkta gyvūnų: <strong>{selectedAnimals.size}</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pasirinkite ekonominę grupę *
+                  </label>
+                  <select
+                    value={bulkAssignGroupId}
+                    onChange={(e) => setBulkAssignGroupId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Pasirinkite grupę --</option>
+                    {economicGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {bulkAssignGroupId && (
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    {economicGroups.find(g => g.id === bulkAssignGroupId) && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Pasirinkta grupė:</span>
+                        <span
+                          className="inline-flex items-center px-3 py-1 rounded text-sm font-medium text-white"
+                          style={{ backgroundColor: economicGroups.find(g => g.id === bulkAssignGroupId)?.color }}
+                        >
+                          {economicGroups.find(g => g.id === bulkAssignGroupId)?.name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    onClick={bulkAssignEconomicGroup}
+                    disabled={!bulkAssignGroupId}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                    Priskirti grupę
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowBulkAssignModal(false);
+                      setBulkAssignGroupId('');
+                    }}
+                    className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  >
+                    Atšaukti
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

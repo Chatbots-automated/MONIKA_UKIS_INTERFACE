@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { AlertCircle, CheckCircle, Calendar, Info } from 'lucide-react';
+import { AlertCircle, CheckCircle, Calendar, Info, Plus, Edit2, Save, X } from 'lucide-react';
+
+interface EconomicGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  is_active: boolean;
+}
 
 interface AnimalDeparture {
   id: string;
@@ -28,6 +36,9 @@ interface AnimalDeparture {
   sex: string | null;
   breed: string | null;
   animal_active: boolean | null;
+  economic_group_id: string | null;
+  economic_group_name: string | null;
+  economic_group_color: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -38,9 +49,16 @@ export default function AnimalDepartures() {
   const [filterConflicts, setFilterConflicts] = useState<'all' | 'conflicts' | 'clean'>('all');
   const [dateRange, setDateRange] = useState<'7days' | '30days' | 'all'>('30days');
   const [searchTerm, setSearchTerm] = useState('');
+  const [economicGroups, setEconomicGroups] = useState<EconomicGroup[]>([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<EconomicGroup | null>(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState('#3B82F6');
 
   useEffect(() => {
     fetchDepartures();
+    fetchEconomicGroups();
   }, [filterConflicts, dateRange]);
 
   const fetchDepartures = async () => {
@@ -80,6 +98,99 @@ export default function AnimalDepartures() {
     }
   };
 
+  const fetchEconomicGroups = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('economic_groups')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setEconomicGroups(data || []);
+    } catch (error) {
+      console.error('Error fetching economic groups:', error);
+    }
+  };
+
+  const updateEconomicGroup = async (departureId: string, groupId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('animal_departures')
+        .update({ economic_group_id: groupId, updated_at: new Date().toISOString() })
+        .eq('id', departureId);
+
+      if (error) throw error;
+      
+      // Refresh departures to show updated data
+      await fetchDepartures();
+    } catch (error) {
+      console.error('Error updating economic group:', error);
+      alert('Klaida atnaujinant ekonominę grupę');
+    }
+  };
+
+  const saveEconomicGroup = async () => {
+    if (!newGroupName.trim()) {
+      alert('Įveskite grupės pavadinimą');
+      return;
+    }
+
+    try {
+      if (editingGroup) {
+        // Update existing group
+        const { error } = await supabase
+          .from('economic_groups')
+          .update({
+            name: newGroupName,
+            description: newGroupDescription,
+            color: newGroupColor,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingGroup.id);
+
+        if (error) throw error;
+      } else {
+        // Create new group
+        const { error } = await supabase
+          .from('economic_groups')
+          .insert({
+            name: newGroupName,
+            description: newGroupDescription,
+            color: newGroupColor
+          });
+
+        if (error) throw error;
+      }
+
+      // Refresh groups and close modal
+      await fetchEconomicGroups();
+      setShowGroupModal(false);
+      setEditingGroup(null);
+      setNewGroupName('');
+      setNewGroupDescription('');
+      setNewGroupColor('#3B82F6');
+    } catch (error) {
+      console.error('Error saving economic group:', error);
+      alert('Klaida išsaugant ekonominę grupę');
+    }
+  };
+
+  const openGroupModal = (group?: EconomicGroup) => {
+    if (group) {
+      setEditingGroup(group);
+      setNewGroupName(group.name);
+      setNewGroupDescription(group.description || '');
+      setNewGroupColor(group.color);
+    } else {
+      setEditingGroup(null);
+      setNewGroupName('');
+      setNewGroupDescription('');
+      setNewGroupColor('#3B82F6');
+    }
+    setShowGroupModal(true);
+  };
+
   const filteredDepartures = departures.filter(dep =>
     searchTerm === '' ||
     dep.animal_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -97,11 +208,20 @@ export default function AnimalDepartures() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Išvežti Gyvūnai</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Gyvūnų išvežimo registras su karencijos laikotarpio tikrinimu
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Išvežti Gyvūnai</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Gyvūnų išvežimo registras su karencijos laikotarpio tikrinimu
+          </p>
+        </div>
+        <button
+          onClick={() => openGroupModal()}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Valdyti ekonomines grupes
+        </button>
       </div>
 
       {/* Statistics Cards */}
@@ -224,6 +344,9 @@ export default function AnimalDepartures() {
                     Lytis
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ekonominė grupė
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Pieno Karencija
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -275,6 +398,30 @@ export default function AnimalDepartures() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                       {departure.gender || '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <select
+                        value={departure.economic_group_id || ''}
+                        onChange={(e) => updateEconomicGroup(departure.id, e.target.value || null)}
+                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Nepriskirta</option>
+                        {economicGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                      {departure.economic_group_name && (
+                        <div className="mt-1">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white"
+                            style={{ backgroundColor: departure.economic_group_color }}
+                          >
+                            {departure.economic_group_name}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                       {departure.last_withdrawal_milk ? (
@@ -340,6 +487,146 @@ export default function AnimalDepartures() {
           </div>
         </div>
       </div>
+
+      {/* Economic Groups Management Modal */}
+      {showGroupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingGroup ? 'Redaguoti ekonominę grupę' : 'Ekonominių grupių valdymas'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowGroupModal(false);
+                    setEditingGroup(null);
+                    setNewGroupName('');
+                    setNewGroupDescription('');
+                    setNewGroupColor('#3B82F6');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Create/Edit Group Form */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 className="font-semibold text-gray-900 mb-3">
+                  {editingGroup ? 'Redaguoti grupę' : 'Sukurti naują grupę'}
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pavadinimas *
+                    </label>
+                    <input
+                      type="text"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="Pvz., Pelningos karvės"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Aprašymas
+                    </label>
+                    <textarea
+                      value={newGroupDescription}
+                      onChange={(e) => setNewGroupDescription(e.target.value)}
+                      placeholder="Pasirenkamas aprašymas..."
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Spalva
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={newGroupColor}
+                        onChange={(e) => setNewGroupColor(e.target.value)}
+                        className="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+                      />
+                      <span className="text-sm text-gray-600">{newGroupColor}</span>
+                      <span
+                        className="inline-flex items-center px-3 py-1 rounded text-sm font-medium text-white"
+                        style={{ backgroundColor: newGroupColor }}
+                      >
+                        Pavyzdys
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveEconomicGroup}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Save className="w-4 h-4" />
+                      {editingGroup ? 'Išsaugoti' : 'Sukurti'}
+                    </button>
+                    {editingGroup && (
+                      <button
+                        onClick={() => {
+                          setEditingGroup(null);
+                          setNewGroupName('');
+                          setNewGroupDescription('');
+                          setNewGroupColor('#3B82F6');
+                        }}
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                      >
+                        Atšaukti
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Existing Groups List */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Esamos grupės</h4>
+                <div className="space-y-2">
+                  {economicGroups.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      Nėra sukurtų ekonominių grupių
+                    </p>
+                  ) : (
+                    economicGroups.map((group) => (
+                      <div
+                        key={group.id}
+                        className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded text-sm font-medium text-white"
+                            style={{ backgroundColor: group.color }}
+                          >
+                            {group.name}
+                          </span>
+                          {group.description && (
+                            <span className="text-sm text-gray-600">{group.description}</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => openGroupModal(group)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Redaguoti"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
