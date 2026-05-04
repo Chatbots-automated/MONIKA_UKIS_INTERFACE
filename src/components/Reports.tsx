@@ -94,6 +94,7 @@ export function Reports() {
   const [filterInvoice, setFilterInvoice] = useState('');
   const [filterBatch, setFilterBatch] = useState('');
   const [filterVet, setFilterVet] = useState('');
+  const [filterAnimalId, setFilterAnimalId] = useState(''); // For animal departures search
 
   const [animals, setAnimals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -998,17 +999,41 @@ export function Reports() {
   };
 
   const renderAnimalDepartures = () => {
+    // Filter data by animal ID search
+    const filteredData = data.filter(d => 
+      !filterAnimalId || d.animal_number.toLowerCase().includes(filterAnimalId.toLowerCase())
+    );
+
     const stats = {
-      total: data.length,
-      conflicts: data.filter(d => d.has_withdrawal_conflict).length,
-      notFound: data.filter(d => !d.animal_id).length,
-      clean: data.filter(d => d.animal_id && !d.has_withdrawal_conflict).length,
+      total: filteredData.length,
+      conflicts: filteredData.filter(d => d.has_withdrawal_conflict).length,
+      notFound: filteredData.filter(d => !d.animal_id).length,
+      clean: filteredData.filter(d => d.animal_id && !d.has_withdrawal_conflict).length,
     };
 
     const conflictRate = stats.total > 0 ? ((stats.conflicts / stats.total) * 100).toFixed(1) : '0';
 
     return (
       <div className="space-y-4">
+        {/* Search Filter */}
+        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Ieškoti pagal gyvūno numerį
+          </label>
+          <input
+            type="text"
+            value={filterAnimalId}
+            onChange={(e) => setFilterAnimalId(e.target.value)}
+            placeholder="Įveskite gyvūno numerį (pvz., LT000008945497)..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {filterAnimalId && (
+            <p className="text-sm text-gray-600 mt-2">
+              Rasta: <strong>{filteredData.length}</strong> iš {data.length} gyvūnų
+            </p>
+          )}
+        </div>
+
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="bg-white p-3 rounded-lg shadow border border-gray-200">
@@ -1132,7 +1157,7 @@ export function Reports() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {data.map((departure: any) => (
+                {filteredData.map((departure: any) => (
                   <tr
                     key={departure.id}
                     className={

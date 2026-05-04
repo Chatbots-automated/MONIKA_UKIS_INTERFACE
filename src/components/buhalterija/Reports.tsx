@@ -21,6 +21,7 @@ interface ReportData {
     animal_number: string;
     departure_date: string;
     gender: string;
+    economic_group_id: string | null;
     economic_group_name: string;
     economic_group_color: string;
     destination_name: string;
@@ -37,6 +38,10 @@ export function Reports() {
   });
   const [selectedModule, setSelectedModule] = useState<'all' | 'veterinarija' | 'technika'>('all');
   const [activeReport, setActiveReport] = useState<'suppliers' | 'categories' | 'monthly' | 'tax' | 'exported-animals'>('suppliers');
+  
+  // Filters for exported animals
+  const [filterEconomicGroup, setFilterEconomicGroup] = useState<string>('');
+  const [economicGroups, setEconomicGroups] = useState<Array<{id: string, name: string, color: string}>>([]);
 
   useEffect(() => {
     loadReportData();
@@ -117,10 +122,21 @@ export function Reports() {
       // Load exported animals data
       const { data: exportedAnimalsData } = await supabase
         .from('vw_animal_departures_with_conflicts')
-        .select('animal_number, departure_date, gender, economic_group_name, economic_group_color, destination_name, has_withdrawal_conflict')
+        .select('animal_number, departure_date, gender, economic_group_id, economic_group_name, economic_group_color, destination_name, has_withdrawal_conflict')
         .gte('departure_date', dateRange.start)
         .lte('departure_date', dateRange.end)
         .order('departure_date', { ascending: false });
+
+      // Load economic groups for filter
+      const { data: groupsData } = await supabase
+        .from('economic_groups')
+        .select('id, name, color')
+        .eq('is_active', true)
+        .order('name');
+
+      if (groupsData) {
+        setEconomicGroups(groupsData);
+      }
 
       setReportData({
         suppliers,
@@ -454,12 +470,50 @@ export function Reports() {
         {activeReport === 'exported-animals' && reportData && (
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Išvežti gyvūnai</h3>
+            
+            {/* Filters */}
+            <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ekonominė grupė
+                  </label>
+                  <select
+                    value={filterEconomicGroup}
+                    onChange={(e) => setFilterEconomicGroup(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Visos grupės</option>
+                    {economicGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Filtruota rezultatų
+                  </label>
+                  <div className="px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 font-medium">
+                    {reportData.exportedAnimals.filter(a => 
+                      !filterEconomicGroup || a.economic_group_id === filterEconomicGroup
+                    ).length} iš {reportData.exportedAnimals.length}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
-                <strong>Viso išvežta gyvūnų:</strong> {reportData.exportedAnimals.length}
+                <strong>Viso išvežta gyvūnų:</strong> {reportData.exportedAnimals.filter(a => 
+                  !filterEconomicGroup || a.economic_group_id === filterEconomicGroup
+                ).length}
               </p>
               <p className="text-sm text-blue-800 mt-1">
-                <strong>Su konfliktais:</strong> {reportData.exportedAnimals.filter(a => a.has_withdrawal_conflict).length}
+                <strong>Su konfliktais:</strong> {reportData.exportedAnimals.filter(a => 
+                  a.has_withdrawal_conflict && (!filterEconomicGroup || a.economic_group_id === filterEconomicGroup)
+                ).length}
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -475,14 +529,18 @@ export function Reports() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {reportData.exportedAnimals.length === 0 ? (
+                  {reportData.exportedAnimals
+                    .filter(a => !filterEconomicGroup || a.economic_group_id === filterEconomicGroup)
+                    .length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                        Nėra išvežtų gyvūnų pasirinktam laikotarpiui
+                        Nėra išvežtų gyvūnų pasirinktam laikotarpiui ir filtrams
                       </td>
                     </tr>
                   ) : (
-                    reportData.exportedAnimals.map((animal, idx) => (
+                    reportData.exportedAnimals
+                      .filter(a => !filterEconomicGroup || a.economic_group_id === filterEconomicGroup)
+                      .map((animal, idx) => (
                       <tr key={idx} className={animal.has_withdrawal_conflict ? 'bg-red-50' : 'hover:bg-gray-50'}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{animal.animal_number}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">
