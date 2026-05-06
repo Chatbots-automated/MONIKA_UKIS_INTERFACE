@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
     "@supabase/supabase-js": "^2.57.4",
     "@types/node": "^25.5.0",
     "dotenv": "^17.2.3",
@@ -18,6 +20,7 @@
     "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "three": "^0.160.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

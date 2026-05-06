@@ -9,7 +9,7 @@ import { VisitsModern as Visits } from './components/VisitsModern';
 import { Synchronizations } from './components/Synchronizations';
 import { Seklinimas } from './components/Seklinimas';
 import { Pienas } from './components/Pienas';
-import { Hoofs } from './components/Hoofs';
+import { Hoofs3D } from './components/Hoofs3D';
 import { Suppliers } from './components/Suppliers';
 import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
@@ -307,7 +307,7 @@ function App() {
       case 'visits':
         return <Visits />;
       case 'hoofs':
-        return <Hoofs />;
+        return <Hoofs3D />;
       case 'synchronizations':
         return <Synchronizations />;
       case 'insemination':

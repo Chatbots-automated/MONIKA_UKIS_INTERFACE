@@ -63,7 +63,7 @@ interface EconomicGroup {
   is_active: boolean;
 }
 
-type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices' | 'animal_departures';
+type ReportType = 'analytics' | 'drug_journal' | 'treated_animals' | 'biocide_journal' | 'insemination_journal' | 'medical_waste' | 'invoices' | 'animal_departures' | 'hoof_journal';
 
 // Get current month's first and last day
 const getCurrentMonthDates = () => {
@@ -656,6 +656,28 @@ export function Reports() {
           break;
         }
 
+        case 'hoof_journal': {
+          let query = supabase
+            .from('hoof_records')
+            .select(`
+              *,
+              animal:animals(tag_no, species),
+              condition:hoof_condition_codes(code, name_lt, name_en, severity_default),
+              product:products(name),
+              batch:batches(lot, expiry_date)
+            `)
+            .order('examination_date', { ascending: false });
+
+          if (dateFrom) query = query.gte('examination_date', dateFrom);
+          if (dateTo) query = query.lte('examination_date', dateTo);
+          if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+
+          const { data, error } = await query;
+          if (error) throw error;
+          result = data || [];
+          break;
+        }
+
         default:
           return;
       }
@@ -961,6 +983,100 @@ export function Reports() {
     );
   };
 
+  const renderHoofJournal = () => {
+    const stats = {
+      totalRecords: data.length,
+      totalTreated: data.filter((r: any) => r.was_treated).length,
+      totalTrimmed: data.filter((r: any) => r.was_trimmed).length,
+      withConditions: data.filter((r: any) => r.condition_code && r.condition_code !== 'OK').length,
+      requireFollowup: data.filter((r: any) => r.requires_followup && !r.followup_completed).length,
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border-2 border-blue-200">
+            <div className="text-3xl font-bold text-blue-900">{stats.totalRecords}</div>
+            <div className="text-sm font-medium text-blue-700">Iš viso apžiūrų</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border-2 border-green-200">
+            <div className="text-3xl font-bold text-green-900">{stats.totalTreated}</div>
+            <div className="text-sm font-medium text-green-700">Gydyta</div>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border-2 border-purple-200">
+            <div className="text-3xl font-bold text-purple-900">{stats.totalTrimmed}</div>
+            <div className="text-sm font-medium text-purple-700">Kirpta</div>
+          </div>
+          <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border-2 border-red-200">
+            <div className="text-3xl font-bold text-red-900">{stats.withConditions}</div>
+            <div className="text-sm font-medium text-red-700">Su pažeidimais</div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border-2 border-orange-200">
+            <div className="text-3xl font-bold text-orange-900">{stats.requireFollowup}</div>
+            <div className="text-sm font-medium text-orange-700">Reikia kontrolės</div>
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvulys</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Koja</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nagas</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zona</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Būklė</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sunkumas</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kirpta</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydyta</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Preparatas</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Technikas</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {data.map((record: any, idx: number) => (
+                  <tr key={record.id || idx} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm">{record.examination_date}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{record.animal?.tag_no || record.animal_id}</td>
+                    <td className="px-4 py-3 text-sm">{record.leg}</td>
+                    <td className="px-4 py-3 text-sm">{record.claw === 'inner' ? 'Vidinis' : 'Išorinis'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      {record.zone !== null && record.zone !== undefined ? (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                          Z{record.zone}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">{record.condition?.name_lt || record.condition_code}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                        ${record.severity === 0 ? 'bg-green-100 text-green-800' : ''}
+                        ${record.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
+                        ${record.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
+                        ${record.severity === 3 ? 'bg-red-100 text-red-800' : ''}
+                        ${record.severity === 4 ? 'bg-red-200 text-red-900' : ''}
+                      `}>
+                        {record.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-center">{record.was_trimmed ? '✓' : ''}</td>
+                    <td className="px-4 py-3 text-sm text-center">{record.was_treated ? '✓' : ''}</td>
+                    <td className="px-4 py-3 text-sm">{record.product?.name || '-'}</td>
+                    <td className="px-4 py-3 text-sm">{record.technician_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderReport = () => {
     if (loading) {
       return (
@@ -993,6 +1109,8 @@ export function Reports() {
         return <InseminationJournalReport data={data} />;
       case 'animal_departures':
         return renderAnimalDepartures();
+      case 'hoof_journal':
+        return renderHoofJournal();
       default:
         return null;
     }
@@ -1569,6 +1687,7 @@ export function Reports() {
     insemination_journal: { name: 'Sėklinimo žurnalas', icon: Heart, color: 'rose' },
     medical_waste: { name: 'Medicininių atliekų žurnalas', icon: AlertTriangle, color: 'orange' },
     animal_departures: { name: 'Išvežti Gyvūnai', icon: Truck, color: 'red' },
+    hoof_journal: { name: 'Nagų žurnalas', icon: Activity, color: 'amber' },
   };
 
   const currentReport = reportTypeInfo[reportType];
@@ -1696,7 +1815,7 @@ export function Reports() {
                     </div>
                   </div>
 
-                  {(reportType === 'treated_animals' || reportType === 'insemination_journal') && (
+                  {(reportType === 'treated_animals' || reportType === 'insemination_journal' || reportType === 'hoof_journal') && (
                     <SearchableSelect
                       label="Gyvūnas"
                       placeholder="Pasirinkite gyvūną"

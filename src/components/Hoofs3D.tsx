@@ -1,0 +1,1003 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
+import {
+  Animal,
+  HoofRecord,
+  HoofConditionCode,
+  HoofLeg,
+  HoofClaw,
+  Product,
+  Batch,
+  Unit
+} from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
+import { HoofViewer3DEnhanced } from './HoofViewer3DEnhanced';
+import { SearchableSelect } from './SearchableSelect';
+import {
+  Activity,
+  Plus,
+  Save,
+  X,
+  Search,
+  Calendar,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Layers,
+  Box
+} from 'lucide-react';
+import { formatDateLT } from '../lib/formatters';
+import { fetchAllRows, formatAnimalDisplay, sortByLithuanian } from '../lib/helpers';
+import { showNotification } from './NotificationToast';
+
+interface ExtendedHoofRecord extends HoofRecord {
+  zone?: number;
+}
+
+interface ClawExamination {
+  leg: HoofLeg;
+  claw: HoofClaw;
+  zone?: number;
+  condition_code: string;
+  severity: number;
+  was_trimmed: boolean;
+  was_treated: boolean;
+  treatment_product_id?: string;
+  treatment_batch_id?: string;
+  treatment_quantity?: number;
+  treatment_unit?: Unit;
+  treatment_notes?: string;
+  bandage_applied: boolean;
+  requires_followup: boolean;
+  followup_date?: string;
+  notes?: string;
+}
+
+export function Hoofs3D() {
+  const { user, logAction } = useAuth();
+  const [animals, setAnimals] = useState<Animal[]>([]);
+  const [animalCollarNumbers, setAnimalCollarNumbers] = useState<Map<string, number>>(new Map());
+  const [conditions, setConditions] = useState<HoofConditionCode[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [hoofRecords, setHoofRecords] = useState<ExtendedHoofRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showExaminationForm, setShowExaminationForm] = useState(false);
+  const [use3DView, setUse3DView] = useState(true);
+
+  const [selectedAnimalId, setSelectedAnimalId] = useState<string>('');
+  const [examinationDate, setExaminationDate] = useState(new Date().toISOString().split('T')[0]);
+  const [technicianName, setTechnicianName] = useState(user?.username || '');
+  const [generalNotes, setGeneralNotes] = useState('');
+
+  const [selectedLeg, setSelectedLeg] = useState<HoofLeg | null>(null);
+  const [selectedClaw, setSelectedClaw] = useState<HoofClaw | null>(null);
+  const [selectedZone, setSelectedZone] = useState<number | null>(null);
+  const [currentExaminations, setCurrentExaminations] = useState<ClawExamination[]>([]);
+
+  const [showClawModal, setShowClawModal] = useState(false);
+  const [clawFormData, setClawFormData] = useState<Partial<ClawExamination>>({
+    condition_code: 'OK',
+    severity: 0,
+    was_trimmed: false,
+    was_treated: false,
+    bandage_applied: false,
+    requires_followup: false
+  });
+
+  const [filterCondition, setFilterCondition] = useState<string>('all');
+  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useRealtimeSubscription({
+    table: 'hoof_records',
+    onInsert: useCallback(() => {
+      loadData();
+    }, []),
+    onUpdate: useCallback(() => {
+      loadData();
+    }, []),
+    onDelete: useCallback(() => {
+      loadData();
+    }, []),
+  });
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      const [animalsData, conditionsRes, productsRes, batchesRes, recordsData, collarRes] = await Promise.all([
+        fetchAllRows<Animal>('animals'),
+        supabase.from('hoof_condition_codes').select('*').eq('is_active', true).order('name_lt'),
+        supabase.from('products').select('*').eq('is_active', true).order('name'),
+        supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
+        fetchAllRows<ExtendedHoofRecord>('hoof_records'),
+        supabase.from('vw_animal_latest_collar').select('*')
+      ]);
+
+      if (conditionsRes.error) console.error('❌ Condition codes error:', conditionsRes.error);
+      if (productsRes.error) console.error('❌ Products error:', productsRes.error);
+      if (batchesRes.error) console.error('❌ Batches error:', batchesRes.error);
+      if (collarRes.error) console.error('❌ Collar data error:', collarRes.error);
+
+      setAnimals(animalsData);
+      setConditions(conditionsRes.data || []);
+      setProducts(productsRes.data || []);
+      setBatches(batchesRes.data || []);
+      setHoofRecords(recordsData);
+
+      console.log('📊 Data loaded:', {
+        animals: animalsData.length,
+        conditions: conditionsRes.data?.length || 0,
+        products: productsRes.data?.length || 0,
+        batches: batchesRes.data?.length || 0,
+        records: recordsData.length
+      });
+
+      const collarMap = new Map<string, number>();
+      (collarRes.data || []).forEach((row: any) => {
+        collarMap.set(row.animal_id, row.collar_no);
+      });
+      setAnimalCollarNumbers(collarMap);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLegSelect = (leg: HoofLeg) => {
+    if (leg === selectedLeg) {
+      // If clicking the same leg, reset to cow view
+      setSelectedLeg(null);
+      setSelectedClaw(null);
+      setSelectedZone(null);
+    } else {
+      setSelectedLeg(leg);
+      setSelectedClaw(null);
+      setSelectedZone(null);
+    }
+  };
+
+  const handleClawSelect = (claw: HoofClaw) => {
+    if (claw === selectedClaw) {
+      // If clicking the same claw, go back to leg selection
+      setSelectedClaw(null);
+      setSelectedZone(null);
+    } else {
+      setSelectedClaw(claw);
+      setSelectedZone(null);
+    }
+  };
+
+  const handleZoneSelect = (zone: number) => {
+    setSelectedZone(zone);
+    
+    if (!selectedLeg || !selectedClaw) return;
+
+    const existing = currentExaminations.find(
+      e => e.leg === selectedLeg && e.claw === selectedClaw && e.zone === zone
+    );
+    
+    if (existing) {
+      setClawFormData(existing);
+    } else {
+      setClawFormData({
+        leg: selectedLeg,
+        claw: selectedClaw,
+        zone: zone,
+        condition_code: 'OK',
+        severity: 0,
+        was_trimmed: false,
+        was_treated: false,
+        bandage_applied: false,
+        requires_followup: false
+      });
+    }
+
+    setShowClawModal(true);
+  };
+
+  const saveClawExamination = () => {
+    if (!selectedLeg || !selectedClaw) return;
+
+    const examination: ClawExamination = {
+      leg: selectedLeg,
+      claw: selectedClaw,
+      zone: selectedZone || undefined,
+      condition_code: clawFormData.condition_code || 'OK',
+      severity: clawFormData.severity || 0,
+      was_trimmed: clawFormData.was_trimmed || false,
+      was_treated: clawFormData.was_treated || false,
+      treatment_product_id: clawFormData.treatment_product_id,
+      treatment_batch_id: clawFormData.treatment_batch_id,
+      treatment_quantity: clawFormData.treatment_quantity,
+      treatment_unit: clawFormData.treatment_unit,
+      treatment_notes: clawFormData.treatment_notes,
+      bandage_applied: clawFormData.bandage_applied || false,
+      requires_followup: clawFormData.requires_followup || false,
+      followup_date: clawFormData.followup_date,
+      notes: clawFormData.notes
+    };
+
+    setCurrentExaminations(prev => {
+      const filtered = prev.filter(
+        e => !(e.leg === selectedLeg && e.claw === selectedClaw && e.zone === selectedZone)
+      );
+      return [...filtered, examination];
+    });
+
+    setShowClawModal(false);
+    
+    // Reset to cow view so user can easily select another leg/claw/zone
+    setSelectedLeg(null);
+    setSelectedClaw(null);
+    setSelectedZone(null);
+    
+    showNotification(`Pridėta: ${selectedLeg} - ${selectedClaw === 'inner' ? 'Vidinis' : 'Išorinis'}${selectedZone !== null ? ` - Zona ${selectedZone}` : ''}`, 'success');
+  };
+
+  const saveAllExaminations = async () => {
+    if (!selectedAnimalId || currentExaminations.length === 0) {
+      showNotification('Pasirinkite gyvulį ir įveskite bent vieną nago būklę', 'error');
+      return;
+    }
+
+    try {
+      const recordsToInsert = currentExaminations.map(exam => ({
+        animal_id: selectedAnimalId,
+        examination_date: examinationDate,
+        leg: exam.leg,
+        claw: exam.claw,
+        zone: exam.zone || null,
+        condition_code: exam.condition_code,
+        severity: exam.severity,
+        was_trimmed: exam.was_trimmed,
+        was_treated: exam.was_treated,
+        treatment_product_id: exam.treatment_product_id || null,
+        treatment_batch_id: exam.treatment_batch_id || null,
+        treatment_quantity: exam.treatment_quantity || null,
+        treatment_unit: exam.treatment_unit || null,
+        treatment_notes: exam.treatment_notes || null,
+        bandage_applied: exam.bandage_applied,
+        requires_followup: exam.requires_followup,
+        followup_date: exam.followup_date || null,
+        technician_name: technicianName,
+        notes: exam.notes || generalNotes || null
+      }));
+
+      const { error } = await supabase
+        .from('hoof_records')
+        .insert(recordsToInsert);
+
+      if (error) throw error;
+
+      // Deduct stock for treatments
+      for (const exam of currentExaminations) {
+        if (exam.was_treated && exam.treatment_batch_id && exam.treatment_quantity) {
+          const batch = batches.find(b => b.id === exam.treatment_batch_id);
+          if (batch) {
+            const newQuantity = (batch.qty_left || 0) - exam.treatment_quantity;
+            const { error: stockError } = await supabase
+              .from('batches')
+              .update({ 
+                qty_left: Math.max(0, newQuantity),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', exam.treatment_batch_id);
+
+            if (stockError) {
+              console.error('Stock deduction error:', stockError);
+              showNotification(`Įspėjimas: Klaida atimant atsargas partijai ${batch.lot}`, 'error');
+            }
+          }
+        }
+      }
+
+      await logAction('create', 'hoof_records', null,
+        `Įrašyta ${currentExaminations.length} nagų apžiūrų gyvuliui ${selectedAnimalId}`);
+
+      setCurrentExaminations([]);
+      setSelectedAnimalId('');
+      setGeneralNotes('');
+      setShowExaminationForm(false);
+      setSelectedLeg(null);
+      setSelectedClaw(null);
+      setSelectedZone(null);
+
+      await loadData();
+      showNotification(`Sėkmingai išsaugota ${currentExaminations.length} nagų apžiūrų!`, 'success');
+    } catch (error) {
+      console.error('Error saving examinations:', error);
+      showNotification('Klaida išsaugant apžiūras', 'error');
+    }
+  };
+
+  const getExaminedZones = () => {
+    const set = new Set<string>();
+    currentExaminations
+      .filter(exam => exam.leg === selectedLeg && exam.claw === selectedClaw)
+      .forEach(exam => {
+        if (exam.zone !== undefined) {
+          set.add(`${exam.zone}`);
+        }
+      });
+    return set;
+  };
+
+  const filteredAnimals = animals.filter(animal => {
+    const searchLower = searchTerm.toLowerCase();
+    const collarNo = animalCollarNumbers.get(animal.id);
+    return (
+      animal.tag_no?.toLowerCase().includes(searchLower) ||
+      collarNo?.toString().includes(searchLower)
+    );
+  });
+
+  const filteredRecords = hoofRecords.filter(record => {
+    if (filterCondition !== 'all' && record.condition_code !== filterCondition) return false;
+    if (filterSeverity !== 'all' && record.severity?.toString() !== filterSeverity) return false;
+    if (dateFrom && record.examination_date < dateFrom) return false;
+    if (dateTo && record.examination_date > dateTo) return false;
+    return true;
+  });
+
+  const getAnimalById = (id: string) => animals.find(a => a.id === id);
+  const getConditionByCode = (code: string | null) =>
+    conditions.find(c => c.code === code);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">Kraunama...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Activity className="w-8 h-8 text-blue-600" />
+            Nagų sveikata (3D)
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Nagų kirpimas, būklės registravimas su 3D zona pasirinkimu
+          </p>
+        </div>
+        <button
+          onClick={() => setShowExaminationForm(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Nauja apžiūra
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Iš viso apžiūrų</p>
+              <p className="text-2xl font-bold text-gray-900">{hoofRecords.length}</p>
+            </div>
+            <Calendar className="w-8 h-8 text-blue-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Reikia kontrolės</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {hoofRecords.filter(r => r.requires_followup && !r.followup_completed).length}
+              </p>
+            </div>
+            <Clock className="w-8 h-8 text-orange-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Su pažeidimais</p>
+              <p className="text-2xl font-bold text-red-600">
+                {hoofRecords.filter(r => r.condition_code && r.condition_code !== 'OK').length}
+              </p>
+            </div>
+            <AlertCircle className="w-8 h-8 text-red-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Gydyta šį mėnesį</p>
+              <p className="text-2xl font-bold text-green-600">
+                {hoofRecords.filter(r => {
+                  const date = new Date(r.examination_date);
+                  const now = new Date();
+                  return r.was_treated &&
+                    date.getMonth() === now.getMonth() &&
+                    date.getFullYear() === now.getFullYear();
+                }).length}
+              </p>
+            </div>
+            <CheckCircle className="w-8 h-8 text-green-500" />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Apžiūrų istorija</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paieška</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Ausies nr, kaklo nr..."
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Būklė</label>
+            <select
+              value={filterCondition}
+              onChange={(e) => setFilterCondition(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Visos</option>
+              {conditions.map(c => (
+                <option key={c.code} value={c.code}>{c.name_lt}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sunkumas</label>
+            <select
+              value={filterSeverity}
+              onChange={(e) => setFilterSeverity(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Visi</option>
+              <option value="0">0 - Sveikas</option>
+              <option value="1">1 - Lengvas</option>
+              <option value="2">2 - Vidutinis</option>
+              <option value="3">3 - Sunkus</option>
+              <option value="4">4 - Labai sunkus</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data nuo</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data iki</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvulys</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Koja</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nagas</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zona</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Būklė</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sunkumas</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kirpta</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydyta</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredRecords.slice(0, 50).map(record => {
+                const animal = getAnimalById(record.animal_id);
+                const condition = getConditionByCode(record.condition_code);
+                return (
+                  <tr key={record.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm">{formatDateLT(record.examination_date)}</td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      {animal ? formatAnimalDisplay(animal) : record.animal_id}
+                    </td>
+                    <td className="px-4 py-3 text-sm">{record.leg}</td>
+                    <td className="px-4 py-3 text-sm">
+                      {record.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {record.zone !== null && record.zone !== undefined ? (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                          Z{record.zone}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">{condition?.name_lt || record.condition_code}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                        ${record.severity === 0 ? 'bg-green-100 text-green-800' : ''}
+                        ${record.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
+                        ${record.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
+                        ${record.severity === 3 ? 'bg-red-100 text-red-800' : ''}
+                        ${record.severity === 4 ? 'bg-red-200 text-red-900' : ''}
+                      `}>
+                        {record.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {record.was_trimmed ? '✓' : ''}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {record.was_treated ? '✓' : ''}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showExaminationForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Nauja nagų apžiūra (3D)</h3>
+              <button
+                onClick={() => {
+                  setShowExaminationForm(false);
+                  setCurrentExaminations([]);
+                  setSelectedAnimalId('');
+                  setSelectedLeg(null);
+                  setSelectedClaw(null);
+                  setSelectedZone(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Gyvulys (Ausies nr / Kaklo nr) <span className="text-red-500">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={sortByLithuanian(filteredAnimals, (a) => {
+                      const collarNo = animalCollarNumbers.get(a.id);
+                      return collarNo ? `${a.tag_no} (${collarNo})` : formatAnimalDisplay(a);
+                    }).map(a => {
+                      const collarNo = animalCollarNumbers.get(a.id);
+                      return {
+                        value: a.id,
+                        label: collarNo ? `${a.tag_no} (Kaklo: ${collarNo})` : formatAnimalDisplay(a)
+                      };
+                    })}
+                    value={selectedAnimalId}
+                    onChange={setSelectedAnimalId}
+                    placeholder="Pasirinkite gyvulį..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Apžiūros data <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={examinationDate}
+                    onChange={(e) => setExaminationDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Technikas <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={technicianName}
+                    onChange={(e) => setTechnicianName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg">
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <Box className="w-5 h-5 text-blue-600" />
+                  Interaktyvus 3D gyvulio modelis
+                </h4>
+                <HoofViewer3DEnhanced
+                  selectedLeg={selectedLeg}
+                  selectedClaw={selectedClaw}
+                  selectedZone={selectedZone}
+                  onLegSelect={handleLegSelect}
+                  onClawSelect={handleClawSelect}
+                  onZoneSelect={handleZoneSelect}
+                  examinedZones={getExaminedZones()}
+                />
+              </div>
+
+              {currentExaminations.length > 0 && (
+                <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      Įvestos būklės ({currentExaminations.length})
+                    </h4>
+                    <button
+                      onClick={() => setCurrentExaminations([])}
+                      className="text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      Išvalyti visas
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {currentExaminations.map((exam, idx) => {
+                      const condition = getConditionByCode(exam.condition_code);
+                      return (
+                        <div 
+                          key={idx} 
+                          className="text-sm bg-white p-2 rounded border-2 border-green-300 hover:border-green-500 transition-colors cursor-pointer group relative"
+                          onClick={() => {
+                            // Allow editing by clicking on the examination card
+                            setSelectedLeg(exam.leg);
+                            setSelectedClaw(exam.claw);
+                            setSelectedZone(exam.zone || null);
+                            setClawFormData(exam);
+                            setShowClawModal(true);
+                          }}
+                        >
+                          <div className="font-medium text-gray-800">
+                            {exam.leg} - {exam.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
+                            {exam.zone !== undefined && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                Z{exam.zone}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-gray-700 font-medium">{condition?.name_lt || exam.condition_code}</div>
+                          <div className="text-gray-500 text-xs">
+                            Sunkumas: {exam.severity}
+                            {exam.was_treated && ' • Gydyta'}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCurrentExaminations(prev => 
+                                prev.filter((_, i) => i !== idx)
+                              );
+                            }}
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
+                            title="Pašalinti"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 text-xs text-gray-600 italic">
+                    💡 Spustelėkite kortelę norėdami redaguoti. Pasirinkite kitą koją, kad pridėtumėte daugiau apžiūrų.
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowExaminationForm(false);
+                    setCurrentExaminations([]);
+                    setSelectedAnimalId('');
+                    setSelectedLeg(null);
+                    setSelectedClaw(null);
+                    setSelectedZone(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={saveAllExaminations}
+                  disabled={!selectedAnimalId || currentExaminations.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!selectedAnimalId ? 'Pasirinkite gyvulį' : currentExaminations.length === 0 ? 'Įveskite bent vieną nago būklę' : 'Išsaugoti visas apžiūras'}
+                >
+                  <Save className="w-5 h-5" />
+                  Išsaugoti visas ({currentExaminations.length})
+                </button>
+              </div>
+              {(!selectedAnimalId || currentExaminations.length === 0) && (
+                <div className="text-sm text-gray-500 text-right mt-2">
+                  {!selectedAnimalId && '⚠️ Pasirinkite gyvulį'}
+                  {selectedAnimalId && currentExaminations.length === 0 && '⚠️ Pridėkite bent vieną nago būklę'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClawModal && selectedLeg && selectedClaw && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                {selectedLeg} - {selectedClaw === 'inner' ? 'Vidinis' : 'Išorinis'} nagas
+                {selectedZone !== null && ` - Zona ${selectedZone}`}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowClawModal(false);
+                  setSelectedZone(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Būklė {conditions.length === 0 && <span className="text-red-500 text-xs">(Nėra duomenų)</span>}
+                </label>
+                <select
+                  value={clawFormData.condition_code || 'OK'}
+                  onChange={(e) => setClawFormData({...clawFormData, condition_code: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  {conditions.length === 0 ? (
+                    <option value="OK">Sveikas (Nėra būklių duomenų)</option>
+                  ) : (
+                    conditions.map(c => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} - {c.name_lt}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sunkumas: {clawFormData.severity || 0}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="4"
+                  value={clawFormData.severity || 0}
+                  onChange={(e) => setClawFormData({...clawFormData, severity: parseInt(e.target.value)})}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>0 - Sveikas</span>
+                  <span>1 - Lengvas</span>
+                  <span>2 - Vidutinis</span>
+                  <span>3 - Sunkus</span>
+                  <span>4 - Labai sunkus</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={clawFormData.was_treated || false}
+                    onChange={(e) => setClawFormData({...clawFormData, was_treated: e.target.checked})}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Gydyta</span>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={clawFormData.requires_followup || false}
+                    onChange={(e) => setClawFormData({
+                      ...clawFormData,
+                      requires_followup: e.target.checked,
+                      followup_date: e.target.checked
+                        ? new Date(Date.now() + 14*24*60*60*1000).toISOString().split('T')[0]
+                        : undefined
+                    })}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Reikia kontrolės</span>
+                </label>
+              </div>
+
+              {clawFormData.was_treated && (
+                <div className="space-y-3 border-t pt-4">
+                  <h4 className="font-medium text-gray-800">Gydymas</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Preparatas</label>
+                    <select
+                      value={clawFormData.treatment_product_id || ''}
+                      onChange={(e) => {
+                        const productId = e.target.value;
+                        // Filter available batches with stock and sort by date ASCENDING (oldest first = FIFO)
+                        const availableBatches = batches
+                          .filter(b => 
+                            b.product_id === productId && 
+                            (b.qty_left === null || b.qty_left === undefined || b.qty_left > 0) &&
+                            (!b.expiry_date || new Date(b.expiry_date) >= new Date()) // Not expired
+                          )
+                          .sort((a, b) => {
+                            // Sort by date ascending (earliest date first = oldest stock = FIFO)
+                            // Use mfg_date or created_at to determine oldest batch
+                            const dateA = a.mfg_date ? new Date(a.mfg_date) : new Date(a.created_at);
+                            const dateB = b.mfg_date ? new Date(b.mfg_date) : new Date(b.created_at);
+                            return dateA.getTime() - dateB.getTime();
+                          });
+                        
+                        // Auto-select the first available batch (oldest = FIFO)
+                        setClawFormData({
+                          ...clawFormData,
+                          treatment_product_id: productId || undefined,
+                          treatment_batch_id: availableBatches.length > 0 ? availableBatches[0].id : undefined
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Pasirinkite preparatą...</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {clawFormData.treatment_product_id && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Partija</label>
+                        <select
+                          value={clawFormData.treatment_batch_id || ''}
+                          onChange={(e) => setClawFormData({
+                            ...clawFormData,
+                            treatment_batch_id: e.target.value || undefined
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="">Pasirinkite partiją...</option>
+                          {batches
+                            .filter(b => 
+                              b.product_id === clawFormData.treatment_product_id && 
+                              (b.qty_left === null || b.qty_left === undefined || b.qty_left > 0) &&
+                              (!b.expiry_date || new Date(b.expiry_date) >= new Date()) // Not expired
+                            )
+                            .sort((a, b) => {
+                              // Sort by date ascending (earliest date first = oldest stock = FIFO)
+                              const dateA = a.mfg_date ? new Date(a.mfg_date) : new Date(a.created_at);
+                              const dateB = b.mfg_date ? new Date(b.mfg_date) : new Date(b.created_at);
+                              return dateA.getTime() - dateB.getTime();
+                            })
+                            .map(b => {
+                              const product = products.find(p => p.id === b.product_id);
+                              return (
+                                <option key={b.id} value={b.id}>
+                                  {b.lot || 'Partija ' + b.id.slice(0, 8)} {b.qty_left !== null && b.qty_left !== undefined ? `- Likutis: ${b.qty_left} ${product?.primary_pack_unit || ''}` : ''} {b.expiry_date ? `(galioja iki: ${b.expiry_date})` : ''}
+                                </option>
+                              );
+                            })}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={clawFormData.treatment_quantity || ''}
+                            onChange={(e) => setClawFormData({
+                              ...clawFormData,
+                              treatment_quantity: parseFloat(e.target.value) || undefined
+                            })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
+                          <select
+                            value={clawFormData.treatment_unit || ''}
+                            onChange={(e) => setClawFormData({
+                              ...clawFormData,
+                              treatment_unit: e.target.value as Unit || undefined
+                            })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="">Pasirinkite...</option>
+                            <option value="ml">ml</option>
+                            <option value="g">g</option>
+                            <option value="pcs">vnt</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {clawFormData.requires_followup && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kontrolės data</label>
+                  <input
+                    type="date"
+                    value={clawFormData.followup_date || ''}
+                    onChange={(e) => setClawFormData({...clawFormData, followup_date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pastabos</label>
+                <textarea
+                  value={clawFormData.notes || ''}
+                  onChange={(e) => setClawFormData({...clawFormData, notes: e.target.value})}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Papildomos pastabos apie šį nagą..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowClawModal(false);
+                    setSelectedZone(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={saveClawExamination}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Išsaugoti
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

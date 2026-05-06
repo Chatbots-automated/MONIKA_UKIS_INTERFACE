@@ -81,16 +81,23 @@ export function SearchableSelect({
         </span>
         <div className="flex items-center gap-1">
           {value && (
-            <button
-              type="button"
+            <span
               onClick={(e) => {
                 e.stopPropagation();
                 handleClear();
               }}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              className="p-1 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  handleClear();
+                }
+              }}
             >
               <X className="w-3 h-3 text-gray-500" />
-            </button>
+            </span>
           )}
           <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>

@@ -43,6 +43,10 @@ export interface Batch {
   package_count: number | null;
   invoice_path: string | null;
   created_at: string;
+  qty_left: number | null;
+  batch_number: string | null;
+  status: string | null;
+  updated_at: string;
 }
 
 export interface Animal {
