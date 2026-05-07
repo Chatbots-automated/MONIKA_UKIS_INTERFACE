@@ -135,22 +135,55 @@ export function parseNumberInput(value: string): number {
 
 /**
  * Fetch latest collar numbers for all animals
- * Uses optimized view instead of full gea_daily table scan
+ * Queries source tables directly to ensure ALL animals are included (not just active)
  * Returns a Map of animal_id -> collar_no for fast lookups
  * Uses pagination to handle more than 1000 animals
  */
 export async function fetchLatestCollarNumbers(): Promise<Map<string, number>> {
   try {
-    // Use fetchAllRows to handle pagination automatically
-    const data = await fetchAllRows<{ animal_id: string; collar_no: number }>(
-      'vw_animal_latest_collar',
-      'animal_id, collar_no'
+    // Get latest import
+    const { data: latestImport } = await supabase
+      .from('gea_daily_imports')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!latestImport) {
+      return new Map();
+    }
+
+    // Get all animals
+    const animals = await fetchAllRows<{ id: string; tag_no: string }>(
+      'animals',
+      'id, tag_no',
+      'tag_no'
     );
 
+    // Get collar numbers (cow_number) from ataskaita1 for the latest import
+    const ataskaita1Data = await fetchAllRows<{ ear_number: string; cow_number: string }>(
+      'gea_daily_ataskaita1',
+      'ear_number, cow_number',
+      undefined,
+      [{ column: 'import_id', value: latestImport.id }]
+    );
+
+    // Build map: ear_number -> collar_no
+    const earToCollar = new Map<string, number>();
+    ataskaita1Data.forEach((record) => {
+      if (record.ear_number && record.cow_number && /^\d+$/.test(record.cow_number)) {
+        earToCollar.set(record.ear_number, parseInt(record.cow_number));
+      }
+    });
+
+    // Build final map: animal_id -> collar_no
     const collarMap = new Map<string, number>();
-    data.forEach((record) => {
-      if (record.collar_no) {
-        collarMap.set(record.animal_id, record.collar_no);
+    animals.forEach((animal) => {
+      if (animal.tag_no) {
+        const collarNo = earToCollar.get(animal.tag_no);
+        if (collarNo) {
+          collarMap.set(animal.id, collarNo);
+        }
       }
     });
 
@@ -179,12 +212,11 @@ export async function fetchLatestGroupNumbers(): Promise<Map<string, string>> {
       return new Map();
     }
 
-    // Get all animals with their tag numbers
+    // Get all animals with their tag numbers (including inactive)
     const animals = await fetchAllRows<{ id: string; tag_no: string }>(
       'animals',
       'id, tag_no',
-      'tag_no',
-      [{ column: 'active', value: true }]
+      'tag_no'
     );
 
     // Get group numbers from ataskaita1 for the latest import

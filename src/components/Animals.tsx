@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers, fetchLatestGroupNumbers } from '../lib/helpers';
 import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
@@ -43,21 +43,23 @@ export function Animals() {
 
   const loadData = async () => {
     try {
-      const [allAnimals, productsRes, diseasesRes, collarMap] = await Promise.all([
+      const [allAnimals, productsRes, diseasesRes, collarMap, groupMap] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
         supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
         fetchLatestCollarNumbers(),
+        fetchLatestGroupNumbers(),
       ]);
 
-      // Enrich animals with collar numbers from optimized view
-      // Neck number is the same as collar number
+      // Enrich animals with collar numbers and group numbers
       const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.get(animal.id) || null;
+        const groupNo = groupMap.get(animal.id) || null;
         return {
           ...animal,
           collar_no: collarNo?.toString() || null,
           neck_no: collarNo?.toString() || null,
+          group_number: groupNo,
         };
       });
 
@@ -1007,6 +1009,7 @@ export function Animals() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kaklo nr.</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grupė</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rūšis</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amžius</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Savininkas</th>
@@ -1018,7 +1021,7 @@ export function Animals() {
                 <tr key={animal.id} className="hover:bg-gray-50 transition-colors">
                   {editing === animal.id ? (
                     <>
-                      <td className="px-6 py-4" colSpan={6}>
+                      <td className="px-6 py-4" colSpan={7}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <input
                             type="text"
@@ -1092,6 +1095,7 @@ export function Animals() {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).neck_no || '-'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).group_number || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || animal.species}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}

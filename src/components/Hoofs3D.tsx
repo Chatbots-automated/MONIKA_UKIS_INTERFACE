@@ -12,7 +12,7 @@ import {
 } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { HoofViewer3DEnhanced } from './HoofViewer3DEnhanced';
+import { HoofInterfaceNew } from './HoofInterfaceNew';
 import { SearchableSelect } from './SearchableSelect';
 import {
   Activity,
@@ -178,6 +178,12 @@ export function Hoofs3D() {
   };
 
   const handleZoneSelect = (zone: number) => {
+    // Handle deselection
+    if (zone === -1) {
+      setSelectedZone(null);
+      return;
+    }
+
     setSelectedZone(zone);
     
     if (!selectedLeg || !selectedClaw) return;
@@ -635,12 +641,8 @@ export function Hoofs3D() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg">
-                <h4 className="font-semibold mb-3 flex items-center gap-2">
-                  <Box className="w-5 h-5 text-blue-600" />
-                  Interaktyvus 3D gyvulio modelis
-                </h4>
-                <HoofViewer3DEnhanced
+              <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-6 rounded-lg">
+                <HoofInterfaceNew
                   selectedLeg={selectedLeg}
                   selectedClaw={selectedClaw}
                   selectedZone={selectedZone}
@@ -648,6 +650,7 @@ export function Hoofs3D() {
                   onClawSelect={handleClawSelect}
                   onZoneSelect={handleZoneSelect}
                   examinedZones={getExaminedZones()}
+                  animalId={selectedAnimalId}
                 />
               </div>
 

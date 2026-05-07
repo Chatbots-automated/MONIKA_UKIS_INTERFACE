@@ -59,6 +59,7 @@ export interface Animal {
   holder_name: string | null;
   holder_address: string | null;
   created_at: string;
+  group_number?: string | null;
 }
 
 export interface Disease {

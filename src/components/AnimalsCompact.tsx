@@ -6,7 +6,7 @@ import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
-import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers } from '../lib/helpers';
+import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers, fetchLatestGroupNumbers } from '../lib/helpers';
 
 interface GeaCollarData {
   animal_id: string;
@@ -74,21 +74,27 @@ export function AnimalsCompact() {
       // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');
 
-      // Fetch latest collar numbers from optimized view
+      // Fetch latest collar numbers from optimized view (with pagination)
       const collarMap = await fetchLatestCollarNumbers();
+
+      // Fetch latest group numbers from GEA data (with pagination)
+      const groupMap = await fetchLatestGroupNumbers();
 
       console.log('🐄 Animals loaded:', allAnimals.length);
       console.log('🏷️ Animals with collar numbers:', collarMap.size);
+      console.log('📊 Animals with group numbers:', groupMap.size);
 
       setGeaCollars(collarMap);
 
-      // Enrich animals with collar numbers
+      // Enrich animals with collar numbers and group numbers
       const enrichedAnimals = allAnimals.map((animal: Animal) => {
         const collarNo = collarMap.has(animal.id) ? collarMap.get(animal.id)?.toString() : null;
+        const groupNo = groupMap.get(animal.id) || null;
         return {
           ...animal,
           collar_no: collarNo,
           neck_no: collarNo,
+          group_number: groupNo,
         };
       });
 
@@ -270,6 +276,7 @@ export function AnimalsCompact() {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaklo nr.</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupė</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rūšis</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amžius</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sekantis vizitas</th>
@@ -312,6 +319,9 @@ export function AnimalsCompact() {
                         <td className="px-4 py-3 text-sm text-gray-500">
                           {(animal as any).neck_no || '-'}
                         </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {(animal as any).group_number || '-'}
+                        </td>
                         <td className="px-4 py-3">
                           <input
                             type="text"
@@ -341,7 +351,7 @@ export function AnimalsCompact() {
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
-                        <td className="px-4 py-3" colSpan={2}></td>
+                        <td className="px-4 py-3" colSpan={3}></td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -369,6 +379,9 @@ export function AnimalsCompact() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {(animal as any).neck_no || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {(animal as any).group_number || '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {animal.sex || animal.species}

@@ -32,10 +32,10 @@ CREATE TABLE IF NOT EXISTS public.animal_departures (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_animal_departures_animal_id ON public.animal_departures(animal_id);
-CREATE INDEX idx_animal_departures_animal_number ON public.animal_departures(animal_number);
-CREATE INDEX idx_animal_departures_departure_date ON public.animal_departures(departure_date);
-CREATE INDEX idx_animal_departures_has_conflict ON public.animal_departures(has_withdrawal_conflict);
+CREATE INDEX IF NOT EXISTS idx_animal_departures_animal_id ON public.animal_departures(animal_id);
+CREATE INDEX IF NOT EXISTS idx_animal_departures_animal_number ON public.animal_departures(animal_number);
+CREATE INDEX IF NOT EXISTS idx_animal_departures_departure_date ON public.animal_departures(departure_date);
+CREATE INDEX IF NOT EXISTS idx_animal_departures_has_conflict ON public.animal_departures(has_withdrawal_conflict);
 
 -- Add comment
 COMMENT ON TABLE public.animal_departures IS 'Tracks animals that have been sent away (išvežti gyvūnai) and checks for withdrawal period conflicts';
@@ -90,25 +90,31 @@ BEGIN
     FROM public.treatments t
     WHERE t.animal_id = v_animal_id;
     
-    -- Check for conflicts
-    IF v_last_withdrawal_milk IS NOT NULL AND p_departure_date < v_last_withdrawal_milk THEN
-      v_has_conflict := true;
-      v_conflict_details := v_conflict_details || 
-        'PIENO KARENCIJA: Išvežta ' || p_departure_date || 
-        ', bet pieno karencija baigiasi ' || v_last_withdrawal_milk || 
-        ' (dar ' || (v_last_withdrawal_milk - p_departure_date) || ' d.). ';
-    END IF;
-    
-    IF v_last_withdrawal_meat IS NOT NULL AND p_departure_date < v_last_withdrawal_meat THEN
-      v_has_conflict := true;
-      v_conflict_details := v_conflict_details || 
-        'MĖSOS KARENCIJA: Išvežta ' || p_departure_date || 
-        ', bet mėsos karencija baigiasi ' || v_last_withdrawal_meat || 
-        ' (dar ' || (v_last_withdrawal_meat - p_departure_date) || ' d.). ';
-    END IF;
-    
-    IF NOT v_has_conflict THEN
-      v_conflict_details := 'Nėra karencijos konfliktų';
+    -- Only check for conflicts if there's a veterinary reason code
+    IF p_vet_reason_code IS NOT NULL AND p_vet_reason_code != '' THEN
+      -- Check for conflicts
+      IF v_last_withdrawal_milk IS NOT NULL AND p_departure_date < v_last_withdrawal_milk THEN
+        v_has_conflict := true;
+        v_conflict_details := v_conflict_details || 
+          'PIENO KARENCIJA: Išvežta ' || p_departure_date || 
+          ', bet pieno karencija baigiasi ' || v_last_withdrawal_milk || 
+          ' (dar ' || (v_last_withdrawal_milk - p_departure_date) || ' d.). ';
+      END IF;
+      
+      IF v_last_withdrawal_meat IS NOT NULL AND p_departure_date < v_last_withdrawal_meat THEN
+        v_has_conflict := true;
+        v_conflict_details := v_conflict_details || 
+          'MĖSOS KARENCIJA: Išvežta ' || p_departure_date || 
+          ', bet mėsos karencija baigiasi ' || v_last_withdrawal_meat || 
+          ' (dar ' || (v_last_withdrawal_meat - p_departure_date) || ' d.). ';
+      END IF;
+      
+      IF NOT v_has_conflict THEN
+        v_conflict_details := 'Nėra karencijos konfliktų';
+      END IF;
+    ELSE
+      -- No vet reason code, so no conflict check needed
+      v_conflict_details := 'Nėra veterinarinės priežasties kodo';
     END IF;
   ELSE
     -- Animal not found in database
@@ -191,7 +197,8 @@ GRANT EXECUTE ON FUNCTION upsert_animal_departure TO anon;
 COMMENT ON FUNCTION upsert_animal_departure IS 'Upserts animal departure record from N8N Excel import. Checks for withdrawal period conflicts. Prevents duplicates using (animal_number, departure_date) unique constraint.';
 
 -- View for easy querying of departed animals with conflicts
-CREATE OR REPLACE VIEW vw_animal_departures_with_conflicts AS
+DROP VIEW IF EXISTS vw_animal_departures_with_conflicts;
+CREATE VIEW vw_animal_departures_with_conflicts AS
 SELECT 
   ad.id,
   ad.animal_number,
@@ -243,18 +250,21 @@ COMMENT ON VIEW vw_animal_departures_with_conflicts IS 'View of departed animals
 -- RLS Policies (allow authenticated users to read)
 ALTER TABLE public.animal_departures ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow authenticated users to read animal departures" ON public.animal_departures;
 CREATE POLICY "Allow authenticated users to read animal departures"
   ON public.animal_departures
   FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Allow anon to insert animal departures (for N8N)" ON public.animal_departures;
 CREATE POLICY "Allow anon to insert animal departures (for N8N)"
   ON public.animal_departures
   FOR INSERT
   TO anon
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow anon to update animal departures (for N8N)" ON public.animal_departures;
 CREATE POLICY "Allow anon to update animal departures (for N8N)"
   ON public.animal_departures
   FOR UPDATE

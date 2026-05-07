@@ -53,29 +53,35 @@ BEGIN
       FROM public.treatments t
       WHERE t.animal_id = v_animal_id;
       
-      -- Check for conflicts
-      IF v_last_withdrawal_milk IS NOT NULL AND (v_animal->>'Data')::DATE < v_last_withdrawal_milk THEN
-        v_has_conflict := true;
-        v_conflicts := v_conflicts + 1;
-        v_conflict_details := v_conflict_details || 
-          'PIENO KARENCIJA: Išvežta ' || (v_animal->>'Data') || 
-          ', bet pieno karencija baigiasi ' || v_last_withdrawal_milk || 
-          ' (dar ' || (v_last_withdrawal_milk - (v_animal->>'Data')::DATE) || ' d.). ';
-      END IF;
-      
-      IF v_last_withdrawal_meat IS NOT NULL AND (v_animal->>'Data')::DATE < v_last_withdrawal_meat THEN
-        v_has_conflict := true;
-        IF v_conflicts < v_total THEN
+      -- Only check for conflicts if there's a veterinary reason code
+      IF v_animal->>'Vet. priež. Nr.' IS NOT NULL AND v_animal->>'Vet. priež. Nr.' != '' THEN
+        -- Check for conflicts
+        IF v_last_withdrawal_milk IS NOT NULL AND (v_animal->>'Data')::DATE < v_last_withdrawal_milk THEN
+          v_has_conflict := true;
           v_conflicts := v_conflicts + 1;
+          v_conflict_details := v_conflict_details || 
+            'PIENO KARENCIJA: Išvežta ' || (v_animal->>'Data') || 
+            ', bet pieno karencija baigiasi ' || v_last_withdrawal_milk || 
+            ' (dar ' || (v_last_withdrawal_milk - (v_animal->>'Data')::DATE) || ' d.). ';
         END IF;
-        v_conflict_details := v_conflict_details || 
-          'MĖSOS KARENCIJA: Išvežta ' || (v_animal->>'Data') || 
-          ', bet mėsos karencija baigiasi ' || v_last_withdrawal_meat || 
-          ' (dar ' || (v_last_withdrawal_meat - (v_animal->>'Data')::DATE) || ' d.). ';
-      END IF;
-      
-      IF NOT v_has_conflict THEN
-        v_conflict_details := 'Nėra karencijos konfliktų';
+        
+        IF v_last_withdrawal_meat IS NOT NULL AND (v_animal->>'Data')::DATE < v_last_withdrawal_meat THEN
+          v_has_conflict := true;
+          IF v_conflicts < v_total THEN
+            v_conflicts := v_conflicts + 1;
+          END IF;
+          v_conflict_details := v_conflict_details || 
+            'MĖSOS KARENCIJA: Išvežta ' || (v_animal->>'Data') || 
+            ', bet mėsos karencija baigiasi ' || v_last_withdrawal_meat || 
+            ' (dar ' || (v_last_withdrawal_meat - (v_animal->>'Data')::DATE) || ' d.). ';
+        END IF;
+        
+        IF NOT v_has_conflict THEN
+          v_conflict_details := 'Nėra karencijos konfliktų';
+        END IF;
+      ELSE
+        -- No vet reason code, so no conflict check needed
+        v_conflict_details := 'Nėra veterinarinės priežasties kodo';
       END IF;
     ELSE
       v_conflict_details := 'Gyvūnas nerastas duomenų bazėje (galbūt dar nesinchronizuotas iš VIC)';
