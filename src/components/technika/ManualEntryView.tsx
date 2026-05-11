@@ -1066,9 +1066,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       return;
     }
 
-    const validEntries = dayEntries.filter(d => d.start_time && d.end_time);
+    // Valid entries are those with times OR with an initial selected
+    const validEntries = dayEntries.filter(d => 
+      (d.start_time && d.end_time) || d.day_type_initial_id
+    );
+    
     if (validEntries.length === 0) {
-      alert('Įveskite bent vieną dieną su pradžios ir pabaigos laiku');
+      alert('Įveskite bent vieną dieną su pradžios ir pabaigos laiku arba pasirinkite inicialą');
       return;
     }
 
@@ -1079,42 +1083,66 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       await supabase.from('worker_schedules').delete().eq('worker_id', selectedWorker).in('date', datesToSave);
       await supabase.from('manual_time_entries').delete().eq('worker_id', selectedWorker).in('entry_date', datesToSave);
 
-      const schedulesToInsert = validEntries.map(entry => ({
-        worker_id: selectedWorker,
-        date: entry.date,
-        shift_start: entry.start_time,
-        shift_end: entry.end_time,
-        schedule_type: 'work',
-        notes: `${calculateHours(entry.start_time, entry.end_time, entry.lunch_type).toFixed(2)}h`,
-        work_location: workLocation,
-      }));
+      // Only create schedules for entries with actual times
+      const entriesWithTimes = validEntries.filter(e => e.start_time && e.end_time);
+      
+      let schedulesCount = 0;
+      if (entriesWithTimes.length > 0) {
+        const schedulesToInsert = entriesWithTimes.map(entry => ({
+          worker_id: selectedWorker,
+          date: entry.date,
+          shift_start: entry.start_time,
+          shift_end: entry.end_time,
+          schedule_type: 'work',
+          notes: `${calculateHours(entry.start_time, entry.end_time, entry.lunch_type).toFixed(2)}h`,
+          work_location: workLocation,
+        }));
 
-      const { error: scheduleError } = await supabase
-        .from('worker_schedules')
-        .insert(schedulesToInsert);
+        const { error: scheduleError } = await supabase
+          .from('worker_schedules')
+          .insert(schedulesToInsert);
 
-      if (scheduleError) throw scheduleError;
+        if (scheduleError) throw scheduleError;
+        schedulesCount = schedulesToInsert.length;
+      }
 
-      const timeEntriesToInsert = validEntries.map(entry => ({
-        worker_id: selectedWorker,
-        entry_date: entry.date,
-        start_time: entry.start_time,
-        end_time: entry.end_time,
-        worker_type: entry.worker_type,
-        lunch_type: entry.lunch_type,
-        work_description: entry.work_descriptions.length > 0 ? entry.work_descriptions.join(', ') : (entry.work_description || null),
-        measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
-        measurement_unit_id: entry.measurement_unit_id || null,
-        comments: entry.comments || null,
-        non_driving_hours: entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : null,
-        day_type_initial_id: entry.day_type_initial_id || null,
-        notes: 'Įvesta iš lapų',
-      }));
+      const timeEntriesToInsert = validEntries.map(entry => {
+        const hours = entry.day_type_initial_id 
+          ? 0 
+          : entry.worker_type === 'vairuotojas'
+            ? (entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : 0)
+            : calculateHours(entry.start_time || '', entry.end_time || '', entry.lunch_type);
+        
+        return {
+          worker_id: selectedWorker,
+          entry_date: entry.date,
+          start_time: entry.start_time || null,
+          end_time: entry.end_time || null,
+          worker_type: entry.worker_type,
+          lunch_type: entry.lunch_type,
+          work_description: entry.work_descriptions.length > 0 ? entry.work_descriptions.join(', ') : (entry.work_description || null),
+          measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
+          measurement_unit_id: entry.measurement_unit_id || null,
+          comments: entry.comments || null,
+          non_driving_hours: entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : null,
+          day_type_initial_id: entry.day_type_initial_id || null,
+          hours_worked: hours,
+          notes: entry.day_type_initial_id ? 'Inicialas' : 'Įvesta iš lapų',
+        };
+      });
 
-      await supabase.from('manual_time_entries').insert(timeEntriesToInsert);
+      console.log('Attempting to insert:', timeEntriesToInsert);
+      const { data: insertedData, error: insertError } = await supabase
+        .from('manual_time_entries')
+        .insert(timeEntriesToInsert);
+      
+      if (insertError) {
+        console.error('Insert error details:', insertError);
+        throw insertError;
+      }
 
       await logAction('create_manual_schedules', 'worker_schedules', null, null, {
-        count: schedulesToInsert.length,
+        count: schedulesCount,
         worker_id: selectedWorker,
         month: selectedMonth.toISOString(),
       });
@@ -1140,6 +1168,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
   const totalHours = dayEntries.reduce(
     (sum, d) => {
+      // Skip days with initials (no hours to count)
+      if (d.day_type_initial_id) return sum;
+      
       if (d.worker_type === 'vairuotojas') {
         return sum + (d.non_driving_hours ? parseFloat(d.non_driving_hours) : 0);
       }
@@ -1147,7 +1178,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     },
     0
   );
-  const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
+  const filledDays = dayEntries.filter(d => (d.start_time && d.end_time) || d.day_type_initial_id).length;
   const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
 
   // Calculate measurement totals
@@ -1387,8 +1418,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               onBlur={() => handleTimeBlur(day.date, 'start_time')}
                               placeholder="0810"
                               maxLength={5}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                              title="Įveskite 4 skaitmenis, pvz. 0810"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              title={day.day_type_initial_id ? 'Išjungta - pasirinktas inicialas' : 'Įveskite 4 skaitmenis, pvz. 0810'}
                             />
                           </td>
                           <td className="px-2 py-2">
@@ -1400,8 +1432,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               onBlur={() => handleTimeBlur(day.date, 'end_time')}
                               placeholder="1853"
                               maxLength={5}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                              title="Įveskite 4 skaitmenis, pvz. 1853"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              title={day.day_type_initial_id ? 'Išjungta - pasirinktas inicialas' : 'Įveskite 4 skaitmenis, pvz. 1853'}
                             />
                           </td>
                           <td className="px-2 py-2">
@@ -1447,7 +1480,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             <select
                               value={day.lunch_type}
                               onChange={e => updateDayEntry(day.date, 'lunch_type', e.target.value)}
-                              className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             >
                               <option value="none">Be</option>
                               <option value="half">Pusė</option>
@@ -1455,7 +1489,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             </select>
                           </td>
                           <td className="px-2 py-2">
-                            {day.worker_type === 'darbuotojas' ? (
+                            {day.day_type_initial_id ? (
+                              <span className="text-gray-400 text-xs italic">-</span>
+                            ) : day.worker_type === 'darbuotojas' ? (
                               <input
                                 type="text"
                                 value={day.work_description}
@@ -1525,7 +1561,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             )}
                           </td>
                           <td className="px-2 py-2">
-                            {day.worker_type === 'vairuotojas' ? (
+                            {day.day_type_initial_id ? (
+                              <span className="text-gray-400 text-xs">-</span>
+                            ) : day.worker_type === 'vairuotojas' ? (
                               <input
                                 type="number"
                                 step="0.1"
