@@ -61,6 +61,7 @@ export function Hoofs3D() {
   const [conditions, setConditions] = useState<HoofConditionCode[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const [hoofRecords, setHoofRecords] = useState<ExtendedHoofRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -113,11 +114,12 @@ export function Hoofs3D() {
     try {
       setLoading(true);
 
-      const [animalsData, conditionsRes, productsRes, batchesRes, recordsData, collarRes] = await Promise.all([
+      const [animalsData, conditionsRes, productsRes, batchesRes, usersRes, recordsData, collarRes] = await Promise.all([
         fetchAllRows<Animal>('animals'),
         supabase.from('hoof_condition_codes').select('*').eq('is_active', true).order('name_lt'),
         supabase.from('products').select('*').eq('is_active', true).order('name'),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
+        supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
         fetchAllRows<ExtendedHoofRecord>('hoof_records'),
         supabase.from('vw_animal_latest_collar').select('*')
       ]);
@@ -125,12 +127,14 @@ export function Hoofs3D() {
       if (conditionsRes.error) console.error('❌ Condition codes error:', conditionsRes.error);
       if (productsRes.error) console.error('❌ Products error:', productsRes.error);
       if (batchesRes.error) console.error('❌ Batches error:', batchesRes.error);
+      if (usersRes.error) console.error('❌ Users error:', usersRes.error);
       if (collarRes.error) console.error('❌ Collar data error:', collarRes.error);
 
       setAnimals(animalsData);
       setConditions(conditionsRes.data || []);
       setProducts(productsRes.data || []);
       setBatches(batchesRes.data || []);
+      setUsers(usersRes.data || []);
       setHoofRecords(recordsData);
 
       console.log('📊 Data loaded:', {
@@ -138,6 +142,7 @@ export function Hoofs3D() {
         conditions: conditionsRes.data?.length || 0,
         products: productsRes.data?.length || 0,
         batches: batchesRes.data?.length || 0,
+        users: usersRes.data?.length || 0,
         records: recordsData.length
       });
 
@@ -177,7 +182,7 @@ export function Hoofs3D() {
     }
   };
 
-  const handleZoneSelect = (zone: number) => {
+  const handleZoneSelect = (zone: number, clawOverride?: HoofClaw) => {
     // Handle deselection
     if (zone === -1) {
       setSelectedZone(null);
@@ -186,10 +191,13 @@ export function Hoofs3D() {
 
     setSelectedZone(zone);
     
-    if (!selectedLeg || !selectedClaw) return;
+    // Use clawOverride if provided, otherwise fall back to selectedClaw
+    const clawToUse = clawOverride || selectedClaw;
+    
+    if (!selectedLeg || !clawToUse) return;
 
     const existing = currentExaminations.find(
-      e => e.leg === selectedLeg && e.claw === selectedClaw && e.zone === zone
+      e => e.leg === selectedLeg && e.claw === clawToUse && e.zone === zone
     );
     
     if (existing) {
@@ -197,7 +205,7 @@ export function Hoofs3D() {
     } else {
       setClawFormData({
         leg: selectedLeg,
-        claw: selectedClaw,
+        claw: clawToUse,
         zone: zone,
         condition_code: 'OK',
         severity: 0,
@@ -629,14 +637,14 @@ export function Hoofs3D() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Technikas <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
+                  <SearchableSelect
+                    label="Technikas"
+                    options={users.map(user => ({ value: user.full_name, label: user.full_name }))}
                     value={technicianName}
-                    onChange={(e) => setTechnicianName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={(value) => setTechnicianName(value)}
+                    placeholder="Pasirinkite techniką..."
+                    emptyLabel="Nepasirinkta"
+                    required
                   />
                 </div>
               </div>

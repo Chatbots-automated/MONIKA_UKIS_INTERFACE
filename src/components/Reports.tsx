@@ -99,6 +99,7 @@ export function Reports() {
   const [animals, setAnimals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
 
   const [economicGroups, setEconomicGroups] = useState<EconomicGroup[]>([]);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -157,15 +158,17 @@ export function Reports() {
 
   const loadFilterOptions = async () => {
     try {
-      const [animalsRes, productsRes, diseasesRes] = await Promise.all([
+      const [animalsRes, productsRes, diseasesRes, usersRes] = await Promise.all([
         fetchAllRows('animals', 'id, tag_no, species', 'tag_no'),
         supabase.from('products').select('id, name').eq('is_active', true).order('name'),
         supabase.from('diseases').select('id, name').order('name'),
+        supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
       ]);
 
       if (animalsRes) setAnimals(animalsRes);
       if (productsRes.data) setProducts(productsRes.data);
       if (diseasesRes.data) setDiseases(diseasesRes.data);
+      if (usersRes.data) setUsers(usersRes.data);
 
       // Load economic groups when animal_departures report is active
       if (reportType === 'animal_departures') {
@@ -248,9 +251,13 @@ export function Reports() {
       setNewGroupName('');
       setNewGroupDescription('');
       setNewGroupColor('#3B82F6');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving economic group:', error);
-      alert('Klaida išsaugant ekonominę grupę');
+      if (error.code === '23505') {
+        alert(`Grupė su tokiu pavadinimu "${newGroupName}" jau egzistuoja. Pasirinkite kitą pavadinimą arba redaguokite esamą grupę.`);
+      } else {
+        alert('Klaida išsaugant ekonominę grupę: ' + (error.message || 'Nežinoma klaida'));
+      }
     }
   };
 
@@ -317,6 +324,8 @@ export function Reports() {
     }
 
     try {
+      console.log('Assigning group', bulkAssignGroupId, 'to animals:', Array.from(selectedAnimals));
+      
       const updates = Array.from(selectedAnimals).map(animalId => 
         supabase
           .from('animal_departures')
@@ -327,7 +336,14 @@ export function Reports() {
           .eq('id', animalId)
       );
 
-      await Promise.all(updates);
+      const results = await Promise.all(updates);
+      
+      // Check for errors
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('Errors during bulk assign:', errors);
+        throw new Error(`Failed to update ${errors.length} animals`);
+      }
 
       // Clear selection and reload
       setSelectedAnimals(new Set());
@@ -336,9 +352,9 @@ export function Reports() {
       await loadReport();
       
       alert(`Sėkmingai priskirta ${selectedAnimals.size} gyvūnų`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error bulk assigning economic group:', error);
-      alert('Klaida masiškai priskiriant ekonominę grupę');
+      alert('Klaida masiškai priskiriant ekonominę grupę: ' + (error.message || 'Nežinoma klaida'));
     }
   };
 
@@ -671,6 +687,7 @@ export function Reports() {
           if (dateFrom) query = query.gte('examination_date', dateFrom);
           if (dateTo) query = query.lte('examination_date', dateTo);
           if (filterAnimal) query = query.eq('animal_id', filterAnimal);
+          if (filterVet) query = query.ilike('technician_name', `%${filterVet}%`);
 
           const { data, error } = await query;
           if (error) throw error;
@@ -1883,15 +1900,15 @@ export function Reports() {
                     </div>
                   )}
 
-                  {reportType === 'treated_animals' && (
+                  {(reportType === 'treated_animals' || reportType === 'hoof_journal') && (
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Veterinaras</label>
-                      <input
-                        type="text"
+                      <SearchableSelect
+                        label={reportType === 'hoof_journal' ? 'Technikas' : 'Veterinaras'}
+                        options={users.map(user => ({ value: user.full_name, label: user.full_name }))}
                         value={filterVet}
-                        onChange={(e) => setFilterVet(e.target.value)}
-                        placeholder="Veterinaro vardas"
-                        className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        onChange={(value) => setFilterVet(value)}
+                        placeholder={reportType === 'hoof_journal' ? 'Pasirinkite techniką...' : 'Pasirinkite veterinarą...'}
+                        emptyLabel={reportType === 'hoof_journal' ? 'Visi technikai' : 'Visi veterinarai'}
                       />
                     </div>
                   )}

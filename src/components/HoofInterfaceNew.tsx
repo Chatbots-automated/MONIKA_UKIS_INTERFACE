@@ -9,7 +9,7 @@ interface HoofInterfaceNewProps {
   selectedZone: number | null;
   onLegSelect: (leg: HoofLeg) => void;
   onClawSelect: (claw: HoofClaw) => void;
-  onZoneSelect: (zone: number) => void;
+  onZoneSelect: (zone: number, claw?: HoofClaw) => void;
   examinedZones: Set<string>;
   animalId?: string;
 }
@@ -131,8 +131,9 @@ export function HoofInterfaceNew({
       onClawSelect('inner'); // Reset
     } else {
       setTempZoneKey(key);
-      onZoneSelect(zone);
+      // Pass claw to onZoneSelect so parent can open modal immediately
       onClawSelect(claw);
+      onZoneSelect(zone, claw);
     }
   };
 
@@ -235,131 +236,161 @@ export function HoofInterfaceNew({
 
   // Screen 2: Zones
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between mb-6">
         <button
           onClick={handleBack}
-          className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-base font-medium"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
           Grįžti
         </button>
 
         <div className="text-center">
-          <div className="text-sm font-semibold uppercase tracking-wider text-gray-600">
+          <div className="text-base font-semibold uppercase tracking-wider text-gray-600">
             2 žingsnis iš 2 · Pasirinkite zoną
           </div>
-          <div className="text-lg font-bold text-gray-900">
+          <div className="text-2xl font-bold text-gray-900">
             {currentHoof?.label}
           </div>
         </div>
 
-        <div className="w-20"></div>
+        <div className="w-28"></div>
       </div>
 
-      <div className="bg-white border border-gray-300 rounded-lg p-4">
-        <svg className="w-full max-w-xl mx-auto" viewBox="0 0 420 470" xmlns="http://www.w3.org/2000/svg">
+      <div className="bg-white border border-gray-300 rounded-lg p-8">
+        <svg className="zone-svg w-full max-w-4xl mx-auto" viewBox="0 0 420 470" xmlns="http://www.w3.org/2000/svg" aria-label="Hoof Zones Diagram">
           <defs>
             <linearGradient id="hoofBase" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#9fa9b0"/>
               <stop offset="100%" stopColor="#7f8a91"/>
             </linearGradient>
+
             <linearGradient id="hoofBase2" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#aab3b9"/>
               <stop offset="100%" stopColor="#8a959c"/>
             </linearGradient>
+
+            <linearGradient id="hoofLight" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#b5bdc3"/>
+              <stop offset="100%" stopColor="#8c979e"/>
+            </linearGradient>
           </defs>
 
-          {/* Guide text */}
-          <text x="166" y="70" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">1</text>
-          <text x="248" y="70" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">1</text>
-          <text x="79" y="112" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">2</text>
-          <text x="338" y="112" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">2</text>
-
-          {/* Guide lines */}
-          <path d="M168 75 L168 90" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M250 75 L250 90" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M90 114 L112 114 L121 130" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M330 114 L308 114 L299 130" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-
-          {/* LEFT CLAW ZONES */}
-          <ZonePath zone={1} claw="inner" keyStr="left-1" fill="url(#hoofBase2)"
-            d="M138 90 C149 88, 159 91, 167 100 C171 110, 171 122, 168 136 C152 134, 136 135, 120 140 C122 118, 128 101, 138 90 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-1"} />
-
-          <ZonePath zone={2} claw="inner" keyStr="left-2" fill="url(#hoofBase2)"
-            d="M86 132 C74 163, 71 204, 75 246 C76 258, 78 270, 82 281 C90 282, 99 281, 108 278 C107 237, 109 194, 118 157 C109 145, 99 136, 86 132 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-2"} />
-
-          <ZonePath zone={5} claw="inner" keyStr="left-5" fill="url(#hoofBase)"
-            d="M120 140 C136 135, 152 134, 168 136 C175 145, 178 156, 179 168 C171 168, 161 170, 151 176 C139 171, 128 168, 118 157 C118 151, 119 145, 120 140 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-5"} />
-
-          <ZonePath zone={4} claw="inner" keyStr="left-4" fill="url(#hoofBase)"
-            d="M118 157 C109 194, 107 237, 108 278 C126 289, 148 293, 172 289 C183 265, 186 232, 182 201 C179 188, 172 180, 151 176 C139 171, 128 168, 118 157 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-4"} />
-
-          <ZonePath zone={3} claw="inner" keyStr="left-3" fill="url(#hoofBase2)"
-            d="M82 281 C89 315, 106 347, 132 373 C139 379, 145 384, 151 388 C149 359, 144 329, 135 301 C125 295, 116 287, 108 278 C99 281, 90 282, 82 281 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-3"} />
-
-          <ZonePath zone={6} claw="inner" keyStr="left-6" fill="url(#hoofBase2)"
-            d="M135 301 C144 329, 149 359, 151 388 C160 393, 170 394, 180 391 C184 367, 182 334, 172 289 C159 293, 146 295, 135 301 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-6"} />
-
-          {/* RIGHT CLAW ZONES */}
-          <ZonePath zone={1} claw="outer" keyStr="right-1" fill="url(#hoofBase2)"
-            d="M282 90 C271 88, 261 91, 253 100 C249 110, 249 122, 252 136 C268 134, 284 135, 300 140 C298 118, 292 101, 282 90 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-1"} />
-
-          <ZonePath zone={2} claw="outer" keyStr="right-2" fill="url(#hoofBase2)"
-            d="M334 132 C346 163, 349 204, 345 246 C344 258, 342 270, 338 281 C330 282, 321 281, 312 278 C313 237, 311 194, 302 157 C311 145, 321 136, 334 132 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-2"} />
-
-          <ZonePath zone={5} claw="outer" keyStr="right-5" fill="url(#hoofBase)"
-            d="M300 140 C284 135, 268 134, 252 136 C245 145, 242 156, 241 168 C249 168, 259 170, 269 176 C281 171, 292 168, 302 157 C302 151, 301 145, 300 140 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-5"} />
-
-          <ZonePath zone={4} claw="outer" keyStr="right-4" fill="url(#hoofBase)"
-            d="M302 157 C311 194, 313 237, 312 278 C294 289, 272 293, 248 289 C237 265, 234 232, 238 201 C241 188, 248 180, 269 176 C281 171, 292 168, 302 157 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-4"} />
-
-          <ZonePath zone={3} claw="outer" keyStr="right-3" fill="url(#hoofBase2)"
-            d="M338 281 C331 315, 314 347, 288 373 C281 379, 275 384, 269 388 C271 359, 276 329, 285 301 C295 295, 304 287, 312 278 C321 281, 330 282, 338 281 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-3"} />
-
-          <ZonePath zone={6} claw="outer" keyStr="right-6" fill="url(#hoofBase2)"
-            d="M285 301 C276 329, 271 359, 269 388 C260 393, 250 394, 240 391 C236 367, 238 334, 248 289 C261 293, 274 295, 285 301 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-6"} />
-
-          {/* CENTER ZONES */}
-          <ZonePath zone={0} claw="inner" keyStr="center-0" fill="#ffffff"
-            d="M210 93 C203 117, 200 151, 202 193 C204 235, 206 277, 210 320 C214 277, 216 235, 218 193 C220 151, 217 117, 210 93 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "center-0"} />
-
+          {/* Top shared heel zone 10 */}
           <ZonePath zone={10} claw="inner" keyStr="center-10" fill="url(#hoofBase2)"
-            d="M180 391 C192 404, 205 411, 210 413 C215 411, 228 404, 240 391 C226 399, 194 399, 180 391 Z"
+            d="M184 82 C196 70, 224 70, 236 82 C230 95, 220 104, 210 108 C200 104, 190 95, 184 82 Z"
             onClick={handleZoneClick} selected={tempZoneKey === "center-10"} />
 
-          {/* Zone labels */}
-          <text x="145" y="121" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">1</text>
-          <text x="102" y="206" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">2</text>
-          <text x="146" y="163" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="25" fontWeight="700">5</text>
-          <text x="150" y="236" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">4</text>
-          <text x="119" y="336" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">3</text>
-          <text x="164" y="348" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">6</text>
+          {/* LEFT CLAW OUTER SILHOUETTE / ZONE AREAS */}
+          
+          {/* LEFT ZONE 6 - top heel / bulb */}
+          <ZonePath zone={6} claw="inner" keyStr="left-6" fill="url(#hoofBase2)"
+            d="M130 86 C102 98, 84 125, 78 164 C100 158, 124 156, 149 160 C162 145, 175 125, 184 100 C168 87, 148 81, 130 86 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-6"} />
 
-          <text x="275" y="121" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">1</text>
-          <text x="318" y="206" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">2</text>
-          <text x="274" y="163" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="25" fontWeight="700">5</text>
-          <text x="270" y="236" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">4</text>
-          <text x="301" y="336" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">3</text>
-          <text x="256" y="348" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">6</text>
+          {/* LEFT ZONE 3 - outer side region */}
+          <ZonePath zone={3} claw="inner" keyStr="left-3" fill="url(#hoofBase2)"
+            d="M78 164 C66 195, 65 231, 74 265 C83 269, 94 269, 105 266 C104 230, 108 193, 119 166 C104 159, 90 159, 78 164 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-3"} />
 
-          <text x="210" y="223" textAnchor="middle" className="pointer-events-none select-none fill-gray-800" fontSize="24" fontWeight="700">0</text>
-          <text x="210" y="414" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="18" fontWeight="700">10</text>
+          {/* LEFT ZONE 4 - central sole */}
+          <ZonePath zone={4} claw="inner" keyStr="left-4" fill="url(#hoofBase)"
+            d="M119 166 C108 193, 104 230, 105 266 C122 281, 145 288, 170 286 C183 262, 190 232, 188 203 C186 184, 173 168, 149 160 C138 158, 128 160, 119 166 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-4"} />
+
+          {/* LEFT ZONE 5 - lower inner/toe sole region */}
+          <ZonePath zone={5} claw="inner" keyStr="left-5" fill="url(#hoofBase)"
+            d="M105 266 C113 296, 126 326, 145 350 C158 347, 172 341, 184 330 C181 314, 176 298, 170 286 C145 288, 122 281, 105 266 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-5"} />
+
+          {/* LEFT ZONE 2 - lower outer strip */}
+          <ZonePath zone={2} claw="inner" keyStr="left-2" fill="url(#hoofBase2)"
+            d="M74 265 C80 303, 99 343, 126 374 C132 371, 139 362, 145 350 C126 326, 113 296, 105 266 C94 269, 83 269, 74 265 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-2"} />
+
+          {/* LEFT ZONE 1 - bottom toe tip */}
+          <ZonePath zone={1} claw="inner" keyStr="left-1" fill="url(#hoofLight)"
+            d="M126 374 C137 389, 151 402, 168 410 C178 389, 184 364, 184 330 C172 341, 158 347, 145 350 C139 362, 132 371, 126 374 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "left-1"} />
+
+          {/* RIGHT CLAW */}
+          
+          {/* RIGHT ZONE 6 - top heel / bulb */}
+          <ZonePath zone={6} claw="outer" keyStr="right-6" fill="url(#hoofBase2)"
+            d="M290 86 C318 98, 336 125, 342 164 C320 158, 296 156, 271 160 C258 145, 245 125, 236 100 C252 87, 272 81, 290 86 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-6"} />
+
+          {/* RIGHT ZONE 3 - outer side region */}
+          <ZonePath zone={3} claw="outer" keyStr="right-3" fill="url(#hoofBase2)"
+            d="M342 164 C354 195, 355 231, 346 265 C337 269, 326 269, 315 266 C316 230, 312 193, 301 166 C316 159, 330 159, 342 164 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-3"} />
+
+          {/* RIGHT ZONE 4 - central sole */}
+          <ZonePath zone={4} claw="outer" keyStr="right-4" fill="url(#hoofBase)"
+            d="M301 166 C312 193, 316 230, 315 266 C298 281, 275 288, 250 286 C237 262, 230 232, 232 203 C234 184, 247 168, 271 160 C282 158, 292 160, 301 166 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-4"} />
+
+          {/* RIGHT ZONE 5 - lower inner/toe sole region */}
+          <ZonePath zone={5} claw="outer" keyStr="right-5" fill="url(#hoofBase)"
+            d="M315 266 C307 296, 294 326, 275 350 C262 347, 248 341, 236 330 C239 314, 244 298, 250 286 C275 288, 298 281, 315 266 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-5"} />
+
+          {/* RIGHT ZONE 2 - lower outer strip */}
+          <ZonePath zone={2} claw="outer" keyStr="right-2" fill="url(#hoofBase2)"
+            d="M346 265 C340 303, 321 343, 294 374 C288 371, 281 362, 275 350 C294 326, 307 296, 315 266 C326 269, 337 269, 346 265 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-2"} />
+
+          {/* RIGHT ZONE 1 - bottom toe tip */}
+          <ZonePath zone={1} claw="outer" keyStr="right-1" fill="url(#hoofLight)"
+            d="M294 374 C283 389, 269 402, 252 410 C242 389, 236 364, 236 330 C248 341, 262 347, 275 350 C281 362, 288 371, 294 374 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "right-1"} />
+
+          {/* CENTER ZONE 0 */}
+          <ZonePath zone={0} claw="inner" keyStr="center-0" fill="#ffffff"
+            d="M210 104 C202 130, 200 167, 202 212 C204 256, 206 302, 210 348 C214 302, 216 256, 218 212 C220 167, 218 130, 210 104 Z"
+            onClick={handleZoneClick} selected={tempZoneKey === "center-0"} />
+
+          {/* GUIDE LABELS AND LINES LIKE THE PRINTED CHART */}
+          
+          {/* zone 10 top label */}
+          <text x="210" y="79" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="20" fill="#1f2e36">10</text>
+
+          {/* zone 6 labels */}
+          <text x="136" y="134" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="26" fill="#ffffff">6</text>
+          <text x="284" y="134" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="26" fill="#ffffff">6</text>
+
+          {/* zone 3 labels */}
+          <text x="92" y="220" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="24" fill="#ffffff">3</text>
+          <text x="328" y="220" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="24" fill="#ffffff">3</text>
+
+          {/* zone 4 labels */}
+          <text x="150" y="232" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="26" fill="#ffffff">4</text>
+          <text x="270" y="232" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="26" fill="#ffffff">4</text>
+
+          {/* zone 5 labels */}
+          <text x="148" y="323" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="25" fill="#ffffff">5</text>
+          <text x="272" y="323" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="25" fill="#ffffff">5</text>
+
+          {/* zone 2 labels */}
+          <text x="106" y="335" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="22" fill="#ffffff">2</text>
+          <text x="314" y="335" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="22" fill="#ffffff">2</text>
+
+          {/* zone 1 labels */}
+          <text x="154" y="392" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="24" fill="#ffffff">1</text>
+          <text x="266" y="392" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="24" fill="#ffffff">1</text>
+
+          {/* zone 0 label */}
+          <text x="210" y="226" textAnchor="middle" className="ztext pointer-events-none select-none" fontSize="24" fill="#1f2e36">0</text>
+
+          {/* printed-chart style leader lines */}
+          <path d="M194 84 C185 92, 176 104, 168 118" className="guide-line pointer-events-none" stroke="#2c3941" strokeWidth="1.5" fill="none"/>
+          <path d="M226 84 C235 92, 244 104, 252 118" className="guide-line pointer-events-none" stroke="#2c3941" strokeWidth="1.5" fill="none"/>
+
+          <path d="M78 168 C70 193, 70 225, 76 254" className="guide-line pointer-events-none" stroke="#2c3941" strokeWidth="1.5" fill="none"/>
+          <path d="M342 168 C350 193, 350 225, 344 254" className="guide-line pointer-events-none" stroke="#2c3941" strokeWidth="1.5" fill="none"/>
         </svg>
       </div>
 
