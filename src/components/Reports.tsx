@@ -196,18 +196,26 @@ export function Reports() {
 
   const updateEconomicGroup = async (departureId: string, groupId: string | null) => {
     try {
-      const { error } = await supabase
+      console.log('Updating economic group:', { departureId, groupId });
+      
+      const { data, error } = await supabase
         .from('animal_departures')
         .update({ economic_group_id: groupId, updated_at: new Date().toISOString() })
-        .eq('id', departureId);
+        .eq('id', departureId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Update successful:', data);
       
       // Reload the report data to show updated group
       await loadReport();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating economic group:', error);
-      alert('Klaida atnaujinant ekonominę grupę');
+      alert(`Klaida atnaujinant ekonominę grupę: ${error.message || 'Nežinoma klaida'}`);
     }
   };
 
