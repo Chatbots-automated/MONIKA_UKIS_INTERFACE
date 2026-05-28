@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { HoofLeg, HoofClaw } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { Clock, Activity } from 'lucide-react';
+import { HOOF_SELECTOR_DATA } from './hoof/hoofSelectorData';
+import { HOOF_ZONE_DATA } from './hoof/hoofZoneData';
 
 interface HoofInterfaceNewProps {
   selectedLeg: HoofLeg | null;
@@ -34,21 +36,21 @@ interface HoofHistory {
   };
 }
 
-interface HoofData {
-  id: number;
-  label: string;
-  short: string;
-  leg: HoofLeg;
-  position: string;
-  side: string;
-}
+// Map hoof selector data to leg codes
+const HOOF_LEG_MAP: Record<string, HoofLeg> = {
+  "Front Left": "FL",
+  "Front Right": "FR",
+  "Back Left": "HL",
+  "Back Right": "HR"
+};
 
-const HOOFS: HoofData[] = [
-  { id: 1, label: "Priekinė Kairė", short: "FL", leg: "FL", side: "kairė", position: "priekinė" },
-  { id: 2, label: "Priekinė Dešinė", short: "FR", leg: "FR", side: "dešinė", position: "priekinė" },
-  { id: 3, label: "Galinė Kairė", short: "HL", leg: "HL", side: "kairė", position: "galinė" },
-  { id: 4, label: "Galinė Dešinė", short: "HR", leg: "HR", side: "dešinė", position: "galinė" }
-];
+// Lithuanian labels for hoofs
+const HOOF_LABELS: Record<HoofLeg, string> = {
+  "FL": "Priekinė Kairė",
+  "FR": "Priekinė Dešinė",
+  "HL": "Galinė Kairė",
+  "HR": "Galinė Dešinė"
+};
 
 const ZONE_NAMES: Record<number, string> = {
   0: "Tarppiršlio erdvė",
@@ -75,8 +77,6 @@ export function HoofInterfaceNew({
   const [tempZoneKey, setTempZoneKey] = useState<string | null>(null);
   const [history, setHistory] = useState<HoofHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-
-  const currentHoof = HOOFS.find(h => h.leg === selectedLeg);
 
   // Reset screen to 'legs' when parent resets selectedLeg (after saving examination)
   useEffect(() => {
@@ -120,19 +120,31 @@ export function HoofInterfaceNew({
 
   const handleHoofClick = (leg: HoofLeg) => {
     onLegSelect(leg);
-    // Auto-advance to zones screen
     setScreen('zones');
   };
 
-  const handleZoneClick = (zone: number, claw: HoofClaw, key: string) => {
-    if (tempZoneKey === key) {
+  const handleZoneClick = (zoneKey: string) => {
+    // Parse zone key like "left_1" or "right_6" or "center_0"
+    const parts = zoneKey.split('_');
+    const side = parts[0]; // "left", "right", "center"
+    const zoneNum = parseInt(parts[1], 10);
+
+    if (tempZoneKey === zoneKey) {
       setTempZoneKey(null);
-      onZoneSelect(-1); // Deselect
-      onClawSelect('inner'); // Reset
+      onZoneSelect(-1);
+      onClawSelect('inner');
     } else {
-      setTempZoneKey(key);
-      onZoneSelect(zone);
-      onClawSelect(claw);
+      setTempZoneKey(zoneKey);
+      onZoneSelect(zoneNum);
+      
+      // Determine claw based on side
+      if (side === 'left') {
+        onClawSelect('inner');
+      } else if (side === 'right') {
+        onClawSelect('outer');
+      } else {
+        onClawSelect('inner'); // center zones default to inner
+      }
     }
   };
 
@@ -147,45 +159,9 @@ export function HoofInterfaceNew({
     return 'Centras';
   };
 
-  const HoofSVG = ({ num, active }: { num: number; active: boolean }) => {
-    const fill = active ? "url(#cardFillSel)" : "url(#cardFill)";
-    const stroke = active ? "#1f5670" : "#2f3d47";
-    const line = active ? "#1f5670" : "#8a949b";
-    const numCol = active ? "#1f5670" : "#5a7280";
-
-    return (
-      <svg className="w-full max-w-[200px] filter drop-shadow-sm transition-transform duration-250" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="cardFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#e6ebee"/>
-            <stop offset="100%" stopColor="#c2cbd1"/>
-          </linearGradient>
-          <linearGradient id="cardFillSel" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#cfe6ef"/>
-            <stop offset="100%" stopColor="#90bdce"/>
-          </linearGradient>
-        </defs>
-
-        <path d="M 100 22 C 86 22, 70 28, 56 42 C 40 60, 32 88, 32 116 C 32 144, 40 172, 56 192 C 68 204, 82 210, 96 208 C 100 200, 102 188, 102 168 C 102 130, 100 92, 100 56 C 100 40, 100 28, 100 22 Z"
-          fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
-
-        <path d="M 100 22 C 114 22, 130 28, 144 42 C 160 60, 168 88, 168 116 C 168 144, 160 172, 144 192 C 132 204, 118 210, 104 208 C 100 200, 98 188, 98 168 C 98 130, 100 92, 100 56 C 100 40, 100 28, 100 22 Z"
-          fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
-
-        <path d="M 100 30 C 99 60, 99 100, 99 140 C 99 170, 100 190, 100 205"
-          fill="none" stroke={line} strokeWidth="1.5" opacity=".7"/>
-
-        <path d="M 56 50 C 76 38, 124 38, 144 50" fill="none" stroke={line} strokeWidth="1.4" opacity=".55"/>
-        <path d="M 38 110 C 56 100, 76 100, 92 110" fill="none" stroke={line} strokeWidth="1.2" opacity=".4"/>
-        <path d="M 162 110 C 144 100, 124 100, 108 110" fill="none" stroke={line} strokeWidth="1.2" opacity=".4"/>
-        <path d="M 60 188 C 76 180, 92 178, 96 178" fill="none" stroke={line} strokeWidth="1.2" opacity=".4"/>
-        <path d="M 140 188 C 124 180, 108 178, 104 178" fill="none" stroke={line} strokeWidth="1.2" opacity=".4"/>
-
-        <text x="100" y="14" textAnchor="middle"
-              fontFamily="'IBM Plex Mono', monospace" fontSize="13" fontWeight="600" letterSpacing="2"
-              fill={numCol}>0{num}</text>
-      </svg>
-    );
+  // Convert points array to SVG polygon points string
+  const pointsToString = (points: number[][]) => {
+    return points.map(p => `${p[0]},${p[1]}`).join(' ');
   };
 
   if (screen === 'legs') {
@@ -198,37 +174,78 @@ export function HoofInterfaceNew({
           <h2 className="text-xl font-bold text-gray-900">Pasirinkite pažeistą nagą</h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 max-w-3xl mx-auto">
-          {HOOFS.map((hoof) => {
-            const isSelected = selectedLeg === hoof.leg;
-            return (
-              <button
-                key={hoof.id}
-                type="button"
-                onClick={() => handleHoofClick(hoof.leg)}
-                className={`
-                  relative flex flex-col items-center gap-2 p-4 rounded-xl
-                  border-2 transition-all duration-200
-                  ${isSelected
-                    ? 'border-blue-600 bg-blue-50 shadow-lg shadow-blue-200'
-                    : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
-                  }
-                `}
-              >
-                <HoofSVG num={hoof.id} active={isSelected} />
-                <div className="text-center">
-                  <div className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
-                    {hoof.label}
-                  </div>
-                  <div className="text-xs uppercase tracking-wider text-gray-500 font-mono">
-                    {hoof.position} · {hoof.side}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+        <div className="bg-white border border-gray-300 rounded-lg p-4">
+          <div className="relative w-full max-w-4xl mx-auto bg-white rounded-lg overflow-hidden">
+            {/* Background reference image */}
+            <img 
+              src="https://i.imgur.com/X3M1tuk.png" 
+              alt="Hoof selector"
+              className="w-full h-auto block"
+              style={{ userSelect: 'none', pointerEvents: 'none' }}
+            />
+            
+            {/* Interactive SVG overlay */}
+            <svg 
+              className="absolute inset-0 w-full h-full"
+              viewBox="0 0 1000 1000"
+              preserveAspectRatio="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ zIndex: 5 }}
+            >
+              {/* Render all hoofs as transparent clickable areas */}
+              {Object.entries(HOOF_SELECTOR_DATA).map(([hoofKey, hoof]) => {
+                const leg = HOOF_LEG_MAP[hoof.group];
+                const isSelected = selectedLeg === leg;
+
+                return (
+                  <polygon
+                    key={hoofKey}
+                    points={pointsToString(hoof.points)}
+                    fill={isSelected ? "rgba(255, 125, 45, 0.34)" : "rgba(0, 140, 255, 0)"}
+                    stroke={isSelected ? "#ff7d2d" : "transparent"}
+                    strokeWidth="2.5"
+                    strokeLinejoin="round"
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'fill 0.12s ease, stroke 0.12s ease',
+                      vectorEffect: 'non-scaling-stroke'
+                    }}
+                    onClick={() => handleHoofClick(leg)}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.setAttribute('fill', 'rgba(0, 140, 255, 0.16)');
+                        e.currentTarget.setAttribute('stroke', 'rgba(0, 140, 255, 0.82)');
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.setAttribute('fill', 'rgba(0, 140, 255, 0)');
+                        e.currentTarget.setAttribute('stroke', 'transparent');
+                      }
+                    }}
+                  />
+                );
+              })}
+            </svg>
+          </div>
         </div>
 
+        {/* Show selected hoof info */}
+        {selectedLeg && (
+          <div className="bg-white border border-gray-300 rounded-lg p-4 max-w-md mx-auto">
+            <div className="text-center">
+              <div className="text-sm uppercase tracking-wider text-gray-500 font-mono mb-1">
+                Pasirinkta
+              </div>
+              <div className="text-2xl font-bold text-gray-900 mb-2">
+                {HOOF_LABELS[selectedLeg]}
+              </div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono">
+                {selectedLeg}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -252,7 +269,7 @@ export function HoofInterfaceNew({
             2 žingsnis iš 2 · Pasirinkite zoną
           </div>
           <div className="text-lg font-bold text-gray-900">
-            {currentHoof?.label}
+            {selectedLeg ? HOOF_LABELS[selectedLeg] : ''}
           </div>
         </div>
 
@@ -260,107 +277,59 @@ export function HoofInterfaceNew({
       </div>
 
       <div className="bg-white border border-gray-300 rounded-lg p-4">
-        <svg className="w-full max-w-xl mx-auto" viewBox="0 0 420 470" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="hoofBase" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#9fa9b0"/>
-              <stop offset="100%" stopColor="#7f8a91"/>
-            </linearGradient>
-            <linearGradient id="hoofBase2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#aab3b9"/>
-              <stop offset="100%" stopColor="#8a959c"/>
-            </linearGradient>
-          </defs>
+        <div className="relative w-full max-w-4xl mx-auto bg-white rounded-lg overflow-hidden">
+          {/* Background reference image */}
+          <img 
+            src="/hoof-zones-reference.png" 
+            alt="Hoof zones reference"
+            className="w-full h-auto block"
+            style={{ userSelect: 'none', pointerEvents: 'none' }}
+          />
+          
+          {/* Interactive SVG overlay */}
+          <svg 
+            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 1000 1000"
+            preserveAspectRatio="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ zIndex: 5 }}
+          >
+            {/* Render all zones as transparent clickable areas */}
+            {Object.entries(HOOF_ZONE_DATA).map(([zoneKey, points]) => {
+              const isSelected = tempZoneKey === zoneKey;
 
-          {/* Guide text */}
-          <text x="166" y="70" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">1</text>
-          <text x="248" y="70" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">1</text>
-          <text x="79" y="112" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">2</text>
-          <text x="338" y="112" className="pointer-events-none select-none fill-gray-800" fontSize="22" fontWeight="600">2</text>
-
-          {/* Guide lines */}
-          <path d="M168 75 L168 90" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M250 75 L250 90" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M90 114 L112 114 L121 130" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-          <path d="M330 114 L308 114 L299 130" className="pointer-events-none" stroke="#2f3c44" strokeWidth="1.25" fill="none" opacity="0.95"/>
-
-          {/* LEFT CLAW ZONES */}
-          <ZonePath zone={1} claw="inner" keyStr="left-1" fill="url(#hoofBase2)"
-            d="M138 90 C149 88, 159 91, 167 100 C171 110, 171 122, 168 136 C152 134, 136 135, 120 140 C122 118, 128 101, 138 90 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-1"} />
-
-          <ZonePath zone={2} claw="inner" keyStr="left-2" fill="url(#hoofBase2)"
-            d="M86 132 C74 163, 71 204, 75 246 C76 258, 78 270, 82 281 C90 282, 99 281, 108 278 C107 237, 109 194, 118 157 C109 145, 99 136, 86 132 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-2"} />
-
-          <ZonePath zone={5} claw="inner" keyStr="left-5" fill="url(#hoofBase)"
-            d="M120 140 C136 135, 152 134, 168 136 C175 145, 178 156, 179 168 C171 168, 161 170, 151 176 C139 171, 128 168, 118 157 C118 151, 119 145, 120 140 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-5"} />
-
-          <ZonePath zone={4} claw="inner" keyStr="left-4" fill="url(#hoofBase)"
-            d="M118 157 C109 194, 107 237, 108 278 C126 289, 148 293, 172 289 C183 265, 186 232, 182 201 C179 188, 172 180, 151 176 C139 171, 128 168, 118 157 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-4"} />
-
-          <ZonePath zone={3} claw="inner" keyStr="left-3" fill="url(#hoofBase2)"
-            d="M82 281 C89 315, 106 347, 132 373 C139 379, 145 384, 151 388 C149 359, 144 329, 135 301 C125 295, 116 287, 108 278 C99 281, 90 282, 82 281 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-3"} />
-
-          <ZonePath zone={6} claw="inner" keyStr="left-6" fill="url(#hoofBase2)"
-            d="M135 301 C144 329, 149 359, 151 388 C160 393, 170 394, 180 391 C184 367, 182 334, 172 289 C159 293, 146 295, 135 301 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "left-6"} />
-
-          {/* RIGHT CLAW ZONES */}
-          <ZonePath zone={1} claw="outer" keyStr="right-1" fill="url(#hoofBase2)"
-            d="M282 90 C271 88, 261 91, 253 100 C249 110, 249 122, 252 136 C268 134, 284 135, 300 140 C298 118, 292 101, 282 90 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-1"} />
-
-          <ZonePath zone={2} claw="outer" keyStr="right-2" fill="url(#hoofBase2)"
-            d="M334 132 C346 163, 349 204, 345 246 C344 258, 342 270, 338 281 C330 282, 321 281, 312 278 C313 237, 311 194, 302 157 C311 145, 321 136, 334 132 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-2"} />
-
-          <ZonePath zone={5} claw="outer" keyStr="right-5" fill="url(#hoofBase)"
-            d="M300 140 C284 135, 268 134, 252 136 C245 145, 242 156, 241 168 C249 168, 259 170, 269 176 C281 171, 292 168, 302 157 C302 151, 301 145, 300 140 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-5"} />
-
-          <ZonePath zone={4} claw="outer" keyStr="right-4" fill="url(#hoofBase)"
-            d="M302 157 C311 194, 313 237, 312 278 C294 289, 272 293, 248 289 C237 265, 234 232, 238 201 C241 188, 248 180, 269 176 C281 171, 292 168, 302 157 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-4"} />
-
-          <ZonePath zone={3} claw="outer" keyStr="right-3" fill="url(#hoofBase2)"
-            d="M338 281 C331 315, 314 347, 288 373 C281 379, 275 384, 269 388 C271 359, 276 329, 285 301 C295 295, 304 287, 312 278 C321 281, 330 282, 338 281 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-3"} />
-
-          <ZonePath zone={6} claw="outer" keyStr="right-6" fill="url(#hoofBase2)"
-            d="M285 301 C276 329, 271 359, 269 388 C260 393, 250 394, 240 391 C236 367, 238 334, 248 289 C261 293, 274 295, 285 301 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "right-6"} />
-
-          {/* CENTER ZONES */}
-          <ZonePath zone={0} claw="inner" keyStr="center-0" fill="#ffffff"
-            d="M210 93 C203 117, 200 151, 202 193 C204 235, 206 277, 210 320 C214 277, 216 235, 218 193 C220 151, 217 117, 210 93 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "center-0"} />
-
-          <ZonePath zone={10} claw="inner" keyStr="center-10" fill="url(#hoofBase2)"
-            d="M180 391 C192 404, 205 411, 210 413 C215 411, 228 404, 240 391 C226 399, 194 399, 180 391 Z"
-            onClick={handleZoneClick} selected={tempZoneKey === "center-10"} />
-
-          {/* Zone labels */}
-          <text x="145" y="121" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">1</text>
-          <text x="102" y="206" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">2</text>
-          <text x="146" y="163" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="25" fontWeight="700">5</text>
-          <text x="150" y="236" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">4</text>
-          <text x="119" y="336" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">3</text>
-          <text x="164" y="348" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">6</text>
-
-          <text x="275" y="121" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">1</text>
-          <text x="318" y="206" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">2</text>
-          <text x="274" y="163" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="25" fontWeight="700">5</text>
-          <text x="270" y="236" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">4</text>
-          <text x="301" y="336" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="24" fontWeight="700">3</text>
-          <text x="256" y="348" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="26" fontWeight="700">6</text>
-
-          <text x="210" y="223" textAnchor="middle" className="pointer-events-none select-none fill-gray-800" fontSize="24" fontWeight="700">0</text>
-          <text x="210" y="414" textAnchor="middle" className="pointer-events-none select-none fill-white" fontSize="18" fontWeight="700">10</text>
-        </svg>
+              return (
+                <polygon
+                  key={zoneKey}
+                  points={pointsToString(points)}
+                  fill={isSelected ? "rgba(255, 80, 60, 0.30)" : "rgba(0, 140, 255, 0)"}
+                  stroke={isSelected ? "#ff513d" : "transparent"}
+                  strokeWidth="2.1"
+                  strokeLinejoin="round"
+                  className="zone-path"
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'fill 0.12s ease, stroke 0.12s ease',
+                    vectorEffect: 'non-scaling-stroke'
+                  }}
+                  onClick={() => handleZoneClick(zoneKey)}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.setAttribute('fill', 'rgba(0, 140, 255, 0.16)');
+                      e.currentTarget.setAttribute('stroke', 'rgba(0, 140, 255, 0.8)');
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.setAttribute('fill', 'rgba(0, 140, 255, 0)');
+                      e.currentTarget.setAttribute('stroke', 'transparent');
+                    }
+                  }}
+                />
+              );
+            })}
+          </svg>
+        </div>
       </div>
 
       {/* Selection Info */}
@@ -368,7 +337,7 @@ export function HoofInterfaceNew({
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Nagas</div>
-            <div className="font-semibold">{currentHoof?.label}</div>
+            <div className="font-semibold">{selectedLeg ? HOOF_LABELS[selectedLeg] : ''}</div>
           </div>
           <div>
             <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Zona</div>
@@ -486,28 +455,5 @@ export function HoofInterfaceNew({
         </div>
       )}
     </div>
-  );
-}
-
-interface ZonePathProps {
-  zone: number;
-  claw: HoofClaw;
-  keyStr: string;
-  d: string;
-  fill: string;
-  onClick: (zone: number, claw: HoofClaw, key: string) => void;
-  selected: boolean;
-}
-
-function ZonePath({ zone, claw, keyStr, d, fill, onClick, selected }: ZonePathProps) {
-  return (
-    <path
-      d={d}
-      fill={selected ? "#3d84a8" : fill}
-      stroke={selected ? "#193949" : "#2c3941"}
-      strokeWidth="1.5"
-      className="cursor-pointer transition-all duration-150 hover:opacity-80"
-      onClick={() => onClick(zone, claw, keyStr)}
-    />
   );
 }
