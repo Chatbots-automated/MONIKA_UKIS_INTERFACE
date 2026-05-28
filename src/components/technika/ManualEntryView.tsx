@@ -13,7 +13,7 @@ interface DayEntry {
   date: string;
   start_time: string;
   end_time: string;
-  worker_type: 'darbuotojas' | 'vairuotojas' | 'traktorininkas';
+  worker_type: 'darbuotojas' | 'vairuotojas' | 'traktorininkas' | string;
   lunch_type: 'none' | 'half' | 'full';
   work_description: string;
   work_descriptions: string[];
@@ -21,6 +21,7 @@ interface DayEntry {
   measurement_unit_id: string;
   comments: string;
   non_driving_hours: string;
+  day_type_initial_id?: string;
 }
 
 interface MeasurementUnit {
@@ -34,6 +35,13 @@ interface MeasurementUnit {
 interface WorkDescription {
   id: string;
   worker_type: string;
+  description: string;
+  work_location: string;
+}
+
+interface DayTypeInitial {
+  id: string;
+  initial: string;
   description: string;
   work_location: string;
 }
@@ -54,8 +62,10 @@ interface SavedEntry {
   measurement_unit_id: string;
   comments: string;
   non_driving_hours: number;
+  day_type_initial_id?: string;
   worker?: { full_name: string };
   measurement_unit?: { unit_name: string; unit_abbreviation: string };
+  day_type_initial?: { initial: string; description: string };
 }
 
 interface ManualEntryViewProps {
@@ -64,24 +74,22 @@ interface ManualEntryViewProps {
 
 const DAY_NAMES = ['Sk', 'Pr', 'An', 'Tr', 'Kt', 'Pn', 'Št'];
 
-// Lithuanian public holidays for 2026
+// Lithuanian public holidays for 2026 (official)
 const HOLIDAYS_2026 = [
-  '2026-01-01', // Naujieji metai
+  '2026-01-01', // Naujieji metai (New Year's Day)
   '2026-02-16', // Lietuvos valstybės atkūrimo diena
   '2026-03-11', // Lietuvos nepriklausomybės atkūrimo diena
-  '2026-04-12', // Velykos
-  '2026-04-13', // Antroji Velykų diena
-  '2026-05-01', // Tarptautinė darbo diena
-  '2026-05-03', // Motinos diena
-  '2026-06-07', // Joninės
-  '2026-06-24', // Rasos ir Joninių diena
-  '2026-07-06', // Valstybės (Lietuvos karaliaus Mindaugo karūnavimo) diena
-  '2026-08-15', // Žolinė (Švč. Mergelės Marijos ėmimo į dangų diena)
-  '2026-11-01', // Visų šventųjų diena
-  '2026-11-02', // Vėlinės
-  '2026-12-24', // Kūčios
-  '2026-12-25', // Kalėdos
-  '2026-12-26', // Antroji Kalėdų diena
+  '2026-04-05', // Velykos (Easter Sunday)
+  '2026-04-06', // Antroji Velykų diena (Easter Monday)
+  '2026-05-01', // Tarptautinė darbo diena (International Labour Day)
+  '2026-06-24', // Joninės / Rasos (St. John's Day / Midsummer Day)
+  '2026-07-06', // Valstybės diena (King Mindaugas' Day / Statehood Day)
+  '2026-08-15', // Žolinė (Assumption Day)
+  '2026-11-01', // Visų šventųjų diena (All Saints' Day)
+  '2026-11-02', // Vėlinės (All Souls' Day)
+  '2026-12-24', // Kūčios (Christmas Eve)
+  '2026-12-25', // Kalėdos (Christmas Day)
+  '2026-12-26', // Antroji Kalėdų diena (Second Day of Christmas)
 ];
 
 function isHoliday(dateStr: string): boolean {
@@ -160,7 +168,8 @@ function getDaysInMonth(year: number, month: number): DayEntry[] {
       measurement_value: '',
       measurement_unit_id: '',
       comments: '',
-      non_driving_hours: ''
+      non_driving_hours: '',
+      day_type_initial_id: undefined
     });
   }
   return days;
@@ -231,6 +240,11 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [newWorkDesc, setNewWorkDesc] = useState('');
   const [newWorkDescWorkerType, setNewWorkDescWorkerType] = useState<'vairuotojas' | 'traktorininkas'>('vairuotojas');
   
+  // Day type initials state
+  const [dayTypeInitials, setDayTypeInitials] = useState<DayTypeInitial[]>([]);
+  const [newInitial, setNewInitial] = useState('');
+  const [newInitialDesc, setNewInitialDesc] = useState('');
+  
   // Refs for auto-advancing inputs
   const timeInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
@@ -260,6 +274,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     loadWorkers();
     loadMeasurementUnits();
     loadWorkDescriptions();
+    loadDayTypeInitials();
   }, [workLocation]);
 
   useEffect(() => {
@@ -279,7 +294,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let manualQuery = supabase
       .from('manual_time_entries')
-      .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id, comments, non_driving_hours')
+      .select('entry_date, start_time, end_time, worker_type, lunch_type, work_description, measurement_value, measurement_unit_id, comments, non_driving_hours, day_type_initial_id')
       .eq('worker_id', selectedWorker)
       .gte('entry_date', formatDateForDB(startDate))
       .lte('entry_date', formatDateForDB(endDate));
@@ -301,7 +316,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
             measurement_value: existing.measurement_value?.toString() || '',
             measurement_unit_id: existing.measurement_unit_id || '',
             comments: existing.comments || '',
-            non_driving_hours: existing.non_driving_hours?.toString() || ''
+            non_driving_hours: existing.non_driving_hours?.toString() || '',
+            day_type_initial_id: existing.day_type_initial_id || undefined
           } : d;
         })
       );
@@ -387,6 +403,19 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     if (data) {
       setWorkDescriptions(data);
+    }
+  };
+
+  const loadDayTypeInitials = async () => {
+    const { data } = await supabase
+      .from('day_type_initials')
+      .select('*')
+      .eq('work_location', workLocation)
+      .eq('is_active', true)
+      .order('initial');
+
+    if (data) {
+      setDayTypeInitials(data);
     }
   };
 
@@ -506,6 +535,72 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     }
   };
 
+  const addDayTypeInitial = async () => {
+    if (!newInitial.trim() || !newInitialDesc.trim()) {
+      alert('Įveskite inicialą ir aprašymą');
+      return;
+    }
+
+    if (newInitial.trim().length > 3) {
+      alert('Inicialas gali būti ne ilgesnis nei 3 simboliai');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('day_type_initials')
+        .insert({
+          work_location: workLocation,
+          initial: newInitial.trim().toUpperCase(),
+          description: newInitialDesc.trim(),
+        });
+
+      if (error) throw error;
+
+      try {
+        await logAction('create_day_type_initial', 'day_type_initials', null, null, {
+          initial: newInitial,
+          description: newInitialDesc,
+        });
+      } catch (logError) {
+        console.warn('Failed to log action, but day type initial was created successfully:', logError);
+      }
+
+      setNewInitial('');
+      setNewInitialDesc('');
+      loadDayTypeInitials();
+      alert('Inicialas sėkmingai pridėtas!');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
+  const deleteDayTypeInitial = async (initialId: string) => {
+    if (!confirm('Ar tikrai norite ištrinti šį inicialą?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('day_type_initials')
+        .update({ is_active: false })
+        .eq('id', initialId);
+
+      if (error) throw error;
+
+      try {
+        await logAction('delete_day_type_initial', 'day_type_initials', initialId, null, null);
+      } catch (logError) {
+        console.warn('Failed to log action, but day type initial was deleted successfully:', logError);
+      }
+      
+      loadDayTypeInitials();
+      alert('Inicialas sėkmingai ištrintas!');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(`Klaida: ${error.message}`);
+    }
+  };
+
   const deleteMeasurementUnit = async (unitId: string) => {
     if (!confirm('Ar tikrai norite ištrinti šį vienetą?')) return;
 
@@ -536,7 +631,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let query = supabase
       .from('manual_time_entries')
-      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
+      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation), day_type_initial:day_type_initials(initial, description)`)
       .gte('entry_date', formatDateForDB(startDate))
       .lte('entry_date', formatDateForDB(endDate))
       .order('entry_date', { ascending: true });
@@ -570,7 +665,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     let manualQuery = supabase
       .from('manual_time_entries')
-      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation)`)
+      .select(`*, worker:users!worker_id(full_name), measurement_unit:measurement_units(unit_name, unit_abbreviation), day_type_initial:day_type_initials(initial, description)`)
       .eq('worker_id', viewWorker)
       .gte('entry_date', formatDateForDB(startDate))
       .lte('entry_date', formatDateForDB(endDate))
@@ -737,7 +832,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
               measurement_value: prevDay.measurement_value,
               measurement_unit_id: prevDay.measurement_unit_id,
               comments: prevDay.comments,
-              non_driving_hours: prevDay.non_driving_hours
+              non_driving_hours: prevDay.non_driving_hours,
+              day_type_initial_id: prevDay.day_type_initial_id
             }
           : d
       )
@@ -819,7 +915,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         measurement_value: '',
         measurement_unit_id: '',
         comments: '',
-        non_driving_hours: ''
+        non_driving_hours: '',
+        day_type_initial_id: undefined
       })));
 
       // Refresh the view tab if it's showing this worker
@@ -875,7 +972,8 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           measurement_value: '',
           measurement_unit_id: '',
           comments: '',
-          non_driving_hours: ''
+          non_driving_hours: '',
+          day_type_initial_id: undefined
         } : d
       ));
 
@@ -968,9 +1066,13 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       return;
     }
 
-    const validEntries = dayEntries.filter(d => d.start_time && d.end_time);
+    // Valid entries are those with times OR with an initial selected
+    const validEntries = dayEntries.filter(d => 
+      (d.start_time && d.end_time) || d.day_type_initial_id
+    );
+    
     if (validEntries.length === 0) {
-      alert('Įveskite bent vieną dieną su pradžios ir pabaigos laiku');
+      alert('Įveskite bent vieną dieną su pradžios ir pabaigos laiku arba pasirinkite inicialą');
       return;
     }
 
@@ -981,41 +1083,66 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
       await supabase.from('worker_schedules').delete().eq('worker_id', selectedWorker).in('date', datesToSave);
       await supabase.from('manual_time_entries').delete().eq('worker_id', selectedWorker).in('entry_date', datesToSave);
 
-      const schedulesToInsert = validEntries.map(entry => ({
-        worker_id: selectedWorker,
-        date: entry.date,
-        shift_start: entry.start_time,
-        shift_end: entry.end_time,
-        schedule_type: 'work',
-        notes: `${calculateHours(entry.start_time, entry.end_time, entry.lunch_type).toFixed(2)}h`,
-        work_location: workLocation,
-      }));
+      // Only create schedules for entries with actual times
+      const entriesWithTimes = validEntries.filter(e => e.start_time && e.end_time);
+      
+      let schedulesCount = 0;
+      if (entriesWithTimes.length > 0) {
+        const schedulesToInsert = entriesWithTimes.map(entry => ({
+          worker_id: selectedWorker,
+          date: entry.date,
+          shift_start: entry.start_time,
+          shift_end: entry.end_time,
+          schedule_type: 'work',
+          notes: `${calculateHours(entry.start_time, entry.end_time, entry.lunch_type).toFixed(2)}h`,
+          work_location: workLocation,
+        }));
 
-      const { error: scheduleError } = await supabase
-        .from('worker_schedules')
-        .insert(schedulesToInsert);
+        const { error: scheduleError } = await supabase
+          .from('worker_schedules')
+          .insert(schedulesToInsert);
 
-      if (scheduleError) throw scheduleError;
+        if (scheduleError) throw scheduleError;
+        schedulesCount = schedulesToInsert.length;
+      }
 
-      const timeEntriesToInsert = validEntries.map(entry => ({
-        worker_id: selectedWorker,
-        entry_date: entry.date,
-        start_time: entry.start_time,
-        end_time: entry.end_time,
-        worker_type: entry.worker_type,
-        lunch_type: entry.lunch_type,
-        work_description: entry.work_descriptions.length > 0 ? entry.work_descriptions.join(', ') : (entry.work_description || null),
-        measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
-        measurement_unit_id: entry.measurement_unit_id || null,
-        comments: entry.comments || null,
-        non_driving_hours: entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : null,
-        notes: 'Įvesta iš lapų',
-      }));
+      const timeEntriesToInsert = validEntries.map(entry => {
+        const hours = entry.day_type_initial_id 
+          ? 0 
+          : entry.worker_type === 'vairuotojas'
+            ? (entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : 0)
+            : calculateHours(entry.start_time || '', entry.end_time || '', entry.lunch_type);
+        
+        return {
+          worker_id: selectedWorker,
+          entry_date: entry.date,
+          start_time: entry.start_time || null,
+          end_time: entry.end_time || null,
+          worker_type: entry.worker_type,
+          lunch_type: entry.lunch_type,
+          work_description: entry.work_descriptions.length > 0 ? entry.work_descriptions.join(', ') : (entry.work_description || null),
+          measurement_value: entry.measurement_value ? parseFloat(entry.measurement_value) : null,
+          measurement_unit_id: entry.measurement_unit_id || null,
+          comments: entry.comments || null,
+          non_driving_hours: entry.non_driving_hours ? parseFloat(entry.non_driving_hours) : null,
+          day_type_initial_id: entry.day_type_initial_id || null,
+          hours_worked: hours,
+          notes: entry.day_type_initial_id ? 'Inicialas' : 'Įvesta iš lapų',
+        };
+      });
 
-      await supabase.from('manual_time_entries').insert(timeEntriesToInsert);
+      console.log('Attempting to insert:', timeEntriesToInsert);
+      const { data: insertedData, error: insertError } = await supabase
+        .from('manual_time_entries')
+        .insert(timeEntriesToInsert);
+      
+      if (insertError) {
+        console.error('Insert error details:', insertError);
+        throw insertError;
+      }
 
       await logAction('create_manual_schedules', 'worker_schedules', null, null, {
-        count: schedulesToInsert.length,
+        count: schedulesCount,
         worker_id: selectedWorker,
         month: selectedMonth.toISOString(),
       });
@@ -1041,6 +1168,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
   const totalHours = dayEntries.reduce(
     (sum, d) => {
+      // Skip days with initials (no hours to count)
+      if (d.day_type_initial_id) return sum;
+      
       if (d.worker_type === 'vairuotojas') {
         return sum + (d.non_driving_hours ? parseFloat(d.non_driving_hours) : 0);
       }
@@ -1048,7 +1178,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     },
     0
   );
-  const filledDays = dayEntries.filter(d => d.start_time && d.end_time).length;
+  const filledDays = dayEntries.filter(d => (d.start_time && d.end_time) || d.day_type_initial_id).length;
   const avgHoursPerDay = filledDays > 0 ? totalHours / filledDays : 0;
 
   // Calculate measurement totals
@@ -1288,8 +1418,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               onBlur={() => handleTimeBlur(day.date, 'start_time')}
                               placeholder="0810"
                               maxLength={5}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                              title="Įveskite 4 skaitmenis, pvz. 0810"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              title={day.day_type_initial_id ? 'Išjungta - pasirinktas inicialas' : 'Įveskite 4 skaitmenis, pvz. 0810'}
                             />
                           </td>
                           <td className="px-2 py-2">
@@ -1301,26 +1432,56 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               onBlur={() => handleTimeBlur(day.date, 'end_time')}
                               placeholder="1853"
                               maxLength={5}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                              title="Įveskite 4 skaitmenis, pvz. 1853"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              title={day.day_type_initial_id ? 'Išjungta - pasirinktas inicialas' : 'Įveskite 4 skaitmenis, pvz. 1853'}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <select
-                              value={day.worker_type}
-                              onChange={e => updateDayEntry(day.date, 'worker_type', e.target.value)}
-                              className="w-28 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
-                            >
-                              <option value="darbuotojas">Darb.</option>
-                              <option value="vairuotojas">Vair.</option>
-                              <option value="traktorininkas">Trakt.</option>
-                            </select>
+                            {day.day_type_initial_id ? (
+                              <div className="flex items-center gap-1">
+                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-bold text-sm">
+                                  {dayTypeInitials.find(i => i.id === day.day_type_initial_id)?.initial || ''}
+                                </span>
+                                <button
+                                  onClick={() => updateDayEntry(day.date, 'day_type_initial_id', '')}
+                                  className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                                  title="Atšaukti inicialą"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <select
+                                value={day.worker_type}
+                                onChange={e => {
+                                  const value = e.target.value;
+                                  if (value.startsWith('initial_')) {
+                                    updateDayEntry(day.date, 'day_type_initial_id', value.replace('initial_', ''));
+                                  } else {
+                                    updateDayEntry(day.date, 'worker_type', value);
+                                  }
+                                }}
+                                className="w-28 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                              >
+                                <option value="darbuotojas">Darb.</option>
+                                <option value="vairuotojas">Vair.</option>
+                                <option value="traktorininkas">Trakt.</option>
+                                {dayTypeInitials.length > 0 && <option disabled>---</option>}
+                                {dayTypeInitials.map(initial => (
+                                  <option key={initial.id} value={`initial_${initial.id}`}>
+                                    {initial.initial} - {initial.description}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                           </td>
                           <td className="px-2 py-2">
                             <select
                               value={day.lunch_type}
                               onChange={e => updateDayEntry(day.date, 'lunch_type', e.target.value)}
-                              className="w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
+                              disabled={!!day.day_type_initial_id}
+                              className={`w-20 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs ${day.day_type_initial_id ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             >
                               <option value="none">Be</option>
                               <option value="half">Pusė</option>
@@ -1328,7 +1489,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             </select>
                           </td>
                           <td className="px-2 py-2">
-                            {day.worker_type === 'darbuotojas' ? (
+                            {day.day_type_initial_id ? (
+                              <span className="text-gray-400 text-xs italic">-</span>
+                            ) : day.worker_type === 'darbuotojas' ? (
                               <input
                                 type="text"
                                 value={day.work_description}
@@ -1398,7 +1561,9 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                             )}
                           </td>
                           <td className="px-2 py-2">
-                            {day.worker_type === 'vairuotojas' ? (
+                            {day.day_type_initial_id ? (
+                              <span className="text-gray-400 text-xs">-</span>
+                            ) : day.worker_type === 'vairuotojas' ? (
                               <input
                                 type="number"
                                 step="0.1"
@@ -1703,16 +1868,22 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                                     title={entry ? `${entry.start_time} - ${entry.end_time}${entry.work_description ? '\n' + entry.work_description : ''}${entry.comments ? '\n' + entry.comments : ''}` : ''}
                                   >
                                     {entry ? (
-                                      <div className="flex flex-col items-center gap-0.5">
-                                        <div className="font-bold text-sm text-green-700 print:text-black">
-                                          {entry.hours_worked?.toFixed(1) || '0.0'}
+                                      entry.day_type_initial ? (
+                                        <div className="font-bold text-lg text-yellow-800 print:text-black">
+                                          {entry.day_type_initial.initial}
                                         </div>
-                                        {entry.measurement_value && (
-                                          <div className="text-xs text-purple-700 print:text-gray-600 font-semibold">
-                                            {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
+                                      ) : (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <div className="font-bold text-sm text-green-700 print:text-black">
+                                            {entry.hours_worked?.toFixed(1) || '0.0'}
                                           </div>
-                                        )}
-                                      </div>
+                                          {entry.measurement_value && (
+                                            <div className="text-xs text-purple-700 print:text-gray-600 font-semibold">
+                                              {entry.measurement_value} {entry.measurement_unit?.unit_abbreviation || ''}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
                                     ) : (
                                       <span className="text-gray-300 print:text-gray-400 text-xs">-</span>
                                     )}
@@ -2003,6 +2174,83 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
             </div>
           </div>
         </div>
+
+          {/* Day Type Initials Management */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Inicialai</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Sukurkite inicialus specialioms dienoms (pvz. L - Liga, A - Atostogos).
+            </p>
+
+            {/* Add new initial form */}
+            <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
+              <h4 className="font-semibold text-yellow-900 mb-3">Pridėti naują inicialą</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Inicialas (1-3 simboliai)</label>
+                  <input
+                    type="text"
+                    value={newInitial}
+                    onChange={e => setNewInitial(e.target.value.toUpperCase())}
+                    placeholder="pvz. L"
+                    maxLength={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 uppercase font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Aprašymas</label>
+                  <input
+                    type="text"
+                    value={newInitialDesc}
+                    onChange={e => setNewInitialDesc(e.target.value)}
+                    placeholder="pvz. Liga"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={addDayTypeInitial}
+                    className="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Pridėti
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Initials list */}
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3">Sukurti inicialai</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {dayTypeInitials.map(initial => (
+                  <div
+                    key={initial.id}
+                    className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 bg-yellow-200 text-yellow-900 rounded font-bold text-lg">
+                        {initial.initial}
+                      </span>
+                      <div className="font-medium text-gray-800">{initial.description}</div>
+                    </div>
+                    <button
+                      onClick={() => deleteDayTypeInitial(initial.id)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Ištrinti"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {dayTypeInitials.length === 0 && (
+                  <div className="col-span-full text-center py-8 text-gray-500 text-sm">
+                    Nėra sukurtų inicialų
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

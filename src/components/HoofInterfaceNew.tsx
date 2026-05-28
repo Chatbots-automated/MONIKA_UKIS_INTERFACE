@@ -252,20 +252,20 @@ export function HoofInterfaceNew({
 
   // Screen 2: Zones
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between mb-6">
         <button
           onClick={handleBack}
-          className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-base font-medium"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
           Grįžti
         </button>
 
         <div className="text-center">
-          <div className="text-sm font-semibold uppercase tracking-wider text-gray-600">
+          <div className="text-base font-semibold uppercase tracking-wider text-gray-600">
             2 žingsnis iš 2 · Pasirinkite zoną
           </div>
           <div className="text-lg font-bold text-gray-900">
@@ -273,9 +273,8 @@ export function HoofInterfaceNew({
           </div>
         </div>
 
-        <div className="w-20"></div>
+        <div className="w-28"></div>
       </div>
-
       <div className="bg-white border border-gray-300 rounded-lg p-4">
         <div className="relative w-full max-w-4xl mx-auto bg-white rounded-lg overflow-hidden">
           {/* Background reference image */}
