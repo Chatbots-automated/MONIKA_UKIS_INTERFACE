@@ -9,6 +9,7 @@ interface HoofInterfaceNewProps {
   selectedLeg: HoofLeg | null;
   selectedClaw: HoofClaw | null;
   selectedZone: number | null;
+  selectedZones?: Array<{ zone: number; claw: HoofClaw }>;
   onLegSelect: (leg: HoofLeg) => void;
   onClawSelect: (claw: HoofClaw) => void;
   onZoneSelect: (zone: number) => void;
@@ -67,6 +68,7 @@ export function HoofInterfaceNew({
   selectedLeg,
   selectedClaw,
   selectedZone,
+  selectedZones = [],
   onLegSelect,
   onClawSelect,
   onZoneSelect,
@@ -74,7 +76,6 @@ export function HoofInterfaceNew({
   animalId
 }: HoofInterfaceNewProps) {
   const [screen, setScreen] = useState<'legs' | 'zones'>('legs');
-  const [tempZoneKey, setTempZoneKey] = useState<string | null>(null);
   const [history, setHistory] = useState<HoofHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -82,7 +83,6 @@ export function HoofInterfaceNew({
   useEffect(() => {
     if (!selectedLeg) {
       setScreen('legs');
-      setTempZoneKey(null);
     }
   }, [selectedLeg]);
 
@@ -129,28 +129,16 @@ export function HoofInterfaceNew({
     const side = parts[0]; // "left", "right", "center"
     const zoneNum = parseInt(parts[1], 10);
 
-    if (tempZoneKey === zoneKey) {
-      setTempZoneKey(null);
-      onZoneSelect(-1);
-      onClawSelect('inner');
-    } else {
-      setTempZoneKey(zoneKey);
-      onZoneSelect(zoneNum);
-      
-      // Determine claw based on side
-      if (side === 'left') {
-        onClawSelect('inner');
-      } else if (side === 'right') {
-        onClawSelect('outer');
-      } else {
-        onClawSelect('inner'); // center zones default to inner
-      }
-    }
+    // Determine claw based on side
+    const claw = side === 'left' ? 'inner' : side === 'right' ? 'outer' : 'inner';
+    
+    // Just pass to parent - parent handles the toggle logic
+    onZoneSelect(zoneNum);
+    onClawSelect(claw);
   };
 
   const handleBack = () => {
     setScreen('legs');
-    setTempZoneKey(null);
   };
 
   const getClawText = (claw: HoofClaw | null) => {
@@ -295,7 +283,14 @@ export function HoofInterfaceNew({
           >
             {/* Render all zones as transparent clickable areas */}
             {Object.entries(HOOF_ZONE_DATA).map(([zoneKey, points]) => {
-              const isSelected = tempZoneKey === zoneKey;
+              // Parse zoneKey to extract zone number and determine claw
+              const parts = zoneKey.split('_');
+              const side = parts[0]; // "left", "right", "center"
+              const zoneNum = parseInt(parts[1], 10);
+              const zoneClaw = side === 'left' ? 'inner' : side === 'right' ? 'outer' : 'inner';
+              
+              // Check if this zone is in the selectedZones array
+              const isSelected = selectedZones.some(z => z.zone === zoneNum && z.claw === zoneClaw);
 
               return (
                 <polygon
@@ -333,36 +328,40 @@ export function HoofInterfaceNew({
 
       {/* Selection Info */}
       <div className="bg-white border border-gray-300 rounded-lg p-4">
-        <div className="grid grid-cols-3 gap-4 text-sm">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Nagas</div>
-            <div className="font-semibold">{selectedLeg ? HOOF_LABELS[selectedLeg] : ''}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Zona</div>
-            {selectedZone !== null && selectedZone !== -1 ? (
-              <span className="inline-block px-2 py-1 bg-blue-600 text-white rounded text-xs font-mono font-semibold">
-                Z{selectedZone}
-              </span>
-            ) : (
-              <span className="text-gray-400 text-xs">—</span>
-            )}
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Regionas</div>
-            {selectedZone !== null && selectedZone !== -1 ? (
-              <div className="text-xs font-medium text-gray-700">
-                {ZONE_NAMES[selectedZone]} · {getClawText(selectedClaw)}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Nagas</div>
+              <div className="font-semibold">{selectedLeg ? HOOF_LABELS[selectedLeg] : ''}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Pasirinktos zonos</div>
+              <div className="font-semibold text-blue-600">
+                {selectedZones.length > 0 ? selectedZones.length : '—'}
               </div>
-            ) : (
-              <span className="text-gray-400 text-xs">Paspauskite zoną</span>
-            )}
+            </div>
           </div>
+          
+          {selectedZones.length > 0 && (
+            <div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-2">Pasirinktos</div>
+              <div className="flex flex-wrap gap-2">
+                {selectedZones.map((z, idx) => (
+                  <span 
+                    key={idx} 
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-mono font-semibold border border-red-300"
+                  >
+                    Z{z.zone} · {z.claw === 'inner' ? 'K' : 'D'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="text-xs text-gray-500 font-mono text-center p-3 bg-gray-50 border border-gray-200 rounded">
-        Paspauskite zoną, kad įrašytumėte pažeidimo vietą. Visos nago zonos yra paspaudžiamos.
+        💡 Paspauskite zonas, kad jas pasirinktumėte. Galite pasirinkti keletą zonų vienu metu.
       </div>
 
       {/* History Section */}

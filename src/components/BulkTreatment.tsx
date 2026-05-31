@@ -70,13 +70,12 @@ export function BulkTreatment() {
   const loadData = async () => {
     const [animalsRes, productsRes, batchesRes, collarMap, vetsRes] = await Promise.all([
       fetchAllRows<Animal>('animals', '*', 'tag_no'),
-      supabase.from('products').select('*').eq('is_active', true),
+      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
       supabase.from('stock_by_batch').select('*').gt('on_hand', 0),
       fetchLatestCollarNumbers(),
       supabase.from('treatments').select('vet_name').not('vet_name', 'is', null),
     ]);
 
-    // Enrich animals with collar numbers
     const enrichedAnimals = animalsRes.map((animal) => {
       const collarNo = collarMap.get(animal.id) || null;
       return {
@@ -92,7 +91,6 @@ export function BulkTreatment() {
     }
     if (batchesRes.data) setBatches(batchesRes.data);
 
-    // Get unique vet names
     if (vetsRes.data) {
       const uniqueVets = Array.from(new Set(vetsRes.data.map(v => v.vet_name).filter(Boolean))) as string[];
       setVetNames(uniqueVets.sort());

@@ -1009,94 +1009,257 @@ export function Reports() {
   };
 
   const renderHoofJournal = () => {
+    // Group records by session (same date + animal + technician)
+    const groupedSessions = new Map<string, any[]>();
+    data.forEach((record: any) => {
+      const sessionKey = `${record.examination_date}_${record.animal_id}_${record.technician_name || 'unknown'}`;
+      if (!groupedSessions.has(sessionKey)) {
+        groupedSessions.set(sessionKey, []);
+      }
+      groupedSessions.get(sessionKey)!.push(record);
+    });
+
+    // Calculate zone statistics
+    const zoneStats = new Map<number, number>();
+    data.forEach((record: any) => {
+      if (record.zone !== null && record.zone !== undefined) {
+        const count = zoneStats.get(record.zone) || 0;
+        zoneStats.set(record.zone, count + 1);
+      }
+    });
+    const topZones = Array.from(zoneStats.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // Calculate weekly stats (past 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const weeklyRecords = data.filter((r: any) => new Date(r.examination_date) >= sevenDaysAgo);
+
     const stats = {
       totalRecords: data.length,
+      totalSessions: groupedSessions.size,
       totalTreated: data.filter((r: any) => r.was_treated).length,
       totalTrimmed: data.filter((r: any) => r.was_trimmed).length,
       withConditions: data.filter((r: any) => r.condition_code && r.condition_code !== 'OK').length,
       requireFollowup: data.filter((r: any) => r.requires_followup && !r.followup_completed).length,
+      weeklyRecords: weeklyRecords.length,
+      avgSeverity: data.length > 0 ? (data.reduce((sum: number, r: any) => sum + (r.severity || 0), 0) / data.length).toFixed(1) : 0,
     };
 
     return (
       <div className="space-y-6">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border-2 border-blue-200">
-            <div className="text-3xl font-bold text-blue-900">{stats.totalRecords}</div>
-            <div className="text-sm font-medium text-blue-700">Iš viso apžiūrų</div>
+        {/* Main Statistics Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.totalSessions}</div>
+            <div className="text-xs font-medium opacity-90">Apžiūros</div>
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border-2 border-green-200">
-            <div className="text-3xl font-bold text-green-900">{stats.totalTreated}</div>
-            <div className="text-sm font-medium text-green-700">Gydyta</div>
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.totalRecords}</div>
+            <div className="text-xs font-medium opacity-90">Zonų įrašų</div>
           </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border-2 border-purple-200">
-            <div className="text-3xl font-bold text-purple-900">{stats.totalTrimmed}</div>
-            <div className="text-sm font-medium text-purple-700">Kirpta</div>
+          <div className="bg-gradient-to-br from-green-500 to-green-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.totalTreated}</div>
+            <div className="text-xs font-medium opacity-90">Gydyta</div>
           </div>
-          <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border-2 border-red-200">
-            <div className="text-3xl font-bold text-red-900">{stats.withConditions}</div>
-            <div className="text-sm font-medium text-red-700">Su pažeidimais</div>
+          <div className="bg-gradient-to-br from-red-500 to-red-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.withConditions}</div>
+            <div className="text-xs font-medium opacity-90">Su pažeidimais</div>
           </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border-2 border-orange-200">
-            <div className="text-3xl font-bold text-orange-900">{stats.requireFollowup}</div>
-            <div className="text-sm font-medium text-orange-700">Reikia kontrolės</div>
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.requireFollowup}</div>
+            <div className="text-xs font-medium opacity-90">Reikia kontrolės</div>
+          </div>
+          <div className="bg-gradient-to-br from-teal-500 to-teal-600 p-4 rounded-xl shadow-lg text-white">
+            <div className="text-2xl font-bold">{stats.weeklyRecords}</div>
+            <div className="text-xs font-medium opacity-90">Per savaitę</div>
           </div>
         </div>
 
-        {/* Data Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gyvulys</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Koja</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nagas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zona</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Būklė</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sunkumas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kirpta</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gydyta</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Preparatas</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Technikas</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {data.map((record: any, idx: number) => (
-                  <tr key={record.id || idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm">{record.examination_date}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{record.animal?.tag_no || record.animal_id}</td>
-                    <td className="px-4 py-3 text-sm">{record.leg}</td>
-                    <td className="px-4 py-3 text-sm">{record.claw === 'inner' ? 'Vidinis' : 'Išorinis'}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {record.zone !== null && record.zone !== undefined ? (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                          Z{record.zone}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">{record.condition?.name_lt || record.condition_code}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
-                        ${record.severity === 0 ? 'bg-green-100 text-green-800' : ''}
-                        ${record.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
-                        ${record.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
-                        ${record.severity === 3 ? 'bg-red-100 text-red-800' : ''}
-                        ${record.severity === 4 ? 'bg-red-200 text-red-900' : ''}
-                      `}>
-                        {record.severity}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-center">{record.was_trimmed ? '✓' : ''}</td>
-                    <td className="px-4 py-3 text-sm text-center">{record.was_treated ? '✓' : ''}</td>
-                    <td className="px-4 py-3 text-sm">{record.product?.name || '-'}</td>
-                    <td className="px-4 py-3 text-sm">{record.technician_name}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Analytics Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Most Infected Zones */}
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-5">
+            <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-red-600" />
+              Dažniausiai pažeistos zonos
+            </h3>
+            <div className="space-y-2">
+              {topZones.map(([zone, count], idx) => (
+                <div key={zone} className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold
+                    ${idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-orange-500' : 'bg-yellow-500'}`}>
+                    {idx + 1}
+                  </div>
+                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-bold">
+                    Zona {zone}
+                  </span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-red-400 to-red-500 h-6 rounded-full transition-all flex items-center justify-end pr-2"
+                      style={{ width: `${(count / topZones[0][1]) * 100}%`, minWidth: '40px' }}
+                    >
+                      <span className="text-xs font-bold text-white">{count}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {topZones.length === 0 && (
+                <p className="text-center text-gray-500 py-4 text-sm">Nėra duomenų</p>
+              )}
+            </div>
           </div>
+
+          {/* Weekly Trend */}
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-5">
+            <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-teal-600" />
+              Savaitės statistika
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gradient-to-br from-teal-50 to-teal-100 p-4 rounded-lg border border-teal-200">
+                <div className="text-2xl font-bold text-teal-900">{weeklyRecords.length}</div>
+                <div className="text-xs font-medium text-teal-700">Įrašų per 7 d.</div>
+              </div>
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                <div className="text-2xl font-bold text-purple-900">{stats.avgSeverity}</div>
+                <div className="text-xs font-medium text-purple-700">Vid. sunkumas</div>
+              </div>
+              <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                <div className="text-2xl font-bold text-green-900">
+                  {weeklyRecords.filter((r: any) => r.was_treated).length}
+                </div>
+                <div className="text-xs font-medium text-green-700">Gydyti šią savaitę</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                <div className="text-2xl font-bold text-blue-900">
+                  {weeklyRecords.filter((r: any) => r.requires_followup).length}
+                </div>
+                <div className="text-xs font-medium text-blue-700">Reikės kontrolės</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Grouped Sessions */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-blue-600" />
+            Apžiūros ({stats.totalSessions})
+          </h3>
+          {Array.from(groupedSessions.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([sessionKey, records]) => {
+              const firstRecord = records[0];
+              const uniqueLegs = [...new Set(records.map((r: any) => r.leg))];
+              const uniqueProducts = [...new Set(records.filter((r: any) => r.product?.name).map((r: any) => r.product.name))];
+              
+              return (
+                <div key={sessionKey} className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
+                  {/* Session Header */}
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-5 py-3 border-b-2 border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-bold">
+                          {firstRecord.examination_date}
+                        </div>
+                        <div className="text-base font-bold text-gray-900">
+                          {firstRecord.animal?.tag_no || firstRecord.animal_id}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {firstRecord.technician_name || 'Nežinomas technikas'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">
+                          {records.length} zonos
+                        </span>
+                        {records.some((r: any) => r.was_treated) && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-bold">
+                            Gydyta
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Session Details */}
+                  <div className="p-5 space-y-4">
+                    {/* Legs Summary */}
+                    <div>
+                      <div className="text-sm font-semibold text-gray-700 mb-2">Kojos ({uniqueLegs.length}):</div>
+                      <div className="flex flex-wrap gap-2">
+                        {uniqueLegs.map(leg => {
+                          const legRecords = records.filter((r: any) => r.leg === leg);
+                          return (
+                            <div key={leg} className="bg-gray-100 rounded-lg p-3 border border-gray-200">
+                              <div className="font-bold text-sm text-gray-800 mb-1">{leg}</div>
+                              <div className="flex flex-wrap gap-1">
+                                {legRecords.map((record: any, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className={`px-2 py-1 rounded text-xs font-bold
+                                      ${record.severity === 0 ? 'bg-green-100 text-green-800' :
+                                        record.severity === 1 ? 'bg-yellow-100 text-yellow-800' :
+                                        record.severity === 2 ? 'bg-orange-100 text-orange-800' :
+                                        record.severity >= 3 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {record.claw === 'inner' ? 'V' : 'I'} · Z{record.zone !== null ? record.zone : '?'}
+                                    {record.severity > 0 && ` · ${record.severity}`}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Products Used */}
+                    {uniqueProducts.length > 0 && (
+                      <div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2">
+                          Naudoti produktai ({uniqueProducts.length}):
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {uniqueProducts.map((productName, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium border border-blue-200">
+                              {productName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Conditions */}
+                    {records.some((r: any) => r.condition_code && r.condition_code !== 'OK') && (
+                      <div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2">Būklės:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {[...new Set(records.filter((r: any) => r.condition_code && r.condition_code !== 'OK').map((r: any) => r.condition?.name_lt || r.condition_code))].map((condition, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-red-100 text-red-800 rounded-lg text-sm font-medium border border-red-200">
+                              {condition}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notes (if any) */}
+                    {records.some((r: any) => r.notes) && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <div className="text-sm font-semibold text-yellow-900 mb-1">Pastabos:</div>
+                        <div className="text-sm text-yellow-800">
+                          {records.find((r: any) => r.notes)?.notes}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
         </div>
       </div>
     );

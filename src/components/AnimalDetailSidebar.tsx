@@ -2714,7 +2714,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const loadResources = async () => {
     const [productsRes, diseasesRes, batchesRes, usersRes, hoofConditionsRes] = await Promise.all([
-      supabase.from('products').select('*').eq('is_active', true),
+      // Exclude hoof_care products - they are only for nagos section
+      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
       supabase.from('diseases').select('*').order('name'),
       supabase.from('batches').select('*').order('expiry_date'),
       supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
@@ -5146,7 +5147,8 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
 
   const loadProductsAndBatches = async () => {
     const [productsRes, batchesRes] = await Promise.all([
-      supabase.from('products').select('*').order('name'),
+      // Exclude hoof_care products - they are only for nagos section
+      supabase.from('products').select('*').neq('category', 'hoof_care').order('name'),
       supabase.from('batches').select('*').order('expiry_date')
     ]);
 

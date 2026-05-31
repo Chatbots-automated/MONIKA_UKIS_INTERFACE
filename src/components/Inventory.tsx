@@ -400,6 +400,7 @@ export function Inventory() {
           <option value="technical">Techniniai</option>
           <option value="treatment_materials">Gydymo medžiagos</option>
           <option value="reproduction">Reprodukcija</option>
+          <option value="hoof_care">Nagų priežiūra</option>
         </select>
         <button
           onClick={exportToExcel}
@@ -478,6 +479,7 @@ export function Inventory() {
                           <option value="technical">Techniniai</option>
                           <option value="treatment_materials">Gydymo medžiagos</option>
                           <option value="reproduction">Reprodukcija</option>
+                          <option value="hoof_care">Nagų priežiūra</option>
                         </select>
                       ) : (
                         <span className="px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full">

@@ -1436,6 +1436,7 @@ export function ReceiveStock() {
                       <option value="technical">Techniniai</option>
                       <option value="treatment_materials">Gydymo medžiagos</option>
                       <option value="reproduction">Reprodukcija</option>
+                      <option value="hoof_care">Nagų priežiūra</option>
                     </select>
                   </div>
 
@@ -1801,6 +1802,7 @@ export function ReceiveStock() {
                         <option value="technical">Techniniai</option>
                         <option value="treatment_materials">Gydymo medžiagos</option>
                         <option value="reproduction">Reprodukcija</option>
+                        <option value="hoof_care">Nagų priežiūra</option>
                       </select>
                     </div>
 

@@ -56,6 +56,7 @@ export function translateCategory(category: string | undefined): string {
     'technical': 'Techniniai',
     'treatment_materials': 'Gydymo medžiagos',
     'reproduction': 'Reprodukcija',
+    'hoof_care': 'Nagų priežiūra',
   };
 
   return translations[category || ''] || category || '';

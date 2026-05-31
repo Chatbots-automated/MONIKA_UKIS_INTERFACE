@@ -76,9 +76,11 @@ export function Hoofs3D() {
   const [selectedLeg, setSelectedLeg] = useState<HoofLeg | null>(null);
   const [selectedClaw, setSelectedClaw] = useState<HoofClaw | null>(null);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
+  const [selectedZones, setSelectedZones] = useState<Array<{ zone: number; claw: HoofClaw }>>([]);
   const [currentExaminations, setCurrentExaminations] = useState<ClawExamination[]>([]);
 
   const [showClawModal, setShowClawModal] = useState(false);
+  const [showMultiZoneModal, setShowMultiZoneModal] = useState(false);
   const [clawFormData, setClawFormData] = useState<Partial<ClawExamination>>({
     condition_code: 'OK',
     severity: 0,
@@ -87,6 +89,17 @@ export function Hoofs3D() {
     bandage_applied: false,
     requires_followup: false
   });
+  
+  // Multi-zone product tracking
+  interface ProductUsage {
+    product_id: string;
+    batch_id: string;
+    quantity: number;
+    unit: Unit;
+  }
+  const [multiZoneProducts, setMultiZoneProducts] = useState<ProductUsage[]>([]);
+  // Track all products from multi-zone treatments for stock deduction
+  const [pendingMultiZoneProductDeductions, setPendingMultiZoneProductDeductions] = useState<ProductUsage[]>([]);
 
   const [filterCondition, setFilterCondition] = useState<string>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
@@ -117,7 +130,8 @@ export function Hoofs3D() {
       const [animalsData, conditionsRes, productsRes, batchesRes, usersRes, recordsData, collarRes] = await Promise.all([
         fetchAllRows<Animal>('animals'),
         supabase.from('hoof_condition_codes').select('*').eq('is_active', true).order('name_lt'),
-        supabase.from('products').select('*').eq('is_active', true).order('name'),
+        // Only load hoof_care category products for nagos
+        supabase.from('products').select('*').eq('is_active', true).eq('category', 'hoof_care').order('name'),
         supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
         supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
         fetchAllRows<ExtendedHoofRecord>('hoof_records'),
@@ -196,27 +210,19 @@ export function Hoofs3D() {
     
     if (!selectedLeg || !clawToUse) return;
 
-    const existing = currentExaminations.find(
-      e => e.leg === selectedLeg && e.claw === clawToUse && e.zone === zone
+    // Add zone to selected zones list (multi-select mode)
+    const zoneKey = `${zone}-${clawToUse}`;
+    const existingIndex = selectedZones.findIndex(
+      z => z.zone === zone && z.claw === clawToUse
     );
     
-    if (existing) {
-      setClawFormData(existing);
+    if (existingIndex >= 0) {
+      // Remove if already selected (toggle)
+      setSelectedZones(prev => prev.filter((_, i) => i !== existingIndex));
     } else {
-      setClawFormData({
-        leg: selectedLeg,
-        claw: clawToUse,
-        zone: zone,
-        condition_code: 'OK',
-        severity: 0,
-        was_trimmed: false,
-        was_treated: false,
-        bandage_applied: false,
-        requires_followup: false
-      });
+      // Add to selection
+      setSelectedZones(prev => [...prev, { zone, claw: clawToUse }]);
     }
-
-    setShowClawModal(true);
   };
 
   const saveClawExamination = () => {
@@ -258,6 +264,55 @@ export function Hoofs3D() {
     showNotification(`Pridėta: ${selectedLeg} - ${selectedClaw === 'inner' ? 'Vidinis' : 'Išorinis'}${selectedZone !== null ? ` - Zona ${selectedZone}` : ''}`, 'success');
   };
 
+  const saveMultiZoneExaminations = () => {
+    if (!selectedLeg || selectedZones.length === 0) return;
+    
+    // Create examinations for all selected zones
+    const newExaminations: ClawExamination[] = selectedZones.map(z => ({
+      leg: selectedLeg,
+      claw: z.claw,
+      zone: z.zone,
+      condition_code: clawFormData.condition_code || 'OK',
+      severity: clawFormData.severity || 0,
+      was_trimmed: clawFormData.was_trimmed || false,
+      was_treated: multiZoneProducts.length > 0,
+      // DON'T store product data in individual zone records for multi-zone treatments
+      // This prevents double-counting stock deduction
+      treatment_product_id: undefined,
+      treatment_batch_id: undefined,
+      treatment_quantity: undefined,
+      treatment_unit: undefined,
+      // Store all products in notes for reference
+      treatment_notes: multiZoneProducts.length > 0
+        ? `Naudoti produktai (${selectedZones.length} zonos): ${multiZoneProducts.map((p, i) => {
+            const prod = products.find(pr => pr.id === p.product_id);
+            return `${i+1}. ${prod?.name || 'Nežinomas'} - ${p.quantity} ${p.unit}`;
+          }).join('; ')}`
+        : undefined,
+      bandage_applied: clawFormData.bandage_applied || false,
+      requires_followup: clawFormData.requires_followup || false,
+      followup_date: clawFormData.followup_date,
+      notes: clawFormData.notes
+    }));
+
+    // Add ALL products from this multi-zone treatment to pending deductions
+    // The quantities entered are TOTAL amounts used, not per-zone
+    // These will be deducted ONCE during saveAllExaminations
+    if (multiZoneProducts.length > 0) {
+      setPendingMultiZoneProductDeductions(prev => [...prev, ...multiZoneProducts]);
+    }
+
+    setCurrentExaminations(prev => [...prev, ...newExaminations]);
+    setShowMultiZoneModal(false);
+    setSelectedZones([]);
+    setMultiZoneProducts([]);
+    setSelectedLeg(null);
+    setSelectedClaw(null);
+    setSelectedZone(null);
+    
+    showNotification(`Pridėta ${selectedZones.length} zonų apžiūrų su ${multiZoneProducts.length} produktais`, 'success');
+  };
+
   const saveAllExaminations = async () => {
     if (!selectedAnimalId || currentExaminations.length === 0) {
       showNotification('Pasirinkite gyvulį ir įveskite bent vieną nago būklę', 'error');
@@ -294,23 +349,41 @@ export function Hoofs3D() {
       if (error) throw error;
 
       // Deduct stock for treatments
+      // Group by batch_id to avoid double deduction
+      const batchDeductions = new Map<string, number>();
+      
+      // Add deductions from examinations that have individual product data
       for (const exam of currentExaminations) {
         if (exam.was_treated && exam.treatment_batch_id && exam.treatment_quantity) {
-          const batch = batches.find(b => b.id === exam.treatment_batch_id);
-          if (batch) {
-            const newQuantity = (batch.qty_left || 0) - exam.treatment_quantity;
-            const { error: stockError } = await supabase
-              .from('batches')
-              .update({ 
-                qty_left: Math.max(0, newQuantity),
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', exam.treatment_batch_id);
+          const currentDeduction = batchDeductions.get(exam.treatment_batch_id) || 0;
+          batchDeductions.set(exam.treatment_batch_id, currentDeduction + exam.treatment_quantity);
+        }
+      }
 
-            if (stockError) {
-              console.error('Stock deduction error:', stockError);
-              showNotification(`Įspėjimas: Klaida atimant atsargas partijai ${batch.lot}`, 'error');
-            }
+      // Add deductions from multi-zone products (these are tracked separately)
+      for (const product of pendingMultiZoneProductDeductions) {
+        if (product.batch_id && product.quantity) {
+          const currentDeduction = batchDeductions.get(product.batch_id) || 0;
+          batchDeductions.set(product.batch_id, currentDeduction + product.quantity);
+        }
+      }
+
+      // Apply deductions
+      for (const [batchId, totalQty] of batchDeductions.entries()) {
+        const batch = batches.find(b => b.id === batchId);
+        if (batch) {
+          const newQuantity = (batch.qty_left || 0) - totalQty;
+          const { error: stockError } = await supabase
+            .from('batches')
+            .update({ 
+              qty_left: Math.max(0, newQuantity),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', batchId);
+
+          if (stockError) {
+            console.error('Stock deduction error:', stockError);
+            showNotification(`Įspėjimas: Klaida atimant atsargas partijai ${batch.lot}`, 'error');
           }
         }
       }
@@ -319,6 +392,7 @@ export function Hoofs3D() {
         `Įrašyta ${currentExaminations.length} nagų apžiūrų gyvuliui ${selectedAnimalId}`);
 
       setCurrentExaminations([]);
+      setPendingMultiZoneProductDeductions([]); // Clear pending deductions after successful save
       setSelectedAnimalId('');
       setGeneralNotes('');
       setShowExaminationForm(false);
@@ -590,6 +664,7 @@ export function Hoofs3D() {
                 onClick={() => {
                   setShowExaminationForm(false);
                   setCurrentExaminations([]);
+                  setPendingMultiZoneProductDeductions([]);
                   setSelectedAnimalId('');
                   setSelectedLeg(null);
                   setSelectedClaw(null);
@@ -654,6 +729,7 @@ export function Hoofs3D() {
                   selectedLeg={selectedLeg}
                   selectedClaw={selectedClaw}
                   selectedZone={selectedZone}
+                  selectedZones={selectedZones}
                   onLegSelect={handleLegSelect}
                   onClawSelect={handleClawSelect}
                   onZoneSelect={handleZoneSelect}
@@ -661,6 +737,48 @@ export function Hoofs3D() {
                   animalId={selectedAnimalId}
                 />
               </div>
+
+              {selectedZones.length > 0 && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-purple-600" />
+                      Pasirinktos zonos ({selectedZones.length})
+                    </h4>
+                    <button
+                      onClick={() => setSelectedZones([])}
+                      className="text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      Išvalyti
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                    {selectedZones.map((z, idx) => (
+                      <div 
+                        key={idx} 
+                        className="text-sm bg-white p-2 rounded border-2 border-purple-300"
+                      >
+                        <div className="font-medium text-gray-800">
+                          {selectedLeg} - {z.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
+                          <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
+                            Z{z.zone}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setMultiZoneProducts([]);
+                      setShowMultiZoneModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                  >
+                    <Box className="w-5 h-5" />
+                    Tęsti - Pasirinkti produktus
+                  </button>
+                </div>
+              )}
 
               {currentExaminations.length > 0 && (
                 <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 rounded-lg p-4">
@@ -732,6 +850,7 @@ export function Hoofs3D() {
                   onClick={() => {
                     setShowExaminationForm(false);
                     setCurrentExaminations([]);
+                    setPendingMultiZoneProductDeductions([]);
                     setSelectedAnimalId('');
                     setSelectedLeg(null);
                     setSelectedClaw(null);
@@ -757,6 +876,257 @@ export function Hoofs3D() {
                   {selectedAnimalId && currentExaminations.length === 0 && '⚠️ Pridėkite bent vieną nago būklę'}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMultiZoneModal && selectedLeg && selectedZones.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-4 py-2.5 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-white">
+                Produktai ({selectedZones.length} zonos)
+              </h3>
+              <button
+                onClick={() => {
+                  setShowMultiZoneModal(false);
+                  setMultiZoneProducts([]);
+                }}
+                className="text-purple-100 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {/* Selected Zones Summary - Compact */}
+              <div className="bg-purple-50 border border-purple-200 rounded p-2">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Layers className="w-3.5 h-3.5 text-purple-700" />
+                  <h4 className="text-xs font-semibold text-purple-900">Zonos ({selectedZones.length})</h4>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedZones.map((z, idx) => (
+                    <span key={idx} className="px-1.5 py-0.5 bg-white border border-purple-300 rounded text-xs">
+                      {selectedLeg} {z.claw === 'inner' ? 'V' : 'I'} Z{z.zone}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Condition & Severity - Compact */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Būklė
+                  </label>
+                  <select
+                    value={clawFormData.condition_code || 'OK'}
+                    onChange={(e) => setClawFormData({...clawFormData, condition_code: e.target.value})}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500"
+                  >
+                    {conditions.length === 0 ? (
+                      <option value="OK">Sveikas</option>
+                    ) : (
+                      conditions.map(c => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} - {c.name_lt}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Sunkumas: <span className="font-bold text-purple-700">{clawFormData.severity || 0}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="4"
+                    value={clawFormData.severity || 0}
+                    onChange={(e) => setClawFormData({...clawFormData, severity: parseInt(e.target.value)})}
+                    className="w-full h-2"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                    <span>0</span>
+                    <span>4</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Products Section - Compact */}
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                    <Box className="w-4 h-4 text-blue-600" />
+                    Produktai
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setMultiZoneProducts([...multiZoneProducts, {
+                        product_id: '',
+                        batch_id: '',
+                        quantity: 0,
+                        unit: 'ml'
+                      }]);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Pridėti
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-2 italic">
+                  💡 Kiekis = bendras kiekis visoms {selectedZones.length} zonoms
+                </p>
+
+                <div className="space-y-2">
+                  {multiZoneProducts.map((product, idx) => (
+                    <div key={idx} className="bg-blue-50 border border-blue-200 rounded p-2">
+                      <div className="flex gap-2">
+                        <div className="flex-1 space-y-1.5">
+                          <select
+                            value={product.product_id}
+                            onChange={(e) => {
+                              const productId = e.target.value;
+                              const selectedProduct = products.find(p => p.id === productId);
+                              const availableBatches = batches
+                                .filter(b => 
+                                  b.product_id === productId && 
+                                  (b.qty_left === null || b.qty_left === undefined || b.qty_left > 0) &&
+                                  (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                                )
+                                .sort((a, b) => {
+                                  const dateA = a.mfg_date ? new Date(a.mfg_date) : new Date(a.created_at);
+                                  const dateB = b.mfg_date ? new Date(b.mfg_date) : new Date(b.created_at);
+                                  return dateA.getTime() - dateB.getTime();
+                                });
+                              
+                              const newProducts = [...multiZoneProducts];
+                              newProducts[idx] = {
+                                ...product,
+                                product_id: productId,
+                                batch_id: availableBatches.length > 0 ? availableBatches[0].id : '',
+                                unit: (selectedProduct?.primary_pack_unit as Unit) || 'ml'
+                              };
+                              setMultiZoneProducts(newProducts);
+                            }}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">Preparatas...</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+
+                          {product.product_id && (
+                            <>
+                              <select
+                                value={product.batch_id}
+                                onChange={(e) => {
+                                  const newProducts = [...multiZoneProducts];
+                                  newProducts[idx] = {...product, batch_id: e.target.value};
+                                  setMultiZoneProducts(newProducts);
+                                }}
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="">Partija...</option>
+                                {batches
+                                  .filter(b => 
+                                    b.product_id === product.product_id && 
+                                    (b.qty_left === null || b.qty_left === undefined || b.qty_left > 0) &&
+                                    (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                                  )
+                                  .sort((a, b) => {
+                                    const dateA = a.mfg_date ? new Date(a.mfg_date) : new Date(a.created_at);
+                                    const dateB = b.mfg_date ? new Date(b.mfg_date) : new Date(b.created_at);
+                                    return dateA.getTime() - dateB.getTime();
+                                  })
+                                  .map(b => {
+                                    const prod = products.find(p => p.id === b.product_id);
+                                    return (
+                                      <option key={b.id} value={b.id}>
+                                        {b.lot || b.id.slice(0, 8)} - {b.qty_left} {prod?.primary_pack_unit} {b.expiry_date ? `(${b.expiry_date})` : ''}
+                                      </option>
+                                    );
+                                  })}
+                              </select>
+
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={product.quantity || ''}
+                                  onChange={(e) => {
+                                    const newProducts = [...multiZoneProducts];
+                                    newProducts[idx] = {...product, quantity: parseFloat(e.target.value) || 0};
+                                    setMultiZoneProducts(newProducts);
+                                  }}
+                                  placeholder="Kiekis"
+                                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                />
+                                <div className="w-12 px-2 py-1.5 text-sm bg-gray-100 border border-gray-300 rounded flex items-center justify-center font-medium text-gray-700">
+                                  {product.unit || 'ml'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setMultiZoneProducts(multiZoneProducts.filter((_, i) => i !== idx));
+                          }}
+                          className="flex-shrink-0 text-red-500 hover:text-red-700 p-1"
+                          title="Pašalinti"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {multiZoneProducts.length === 0 && (
+                    <div className="text-center py-4 text-gray-400 text-xs">
+                      <Box className="w-8 h-8 mx-auto mb-1 opacity-20" />
+                      <p>Pridėkite naudotus produktus</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes - Compact */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Pastabos (pasirinktinai)</label>
+                <textarea
+                  value={clawFormData.notes || ''}
+                  onChange={(e) => setClawFormData({...clawFormData, notes: e.target.value})}
+                  rows={2}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500"
+                  placeholder="Papildomos pastabos..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowMultiZoneModal(false);
+                    setMultiZoneProducts([]);
+                  }}
+                  className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={saveMultiZoneExaminations}
+                  className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors font-medium"
+                >
+                  Išsaugoti visas zonas
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -861,6 +1231,7 @@ export function Hoofs3D() {
                       value={clawFormData.treatment_product_id || ''}
                       onChange={(e) => {
                         const productId = e.target.value;
+                        const selectedProduct = products.find(p => p.id === productId);
                         // Filter available batches with stock and sort by date ASCENDING (oldest first = FIFO)
                         const availableBatches = batches
                           .filter(b => 
@@ -876,11 +1247,12 @@ export function Hoofs3D() {
                             return dateA.getTime() - dateB.getTime();
                           });
                         
-                        // Auto-select the first available batch (oldest = FIFO)
+                        // Auto-select the first available batch (oldest = FIFO) and unit from product
                         setClawFormData({
                           ...clawFormData,
                           treatment_product_id: productId || undefined,
-                          treatment_batch_id: availableBatches.length > 0 ? availableBatches[0].id : undefined
+                          treatment_batch_id: availableBatches.length > 0 ? availableBatches[0].id : undefined,
+                          treatment_unit: (selectedProduct?.primary_pack_unit as Unit) || undefined
                         });
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -928,8 +1300,8 @@ export function Hoofs3D() {
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Kiekis</label>
                           <input
                             type="number"
@@ -945,19 +1317,9 @@ export function Hoofs3D() {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
-                          <select
-                            value={clawFormData.treatment_unit || ''}
-                            onChange={(e) => setClawFormData({
-                              ...clawFormData,
-                              treatment_unit: e.target.value as Unit || undefined
-                            })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                          >
-                            <option value="">Pasirinkite...</option>
-                            <option value="ml">ml</option>
-                            <option value="g">g</option>
-                            <option value="pcs">vnt</option>
-                          </select>
+                          <div className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center font-medium text-gray-700">
+                            {clawFormData.treatment_unit || 'ml'}
+                          </div>
                         </div>
                       </div>
                     </>

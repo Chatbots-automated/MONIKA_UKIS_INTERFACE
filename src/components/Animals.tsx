@@ -45,7 +45,8 @@ export function Animals() {
     try {
       const [allAnimals, productsRes, diseasesRes, collarMap, groupMap] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
-        supabase.from('products').select('*').eq('is_active', true),
+        // Exclude hoof_care products - they are only for nagos section
+        supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
         supabase.from('diseases').select('*'),
         fetchLatestCollarNumbers(),
         fetchLatestGroupNumbers(),

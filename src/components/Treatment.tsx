@@ -55,7 +55,8 @@ export function Treatment() {
     const [animalsRes, diseasesRes, productsRes, batchesRes] = await Promise.all([
       fetchAllRows('animals', '*', 'tag_no'),
       supabase.from('diseases').select('*').order('name'),
-      supabase.from('products').select('*').eq('is_active', true),
+      // Exclude hoof_care products - they are only for nagos section
+      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
       supabase.from('stock_by_batch').select(`
         *,
         products!inner(name)

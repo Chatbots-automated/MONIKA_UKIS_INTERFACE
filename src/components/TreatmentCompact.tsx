@@ -93,7 +93,8 @@ export function TreatmentCompact() {
     try {
       const [animalsData, productsRes, diseasesRes, batchesRes] = await Promise.all([
         fetchAllRows<Animal>('animals', '*', 'tag_no'),
-        supabase.from('products').select('*').eq('is_active', true).order('name'),
+        // Exclude hoof_care products - they are only for nagos section
+        supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care').order('name'),
         supabase.from('diseases').select('*').order('name'),
         supabase.from('batches').select('*').order('expiry_date'),
       ]);
