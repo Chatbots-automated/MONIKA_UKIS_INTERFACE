@@ -56,7 +56,7 @@ export function AuthForm() {
               ŽŪB Berčiunai
             </h1>
             <p className="text-emerald-50">
-              VetStock Valdymo Sistema
+              GVET PRO
             </p>
           </div>
 
@@ -212,7 +212,7 @@ export function AuthForm() {
         </div>
 
         <div className="mt-6 text-center text-sm text-white/80">
-          <p>© 2025 ŽŪB Berčiunai · VetStock Sistema v1.0.0</p>
+          <p>© 2025 ŽŪB Berčiūnai · GVET PRO v1.0.0</p>
         </div>
       </div>
     </div>

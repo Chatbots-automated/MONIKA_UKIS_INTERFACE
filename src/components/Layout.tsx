@@ -91,7 +91,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
               </div>
               <div>
                 <h1 className="font-bold text-sm xl:text-xl text-white leading-tight">ŽŪB Berčiunai</h1>
-                <p className="text-xs text-emerald-200 xl:mt-1">VetStock<span className="hidden xl:inline"> Sistema</span></p>
+                <p className="text-xs text-emerald-200 xl:mt-1">GVET PRO</p>
               </div>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
               <span className="truncate"><span className="xl:hidden">Moduliai</span><span className="hidden xl:inline">Modulių pasirinkimas</span></span>
             </button>
             <div className="text-xs text-emerald-300 xl:text-emerald-400 text-center pt-1 xl:pt-2">
-              <p className="hidden xl:block">Veterinarijos apskaita</p>
+              <p className="hidden xl:block">GVET PRO</p>
               <p className="xl:mt-1">v1.0<span className="hidden xl:inline">.0</span></p>
             </div>
           </div>
@@ -234,7 +234,7 @@ export function Layout({ children, currentView, onNavigate, onBackToModules }: L
                 <span>© 2025 ŽŪB Berčiunai. Visos teisės saugomos.</span>
               </div>
               <div className="text-xs text-gray-500">
-                VetStock Sistema · Versija 1.0.0
+                GVET PRO · Versija 1.0.0
               </div>
             </div>
           </div>

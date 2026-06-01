@@ -60,7 +60,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
                   Veterinarija
                 </h2>
                 <p className="text-sm lg:text-base text-blue-100">
-                  VetStock Sistema
+                  GVET PRO
                 </p>
               </div>
 
@@ -517,7 +517,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             ŽŪB Berčiunai
           </h1>
           <p className="text-xl text-emerald-100">
-            Valdymo Sistema
+            GVET PRO
           </p>
           <p className="text-emerald-200 mt-2">
             Pasirinkite modulį, kurį norite naudoti
@@ -677,7 +677,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
 
           <div className="text-center">
             <p className="text-sm text-white/60">
-              © 2025 ŽŪB Berčiūnai · Versija 1.0.0
+              © 2025 ŽŪB Berčiūnai · GVET PRO v1.0.0
             </p>
           </div>
         </div>
