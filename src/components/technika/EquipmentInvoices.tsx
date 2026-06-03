@@ -137,6 +137,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
+    assignToWorker: boolean;
+    assignToVehicle: boolean;
     vehicleId: string;
     workerId: string;
     toolId: string;
@@ -147,6 +149,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   }>({
     invoiceItemId: '',
     assignmentType: '',
+    assignToWorker: false,
+    assignToVehicle: false,
     vehicleId: '',
     workerId: '',
     toolId: '',
@@ -726,6 +730,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     setAssignmentForm({
       invoiceItemId: item.id,
       assignmentType: '',
+      assignToWorker: false,
+      assignToVehicle: false,
       vehicleId: '',
       workerId: '',
       toolId: '',
@@ -738,23 +744,37 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   };
 
   const handleSaveAssignment = async () => {
-    if (!assignmentForm.invoiceItemId || !assignmentForm.assignmentType) {
-      alert('Prašome pasirinkti paskyrimo tipą');
+    // Check if at least one assignment type is selected
+    if (!assignmentForm.invoiceItemId) {
+      alert('Trūksta produkto informacijos');
       return;
     }
 
-    if (assignmentForm.assignmentType === 'tool' && !assignmentForm.toolId) {
-      alert('Prašome pasirinkti įrankį');
+    // Check if worker/vehicle are selected, or another assignment type
+    const hasWorkerOrVehicle = assignmentForm.assignToWorker || assignmentForm.assignToVehicle;
+    const hasOtherType = assignmentForm.assignmentType && 
+      !['worker', 'vehicle'].includes(assignmentForm.assignmentType);
+
+    if (!hasWorkerOrVehicle && !hasOtherType) {
+      alert('Prašome pasirinkti bent vieną paskyrimo tipą');
       return;
     }
 
-    if (assignmentForm.assignmentType === 'worker' && !assignmentForm.workerId) {
+    // Validate worker selection
+    if (assignmentForm.assignToWorker && !assignmentForm.workerId) {
       alert('Prašome pasirinkti darbuotoją');
       return;
     }
 
-    if (assignmentForm.assignmentType === 'vehicle' && !assignmentForm.vehicleId) {
+    // Validate vehicle selection
+    if (assignmentForm.assignToVehicle && !assignmentForm.vehicleId) {
       alert('Prašome pasirinkti transporto priemonę');
+      return;
+    }
+
+    // Validate other assignment types
+    if (assignmentForm.assignmentType === 'tool' && !assignmentForm.toolId) {
+      alert('Prašome pasirinkti įrankį');
       return;
     }
 
@@ -774,25 +794,70 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     }
 
     try {
-      const { error } = await supabase.from('equipment_invoice_item_assignments').insert({
-        invoice_item_id: assignmentForm.invoiceItemId,
-        assignment_type: assignmentForm.assignmentType,
-        vehicle_id: assignmentForm.vehicleId || null,
-        worker_id: assignmentForm.workerId || null,
-        tool_id: assignmentForm.toolId || null,
-        cost_center_id: assignmentForm.costCenterId || null,
-        compartment_id: assignmentForm.compartmentId || null,
-        transport_company: assignmentForm.transportCompany || null,
-        notes: assignmentForm.notes || null,
-        assigned_by: user?.id || null,
-      });
+      const assignmentsToCreate = [];
 
-      if (error) throw error;
+      // Create worker assignment if selected
+      if (assignmentForm.assignToWorker && assignmentForm.workerId) {
+        assignmentsToCreate.push({
+          invoice_item_id: assignmentForm.invoiceItemId,
+          assignment_type: 'worker',
+          worker_id: assignmentForm.workerId,
+          vehicle_id: null,
+          tool_id: null,
+          cost_center_id: null,
+          compartment_id: null,
+          transport_company: null,
+          notes: assignmentForm.notes || null,
+        });
+      }
 
-      await logAction('assign_equipment_item', 'equipment_invoice_item_assignments', undefined, null, {
-        invoice_item_id: assignmentForm.invoiceItemId,
-        assignment_type: assignmentForm.assignmentType,
-      });
+      // Create vehicle assignment if selected
+      if (assignmentForm.assignToVehicle && assignmentForm.vehicleId) {
+        assignmentsToCreate.push({
+          invoice_item_id: assignmentForm.invoiceItemId,
+          assignment_type: 'vehicle',
+          vehicle_id: assignmentForm.vehicleId,
+          worker_id: null,
+          tool_id: null,
+          cost_center_id: null,
+          compartment_id: null,
+          transport_company: null,
+          notes: assignmentForm.notes || null,
+        });
+      }
+
+      // Create other assignment type if selected
+      if (assignmentForm.assignmentType && 
+          !['worker', 'vehicle'].includes(assignmentForm.assignmentType)) {
+        assignmentsToCreate.push({
+          invoice_item_id: assignmentForm.invoiceItemId,
+          assignment_type: assignmentForm.assignmentType,
+          vehicle_id: assignmentForm.vehicleId || null,
+          worker_id: assignmentForm.workerId || null,
+          tool_id: assignmentForm.toolId || null,
+          cost_center_id: assignmentForm.costCenterId || null,
+          compartment_id: assignmentForm.compartmentId || null,
+          transport_company: assignmentForm.transportCompany || null,
+          notes: assignmentForm.notes || null,
+        });
+      }
+
+      // Insert all assignments
+      if (assignmentsToCreate.length > 0) {
+        const { error } = await supabase
+          .from('equipment_invoice_item_assignments')
+          .insert(assignmentsToCreate);
+
+        if (error) throw error;
+
+        // Log actions for each assignment
+        for (const assignment of assignmentsToCreate) {
+          await logAction('assign_equipment_item', 'equipment_invoice_item_assignments', undefined, null, {
+            invoice_item_id: assignmentForm.invoiceItemId,
+            assignment_type: assignment.assignment_type,
+          });
+        }
+      }
 
       setInvoiceItems(prev => prev.filter(item => item.id !== assignmentForm.invoiceItemId));
       
@@ -802,6 +867,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       setAssignmentForm({
         invoiceItemId: '',
         assignmentType: '',
+        assignToWorker: false,
+        assignToVehicle: false,
         vehicleId: '',
         workerId: '',
         toolId: '',
@@ -821,7 +888,10 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           alert('Visi produktai priskirti sėkmingai!');
         }
       } else {
-        alert('Produktas priskirtas');
+        const assignmentCount = assignmentsToCreate.length;
+        alert(assignmentCount > 1 ? 
+          `Produktas priskirtas ${assignmentCount} objektams` : 
+          'Produktas priskirtas');
       }
     } catch (error: any) {
       console.error('Error assigning item:', error);
@@ -834,6 +904,8 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     setAssignmentForm({
       invoiceItemId: '',
       assignmentType: '',
+      assignToWorker: false,
+      assignToVehicle: false,
       vehicleId: '',
       workerId: '',
       toolId: '',
@@ -964,9 +1036,13 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         setAssignmentForm({
                           invoiceItemId: item.item_id,
                           assignmentType: '',
+                          assignToWorker: false,
+                          assignToVehicle: false,
                           vehicleId: '',
+                          workerId: '',
                           toolId: '',
                           costCenterId: '',
+                          compartmentId: '',
                           transportCompany: '',
                           notes: '',
                         });
@@ -2247,32 +2323,68 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   
                   {/* Worker and Vehicle Assignment Sections */}
                   <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-semibold text-blue-900 mb-3">Priskirti darbuotojui arba transportui</p>
+                    <p className="text-sm font-semibold text-blue-900 mb-3">Priskirti darbuotojui ir/arba transportui</p>
                     <div className="grid grid-cols-2 gap-3">
                       <button
-                        onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'worker', invoiceItemId: invoiceItems[0].id })}
+                        onClick={() => setAssignmentForm({ 
+                          ...assignmentForm, 
+                          assignToWorker: !assignmentForm.assignToWorker,
+                          assignmentType: '',
+                          invoiceItemId: invoiceItems[0].id 
+                        })}
                         className={`p-4 border-2 rounded-lg transition-all ${
-                          assignmentForm.assignmentType === 'worker'
+                          assignmentForm.assignToWorker
                             ? 'border-green-500 bg-green-50'
                             : 'border-gray-300 hover:border-gray-400'
                         }`}
                       >
                         <div className="text-center">
-                          <p className="font-semibold text-gray-900">Darbuotojui</p>
+                          <div className="flex items-center justify-center gap-2">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              assignmentForm.assignToWorker 
+                                ? 'bg-green-500 border-green-600' 
+                                : 'border-gray-400'
+                            }`}>
+                              {assignmentForm.assignToWorker && (
+                                <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M5 13l4 4L19 7"></path>
+                                </svg>
+                              )}
+                            </div>
+                            <p className="font-semibold text-gray-900">Darbuotojui</p>
+                          </div>
                           <p className="text-xs text-gray-500 mt-1">Asmeninės priemonės, įrankiai</p>
                         </div>
                       </button>
 
                       <button
-                        onClick={() => setAssignmentForm({ ...assignmentForm, assignmentType: 'vehicle', invoiceItemId: invoiceItems[0].id })}
+                        onClick={() => setAssignmentForm({ 
+                          ...assignmentForm, 
+                          assignToVehicle: !assignmentForm.assignToVehicle,
+                          assignmentType: '',
+                          invoiceItemId: invoiceItems[0].id 
+                        })}
                         className={`p-4 border-2 rounded-lg transition-all ${
-                          assignmentForm.assignmentType === 'vehicle'
+                          assignmentForm.assignToVehicle
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-300 hover:border-gray-400'
                         }`}
                       >
                         <div className="text-center">
-                          <p className="font-semibold text-gray-900">Transportui</p>
+                          <div className="flex items-center justify-center gap-2">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              assignmentForm.assignToVehicle 
+                                ? 'bg-purple-500 border-purple-600' 
+                                : 'border-gray-400'
+                            }`}>
+                              {assignmentForm.assignToVehicle && (
+                                <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M5 13l4 4L19 7"></path>
+                                </svg>
+                              )}
+                            </div>
+                            <p className="font-semibold text-gray-900">Transportui</p>
+                          </div>
                           <p className="text-xs text-gray-500 mt-1">Traktoriui, sunkvežimiui</p>
                         </div>
                       </button>
@@ -2507,7 +2619,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   )}
                 </div>
 
-                {assignmentForm.assignmentType === 'worker' && (
+                {assignmentForm.assignToWorker && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite darbuotoją</label>
                     <select
@@ -2525,7 +2637,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                   </div>
                 )}
 
-                {assignmentForm.assignmentType === 'vehicle' && (
+                {assignmentForm.assignToVehicle && (
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite transporto priemonę</label>
                     
