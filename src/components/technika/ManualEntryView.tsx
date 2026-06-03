@@ -224,7 +224,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<SavedEntry | null>(null);
   const [showAllWorkers, setShowAllWorkers] = useState(true);
-  const [workerTypeFilter, setWorkerTypeFilter] = useState<'all' | 'darbuotojas' | 'vairuotojas' | 'traktorininkas'>('all');
+  const [workerTypeFilter, setWorkerTypeFilter] = useState<string[]>(['darbuotojas', 'vairuotojas', 'traktorininkas']);
   const [allWorkersData, setAllWorkersData] = useState<any[]>([]);
   const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
@@ -247,6 +247,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
   
   // Refs for auto-advancing inputs
   const timeInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const tipasSelectRefs = useRef<{ [key: string]: HTMLSelectElement | null }>({});
 
   // Update URL when tab changes
   useEffect(() => {
@@ -779,6 +780,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
     // Auto-advance logic
     if (digits.length === 4) {
       const currentIndex = dayEntries.findIndex(d => d.date === date);
+      const currentDay = dayEntries[currentIndex];
       
       if (field === 'start_time') {
         // Move to end_time of same day
@@ -787,12 +789,20 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           setTimeout(() => endRef.focus(), 0);
         }
       } else if (field === 'end_time') {
-        // Move to start_time of next day
-        if (currentIndex < dayEntries.length - 1) {
-          const nextDate = dayEntries[currentIndex + 1].date;
-          const nextStartRef = timeInputRefs.current[`${nextDate}-start_time`];
-          if (nextStartRef) {
-            setTimeout(() => nextStartRef.focus(), 0);
+        // Move to Tipas field of same day if no initial is selected
+        if (!currentDay?.day_type_initial_id) {
+          const tipasRef = tipasSelectRefs.current[`${date}-tipas`];
+          if (tipasRef) {
+            setTimeout(() => tipasRef.focus(), 0);
+          }
+        } else {
+          // If initial is selected, skip to next day's start_time
+          if (currentIndex < dayEntries.length - 1) {
+            const nextDate = dayEntries[currentIndex + 1].date;
+            const nextStartRef = timeInputRefs.current[`${nextDate}-start_time`];
+            if (nextStartRef) {
+              setTimeout(() => nextStartRef.focus(), 0);
+            }
           }
         }
       }
@@ -808,6 +818,29 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         return normalized ? { ...d, [field]: normalized } : d;
       })
     );
+  };
+
+  const handleTipasChange = (date: string, value: string) => {
+    // Check if selecting an initial or a worker type
+    if (value.startsWith('initial_')) {
+      updateDayEntry(date, 'day_type_initial_id', value.replace('initial_', ''));
+    } else {
+      updateDayEntry(date, 'worker_type', value);
+    }
+  };
+
+  const handleTipasKeyDown = (date: string, e: React.KeyboardEvent<HTMLSelectElement>) => {
+    // Move to next day's start_time on Enter key
+    if (e.key === 'Enter') {
+      const currentIndex = dayEntries.findIndex(d => d.date === date);
+      if (currentIndex < dayEntries.length - 1) {
+        const nextDate = dayEntries[currentIndex + 1].date;
+        const nextStartRef = timeInputRefs.current[`${nextDate}-start_time`];
+        if (nextStartRef) {
+          setTimeout(() => nextStartRef.focus(), 0);
+        }
+      }
+    }
   };
 
   const copyFromPreviousDay = (currentDate: string) => {
@@ -1453,15 +1486,10 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                               </div>
                             ) : (
                               <select
+                                ref={el => tipasSelectRefs.current[`${day.date}-tipas`] = el}
                                 value={day.worker_type}
-                                onChange={e => {
-                                  const value = e.target.value;
-                                  if (value.startsWith('initial_')) {
-                                    updateDayEntry(day.date, 'day_type_initial_id', value.replace('initial_', ''));
-                                  } else {
-                                    updateDayEntry(day.date, 'worker_type', value);
-                                  }
-                                }}
+                                onChange={e => handleTipasChange(day.date, e.target.value)}
+                                onKeyDown={e => handleTipasKeyDown(day.date, e)}
                                 className="w-28 px-1 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-xs"
                               >
                                 <option value="darbuotojas">Darb.</option>
@@ -1702,18 +1730,69 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
-            <div className="min-w-[150px]">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipas</label>
-              <select
-                value={workerTypeFilter}
-                onChange={e => setWorkerTypeFilter(e.target.value as any)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">Visi</option>
-                <option value="darbuotojas">Darbuotojai</option>
-                <option value="vairuotojas">Vairuotojai</option>
-                <option value="traktorininkas">Traktorininkai</option>
-              </select>
+            <div className="min-w-[200px]">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Tipas</label>
+                <button
+                  onClick={() => {
+                    if (workerTypeFilter.length === 3) {
+                      setWorkerTypeFilter([]);
+                    } else {
+                      setWorkerTypeFilter(['darbuotojas', 'vairuotojas', 'traktorininkas']);
+                    }
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-900 font-medium"
+                >
+                  {workerTypeFilter.length === 3 ? 'Atžymėti visus' : 'Žymėti visus'}
+                </button>
+              </div>
+              <div className="border border-gray-300 rounded-lg px-3 py-2 bg-white">
+                <label className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={workerTypeFilter.includes('darbuotojas')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setWorkerTypeFilter([...workerTypeFilter, 'darbuotojas']);
+                      } else {
+                        setWorkerTypeFilter(workerTypeFilter.filter(t => t !== 'darbuotojas'));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">Darbuotojai</span>
+                </label>
+                <label className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={workerTypeFilter.includes('vairuotojas')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setWorkerTypeFilter([...workerTypeFilter, 'vairuotojas']);
+                      } else {
+                        setWorkerTypeFilter(workerTypeFilter.filter(t => t !== 'vairuotojas'));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">Vairuotojai</span>
+                </label>
+                <label className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={workerTypeFilter.includes('traktorininkas')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setWorkerTypeFilter([...workerTypeFilter, 'traktorininkas']);
+                      } else {
+                        setWorkerTypeFilter(workerTypeFilter.filter(t => t !== 'traktorininkas'));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">Traktorininkai</span>
+                </label>
+              </div>
             </div>
             <div className="min-w-[200px]">
               <label className="block text-sm font-medium text-gray-700 mb-1">Darbuotojas</label>
@@ -1739,7 +1818,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
           {(() => {
             const filteredData = allWorkersData
               .filter(entry => {
-                if (workerTypeFilter !== 'all' && entry.worker_type !== workerTypeFilter) return false;
+                if (workerTypeFilter.length > 0 && !workerTypeFilter.includes(entry.worker_type)) return false;
                 if (selectedWorkerFilter && entry.worker_id !== selectedWorkerFilter) return false;
                 return true;
               });
@@ -1809,7 +1888,7 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
                     <h2 className="text-2xl font-bold">Darbuotojų darbo valandos</h2>
                     <p className="text-base text-gray-600">
                       {new Date(year, month, 15).toLocaleDateString('lt-LT', { year: 'numeric', month: 'long' })}
-                      {workerTypeFilter !== 'all' && ` - ${workerTypeFilter === 'darbuotojas' ? 'Darbuotojai' : workerTypeFilter === 'vairuotojas' ? 'Vairuotojai' : 'Traktorininkai'}`}
+                      {workerTypeFilter.length > 0 && workerTypeFilter.length < 3 && ` - ${workerTypeFilter.map(t => t === 'darbuotojas' ? 'Darbuotojai' : t === 'vairuotojas' ? 'Vairuotojai' : 'Traktorininkai').join(', ')}`}
                     </p>
                   </div>
                   <div className="overflow-x-auto">
