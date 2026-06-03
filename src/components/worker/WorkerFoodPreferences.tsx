@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { UtensilsCrossed, Check, X, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface WorkerFoodPreferencesProps {
-  workLocation: 'farm' | 'warehouse';
+  workLocation: 'farm' | 'warehouse' | 'administration';
 }
 
 interface FoodPreference {

@@ -69,7 +69,7 @@ export function WorkerCodes() {
       const { data, error } = await supabase
         .from('users')
         .select('id, full_name, email, work_location')
-        .in('role', ['farm_worker', 'warehouse_worker'])
+        .in('role', ['farm_worker', 'warehouse_worker', 'administracija'])
         .order('full_name');
 
       if (error) throw error;
@@ -93,21 +93,39 @@ export function WorkerCodes() {
     }
 
     try {
+      const insertData: any = {
+        code: newCode.code.trim().toUpperCase(),
+        worker_id: newCode.worker_id,
+        notes: newCode.notes.trim() || null
+      };
+
+      // Only add created_by if user exists and has valid id
+      if (user?.id) {
+        insertData.created_by = user.id;
+      }
+
       const { error } = await supabase
         .from('worker_login_codes')
-        .insert({
-          code: newCode.code.trim().toUpperCase(),
-          worker_id: newCode.worker_id,
-          notes: newCode.notes.trim() || null,
-          created_by: user?.id
-        });
+        .insert(insertData);
 
       if (error) {
         if (error.code === '23505') {
           alert('Šis kodas jau egzistuoja! Pasirinkite kitą kodą.');
           return;
         }
-        throw error;
+        if (error.code === '23503') {
+          // Foreign key violation - just insert without created_by
+          const { error: retryError } = await supabase
+            .from('worker_login_codes')
+            .insert({
+              code: newCode.code.trim().toUpperCase(),
+              worker_id: newCode.worker_id,
+              notes: newCode.notes.trim() || null
+            });
+          if (retryError) throw retryError;
+        } else {
+          throw error;
+        }
       }
 
       alert('Kodas sėkmingai sukurtas!');
@@ -282,9 +300,11 @@ export function WorkerCodes() {
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       code.worker?.work_location === 'farm'
                         ? 'bg-green-100 text-green-800'
+                        : code.worker?.work_location === 'administration'
+                        ? 'bg-violet-100 text-violet-800'
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {code.worker?.work_location === 'farm' ? 'Ūkis' : 'Sandėlis'}
+                      {code.worker?.work_location === 'farm' ? 'Ūkis' : code.worker?.work_location === 'administration' ? 'Administracija' : 'Sandėlis'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -416,7 +436,7 @@ export function WorkerCodes() {
                     .filter(w => !codes.find(c => c.worker_id === w.id && c.is_active))
                     .map(worker => (
                       <option key={worker.id} value={worker.id}>
-                        {worker.full_name} ({worker.work_location === 'farm' ? 'Ūkis' : 'Sandėlis'})
+                        {worker.full_name} ({worker.work_location === 'farm' ? 'Ūkis' : worker.work_location === 'administration' ? 'Administracija' : 'Sandėlis'})
                       </option>
                     ))}
                 </select>

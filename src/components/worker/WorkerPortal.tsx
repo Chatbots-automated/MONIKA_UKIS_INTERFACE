@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, Clock, Tractor, Warehouse, UtensilsCrossed } from 'lucide-react';
+import { LogOut, Clock, Tractor, Warehouse, UtensilsCrossed, Building2 } from 'lucide-react';
 import { WorkerFoodPreferences } from './WorkerFoodPreferences';
 import { supabase } from '../../lib/supabase';
 
@@ -9,9 +9,10 @@ export function WorkerPortal() {
   const [activeTimeEntry, setActiveTimeEntry] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const workLocation = isFarmWorker ? 'farm' : 'warehouse';
-  const locationLabel = isFarmWorker ? 'Ferma' : 'Technikos kiemas';
-  const LocationIcon = isFarmWorker ? Tractor : Warehouse;
+  const isAdministracija = user?.role === 'administracija';
+  const workLocation = isFarmWorker ? 'farm' : isAdministracija ? 'administration' : 'warehouse';
+  const locationLabel = isFarmWorker ? 'Ferma' : isAdministracija ? 'Administracija' : 'Technikos kiemas';
+  const LocationIcon = isFarmWorker ? Tractor : isAdministracija ? Building2 : Warehouse;
 
   useEffect(() => {
     loadActiveTimeEntry();
@@ -75,11 +76,11 @@ export function WorkerPortal() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className={`${isFarmWorker ? 'bg-green-600' : 'bg-slate-600'} text-white shadow-lg`}>
+      <div className={`${isFarmWorker ? 'bg-green-600' : isAdministracija ? 'bg-violet-600' : 'bg-slate-600'} text-white shadow-lg`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 ${isFarmWorker ? 'bg-green-700' : 'bg-slate-700'} rounded-lg flex items-center justify-center`}>
+              <div className={`w-12 h-12 ${isFarmWorker ? 'bg-green-700' : isAdministracija ? 'bg-violet-700' : 'bg-slate-700'} rounded-lg flex items-center justify-center`}>
                 <LocationIcon className="w-7 h-7" />
               </div>
               <div>
@@ -90,7 +91,7 @@ export function WorkerPortal() {
 
             {/* Clock Status */}
             {activeTimeEntry && (
-              <div className={`${isFarmWorker ? 'bg-green-700' : 'bg-slate-700'} px-4 py-2 rounded-lg flex items-center gap-3`}>
+              <div className={`${isFarmWorker ? 'bg-green-700' : isAdministracija ? 'bg-violet-700' : 'bg-slate-700'} px-4 py-2 rounded-lg flex items-center gap-3`}>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                   <Clock className="w-5 h-5" />
@@ -104,7 +105,7 @@ export function WorkerPortal() {
 
             <button
               onClick={handleSignOut}
-              className={`flex items-center gap-2 ${isFarmWorker ? 'bg-green-700 hover:bg-green-800' : 'bg-slate-700 hover:bg-slate-800'} px-4 py-2 rounded-lg transition-colors`}
+              className={`flex items-center gap-2 ${isFarmWorker ? 'bg-green-700 hover:bg-green-800' : isAdministracija ? 'bg-violet-700 hover:bg-violet-800' : 'bg-slate-700 hover:bg-slate-800'} px-4 py-2 rounded-lg transition-colors`}
             >
               <LogOut className="w-5 h-5" />
               Atsijungti
@@ -117,13 +118,10 @@ export function WorkerPortal() {
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-1">
-            <button
-              onClick={() => setCurrentView('food')}
-              className="flex items-center gap-2 px-6 py-4 font-medium border-b-2 border-orange-600 text-orange-600"
-            >
+            <div className="flex items-center gap-2 px-6 py-4 font-medium border-b-2 border-orange-600 text-orange-600">
               <UtensilsCrossed className="w-5 h-5" />
               Pietūs ir vakarienė
-            </button>
+            </div>
           </nav>
         </div>
       </div>

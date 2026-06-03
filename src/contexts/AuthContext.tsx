@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker' | 'buhaltere' | 'sandelininkas' | 'custom';
+export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker' | 'buhaltere' | 'sandelininkas' | 'administracija' | 'custom';
 
 export interface ModulePermission {
   module_name: string;
@@ -41,6 +41,7 @@ interface AuthContextType {
   isViewer: boolean;
   isFarmWorker: boolean;
   isWarehouseWorker: boolean;
+  isAdministracija: boolean;
   isWorker: boolean;
   isCustomRole: boolean;
   isFrozen: boolean;
@@ -340,7 +341,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isViewer = user?.role === 'viewer';
   const isFarmWorker = user?.role === 'farm_worker';
   const isWarehouseWorker = user?.role === 'warehouse_worker';
-  const isWorker = isFarmWorker || isWarehouseWorker;
+  const isAdministracija = user?.role === 'administracija';
+  const isWorker = isFarmWorker || isWarehouseWorker || isAdministracija;
   const isCustomRole = user?.role === 'custom';
   const isFrozen = user?.is_frozen || false;
 
@@ -360,6 +362,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isViewer,
       isFarmWorker,
       isWarehouseWorker,
+      isAdministracija,
       isWorker,
       isCustomRole,
       isFrozen

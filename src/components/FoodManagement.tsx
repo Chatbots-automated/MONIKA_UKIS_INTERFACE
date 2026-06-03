@@ -105,7 +105,7 @@ export function FoodManagement() {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .in('role', ['farm_worker', 'warehouse_worker'])
+      .in('role', ['farm_worker', 'warehouse_worker', 'administracija'])
       .order('full_name');
 
     if (error) throw error;
@@ -206,6 +206,12 @@ export function FoodManagement() {
     const farmSupper = preferences.filter(p => p.work_location === 'farm' && p.wants_supper);
     const warehouseLunch = preferences.filter(p => p.work_location === 'warehouse' && p.wants_lunch);
     const warehouseSupper = preferences.filter(p => p.work_location === 'warehouse' && p.wants_supper);
+    const administracijaLunch = preferences.filter(p => p.work_location === 'administration' && p.wants_lunch);
+    const administracijaSupper = preferences.filter(p => p.work_location === 'administration' && p.wants_supper);
+    
+    // Combine administracija worker responses with manual admin counts
+    const totalAdminLunch = administracijaLunch.length + adminCounts.lunch_count;
+    const totalAdminSupper = administracijaSupper.length + adminCounts.supper_count;
     
     return {
       date: formatDate(new Date()),
@@ -213,8 +219,8 @@ export function FoodManagement() {
       farm_supper: farmSupper.length,
       warehouse_lunch: warehouseLunch.length,
       warehouse_supper: warehouseSupper.length,
-      admin_lunch: adminCounts.lunch_count,
-      admin_supper: adminCounts.supper_count,
+      admin_lunch: totalAdminLunch,
+      admin_supper: totalAdminSupper,
       farm_workers: preferences.filter(p => p.work_location === 'farm'),
       warehouse_workers: preferences.filter(p => p.work_location === 'warehouse'),
       total_workers: allWorkers.length,
@@ -689,7 +695,7 @@ export function FoodManagement() {
                   <div key={worker.id} className="text-sm text-yellow-800">
                     <span className="font-medium">{worker.full_name}</span>
                     <span className="text-yellow-600 ml-2">
-                      ({worker.work_location === 'farm' ? 'Ferma' : 'Technikos kiemas'})
+                      ({worker.work_location === 'farm' ? 'Ferma' : worker.work_location === 'administration' ? 'Administracija' : 'Technikos kiemas'})
                     </span>
                   </div>
                 ))}

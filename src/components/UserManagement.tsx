@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity, Tractor, Warehouse, Settings, Lock, Unlock } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Eye, Stethoscope, Wrench, Mail, Calendar, Check, X, Snowflake, Play, Activity, Tractor, Warehouse, Settings, Lock, Unlock, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth, UserRole, User } from '../contexts/AuthContext';
 import { formatDateLT } from '../lib/formatters';
@@ -41,6 +41,8 @@ export function UserManagement() {
       setNewUserWorkLocation('farm');
     } else if (newUserRole === 'warehouse_worker') {
       setNewUserWorkLocation('warehouse');
+    } else if (newUserRole === 'administracija') {
+      setNewUserWorkLocation('administration');
     }
   }, [newUserRole]);
 
@@ -49,6 +51,8 @@ export function UserManagement() {
       setEditWorkLocation('farm');
     } else if (editRole === 'warehouse_worker') {
       setEditWorkLocation('warehouse');
+    } else if (editRole === 'administracija') {
+      setEditWorkLocation('administration');
     }
   }, [editRole]);
 
@@ -75,7 +79,7 @@ export function UserManagement() {
       const updateData: any = { role: editRole };
       
       // Add work_location for worker roles
-      if (editRole === 'farm_worker' || editRole === 'warehouse_worker') {
+      if (editRole === 'farm_worker' || editRole === 'warehouse_worker' || editRole === 'administracija') {
         updateData.work_location = editWorkLocation;
       }
 
@@ -133,7 +137,7 @@ export function UserManagement() {
         const updateData: any = { full_name: newUserFullName, requires_login: newUserRequiresLogin };
 
         // Add work_location for worker roles
-        if (newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') {
+        if (newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker' || newUserRole === 'administracija') {
           updateData.work_location = newUserWorkLocation;
         }
 
@@ -358,6 +362,8 @@ export function UserManagement() {
         return <Warehouse className="w-4 h-4" />;
       case 'buhaltere':
         return <Mail className="w-4 h-4" />;
+      case 'administracija':
+        return <Building2 className="w-4 h-4" />;
       case 'custom':
         return <Settings className="w-4 h-4" />;
     }
@@ -381,6 +387,8 @@ export function UserManagement() {
         return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'buhaltere':
         return 'bg-pink-100 text-pink-800 border-pink-200';
+      case 'administracija':
+        return 'bg-violet-100 text-violet-800 border-violet-200';
       case 'custom':
         return 'bg-purple-100 text-purple-800 border-purple-200';
     }
@@ -404,6 +412,8 @@ export function UserManagement() {
         return 'Buhalterė';
       case 'warehouse_worker':
         return 'Technikos kiemo darbuotojas';
+      case 'administracija':
+        return 'Administracija';
       case 'custom':
         return 'Pasirinktinė prieiga';
     }
@@ -580,13 +590,14 @@ export function UserManagement() {
                     <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
                     <option value="sandelininkas">Sandėlininkas (Warehouse Manager)</option>
                     <option value="buhaltere">Buhalterė (Secretary)</option>
+                    <option value="administracija">Administracija</option>
                   </optgroup>
                   <optgroup label="Pasirinktinė prieiga">
                     <option value="custom">Pasirinktinė prieiga (Custom Permissions)</option>
                   </optgroup>
                 </select>
               </div>
-              {(newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker') && (
+              {(newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker' || newUserRole === 'administracija') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Darbo vieta
@@ -598,6 +609,7 @@ export function UserManagement() {
                   >
                     <option value="farm">Ferma</option>
                     <option value="warehouse">Technikos kiemas</option>
+                    <option value="administration">Administracija</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Automatiškai nustatyta pagal rolę, bet galite pakeisti jei reikia
@@ -689,12 +701,13 @@ export function UserManagement() {
                             <optgroup label="Technikos modulis">
                               <option value="farm_worker">Fermos darbuotojas</option>
                               <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
+                              <option value="administracija">Administracija</option>
                             </optgroup>
                             <optgroup label="Pasirinktinė prieiga">
                               <option value="custom">Pasirinktinė prieiga</option>
                             </optgroup>
                           </select>
-                          {(editRole === 'farm_worker' || editRole === 'warehouse_worker') && (
+                          {(editRole === 'farm_worker' || editRole === 'warehouse_worker' || editRole === 'administracija') && (
                             <select
                               value={editWorkLocation}
                               onChange={(e) => setEditWorkLocation(e.target.value)}
@@ -702,6 +715,7 @@ export function UserManagement() {
                             >
                               <option value="farm">Ferma</option>
                               <option value="warehouse">Technikos kiemas</option>
+                              <option value="administration">Administracija</option>
                             </select>
                           )}
                         </div>
@@ -711,9 +725,9 @@ export function UserManagement() {
                             {getRoleIcon(user.role)}
                             {getRoleLabel(user.role)}
                           </span>
-                          {(user.role === 'farm_worker' || user.role === 'warehouse_worker') && user.work_location && (
+                          {(user.role === 'farm_worker' || user.role === 'warehouse_worker' || user.role === 'administracija') && user.work_location && (
                             <div className="text-xs text-gray-500 ml-1">
-                              📍 {user.work_location === 'farm' ? 'Ferma' : 'Technikos kiemas'}
+                              📍 {user.work_location === 'farm' ? 'Ferma' : user.work_location === 'warehouse' ? 'Technikos kiemas' : 'Administracija'}
                             </div>
                           )}
                         </div>
