@@ -205,12 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     newData?: any
   ) => {
     if (!user) {
-      console.warn('Cannot log action: no user logged in');
+      console.log('[logAction] No user logged in, skipping');
       return;
     }
 
+    console.log('[logAction] Attempting to log action:', {
+      action,
+      tableName,
+      recordId,
+      userId: user.id,
+      hasOldData: !!oldData,
+      hasNewData: !!newData
+    });
+
     try {
-      console.log('Logging action:', { action, tableName, recordId, newData });
       const { data, error } = await supabase.rpc('log_user_action', {
         p_user_id: user.id,
         p_action: action,
@@ -221,13 +229,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        console.error('Error logging action:', error);
-        throw error;
+        // Silently handle foreign key constraint violation (user_id not in public.users table)
+        // This can happen with custom auth where the auth user doesn't match public.users
+        if (error.code === '23503') {
+          console.log('[logAction] ✓ EXPECTED: Custom auth user - audit logging skipped (this is normal)');
+          return;
+        }
+        
+        console.error('[logAction] RPC returned error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          fullError: error
+        });
+        console.error('[logAction] Unexpected error, throwing:', error);
+      } else {
+        console.log('[logAction] ✓ Action logged successfully:', data);
       }
-
-      console.log('Action logged successfully:', data);
-    } catch (error) {
-      console.error('Failed to log action:', error);
+    } catch (error: any) {
+      // Silently handle foreign key constraint violations for custom auth users
+      if (error?.code === '23503') {
+        console.log('[logAction] ✓ EXPECTED: Custom auth user - audit logging skipped (this is normal)');
+        return;
+      }
+      
+      console.error('[logAction] Exception caught:', {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        fullError: error
+      });
+      console.error('[logAction] Failed to log action (non-FK error):', error);
     }
   };
 

@@ -1111,10 +1111,28 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
 
     setSaving(true);
     try {
-      const datesToSave = validEntries.map(e => e.date);
+      // Delete ALL entries for this month (not just the ones we're saving)
+      // This ensures that days where data was removed (like clearing an initial) get deleted
+      const startDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+      const endDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
+      const startDateStr = formatDateForDB(startDate);
+      const endDateStr = formatDateForDB(endDate);
 
-      await supabase.from('worker_schedules').delete().eq('worker_id', selectedWorker).in('date', datesToSave);
-      await supabase.from('manual_time_entries').delete().eq('worker_id', selectedWorker).in('entry_date', datesToSave);
+      console.log('[saveEntries] Deleting all entries for month:', { startDateStr, endDateStr });
+      
+      await supabase
+        .from('worker_schedules')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .gte('date', startDateStr)
+        .lte('date', endDateStr);
+      
+      await supabase
+        .from('manual_time_entries')
+        .delete()
+        .eq('worker_id', selectedWorker)
+        .gte('entry_date', startDateStr)
+        .lte('entry_date', endDateStr);
 
       // Only create schedules for entries with actual times
       const entriesWithTimes = validEntries.filter(e => e.start_time && e.end_time);
@@ -1164,21 +1182,27 @@ export function ManualEntryView({ workLocation }: ManualEntryViewProps) {
         };
       });
 
-      console.log('Attempting to insert:', timeEntriesToInsert);
+      console.log('[saveEntries] Attempting to insert time entries:', timeEntriesToInsert);
       const { data: insertedData, error: insertError } = await supabase
         .from('manual_time_entries')
         .insert(timeEntriesToInsert);
       
       if (insertError) {
-        console.error('Insert error details:', insertError);
+        console.error('[saveEntries] Insert error details:', insertError);
         throw insertError;
       }
+      
+      console.log('[saveEntries] ✓ Time entries inserted successfully');
 
+      console.log('[saveEntries] Calling logAction for audit trail...');
+      
       await logAction('create_manual_schedules', 'worker_schedules', null, null, {
         count: schedulesCount,
         worker_id: selectedWorker,
         month: selectedMonth.toISOString(),
       });
+      
+      console.log('[saveEntries] ✓ Save operation completed successfully');
 
       alert('Grafikai sėkmingai išsaugoti!');
       
