@@ -110,6 +110,12 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     description: '',
     min_stock_level: '0',
   });
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewUnitInput, setShowNewUnitInput] = useState(false);
+  const [newUnitCode, setNewUnitCode] = useState('');
+  const [newUnitLabel, setNewUnitLabel] = useState('');
+  const [customUnits, setCustomUnits] = useState<{code: string, label: string}[]>([]);
 
   // Multi-upload staging states
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
@@ -134,6 +140,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [shelves, setShelves] = useState<any[]>([]);
   const [compartments, setCompartments] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [assignmentForm, setAssignmentForm] = useState<{
     invoiceItemId: string;
     assignmentType: string;
@@ -145,6 +152,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     costCenterId: string;
     compartmentId: string;
     transportCompany: string;
+    warehouseId: string;
     notes: string;
   }>({
     invoiceItemId: '',
@@ -157,6 +165,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     costCenterId: '',
     compartmentId: '',
     transportCompany: '',
+    warehouseId: '',
     notes: '',
   });
 
@@ -179,7 +188,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     const canSeeAllInvoices = user?.role === 'admin' || user?.role === 'buhaltere' || user?.role === 'sandelininkas';
     const invoiceLimit = canSeeAllInvoices ? 1000 : 20;
 
-    const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes, workersRes, vehiclesRes, shelvesRes, compartmentsRes] = await Promise.all([
+    const [suppliersRes, productsRes, categoriesRes, invoicesRes, toolsRes, costCentersRes, workersRes, vehiclesRes, shelvesRes, compartmentsRes, warehousesRes] = await Promise.all([
       supabase.from('equipment_suppliers').select('*').order('name'),
       supabase.from('equipment_products').select('*').eq('is_active', true).order('name'),
       supabase.from('equipment_categories').select('*').order('name'),
@@ -190,6 +199,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       supabase.from('vehicles').select('id, registration_number, vehicle_type, vehicle_category, make, model').eq('is_active', true).order('registration_number'),
       supabase.from('equipment_shelves').select('id, shelf_number, name').eq('is_active', true).order('shelf_number'),
       supabase.from('equipment_shelf_compartments').select('id, shelf_id, compartment_code, description, vehicle_category').eq('is_active', true).order('compartment_code'),
+      supabase.from('equipment_warehouses').select('id, name, description, location').eq('is_active', true).order('name'),
     ]);
 
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
@@ -202,6 +212,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     if (vehiclesRes.data) setVehicles(vehiclesRes.data);
     if (shelvesRes.data) setShelves(shelvesRes.data);
     if (compartmentsRes.data) setCompartments(compartmentsRes.data);
+    if (warehousesRes.data) setWarehouses(warehousesRes.data);
   };
 
   const loadUnassignedItems = async () => {
@@ -455,6 +466,49 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
     setShowCreateModal(true);
   };
 
+  const handleCreateNewCategory = async () => {
+    if (!newCategoryName.trim()) {
+      alert('Prašome įvesti kategorijos pavadinimą');
+      return;
+    }
+
+    try {
+      const { data: newCategory, error } = await supabase
+        .from('equipment_categories')
+        .insert({
+          name: newCategoryName.trim(),
+          description: '',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCategories(prev => [...prev, newCategory]);
+      setNewProductForm({ ...newProductForm, category_id: newCategory.id });
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+      alert('Nauja kategorija sukurta sėkmingai!');
+    } catch (error: any) {
+      console.error('Error creating category:', error);
+      alert('Klaida kuriant kategoriją: ' + error.message);
+    }
+  };
+
+  const handleCreateNewUnit = () => {
+    if (!newUnitCode.trim() || !newUnitLabel.trim()) {
+      alert('Prašome įvesti vieneto kodą ir pavadinimą');
+      return;
+    }
+
+    const newUnit = { code: newUnitCode.trim(), label: newUnitLabel.trim() };
+    setCustomUnits(prev => [...prev, newUnit]);
+    setNewProductForm({ ...newProductForm, unit_type: newUnit.code });
+    setNewUnitCode('');
+    setNewUnitLabel('');
+    setShowNewUnitInput(false);
+  };
+
   const handleSaveNewProduct = async () => {
     if (!newProductForm.name) {
       alert('Prašome įvesti produkto pavadinimą');
@@ -499,6 +553,11 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
       setShowCreateModal(false);
       setCreatingProduct(null);
+      setShowNewCategoryInput(false);
+      setNewCategoryName('');
+      setShowNewUnitInput(false);
+      setNewUnitCode('');
+      setNewUnitLabel('');
       setNewProductForm({
         name: '',
         product_code: '',
@@ -737,6 +796,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       toolId: '',
       costCenterId: '',
       compartmentId: '',
+      warehouseId: '',
       transportCompany: '',
       notes: '',
     });
@@ -788,6 +848,11 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       return;
     }
 
+    if (assignmentForm.assignmentType === 'stock' && !assignmentForm.warehouseId) {
+      alert('Prašome pasirinkti sandėlį');
+      return;
+    }
+
     if (assignmentForm.assignmentType === 'transport_service' && !assignmentForm.transportCompany) {
       alert('Prašome įvesti transporto kompaniją');
       return;
@@ -806,6 +871,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           tool_id: null,
           cost_center_id: null,
           compartment_id: null,
+          warehouse_id: null,
           transport_company: null,
           notes: assignmentForm.notes || null,
         });
@@ -821,6 +887,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           tool_id: null,
           cost_center_id: null,
           compartment_id: null,
+          warehouse_id: null,
           transport_company: null,
           notes: assignmentForm.notes || null,
         });
@@ -837,6 +904,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
           tool_id: assignmentForm.toolId || null,
           cost_center_id: assignmentForm.costCenterId || null,
           compartment_id: assignmentForm.compartmentId || null,
+          warehouse_id: assignmentForm.warehouseId || null,
           transport_company: assignmentForm.transportCompany || null,
           notes: assignmentForm.notes || null,
         });
@@ -874,6 +942,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
         toolId: '',
         costCenterId: '',
         compartmentId: '',
+        warehouseId: '',
         transportCompany: '',
         notes: '',
       });
@@ -911,6 +980,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
       toolId: '',
       costCenterId: '',
       compartmentId: '',
+      warehouseId: '',
       transportCompany: '',
       notes: '',
     });
@@ -1043,6 +1113,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                           toolId: '',
                           costCenterId: '',
                           compartmentId: '',
+                          warehouseId: '',
                           transportCompany: '',
                           notes: '',
                         });
@@ -2005,7 +2076,11 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                             <select
                               value={matchedProduct.id}
                               onChange={(e) => {
-                                handleProductMatch(index, e.target.value);
+                                if (e.target.value === '__create_new__') {
+                                  handleCreateProduct(item, index);
+                                } else {
+                                  handleProductMatch(index, e.target.value);
+                                }
                                 setProductSearchTerm('');
                               }}
                               className="px-2 py-0.5 border border-emerald-300 rounded text-xs bg-white"
@@ -2021,6 +2096,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                                     {p.name} {p.product_code ? `(${p.product_code})` : ''}
                                   </option>
                                 ))}
+                              <option value="__create_new__">+ Sukurti naują produktą</option>
                             </select>
                           </div>
                         </div>
@@ -2039,10 +2115,12 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                             />
                             <select
                               onChange={(e) => {
-                                if (e.target.value) {
+                                if (e.target.value === '__create_new__') {
+                                  handleCreateProduct(item, index);
+                                } else if (e.target.value) {
                                   handleProductMatch(index, e.target.value);
-                                  setProductSearchTerm('');
                                 }
+                                setProductSearchTerm('');
                               }}
                               className="px-2 py-0.5 border border-gray-400 rounded text-xs bg-white font-mono min-w-[100px]"
                               defaultValue=""
@@ -2059,6 +2137,7 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                                     {p.name} {p.product_code ? `(${p.product_code})` : ''}
                                   </option>
                                 ))}
+                              <option value="__create_new__">+ Sukurti naują produktą</option>
                             </select>
                           </div>
                           <button
@@ -2177,34 +2256,142 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Kategorija *</label>
-                <select
-                  value={newProductForm.category_id}
-                  onChange={(e) => setNewProductForm({ ...newProductForm, category_id: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="">Pasirinkite kategoriją</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                {!showNewCategoryInput ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={newProductForm.category_id}
+                      onChange={(e) => {
+                        if (e.target.value === '__new__') {
+                          setShowNewCategoryInput(true);
+                        } else {
+                          setNewProductForm({ ...newProductForm, category_id: e.target.value });
+                        }
+                      }}
+                      className="flex-1 border rounded px-3 py-2"
+                    >
+                      <option value="">Pasirinkite kategoriją</option>
+                      {categories.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                      <option value="__new__">+ Sukurti naują kategoriją</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Naujos kategorijos pavadinimas"
+                        className="flex-1 border rounded px-3 py-2"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCreateNewCategory();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleCreateNewCategory}
+                        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                      >
+                        Sukurti
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNewCategoryInput(false);
+                          setNewCategoryName('');
+                        }}
+                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                      >
+                        Atšaukti
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Vienetas</label>
-                  <select
-                    value={newProductForm.unit_type}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, unit_type: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
-                  >
-                    <option value="pcs">vnt</option>
-                    <option value="kg">kg</option>
-                    <option value="l">l</option>
-                    <option value="m">m</option>
-                    <option value="box">dėžė</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Matavimo vienetas</label>
+                  {!showNewUnitInput ? (
+                    <div className="flex gap-2">
+                      <select
+                        value={newProductForm.unit_type}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') {
+                            setShowNewUnitInput(true);
+                          } else {
+                            setNewProductForm({ ...newProductForm, unit_type: e.target.value });
+                          }
+                        }}
+                        className="flex-1 border rounded px-3 py-2"
+                      >
+                        <option value="pcs">vnt (vienetai)</option>
+                        <option value="kg">kg (kilogramai)</option>
+                        <option value="l">l (litrai)</option>
+                        <option value="m">m (metrai)</option>
+                        <option value="box">dėžė</option>
+                        <option value="pack">pak (pakuotė)</option>
+                        <option value="bottle">but (butelis)</option>
+                        <option value="can">skardinė</option>
+                        {customUnits.map((unit, idx) => (
+                          <option key={idx} value={unit.code}>
+                            {unit.code} ({unit.label})
+                          </option>
+                        ))}
+                        <option value="__new__">+ Sukurti naują vienetą</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newUnitCode}
+                          onChange={(e) => setNewUnitCode(e.target.value)}
+                          placeholder="Kodas (pvz: ml)"
+                          className="w-1/3 border rounded px-3 py-2"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCreateNewUnit();
+                            }
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={newUnitLabel}
+                          onChange={(e) => setNewUnitLabel(e.target.value)}
+                          placeholder="Pavadinimas (pvz: mililitrai)"
+                          className="flex-1 border rounded px-3 py-2"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCreateNewUnit();
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={handleCreateNewUnit}
+                          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                        >
+                          Sukurti
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowNewUnitInput(false);
+                            setNewUnitCode('');
+                            setNewUnitLabel('');
+                          }}
+                          className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                        >
+                          Atšaukti
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500">Kodas bus naudojamas sistemoje, pavadinimas – ataskaitose</p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -2254,6 +2441,11 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                 onClick={() => {
                   setShowCreateModal(false);
                   setCreatingProduct(null);
+                  setShowNewCategoryInput(false);
+                  setNewCategoryName('');
+                  setShowNewUnitInput(false);
+                  setNewUnitCode('');
+                  setNewUnitLabel('');
                 }}
                 className="px-4 py-2 border rounded hover:bg-gray-50"
               >
@@ -2721,6 +2913,30 @@ export function EquipmentInvoices({ locationFilter }: EquipmentInvoicesProps = {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {assignmentForm.assignmentType === 'stock' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite sandėlį</label>
+                    <select
+                      value={assignmentForm.warehouseId}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, warehouseId: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2"
+                    >
+                      <option value="">-- Pasirinkite sandėlį --</option>
+                      {warehouses.map(warehouse => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}
+                          {warehouse.location && ` - ${warehouse.location}`}
+                        </option>
+                      ))}
+                    </select>
+                    {warehouses.length === 0 && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        Nėra sukurtų sandėlių. Sukurkite sandėlį "Sandėlis" skiltyje.
+                      </p>
+                    )}
                   </div>
                 )}
 

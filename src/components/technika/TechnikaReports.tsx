@@ -1004,7 +1004,6 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
             {[
               { id: 'overview', label: 'Apžvalga', icon: BarChart3 },
               { id: 'items', label: 'Prekių istorija', icon: Package },
-              { id: 'workers', label: 'Darbuotojai', icon: Users },
               { id: 'categories', label: 'Kategorijos', icon: Filter },
               { id: 'assignments', label: 'Priskyrimas', icon: Users },
               { id: 'invoices', label: 'Sąskaitos', icon: FileText },
@@ -1012,7 +1011,6 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
               ...(locationFilter === 'farm' ? [{ id: 'farm-equipment', label: 'Fermos įrangos savikaina', icon: DollarSign }] : []),
               ...(!locationFilter ? [{ id: 'vehicle-maintenance', label: 'Transporto taisymų savikaina', icon: Car }] : []),
               { id: 'transport-services', label: 'Transporto paslaugos', icon: Car },
-              { id: 'timeline', label: 'Laiko juosta', icon: TrendingUp },
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -1087,13 +1085,13 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6">
                 <div className="bg-slate-50 rounded-lg p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4">Top 5 Kategorijos pagal vertę</h3>
+                  <h3 className="font-semibold text-gray-900 mb-4">Top 10 Kategorijos pagal vertę</h3>
                   <div className="space-y-3">
                     {categoryStats
                       .sort((a, b) => b.total_value - a.total_value)
-                      .slice(0, 5)
+                      .slice(0, 10)
                       .map((cat, idx) => (
                         <div key={idx} className="flex items-center justify-between">
                           <span className="text-sm text-gray-700">{cat.category}</span>
@@ -1102,24 +1100,8 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                       ))}
                   </div>
                 </div>
-
-                <div className="bg-slate-50 rounded-lg p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4">Top 5 Darbuotojai pagal išduotų prekių vertę</h3>
-                  <div className="space-y-3">
-                    {workerStats
-                      .sort((a, b) => b.total_value - a.total_value)
-                      .slice(0, 5)
-                      .map((worker, idx) => (
-                        <div key={idx} className="flex items-center justify-between">
-                          <span className="text-sm text-gray-700">{worker.worker_name}</span>
-                          <span className="font-semibold text-gray-900">
-                            €{worker.total_value.toFixed(2)} ({worker.items_count})
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
               </div>
+
             </div>
           )}
 
@@ -1338,60 +1320,6 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-          )}
-
-          {!loading && activeTab === 'workers' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Darbuotojų išduotų prekių suvestinė</h3>
-                <button
-                  onClick={() => exportToCSV(
-                    workerStats.map(w => ({
-                      'Darbuotojas': w.worker_name,
-                      'Prekių skaičius': w.items_count,
-                      'Bendra vertė': w.total_value.toFixed(2),
-                    })),
-                    'darbuotoju_suvestine'
-                  )}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Eksportuoti
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {workerStats.map((worker) => (
-                  <div key={worker.worker_id} className="border border-gray-200 rounded-lg p-4 bg-white">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{worker.worker_name}</h4>
-                        <p className="text-sm text-gray-600">
-                          {worker.items_count} prekės • €{worker.total_value.toFixed(2)}
-                        </p>
-                      </div>
-                      <Users className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {worker.outstanding_items.map((item, idx) => (
-                        <div key={idx} className="bg-gray-50 rounded p-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="font-medium text-gray-900">{item.product_name}</span>
-                            <span className="text-gray-700">
-                              {item.quantity} {item.unit_type}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-600 mt-1">
-                            <span>{item.issuance_number}</span>
-                            <span>{new Date(item.issue_date).toLocaleDateString('lt-LT')}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -2841,15 +2769,6 @@ export function TechnikaReports({ locationFilter }: TechnikaReportsProps = {}) {
             </div>
           )}
 
-          {!loading && activeTab === 'timeline' && (
-            <div className="text-center py-12">
-              <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Laiko juosta (coming soon)</h3>
-              <p className="text-gray-600">
-                Čia bus rodomi laiko grafikai ir tendencijos
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

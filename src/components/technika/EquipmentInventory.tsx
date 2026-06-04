@@ -1,8 +1,7 @@
-import { Package, Plus, Search, Upload, Users, ArrowRight, User, CornerUpLeft, Warehouse, X } from 'lucide-react';
+import { Package, Plus, Search, Upload, Users, ArrowRight, User, CornerUpLeft, Warehouse, X, Edit2, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { EquipmentReceiveStock } from './EquipmentReceiveStock';
 import { ShelvesManagement } from './ShelvesManagement';
 
 interface WarehouseStock {
@@ -55,10 +54,18 @@ interface UserOption {
   email: string;
 }
 
-type Tab = 'inventory' | 'receive' | 'issue' | 'on-loan' | 'shelves';
+type Tab = 'inventory' | 'issue' | 'on-loan' | 'shelves' | 'warehouses';
 
 interface EquipmentInventoryProps {
   locationFilter?: 'farm' | 'warehouse';
+}
+
+interface CustomWarehouse {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  is_active: boolean;
 }
 
 export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps = {}) {
@@ -69,6 +76,15 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
   const [users, setUsers] = useState<UserOption[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('inventory');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('all');
+  const [customWarehouses, setCustomWarehouses] = useState<CustomWarehouse[]>([]);
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [editingWarehouse, setEditingWarehouse] = useState<CustomWarehouse | null>(null);
+  const [warehouseForm, setWarehouseForm] = useState({
+    name: '',
+    description: '',
+    location: '',
+  });
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<WarehouseStock | null>(null);
@@ -81,6 +97,8 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
     expected_return_date: '',
     notes: '',
     assignmentType: '',
+    assignToWorker: false,
+    assignToVehicle: false,
     workerId: '',
     vehicleId: '',
     costCenterId: '',
@@ -102,6 +120,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
 
   useEffect(() => {
     loadData();
+    loadWarehouses();
 
     // Subscribe to realtime updates
     const subscription = supabase
@@ -118,19 +137,115 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tools' }, () => {
         loadData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_warehouses' }, () => {
+        loadWarehouses();
+      })
       .subscribe();
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [locationFilter]);
+  }, [locationFilter, selectedWarehouseId]);
 
   const loadData = async () => {
-    // Fetch all stock data with product info
-    const stockQuery = supabase
-      .from('equipment_warehouse_stock')
-      .select('*');
+    let stockData = [];
+    
+    if (selectedWarehouseId && selectedWarehouseId !== 'all') {
+      // Step 1: Get assignments for this warehouse
+      const { data: assignments, error: assignError } = await supabase
+        .from('equipment_invoice_item_assignments')
+        .select('invoice_item_id')
+        .eq('warehouse_id', selectedWarehouseId)
+        .eq('assignment_type', 'stock');
 
+      if (assignError) {
+        console.error('Error fetching assignments:', assignError);
+      } else if (assignments && assignments.length > 0) {
+        const invoiceItemIds = assignments.map(a => a.invoice_item_id);
+        
+        // Step 2: Get invoice items with their batch IDs
+        const { data: invoiceItems, error: itemsError } = await supabase
+          .from('equipment_invoice_items')
+          .select('batch_id')
+          .in('id', invoiceItemIds);
+
+        if (itemsError) {
+          console.error('Error fetching invoice items:', itemsError);
+        } else if (invoiceItems && invoiceItems.length > 0) {
+          const batchIds = invoiceItems.map(i => i.batch_id).filter(Boolean);
+          
+          // Step 3: Get batches with product info
+          const { data: batches, error: batchError } = await supabase
+            .from('equipment_batches')
+            .select(`
+              id,
+              product_id,
+              qty_left,
+              purchase_price,
+              equipment_products!inner(
+                id,
+                name,
+                product_code,
+                unit_type,
+                category_id,
+                equipment_categories(name)
+              )
+            `)
+            .in('id', batchIds)
+            .gt('qty_left', 0);
+
+          if (batchError) {
+            console.error('Error fetching batches:', batchError);
+          } else if (batches) {
+            // Aggregate by product
+            const productMap = new Map();
+            
+            batches.forEach((batch: any) => {
+              const product = batch.equipment_products;
+              if (!product) return;
+              
+              const key = product.id;
+              if (!productMap.has(key)) {
+                productMap.set(key, {
+                  product_id: product.id,
+                  product_name: product.name,
+                  product_code: product.product_code,
+                  unit_type: product.unit_type,
+                  category_name: product.equipment_categories?.name || 'Nėra kategorijos',
+                  total_qty: 0,
+                  total_value: 0,
+                  batch_count: 0,
+                  avg_price: 0,
+                  prices: []
+                });
+              }
+              
+              const item = productMap.get(key);
+              item.total_qty += parseFloat(batch.qty_left);
+              item.total_value += parseFloat(batch.qty_left) * parseFloat(batch.purchase_price);
+              item.batch_count += 1;
+              item.prices.push(parseFloat(batch.purchase_price));
+            });
+            
+            // Calculate averages
+            stockData = Array.from(productMap.values()).map(item => ({
+              ...item,
+              avg_price: item.prices.length > 0 
+                ? item.prices.reduce((a: number, b: number) => a + b, 0) / item.prices.length 
+                : 0
+            }));
+          }
+        }
+      }
+    } else {
+      // Show all stock using the view
+      const { data } = await supabase
+        .from('equipment_warehouse_stock')
+        .select('*');
+      
+      stockData = data || [];
+    }
+    
     // Fetch all loans data with product info
     const loansQuery = supabase
       .from('equipment_issuance_items')
@@ -159,8 +274,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       `)
       .in('equipment_issuances.status', ['issued', 'partial_return']);
 
-    const [stockRes, loansRes, toolsRes, usersRes, workersRes, vehiclesRes, costCentersRes, shelvesRes, compartmentsRes, toolsListRes] = await Promise.all([
-      stockQuery,
+    const [loansRes, toolsRes, usersRes, workersRes, vehiclesRes, costCentersRes, shelvesRes, compartmentsRes, toolsListRes] = await Promise.all([
       loansQuery,
       supabase
         .from('tools')
@@ -183,10 +297,8 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       supabase.from('tools').select('*').order('name'),
     ]);
 
-    // Set stock data
-    if (stockRes.data) {
-      setWarehouseStock(stockRes.data);
-    }
+    // Stock data is already set above
+    setWarehouseStock(stockData);
     
     // Set assignment data
     if (workersRes.data) setWorkers(workersRes.data);
@@ -251,6 +363,81 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
     if (usersRes.data) setUsers(usersRes.data);
   };
 
+  const loadWarehouses = async () => {
+    const { data, error } = await supabase
+      .from('equipment_warehouses')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.error('Error loading warehouses:', error);
+      return;
+    }
+
+    if (data) setCustomWarehouses(data);
+  };
+
+  const handleSaveWarehouse = async () => {
+    if (!warehouseForm.name.trim()) {
+      alert('Prašome įvesti sandėlio pavadinimą');
+      return;
+    }
+
+    try {
+      if (editingWarehouse) {
+        const { error } = await supabase
+          .from('equipment_warehouses')
+          .update({
+            name: warehouseForm.name,
+            description: warehouseForm.description,
+            location: warehouseForm.location,
+          })
+          .eq('id', editingWarehouse.id);
+
+        if (error) throw error;
+        alert('Sandėlis atnaujintas');
+      } else {
+        const { error } = await supabase
+          .from('equipment_warehouses')
+          .insert({
+            name: warehouseForm.name,
+            description: warehouseForm.description,
+            location: warehouseForm.location,
+          });
+
+        if (error) throw error;
+        alert('Sandėlis sukurtas');
+      }
+
+      setShowWarehouseModal(false);
+      setEditingWarehouse(null);
+      setWarehouseForm({ name: '', description: '', location: '' });
+      loadWarehouses();
+    } catch (error: any) {
+      console.error('Error saving warehouse:', error);
+      alert('Klaida: ' + error.message);
+    }
+  };
+
+  const handleDeleteWarehouse = async (warehouse: CustomWarehouse) => {
+    if (!confirm(`Ar tikrai norite ištrinti sandėlį "${warehouse.name}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('equipment_warehouses')
+        .update({ is_active: false })
+        .eq('id', warehouse.id);
+
+      if (error) throw error;
+      alert('Sandėlis ištrintas');
+      loadWarehouses();
+    } catch (error: any) {
+      console.error('Error deleting warehouse:', error);
+      alert('Klaida: ' + error.message);
+    }
+  };
+
   const loadBatchesForProduct = async (productId: string) => {
     const { data } = await supabase
       .from('equipment_batches')
@@ -280,8 +467,23 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       return;
     }
 
-    if (!issueForm.issued_to && !issueForm.issued_to_name) {
-      alert('Prašome pasirinkti darbuotoją arba įvesti vardą');
+    // Check if at least worker or vehicle is selected
+    const hasWorkerOrVehicle = issueForm.assignToWorker || issueForm.assignToVehicle;
+    
+    if (!hasWorkerOrVehicle) {
+      alert('Prašome pasirinkti darbuotoją arba transportą');
+      return;
+    }
+
+    // Validate worker selection
+    if (issueForm.assignToWorker && !issueForm.workerId) {
+      alert('Prašome pasirinkti darbuotoją');
+      return;
+    }
+
+    // Validate vehicle selection
+    if (issueForm.assignToVehicle && !issueForm.vehicleId) {
+      alert('Prašome pasirinkti transporto priemonę');
       return;
     }
 
@@ -293,45 +495,97 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
       return;
     }
 
-    if (quantity > selectedBatch.qty_left) {
-      alert('Nepakanka atsargų. Turimas kiekis: ' + selectedBatch.qty_left);
+    // Calculate total quantity needed
+    const totalIssuances = (issueForm.assignToWorker ? 1 : 0) + (issueForm.assignToVehicle ? 1 : 0);
+    const totalQuantityNeeded = quantity * totalIssuances;
+    
+    if (totalQuantityNeeded > selectedBatch.qty_left) {
+      alert(`Nepakanka atsargų. Turimas kiekis: ${selectedBatch.qty_left}, reikia: ${totalQuantityNeeded}`);
       return;
     }
 
     try {
-      const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
+      const issuancesCreated = [];
 
-      const { data: issuance, error: issuanceError } = await supabase
-        .from('equipment_issuances')
-        .insert({
-          issuance_number: issuanceNumber,
-          issued_to: issueForm.issued_to || null,
-          issued_to_name: issueForm.issued_to_name || null,
-          issued_by: user?.id || null,
-          expected_return_date: issueForm.expected_return_date || null,
-          notes: issueForm.notes || null,
-          created_by: user?.id || null,
-        })
-        .select()
-        .single();
+      // Create worker issuance if selected
+      if (issueForm.assignToWorker && issueForm.workerId) {
+        const worker = workers.find(w => w.id === issueForm.workerId);
+        const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
 
-      if (issuanceError) throw issuanceError;
+        const { data: issuance, error: issuanceError } = await supabase
+          .from('equipment_issuances')
+          .insert({
+            issuance_number: issuanceNumber,
+            issued_to: issueForm.workerId,
+            issued_to_name: worker?.full_name || null,
+            issued_by: user?.id || null,
+            expected_return_date: issueForm.expected_return_date || null,
+            notes: issueForm.notes || null,
+            created_by: user?.id || null,
+          })
+          .select()
+          .single();
 
-      const { error: itemError } = await supabase
-        .from('equipment_issuance_items')
-        .insert({
-          issuance_id: issuance.id,
-          batch_id: issueForm.batch_id,
-          product_id: selectedProduct?.product_id,
-          quantity: quantity,
-          unit_price: selectedBatch.purchase_price,
-        });
+        if (issuanceError) throw issuanceError;
 
-      if (itemError) throw itemError;
+        const { error: itemError } = await supabase
+          .from('equipment_issuance_items')
+          .insert({
+            issuance_id: issuance.id,
+            batch_id: issueForm.batch_id,
+            product_id: selectedProduct?.product_id,
+            quantity: quantity,
+            unit_price: selectedBatch.purchase_price,
+          });
 
-      await logAction('issue_equipment', 'equipment_issuances', issuance.id);
+        if (itemError) throw itemError;
 
-      alert('Prekės sėkmingai išduotos');
+        await logAction('issue_equipment', 'equipment_issuances', issuance.id);
+        issuancesCreated.push('darbuotojui');
+      }
+
+      // Create vehicle issuance if selected
+      if (issueForm.assignToVehicle && issueForm.vehicleId) {
+        const vehicle = vehicles.find(v => v.id === issueForm.vehicleId);
+        const { data: issuanceNumber } = await supabase.rpc('generate_equipment_issuance_number');
+
+        const { data: issuance, error: issuanceError } = await supabase
+          .from('equipment_issuances')
+          .insert({
+            issuance_number: issuanceNumber,
+            issued_to: issueForm.vehicleId,
+            issued_to_name: vehicle ? `${vehicle.registration_number} - ${vehicle.make} ${vehicle.model}` : null,
+            issued_by: user?.id || null,
+            expected_return_date: issueForm.expected_return_date || null,
+            notes: issueForm.notes || null,
+            created_by: user?.id || null,
+          })
+          .select()
+          .single();
+
+        if (issuanceError) throw issuanceError;
+
+        const { error: itemError } = await supabase
+          .from('equipment_issuance_items')
+          .insert({
+            issuance_id: issuance.id,
+            batch_id: issueForm.batch_id,
+            product_id: selectedProduct?.product_id,
+            quantity: quantity,
+            unit_price: selectedBatch.purchase_price,
+          });
+
+        if (itemError) throw itemError;
+
+        await logAction('issue_equipment', 'equipment_issuances', issuance.id);
+        issuancesCreated.push('transportui');
+      }
+
+      const message = issuancesCreated.length > 1
+        ? `Prekės sėkmingai išduotos ${issuancesCreated.join(' ir ')}`
+        : 'Prekės sėkmingai išduotos';
+      
+      alert(message);
       setShowIssueModal(false);
       setIssueForm({
         issued_to: '',
@@ -340,6 +594,14 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
         quantity: '1',
         expected_return_date: '',
         notes: '',
+        assignmentType: '',
+        assignToWorker: false,
+        assignToVehicle: false,
+        workerId: '',
+        vehicleId: '',
+        costCenterId: '',
+        compartmentId: '',
+        toolId: '',
       });
       setSelectedProduct(null);
       loadData();
@@ -537,15 +799,15 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
               Išduotos prekės
             </button>
             <button
-              onClick={() => setActiveTab('receive')}
+              onClick={() => setActiveTab('warehouses')}
               className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
-                activeTab === 'receive'
+                activeTab === 'warehouses'
                   ? 'border-slate-600 text-slate-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Upload className="w-4 h-4 inline-block mr-2" />
-              Priimti atsargas
+              <Warehouse className="w-4 h-4 inline-block mr-2" />
+              Sandėliai
             </button>
           </div>
         </div>
@@ -553,7 +815,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
         <div className="p-6">
           {activeTab === 'inventory' && (
             <>
-              <div className="mb-6">
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
@@ -563,6 +825,20 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
                     onChange={e => setSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                   />
+                </div>
+                <div>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  >
+                    <option value="all">Visi sandėliai</option>
+                    {customWarehouses.map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -688,7 +964,72 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
             </>
           )}
 
-          {activeTab === 'receive' && <EquipmentReceiveStock onReceived={loadData} />}
+          {activeTab === 'warehouses' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Sandėlių valdymas</h3>
+                <button
+                  onClick={() => {
+                    setEditingWarehouse(null);
+                    setWarehouseForm({ name: '', description: '', location: '' });
+                    setShowWarehouseModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Pridėti sandėlį
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {customWarehouses.map(warehouse => (
+                  <div key={warehouse.id} className="border border-gray-200 rounded-lg p-4 hover:border-slate-400 transition-all">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-900 mb-1">{warehouse.name}</h4>
+                        {warehouse.description && (
+                          <p className="text-sm text-gray-600 mb-1">{warehouse.description}</p>
+                        )}
+                        {warehouse.location && (
+                          <p className="text-xs text-gray-500">{warehouse.location}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingWarehouse(warehouse);
+                            setWarehouseForm({
+                              name: warehouse.name,
+                              description: warehouse.description || '',
+                              location: warehouse.location || '',
+                            });
+                            setShowWarehouseModal(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteWarehouse(warehouse)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {customWarehouses.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <Warehouse className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nėra sukurtų sandėlių</p>
+                  <p className="text-sm mt-2">Sukurkite sandėlį, kad galėtumėte priskirti produktus</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {activeTab === 'shelves' && <ShelvesManagement />}
         </div>
@@ -712,6 +1053,8 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
                     expected_return_date: '',
                     notes: '',
                     assignmentType: '',
+                    assignToWorker: false,
+                    assignToVehicle: false,
                     workerId: '',
                     vehicleId: '',
                     costCenterId: '',
@@ -775,35 +1118,61 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
               {/* Assignment Type Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Kam išduoti?</label>
-                
+
                 {/* Worker and Vehicle Assignment */}
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-900 mb-3">Priskirti darbuotojui arba transportui</p>
+                  <p className="text-sm font-semibold text-blue-900 mb-3">Priskirti darbuotojui ir/arba transportui</p>
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={() => setIssueForm({ ...issueForm, assignmentType: 'worker' })}
+                      onClick={() => setIssueForm({ ...issueForm, assignToWorker: !issueForm.assignToWorker, assignmentType: '' })}
                       className={`p-4 border-2 rounded-lg transition-all ${
-                        issueForm.assignmentType === 'worker'
+                        issueForm.assignToWorker
                           ? 'border-green-500 bg-green-50'
                           : 'border-gray-300 hover:border-gray-400'
                       }`}
                     >
                       <div className="text-center">
-                        <p className="font-semibold text-gray-900">Darbuotojui</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            issueForm.assignToWorker 
+                              ? 'bg-green-500 border-green-600' 
+                              : 'border-gray-400'
+                          }`}>
+                            {issueForm.assignToWorker && (
+                              <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                <path d="M5 13l4 4L19 7"></path>
+                              </svg>
+                            )}
+                          </div>
+                          <p className="font-semibold text-gray-900">Darbuotojui</p>
+                        </div>
                         <p className="text-xs text-gray-500 mt-1">Asmeninės priemonės</p>
                       </div>
                     </button>
 
                     <button
-                      onClick={() => setIssueForm({ ...issueForm, assignmentType: 'vehicle' })}
+                      onClick={() => setIssueForm({ ...issueForm, assignToVehicle: !issueForm.assignToVehicle, assignmentType: '' })}
                       className={`p-4 border-2 rounded-lg transition-all ${
-                        issueForm.assignmentType === 'vehicle'
+                        issueForm.assignToVehicle
                           ? 'border-purple-500 bg-purple-50'
                           : 'border-gray-300 hover:border-gray-400'
                       }`}
                     >
                       <div className="text-center">
-                        <p className="font-semibold text-gray-900">Transportui</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            issueForm.assignToVehicle 
+                              ? 'bg-purple-500 border-purple-600' 
+                              : 'border-gray-400'
+                          }`}>
+                            {issueForm.assignToVehicle && (
+                              <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                <path d="M5 13l4 4L19 7"></path>
+                              </svg>
+                            )}
+                          </div>
+                          <p className="font-semibold text-gray-900">Transportui</p>
+                        </div>
                         <p className="text-xs text-gray-500 mt-1">Traktoriui, sunkvežimiui</p>
                       </div>
                     </button>
@@ -875,7 +1244,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
               </div>
 
               {/* Worker Selection */}
-              {issueForm.assignmentType === 'worker' && (
+              {issueForm.assignToWorker && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite darbuotoją</label>
                   <select
@@ -894,7 +1263,7 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
               )}
 
               {/* Vehicle Selection */}
-              {issueForm.assignmentType === 'vehicle' && (
+              {issueForm.assignToVehicle && (
                 <div className="space-y-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pasirinkite transporto priemonę</label>
                   
@@ -1145,6 +1514,88 @@ export function EquipmentInventory({ locationFilter }: EquipmentInventoryProps =
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
                 Grąžinti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWarehouseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                {editingWarehouse ? 'Redaguoti sandėlį' : 'Pridėti sandėlį'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowWarehouseModal(false);
+                  setEditingWarehouse(null);
+                  setWarehouseForm({ name: '', description: '', location: '' });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sandėlio pavadinimas *
+                </label>
+                <input
+                  type="text"
+                  value={warehouseForm.name}
+                  onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
+                  placeholder="Pvz: Truck sandėlis, Car sandėlis"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Aprašymas
+                </label>
+                <textarea
+                  value={warehouseForm.description}
+                  onChange={(e) => setWarehouseForm({ ...warehouseForm, description: e.target.value })}
+                  placeholder="Trumpas sandėlio aprašymas"
+                  className="w-full border rounded-lg px-3 py-2"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Vieta
+                </label>
+                <input
+                  type="text"
+                  value={warehouseForm.location}
+                  onChange={(e) => setWarehouseForm({ ...warehouseForm, location: e.target.value })}
+                  placeholder="Pvz: Garažas A, Pagrindinis kompleksas"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowWarehouseModal(false);
+                  setEditingWarehouse(null);
+                  setWarehouseForm({ name: '', description: '', location: '' });
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Atšaukti
+              </button>
+              <button
+                onClick={handleSaveWarehouse}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+              >
+                {editingWarehouse ? 'Atnaujinti' : 'Sukurti'}
               </button>
             </div>
           </div>

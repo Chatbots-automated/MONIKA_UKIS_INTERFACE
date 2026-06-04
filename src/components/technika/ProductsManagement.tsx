@@ -65,6 +65,12 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
     default_location: 'warehouse', // 'farm' or 'warehouse'
     warranty_period_months: '',
   });
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewUnitInput, setShowNewUnitInput] = useState(false);
+  const [newUnitCode, setNewUnitCode] = useState('');
+  const [newUnitLabel, setNewUnitLabel] = useState('');
+  const [customUnits, setCustomUnits] = useState<{code: string, label: string}[]>([]);
 
   useEffect(() => {
     loadData();
@@ -105,6 +111,49 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
       setProducts(productsWithCategories);
     }
     if (categoriesRes.data) setCategories(categoriesRes.data);
+  };
+
+  const handleCreateNewCategory = async () => {
+    if (!newCategoryName.trim()) {
+      alert('Prašome įvesti kategorijos pavadinimą');
+      return;
+    }
+
+    try {
+      const { data: newCategory, error } = await supabase
+        .from('equipment_categories')
+        .insert({
+          name: newCategoryName.trim(),
+          description: '',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCategories(prev => [...prev, newCategory]);
+      setProductForm({ ...productForm, category_id: newCategory.id });
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+      alert('Nauja kategorija sukurta sėkmingai!');
+    } catch (error: any) {
+      console.error('Error creating category:', error);
+      alert('Klaida kuriant kategoriją: ' + error.message);
+    }
+  };
+
+  const handleCreateNewUnit = () => {
+    if (!newUnitCode.trim() || !newUnitLabel.trim()) {
+      alert('Prašome įvesti vieneto kodą ir pavadinimą');
+      return;
+    }
+
+    const newUnit = { code: newUnitCode.trim(), label: newUnitLabel.trim() };
+    setCustomUnits(prev => [...prev, newUnit]);
+    setProductForm({ ...productForm, unit_type: newUnit.code });
+    setNewUnitCode('');
+    setNewUnitLabel('');
+    setShowNewUnitInput(false);
   };
 
   const filteredProducts = products.filter(product => {
@@ -165,6 +214,11 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
 
       setShowAddModal(false);
       setEditingProduct(null);
+      setShowNewCategoryInput(false);
+      setNewCategoryName('');
+      setShowNewUnitInput(false);
+      setNewUnitCode('');
+      setNewUnitLabel('');
       setProductForm({
         name: '',
         product_code: '',
@@ -233,6 +287,11 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
             <button
               onClick={() => {
                 setEditingProduct(null);
+                setShowNewCategoryInput(false);
+                setNewCategoryName('');
+                setShowNewUnitInput(false);
+                setNewUnitCode('');
+                setNewUnitLabel('');
                 setProductForm({
                   name: '',
                   product_code: '',
@@ -407,6 +466,11 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingProduct(null);
+                  setShowNewCategoryInput(false);
+                  setNewCategoryName('');
+                  setShowNewUnitInput(false);
+                  setNewUnitCode('');
+                  setNewUnitLabel('');
                 }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
@@ -446,18 +510,59 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Kategorija
                 </label>
-                <select
-                  value={productForm.category_id}
-                  onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                >
-                  <option value="">Pasirinkite kategoriją</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                {!showNewCategoryInput ? (
+                  <select
+                    value={productForm.category_id}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setShowNewCategoryInput(true);
+                      } else {
+                        setProductForm({ ...productForm, category_id: e.target.value });
+                      }
+                    }}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="">Pasirinkite kategoriją</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                    <option value="__new__">+ Sukurti naują kategoriją</option>
+                  </select>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Naujos kategorijos pavadinimas"
+                        className="flex-1 border rounded-lg px-3 py-2"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCreateNewCategory();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleCreateNewCategory}
+                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                      >
+                        Sukurti
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNewCategoryInput(false);
+                          setNewCategoryName('');
+                        }}
+                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                      >
+                        Atšaukti
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Show location field only for Drabužiai or API categories */}
@@ -499,18 +604,78 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Matavimo vienetas *
                 </label>
-                <select
-                  value={productForm.unit_type}
-                  onChange={(e) => setProductForm({ ...productForm, unit_type: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                >
-                  {UNIT_TYPES.map(unit => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </select>
+                {!showNewUnitInput ? (
+                  <select
+                    value={productForm.unit_type}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setShowNewUnitInput(true);
+                      } else {
+                        setProductForm({ ...productForm, unit_type: e.target.value });
+                      }
+                    }}
+                    className="w-full border rounded-lg px-3 py-2"
+                    required
+                  >
+                    {UNIT_TYPES.map(unit => (
+                      <option key={unit.value} value={unit.value}>
+                        {unit.label}
+                      </option>
+                    ))}
+                    {customUnits.map((unit, idx) => (
+                      <option key={idx} value={unit.code}>
+                        {unit.code} ({unit.label})
+                      </option>
+                    ))}
+                    <option value="__new__">+ Sukurti naują vienetą</option>
+                  </select>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newUnitCode}
+                        onChange={(e) => setNewUnitCode(e.target.value)}
+                        placeholder="Kodas (pvz: ml)"
+                        className="w-1/3 border rounded-lg px-3 py-2"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCreateNewUnit();
+                          }
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={newUnitLabel}
+                        onChange={(e) => setNewUnitLabel(e.target.value)}
+                        placeholder="Pavadinimas (pvz: mililitrai)"
+                        className="flex-1 border rounded-lg px-3 py-2"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCreateNewUnit();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleCreateNewUnit}
+                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 whitespace-nowrap"
+                      >
+                        Sukurti
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNewUnitInput(false);
+                          setNewUnitCode('');
+                          setNewUnitLabel('');
+                        }}
+                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 whitespace-nowrap"
+                      >
+                        Atšaukti
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">Kodas bus naudojamas sistemoje, pavadinimas – ataskaitose</p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -586,6 +751,11 @@ export function ProductsManagement({ locationFilter, workerMode = false }: Produ
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingProduct(null);
+                  setShowNewCategoryInput(false);
+                  setNewCategoryName('');
+                  setShowNewUnitInput(false);
+                  setNewUnitCode('');
+                  setNewUnitLabel('');
                 }}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
               >
