@@ -109,23 +109,22 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
     const today = formatDate(new Date());
     
     try {
-      // Check if this worker has access to today's shared list
+      // Check if this worker has access to shared list (either for today OR permanently)
       const { data: sharingData, error: sharingError } = await supabase
         .from('food_list_shared_with_workers')
         .select('id')
-        .eq('date', today)
         .eq('worker_id', user.id)
-        .single();
+        .or(`date.eq.${today},date.is.null`);
 
-      if (sharingError && sharingError.code !== 'PGRST116') {
+      if (sharingError) {
         console.error('Error loading sharing status:', sharingError);
         setIsListShared(false);
         return;
       }
 
-      setIsListShared(!!sharingData);
+      setIsListShared(sharingData && sharingData.length > 0);
 
-      if (sharingData) {
+      if (sharingData && sharingData.length > 0) {
         // Load today's food preferences list
         const { data: prefsData, error: prefsError } = await supabase
           .from('worker_food_preferences')

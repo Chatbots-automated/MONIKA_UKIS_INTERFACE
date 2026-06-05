@@ -65,6 +65,8 @@ export function FoodManagement() {
   const [sharingLoading, setSharingLoading] = useState(false);
   const [sharedWorkerIds, setSharedWorkerIds] = useState<string[]>([]);
   const [workersWithCodes, setWorkersWithCodes] = useState<any[]>([]);
+  const [sharePermanently, setSharePermanently] = useState(false);
+  const [permanentlySharedWorkerIds, setPermanentlySharedWorkerIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadData();
@@ -245,17 +247,26 @@ export function FoodManagement() {
   const loadSharedWorkers = async () => {
     const today = formatDate(new Date());
     
-    const { data, error } = await supabase
+    // Load both today's shares and permanent shares (where date is NULL)
+    const { data: todayShares, error: todayError } = await supabase
       .from('food_list_shared_with_workers')
       .select('worker_id')
       .eq('date', today);
 
-    if (error) {
-      console.error('Error loading shared workers:', error);
-      return;
+    const { data: permanentShares, error: permError } = await supabase
+      .from('food_list_shared_with_workers')
+      .select('worker_id')
+      .is('date', null);
+
+    if (todayError) {
+      console.error('Error loading today shared workers:', todayError);
+    }
+    if (permError) {
+      console.error('Error loading permanent shared workers:', permError);
     }
 
-    setSharedWorkerIds(data?.map(d => d.worker_id) || []);
+    setSharedWorkerIds(todayShares?.map(d => d.worker_id) || []);
+    setPermanentlySharedWorkerIds(permanentShares?.map(d => d.worker_id) || []);
   };
 
   const handleSaveSharing = async () => {
@@ -263,29 +274,56 @@ export function FoodManagement() {
     const today = formatDate(new Date());
     
     try {
-      // Delete existing shares for today
-      await supabase
-        .from('food_list_shared_with_workers')
-        .delete()
-        .eq('date', today);
-
-      // Insert new shares
-      if (sharedWorkerIds.length > 0) {
-        const sharesToInsert = sharedWorkerIds.map(workerId => ({
-          date: today,
-          worker_id: workerId,
-          shared_by_user_id: user?.id
-        }));
-
-        const { error } = await supabase
+      if (sharePermanently) {
+        // Delete existing permanent shares (NULL date)
+        await supabase
           .from('food_list_shared_with_workers')
-          .insert(sharesToInsert);
+          .delete()
+          .is('date', null);
 
-        if (error) throw error;
+        // Insert new permanent shares
+        if (sharedWorkerIds.length > 0) {
+          const sharesToInsert = sharedWorkerIds.map(workerId => ({
+            date: null,
+            worker_id: workerId,
+            shared_by_user_id: user?.id
+          }));
+
+          const { error } = await supabase
+            .from('food_list_shared_with_workers')
+            .insert(sharesToInsert);
+
+          if (error) throw error;
+        }
+
+        alert(`Sėkmingai pasidalinta visam laikui su ${sharedWorkerIds.length} darbuotojais`);
+      } else {
+        // Delete existing shares for today only
+        await supabase
+          .from('food_list_shared_with_workers')
+          .delete()
+          .eq('date', today);
+
+        // Insert new shares for today
+        if (sharedWorkerIds.length > 0) {
+          const sharesToInsert = sharedWorkerIds.map(workerId => ({
+            date: today,
+            worker_id: workerId,
+            shared_by_user_id: user?.id
+          }));
+
+          const { error } = await supabase
+            .from('food_list_shared_with_workers')
+            .insert(sharesToInsert);
+
+          if (error) throw error;
+        }
+
+        alert(`Sėkmingai pasidalinta šiai dienai su ${sharedWorkerIds.length} darbuotojais`);
       }
 
-      alert(`Sėkmingai pasidalinta su ${sharedWorkerIds.length} darbuotojais`);
       setShowSharingModal(false);
+      await loadSharedWorkers(); // Reload to update the UI
     } catch (error) {
       console.error('Error saving sharing:', error);
       alert('Klaida išsaugant dalijimąsi');
@@ -310,6 +348,18 @@ export function FoodManagement() {
 
   const deselectAllWorkers = () => {
     setSharedWorkerIds([]);
+  };
+
+  const openSharingModal = () => {
+    // Pre-select permanently shared workers when opening the modal
+    if (permanentlySharedWorkerIds.length > 0) {
+      setSharedWorkerIds(permanentlySharedWorkerIds);
+      setSharePermanently(true);
+    } else {
+      setSharedWorkerIds(sharedWorkerIds);
+      setSharePermanently(false);
+    }
+    setShowSharingModal(true);
   };
 
   const getDailySummary = (): DailySummary => {
@@ -434,15 +484,15 @@ export function FoodManagement() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowSharingModal(true)}
+            onClick={openSharingModal}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              sharedWorkerIds.length > 0
+              permanentlySharedWorkerIds.length > 0 || sharedWorkerIds.length > 0
                 ? 'bg-green-600 text-white hover:bg-green-700' 
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
             <Share2 className="w-5 h-5" />
-            Dalintis {sharedWorkerIds.length > 0 && `(${sharedWorkerIds.length})`}
+            Dalintis {(permanentlySharedWorkerIds.length > 0 || sharedWorkerIds.length > 0) && `(${permanentlySharedWorkerIds.length > 0 ? permanentlySharedWorkerIds.length : sharedWorkerIds.length})`}
           </button>
           <button
             onClick={() => setShowHistory(!showHistory)}
@@ -933,7 +983,12 @@ export function FoodManagement() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">Dalintis sąrašu</h3>
-                  <p className="text-sm text-gray-600">Pasirinkite darbuotojus, kurie matys šios dienos sąrašą</p>
+                  <p className="text-sm text-gray-600">
+                    {sharePermanently 
+                      ? 'Pasirinkite darbuotojus, kurie matys sąrašą visada'
+                      : 'Pasirinkite darbuotojus, kurie matys šios dienos sąrašą'
+                    }
+                  </p>
                 </div>
               </div>
               <button
@@ -945,6 +1000,24 @@ export function FoodManagement() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
+              {/* Permanent sharing toggle */}
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sharePermanently}
+                    onChange={(e) => setSharePermanently(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
+                  />
+                  <div>
+                    <p className="font-semibold text-gray-900">Dalintis visam laikui</p>
+                    <p className="text-xs text-gray-600">
+                      Jei pažymėta, darbuotojai matys sąrašą kiekvieną dieną
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               <div className="flex items-center justify-between mb-4">
                 <p className="text-sm text-gray-600">
                   Pasirinkta: <span className="font-bold text-gray-900">{sharedWorkerIds.length}</span> iš {workersWithCodes.length}
@@ -983,7 +1056,14 @@ export function FoodManagement() {
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
                     />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{worker.full_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{worker.full_name}</p>
+                        {!sharePermanently && permanentlySharedWorkerIds.includes(worker.id) && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold">
+                            Visada
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-1">
                         {worker.work_location === 'farm' && (
                           <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
