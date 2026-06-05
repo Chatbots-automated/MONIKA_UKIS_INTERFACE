@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { UtensilsCrossed, Check, X, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
+import { UtensilsCrossed, Check, X, Clock, ChevronRight, ChevronLeft, Users, Eye } from 'lucide-react';
 
 interface WorkerFoodPreferencesProps {
   workLocation: 'farm' | 'warehouse' | 'administration';
@@ -16,6 +16,13 @@ interface FoodPreference {
   notes?: string;
 }
 
+interface SharedPreference {
+  worker_name: string;
+  wants_lunch: boolean;
+  wants_supper: boolean;
+  work_location: string;
+}
+
 export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -23,9 +30,16 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
   const [preferences, setPreferences] = useState<Record<string, FoodPreference>>({});
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getMonday(new Date()));
   const [viewMode, setViewMode] = useState<'today' | 'week'>('today');
+  
+  // Shared list state
+  const [isListShared, setIsListShared] = useState(false);
+  const [sharedList, setSharedList] = useState<SharedPreference[]>([]);
+  const [sharedListLoading, setSharedListLoading] = useState(false);
+  const [showSharedList, setShowSharedList] = useState(false);
 
   useEffect(() => {
     loadPreferences();
+    loadSharedList();
   }, [user, currentWeekStart]);
 
   function getMonday(date: Date): Date {
@@ -88,6 +102,64 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
     }
   };
 
+  const loadSharedList = async () => {
+    if (!user) return;
+    
+    setSharedListLoading(true);
+    const today = formatDate(new Date());
+    
+    try {
+      // Check if this worker has access to today's shared list
+      const { data: sharingData, error: sharingError } = await supabase
+        .from('food_list_shared_with_workers')
+        .select('id')
+        .eq('date', today)
+        .eq('worker_id', user.id)
+        .single();
+
+      if (sharingError && sharingError.code !== 'PGRST116') {
+        console.error('Error loading sharing status:', sharingError);
+        setIsListShared(false);
+        return;
+      }
+
+      setIsListShared(!!sharingData);
+
+      if (sharingData) {
+        // Load today's food preferences list
+        const { data: prefsData, error: prefsError } = await supabase
+          .from('worker_food_preferences')
+          .select(`
+            worker_id,
+            wants_lunch,
+            wants_supper,
+            work_location,
+            worker:users!worker_id(full_name)
+          `)
+          .eq('date', today);
+
+        if (prefsError) throw prefsError;
+
+        const formattedList: SharedPreference[] = prefsData?.map((pref: any) => ({
+          worker_name: pref.worker?.full_name || 'Unknown',
+          wants_lunch: pref.wants_lunch,
+          wants_supper: pref.wants_supper,
+          work_location: pref.work_location
+        })) || [];
+
+        setSharedList(formattedList);
+      } else {
+        setSharedList([]);
+      }
+    } catch (error) {
+      console.error('Error loading shared list:', error);
+      setIsListShared(false);
+      setSharedList([]);
+    } finally {
+      setSharedListLoading(false);
+    }
+  };
+
   const toggleFoodPreference = async (date: string, mealType: 'lunch' | 'supper', wants: boolean) => {
     if (!user) return;
     
@@ -125,6 +197,12 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
           notes: data.notes
         }
       }));
+
+      // Reload shared list if it's today and the list is shared
+      const today = formatDate(new Date());
+      if (date === today && isListShared) {
+        loadSharedList();
+      }
     } catch (error) {
       console.error('Error saving food preference:', error);
       alert('Klaida išsaugant pasirinkimą');
@@ -216,8 +294,21 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
           </div>
         </div>
 
-        {/* View Mode Toggle */}
+        {/* View Mode Toggle and Shared List Button */}
         <div className="flex gap-2">
+          {isListShared && viewMode === 'today' && (
+            <button
+              onClick={() => setShowSharedList(!showSharedList)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                showSharedList
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Pasidalinimai
+            </button>
+          )}
           <button
             onClick={() => setViewMode('today')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -344,6 +435,144 @@ export function WorkerFoodPreferences({ workLocation }: WorkerFoodPreferencesPro
               </div>
             </div>
           </div>
+
+          {/* Shared List for Today */}
+          {isListShared && showSharedList && (
+            <div className="bg-white rounded-xl shadow-sm border-2 border-green-200 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Kas nori maisto šiandien</h3>
+                  <p className="text-sm text-gray-600">Bendras sąrašas</p>
+                </div>
+              </div>
+
+              {sharedListLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <div className="text-xs text-blue-600 font-medium mb-1">PIETŪS</div>
+                      <div className="text-2xl font-bold text-blue-900">
+                        {sharedList.filter(p => p.wants_lunch).length}
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-3">
+                      <div className="text-xs text-purple-600 font-medium mb-1">VAKARIENĖ</div>
+                      <div className="text-2xl font-bold text-purple-900">
+                        {sharedList.filter(p => p.wants_supper).length}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List by location */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    {/* Farm */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <h4 className="font-semibold text-gray-900 text-sm">Ferma</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {sharedList
+                          .filter(p => p.work_location === 'farm')
+                          .map((pref, idx) => (
+                            <div key={idx} className="text-xs p-2 bg-gray-50 rounded border border-gray-200">
+                              <p className="font-medium text-gray-900">{pref.worker_name}</p>
+                              <div className="flex gap-1 mt-1">
+                                {pref.wants_lunch && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                    P
+                                  </span>
+                                )}
+                                {pref.wants_supper && (
+                                  <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">
+                                    V
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {sharedList.filter(p => p.work_location === 'farm').length === 0 && (
+                          <p className="text-xs text-gray-400">Nėra</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Warehouse */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 bg-slate-500 rounded-full"></div>
+                        <h4 className="font-semibold text-gray-900 text-sm">Technikos kiemas</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {sharedList
+                          .filter(p => p.work_location === 'warehouse')
+                          .map((pref, idx) => (
+                            <div key={idx} className="text-xs p-2 bg-gray-50 rounded border border-gray-200">
+                              <p className="font-medium text-gray-900">{pref.worker_name}</p>
+                              <div className="flex gap-1 mt-1">
+                                {pref.wants_lunch && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                    P
+                                  </span>
+                                )}
+                                {pref.wants_supper && (
+                                  <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">
+                                    V
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {sharedList.filter(p => p.work_location === 'warehouse').length === 0 && (
+                          <p className="text-xs text-gray-400">Nėra</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Administration */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                        <h4 className="font-semibold text-gray-900 text-sm">Administracija</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {sharedList
+                          .filter(p => p.work_location === 'administration')
+                          .map((pref, idx) => (
+                            <div key={idx} className="text-xs p-2 bg-gray-50 rounded border border-gray-200">
+                              <p className="font-medium text-gray-900">{pref.worker_name}</p>
+                              <div className="flex gap-1 mt-1">
+                                {pref.wants_lunch && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                    P
+                                  </span>
+                                )}
+                                {pref.wants_supper && (
+                                  <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">
+                                    V
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {sharedList.filter(p => p.work_location === 'administration').length === 0 && (
+                          <p className="text-xs text-gray-400">Nėra</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

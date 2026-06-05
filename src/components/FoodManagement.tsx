@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { UtensilsCrossed, Users, Download, Tractor, Warehouse, Building2, Check, AlertCircle, Edit2, Save, History, Calendar, Filter, X } from 'lucide-react';
+import { UtensilsCrossed, Users, Download, Tractor, Warehouse, Building2, Check, AlertCircle, Edit2, Save, History, Calendar, Filter, X, Share2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface FoodPreference {
@@ -60,6 +60,12 @@ export function FoodManagement() {
   const [historyEndDate, setHistoryEndDate] = useState(() => formatDate(new Date()));
   const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('all');
 
+  // Sharing state
+  const [showSharingModal, setShowSharingModal] = useState(false);
+  const [sharingLoading, setSharingLoading] = useState(false);
+  const [sharedWorkerIds, setSharedWorkerIds] = useState<string[]>([]);
+  const [workersWithCodes, setWorkersWithCodes] = useState<any[]>([]);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -70,7 +76,9 @@ export function FoodManagement() {
       await Promise.all([
         loadPreferences(),
         loadWorkers(),
-        loadAdminCounts()
+        loadAdminCounts(),
+        loadWorkersWithCodes(),
+        loadSharedWorkers()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -201,6 +209,109 @@ export function FoodManagement() {
     }
   }, [showHistory, historyStartDate, historyEndDate, selectedWorkerFilter]);
 
+  const loadWorkersWithCodes = async () => {
+    // Load workers who have active login codes from worker_login_codes table
+    const { data, error } = await supabase
+      .from('worker_login_codes')
+      .select(`
+        worker_id,
+        worker:users!worker_id(id, full_name, work_location)
+      `)
+      .eq('is_active', true)
+      .order('worker(full_name)');
+
+    if (error) {
+      console.error('Error loading workers with codes:', error);
+      return;
+    }
+
+    // Extract unique workers (in case a worker has multiple codes)
+    const uniqueWorkers = new Map();
+    data?.forEach((item: any) => {
+      if (item.worker && !uniqueWorkers.has(item.worker.id)) {
+        uniqueWorkers.set(item.worker.id, {
+          id: item.worker.id,
+          full_name: item.worker.full_name,
+          work_location: item.worker.work_location
+        });
+      }
+    });
+
+    setWorkersWithCodes(Array.from(uniqueWorkers.values()).sort((a, b) => 
+      a.full_name.localeCompare(b.full_name)
+    ));
+  };
+
+  const loadSharedWorkers = async () => {
+    const today = formatDate(new Date());
+    
+    const { data, error } = await supabase
+      .from('food_list_shared_with_workers')
+      .select('worker_id')
+      .eq('date', today);
+
+    if (error) {
+      console.error('Error loading shared workers:', error);
+      return;
+    }
+
+    setSharedWorkerIds(data?.map(d => d.worker_id) || []);
+  };
+
+  const handleSaveSharing = async () => {
+    setSharingLoading(true);
+    const today = formatDate(new Date());
+    
+    try {
+      // Delete existing shares for today
+      await supabase
+        .from('food_list_shared_with_workers')
+        .delete()
+        .eq('date', today);
+
+      // Insert new shares
+      if (sharedWorkerIds.length > 0) {
+        const sharesToInsert = sharedWorkerIds.map(workerId => ({
+          date: today,
+          worker_id: workerId,
+          shared_by_user_id: user?.id
+        }));
+
+        const { error } = await supabase
+          .from('food_list_shared_with_workers')
+          .insert(sharesToInsert);
+
+        if (error) throw error;
+      }
+
+      alert(`Sėkmingai pasidalinta su ${sharedWorkerIds.length} darbuotojais`);
+      setShowSharingModal(false);
+    } catch (error) {
+      console.error('Error saving sharing:', error);
+      alert('Klaida išsaugant dalijimąsi');
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const toggleWorkerSelection = (workerId: string) => {
+    setSharedWorkerIds(prev => {
+      if (prev.includes(workerId)) {
+        return prev.filter(id => id !== workerId);
+      } else {
+        return [...prev, workerId];
+      }
+    });
+  };
+
+  const selectAllWorkers = () => {
+    setSharedWorkerIds(workersWithCodes.map(w => w.id));
+  };
+
+  const deselectAllWorkers = () => {
+    setSharedWorkerIds([]);
+  };
+
   const getDailySummary = (): DailySummary => {
     const farmLunch = preferences.filter(p => p.work_location === 'farm' && p.wants_lunch);
     const farmSupper = preferences.filter(p => p.work_location === 'farm' && p.wants_supper);
@@ -322,6 +433,17 @@ export function FoodManagement() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowSharingModal(true)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              sharedWorkerIds.length > 0
+                ? 'bg-green-600 text-white hover:bg-green-700' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            <Share2 className="w-5 h-5" />
+            Dalintis {sharedWorkerIds.length > 0 && `(${sharedWorkerIds.length})`}
+          </button>
           <button
             onClick={() => setShowHistory(!showHistory)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -799,6 +921,134 @@ export function FoodManagement() {
           </div>
         </div>
       </div>
+
+      {/* Sharing Modal */}
+      {showSharingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Share2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Dalintis sąrašu</h3>
+                  <p className="text-sm text-gray-600">Pasirinkite darbuotojus, kurie matys šios dienos sąrašą</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSharingModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-gray-600">
+                  Pasirinkta: <span className="font-bold text-gray-900">{sharedWorkerIds.length}</span> iš {workersWithCodes.length}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={selectAllWorkers}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Pasirinkti visus
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    onClick={deselectAllWorkers}
+                    className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                  >
+                    Atžymėti visus
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {workersWithCodes.map(worker => (
+                  <label
+                    key={worker.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                      sharedWorkerIds.includes(worker.id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={sharedWorkerIds.includes(worker.id)}
+                      onChange={() => toggleWorkerSelection(worker.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{worker.full_name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {worker.work_location === 'farm' && (
+                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                            Ferma
+                          </span>
+                        )}
+                        {worker.work_location === 'warehouse' && (
+                          <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-700 rounded">
+                            Technikos kiemas
+                          </span>
+                        )}
+                        {worker.work_location === 'administration' && (
+                          <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">
+                            Administracija
+                          </span>
+                        )}
+                        {worker.work_location === 'both' && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                            Abu
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+
+                {workersWithCodes.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                    <p>Nėra darbuotojų su kodais</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowSharingModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Atšaukti
+                </button>
+                <button
+                  onClick={handleSaveSharing}
+                  disabled={sharingLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sharingLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Išsaugoma...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Išsaugoti
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
