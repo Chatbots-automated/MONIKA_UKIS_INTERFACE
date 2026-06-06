@@ -260,6 +260,63 @@ export async function fetchLatestGroupNumbers(): Promise<Map<string, string>> {
 }
 
 /**
+ * Interface for complete GEA data per animal
+ */
+export interface AnimalGeaData {
+  animal_id: string;
+  animal_ear_tag: string;
+  gea_import_date: string;
+  collar_no: string | null;
+  cow_state: string | null;
+  group_number: string | null;
+  pregnant_since: string | null;
+  lactation_days: number | null;
+  inseminated_at: string | null;
+  pregnant_days: number | null;
+  next_pregnancy_date: string | null;
+  days_until_waiting_pregnancy: number | null;
+  genetic_worth: string | null;
+  blood_line: string | null;
+  avg_milk_prod_weight: number | null;
+  produce_milk: boolean | null;
+  last_milking_date: string | null;
+  last_milking_time: string | null;
+  last_milking_weight: number | null;
+  insemination_count: number | null;
+  bull_1: string | null;
+  bull_2: string | null;
+  bull_3: string | null;
+  lactation_number: number | null;
+}
+
+/**
+ * Fetch complete GEA data for all animals from the latest import
+ * Returns a Map of animal_id -> complete GEA data
+ * This ensures we always show the most recent data with the import date (Importuota)
+ */
+export async function fetchLatestGeaData(): Promise<Map<string, AnimalGeaData>> {
+  try {
+    const geaData = await fetchAllRows<AnimalGeaData>(
+      'vw_animal_latest_gea_data',
+      '*',
+      'animal_id'
+    );
+
+    const geaMap = new Map<string, AnimalGeaData>();
+    geaData.forEach((record) => {
+      if (record.animal_id) {
+        geaMap.set(record.animal_id, record);
+      }
+    });
+
+    return geaMap;
+  } catch (error) {
+    console.error('Error fetching GEA data:', error);
+    return new Map();
+  }
+}
+
+/**
  * Fetch raw GEA tables and build latest avg_milk per tag_no client-side.
  * Avoids the slow gea_daily_cows_joined view - uses simple table fetches like Vaistų Panaudojimas.
  * Returns Map<tag_no, avg_milk_kg>

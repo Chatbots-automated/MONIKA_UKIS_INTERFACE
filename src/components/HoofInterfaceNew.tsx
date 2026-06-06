@@ -86,12 +86,12 @@ export function HoofInterfaceNew({
     }
   }, [selectedLeg]);
 
-  // Load history when entering zones screen
+  // Load history when animalId changes or screen changes
   useEffect(() => {
-    if (screen === 'zones' && animalId) {
+    if (animalId) {
       loadHistory();
     }
-  }, [screen, animalId]);
+  }, [animalId, screen]);
 
   const loadHistory = async () => {
     if (!animalId) return;
@@ -154,16 +154,33 @@ export function HoofInterfaceNew({
 
   if (screen === 'legs') {
     return (
-      <div className="space-y-6">
-        <div className="text-center mb-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-600 mb-1">
+      <div className="space-y-4">
+        <div className="text-center mb-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 mb-0.5">
             1 žingsnis iš 2
           </h3>
-          <h2 className="text-xl font-bold text-gray-900">Pasirinkite pažeistą nagą</h2>
+          <h2 className="text-lg font-bold text-gray-900">Pasirinkite pažeistą nagą</h2>
         </div>
 
-        <div className="bg-white border border-gray-300 rounded-lg p-4">
-          <div className="relative w-full max-w-4xl mx-auto bg-white rounded-lg overflow-hidden">
+        {/* Previous visits summary */}
+        {animalId && history.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 max-w-2xl mx-auto">
+            <div className="flex items-center gap-2 justify-center">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
+              <span className="text-xs text-blue-800 font-medium">
+                Ankstesnės apžiūros: {Array.from(new Set(history.map(h => h.examination_date)))
+                  .slice(0, 5)
+                  .map(date => new Date(date).toLocaleDateString('lt'))
+                  .join(', ')}
+                {Array.from(new Set(history.map(h => h.examination_date))).length > 5 && 
+                  ` (+${Array.from(new Set(history.map(h => h.examination_date))).length - 5})`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white border border-gray-300 rounded-lg p-3">
+          <div className="relative w-full max-w-3xl mx-auto bg-white rounded-lg overflow-hidden">
             {/* Background reference image */}
             <img 
               src="https://i.imgur.com/X3M1tuk.png" 
@@ -220,12 +237,12 @@ export function HoofInterfaceNew({
 
         {/* Show selected hoof info */}
         {selectedLeg && (
-          <div className="bg-white border border-gray-300 rounded-lg p-4 max-w-md mx-auto">
+          <div className="bg-white border border-gray-300 rounded-lg p-3 max-w-md mx-auto">
             <div className="text-center">
-              <div className="text-sm uppercase tracking-wider text-gray-500 font-mono mb-1">
+              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-0.5">
                 Pasirinkta
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-2">
+              <div className="text-xl font-bold text-gray-900 mb-1">
                 {HOOF_LABELS[selectedLeg]}
               </div>
               <div className="text-xs uppercase tracking-wider text-gray-500 font-mono">
@@ -240,31 +257,31 @@ export function HoofInterfaceNew({
 
   // Screen 2: Zones
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-4">
         <button
           onClick={handleBack}
-          className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-base font-medium"
+          className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-sm font-medium"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
           Grįžti
         </button>
 
         <div className="text-center">
-          <div className="text-base font-semibold uppercase tracking-wider text-gray-600">
+          <div className="text-xs font-semibold uppercase tracking-wider text-gray-600">
             2 žingsnis iš 2 · Pasirinkite zoną
           </div>
-          <div className="text-lg font-bold text-gray-900">
+          <div className="text-base font-bold text-gray-900">
             {selectedLeg ? HOOF_LABELS[selectedLeg] : ''}
           </div>
         </div>
 
-        <div className="w-28"></div>
+        <div className="w-20"></div>
       </div>
-      <div className="bg-white border border-gray-300 rounded-lg p-4">
-        <div className="relative w-full max-w-4xl mx-auto bg-white rounded-lg overflow-hidden">
+      <div className="bg-white border border-gray-300 rounded-lg p-3">
+        <div className="relative w-full max-w-3xl mx-auto bg-white rounded-lg overflow-hidden">
           {/* Background reference image */}
           <img 
             src="/hoof-zones-reference.png" 
@@ -327,16 +344,16 @@ export function HoofInterfaceNew({
       </div>
 
       {/* Selection Info */}
-      <div className="bg-white border border-gray-300 rounded-lg p-4">
-        <div className="space-y-3">
+      <div className="bg-white border border-gray-300 rounded-lg p-2.5">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Nagas</div>
-              <div className="font-semibold">{selectedLeg ? HOOF_LABELS[selectedLeg] : ''}</div>
+              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono mb-0.5">Nagas</div>
+              <div className="text-sm font-semibold">{selectedLeg ? HOOF_LABELS[selectedLeg] : ''}</div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-1">Pasirinktos zonos</div>
-              <div className="font-semibold text-blue-600">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono mb-0.5">Pasirinktos zonos</div>
+              <div className="text-sm font-semibold text-blue-600">
                 {selectedZones.length > 0 ? selectedZones.length : '—'}
               </div>
             </div>
@@ -344,12 +361,12 @@ export function HoofInterfaceNew({
           
           {selectedZones.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500 font-mono mb-2">Pasirinktos</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono mb-1">Pasirinktos</div>
+              <div className="flex flex-wrap gap-1.5">
                 {selectedZones.map((z, idx) => (
                   <span 
                     key={idx} 
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-mono font-semibold border border-red-300"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[11px] font-mono font-semibold border border-red-300"
                   >
                     Z{z.zone} · {z.claw === 'inner' ? 'K' : 'D'}
                   </span>
@@ -360,30 +377,30 @@ export function HoofInterfaceNew({
         </div>
       </div>
 
-      <div className="text-xs text-gray-500 font-mono text-center p-3 bg-gray-50 border border-gray-200 rounded">
+      <div className="text-[11px] text-gray-500 font-mono text-center p-2 bg-gray-50 border border-gray-200 rounded">
         💡 Paspauskite zonas, kad jas pasirinktumėte. Galite pasirinkti keletą zonų vienu metu.
       </div>
 
       {/* History Section */}
       {animalId && (
         <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-300">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Ankstesnės apžiūros</h3>
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 border-b border-gray-300">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
+              <h3 className="text-xs font-semibold text-gray-900">Ankstesnės apžiūros</h3>
               {!loadingHistory && history.length > 0 && (
-                <span className="text-xs text-gray-500 font-mono">({history.length})</span>
+                <span className="text-[10px] text-gray-500 font-mono">({history.length})</span>
               )}
             </div>
           </div>
 
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-52 overflow-y-auto">
             {loadingHistory ? (
-              <div className="p-4 text-center text-sm text-gray-500">
+              <div className="p-3 text-center text-xs text-gray-500">
                 Kraunama...
               </div>
             ) : history.length === 0 ? (
-              <div className="p-4 text-center text-sm text-gray-500">
+              <div className="p-3 text-center text-xs text-gray-500">
                 Nėra ankstesnių apžiūrų
               </div>
             ) : (
@@ -391,32 +408,32 @@ export function HoofInterfaceNew({
                 {history.map((record) => (
                   <div 
                     key={record.id} 
-                    className={`p-3 hover:bg-gray-50 transition-colors ${
+                    className={`p-2 hover:bg-gray-50 transition-colors ${
                       record.leg === selectedLeg ? 'bg-blue-50' : ''
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-mono text-gray-500">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-mono text-gray-500">
                             {new Date(record.examination_date).toLocaleDateString('lt')}
                           </span>
-                          <span className="text-xs font-semibold text-gray-900">
-                            {record.leg} - {record.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
+                          <span className="text-[11px] font-semibold text-gray-900">
+                            {record.leg} - {record.claw === 'inner' ? 'V' : 'I'}
                           </span>
                           {record.zone !== null && (
-                            <span className="px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs font-mono">
+                            <span className="px-1 py-0.5 bg-blue-600 text-white rounded text-[10px] font-mono">
                               Z{record.zone}
                             </span>
                           )}
                         </div>
                         
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-gray-700">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-gray-700">
                             {record.condition?.name_lt || record.condition_code}
                           </span>
                           
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium
+                          <span className={`px-1 py-0.5 rounded text-[10px] font-medium
                             ${record.severity === 0 ? 'bg-green-100 text-green-800' : ''}
                             ${record.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
                             ${record.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
@@ -427,21 +444,21 @@ export function HoofInterfaceNew({
                           </span>
 
                           {record.was_treated && (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium flex items-center gap-1">
-                              <Activity className="w-3 h-3" />
+                            <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-medium flex items-center gap-0.5">
+                              <Activity className="w-2.5 h-2.5" />
                               Gydyta
                             </span>
                           )}
                         </div>
 
                         {record.product && (
-                          <div className="text-xs text-gray-500 mt-1 truncate">
+                          <div className="text-[10px] text-gray-500 mt-0.5 truncate">
                             {record.product.name}
                           </div>
                         )}
                       </div>
 
-                      <div className="text-xs text-gray-400 font-mono whitespace-nowrap">
+                      <div className="text-[10px] text-gray-400 font-mono whitespace-nowrap">
                         {record.technician_name}
                       </div>
                     </div>

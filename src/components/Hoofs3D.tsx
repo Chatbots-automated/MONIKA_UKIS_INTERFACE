@@ -68,7 +68,13 @@ export function Hoofs3D() {
   const [showExaminationForm, setShowExaminationForm] = useState(false);
   const [use3DView, setUse3DView] = useState(true);
 
+  // Workflow stages: 'select_animal' | 'choose_action' | 'examination'
+  const [workflowStage, setWorkflowStage] = useState<'select_animal' | 'choose_action' | 'examination'>('select_animal');
+  const [previousHoofVisits, setPreviousHoofVisits] = useState<Array<{ date: string; count: number }>>([]);
+
   const [selectedAnimalId, setSelectedAnimalId] = useState<string>('');
+  const [searchEarTag, setSearchEarTag] = useState<string>('');
+  const [searchCollarNo, setSearchCollarNo] = useState<string>('');
   const [examinationDate, setExaminationDate] = useState(new Date().toISOString().split('T')[0]);
   const [technicianName, setTechnicianName] = useState(user?.username || '');
   const [generalNotes, setGeneralNotes] = useState('');
@@ -313,6 +319,137 @@ export function Hoofs3D() {
     showNotification(`Pridėta ${selectedZones.length} zonų apžiūrų su ${multiZoneProducts.length} produktais`, 'success');
   };
 
+  // Search for animal by ear tag or collar number
+  const searchForAnimal = () => {
+    let foundAnimal: Animal | undefined;
+
+    if (searchEarTag.trim()) {
+      foundAnimal = animals.find(a => 
+        a.tag_no?.toLowerCase() === searchEarTag.trim().toLowerCase()
+      );
+    } else if (searchCollarNo.trim()) {
+      const collarNum = parseInt(searchCollarNo.trim());
+      if (!isNaN(collarNum)) {
+        // Find animal by collar number
+        for (const [animalId, collar] of animalCollarNumbers.entries()) {
+          if (collar === collarNum) {
+            foundAnimal = animals.find(a => a.id === animalId);
+            break;
+          }
+        }
+      }
+    }
+
+    if (foundAnimal) {
+      setSelectedAnimalId(foundAnimal.id);
+      loadPreviousVisits(foundAnimal.id);
+      setWorkflowStage('choose_action');
+    } else {
+      showNotification('Gyvulys nerastas. Patikrinkite ausies ar kaklo numerį.', 'error');
+    }
+  };
+
+  // Load previous hoof visits for selected animal
+  const loadPreviousVisits = async (animalId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('hoof_records')
+        .select('examination_date')
+        .eq('animal_id', animalId)
+        .order('examination_date', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        // Group by date and count
+        const visitsByDate = new Map<string, number>();
+        data.forEach(record => {
+          const count = visitsByDate.get(record.examination_date) || 0;
+          visitsByDate.set(record.examination_date, count + 1);
+        });
+        
+        const visits = Array.from(visitsByDate.entries()).map(([date, count]) => ({
+          date,
+          count
+        }));
+        
+        setPreviousHoofVisits(visits);
+      }
+    } catch (error) {
+      console.error('Error loading previous visits:', error);
+      setPreviousHoofVisits([]);
+    }
+  };
+
+  // Save healthy examination (no damage)
+  const saveHealthyExamination = async () => {
+    if (!selectedAnimalId) {
+      showNotification('Pasirinkite gyvulį', 'error');
+      return;
+    }
+
+    try {
+      // Create a single record indicating healthy examination
+      const { error } = await supabase
+        .from('hoof_records')
+        .insert({
+          animal_id: selectedAnimalId,
+          examination_date: examinationDate,
+          leg: 'FL', // Default leg for healthy check
+          claw: 'outer', // Default claw
+          zone: null,
+          condition_code: 'OK',
+          severity: 0,
+          was_trimmed: false,
+          was_treated: false,
+          treatment_product_id: null,
+          treatment_batch_id: null,
+          treatment_quantity: null,
+          treatment_unit: null,
+          treatment_notes: null,
+          bandage_applied: false,
+          requires_followup: false,
+          followup_date: null,
+          technician_name: technicianName,
+          notes: '✅ Nėra pažeidimų - Sveikas patikrinimas'
+        });
+
+      if (error) throw error;
+
+      await logAction('create', 'hoof_records', null,
+        `Įrašytas sveikas nagų patikrinimas gyvuliui ${selectedAnimalId}`);
+
+      // Reset form to select another animal
+      setSelectedAnimalId('');
+      setSearchEarTag('');
+      setSearchCollarNo('');
+      setWorkflowStage('select_animal');
+      setPreviousHoofVisits([]);
+
+      await loadData();
+      showNotification('Sveikas patikrinimas išsaugotas!', 'success');
+    } catch (error) {
+      console.error('Error saving healthy examination:', error);
+      showNotification('Klaida išsaugant patikrinimą', 'error');
+    }
+  };
+
+  // Reset examination form
+  const resetExaminationForm = () => {
+    setShowExaminationForm(false);
+    setWorkflowStage('select_animal');
+    setCurrentExaminations([]);
+    setPendingMultiZoneProductDeductions([]);
+    setSelectedAnimalId('');
+    setSearchEarTag('');
+    setSearchCollarNo('');
+    setSelectedLeg(null);
+    setSelectedClaw(null);
+    setSelectedZone(null);
+    setSelectedZones([]);
+    setPreviousHoofVisits([]);
+  };
+
   const saveAllExaminations = async () => {
     if (!selectedAnimalId || currentExaminations.length === 0) {
       showNotification('Pasirinkite gyvulį ir įveskite bent vieną nago būklę', 'error');
@@ -391,14 +528,18 @@ export function Hoofs3D() {
       await logAction('create', 'hoof_records', null,
         `Įrašyta ${currentExaminations.length} nagų apžiūrų gyvuliui ${selectedAnimalId}`);
 
+      // Reset to select another animal
       setCurrentExaminations([]);
       setPendingMultiZoneProductDeductions([]); // Clear pending deductions after successful save
       setSelectedAnimalId('');
+      setSearchEarTag('');
+      setSearchCollarNo('');
       setGeneralNotes('');
-      setShowExaminationForm(false);
+      setWorkflowStage('select_animal');
       setSelectedLeg(null);
       setSelectedClaw(null);
       setSelectedZone(null);
+      setPreviousHoofVisits([]);
 
       await loadData();
       showNotification(`Sėkmingai išsaugota ${currentExaminations.length} nagų apžiūrų!`, 'success');
@@ -659,17 +800,13 @@ export function Hoofs3D() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-xl font-semibold">Nauja nagų apžiūra (3D)</h3>
+              <h3 className="text-xl font-semibold">
+                {workflowStage === 'select_animal' && 'Nauja nagų apžiūra - Pasirinkite gyvulį'}
+                {workflowStage === 'choose_action' && 'Pasirinkite veiksmą'}
+                {workflowStage === 'examination' && 'Nagų apžiūra'}
+              </h3>
               <button
-                onClick={() => {
-                  setShowExaminationForm(false);
-                  setCurrentExaminations([]);
-                  setPendingMultiZoneProductDeductions([]);
-                  setSelectedAnimalId('');
-                  setSelectedLeg(null);
-                  setSelectedClaw(null);
-                  setSelectedZone(null);
-                }}
+                onClick={resetExaminationForm}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
@@ -677,204 +814,310 @@ export function Hoofs3D() {
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Gyvulys (Ausies nr / Kaklo nr) <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableSelect
-                    options={sortByLithuanian(filteredAnimals, (a) => {
-                      const collarNo = animalCollarNumbers.get(a.id);
-                      return collarNo ? `${a.tag_no} (${collarNo})` : formatAnimalDisplay(a);
-                    }).map(a => {
-                      const collarNo = animalCollarNumbers.get(a.id);
-                      return {
-                        value: a.id,
-                        label: collarNo ? `${a.tag_no} (Kaklo: ${collarNo})` : formatAnimalDisplay(a)
-                      };
-                    })}
-                    value={selectedAnimalId}
-                    onChange={setSelectedAnimalId}
-                    placeholder="Pasirinkite gyvulį..."
-                  />
-                </div>
+              {/* STAGE 1: SELECT ANIMAL */}
+              {workflowStage === 'select_animal' && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-base font-medium text-gray-700 mb-2">
+                        Gyvūno ausies nr <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={searchEarTag}
+                        onChange={(e) => {
+                          setSearchEarTag(e.target.value);
+                          setSearchCollarNo(''); // Clear the other field
+                        }}
+                        placeholder="Pvz: LT123456"
+                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && searchEarTag.trim()) {
+                            searchForAnimal();
+                          }
+                        }}
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Apžiūros data <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={examinationDate}
-                    onChange={(e) => setExaminationDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <SearchableSelect
-                    label="Technikas"
-                    options={users.map(user => ({ value: user.full_name, label: user.full_name }))}
-                    value={technicianName}
-                    onChange={(value) => setTechnicianName(value)}
-                    placeholder="Pasirinkite techniką..."
-                    emptyLabel="Nepasirinkta"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-6 rounded-lg">
-                <HoofInterfaceNew
-                  selectedLeg={selectedLeg}
-                  selectedClaw={selectedClaw}
-                  selectedZone={selectedZone}
-                  selectedZones={selectedZones}
-                  onLegSelect={handleLegSelect}
-                  onClawSelect={handleClawSelect}
-                  onZoneSelect={handleZoneSelect}
-                  examinedZones={getExaminedZones()}
-                  animalId={selectedAnimalId}
-                />
-              </div>
-
-              {selectedZones.length > 0 && (
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-purple-900 flex items-center gap-2">
-                      <Layers className="w-5 h-5 text-purple-600" />
-                      Pasirinktos zonos ({selectedZones.length})
-                    </h4>
-                    <button
-                      onClick={() => setSelectedZones([])}
-                      className="text-xs text-red-600 hover:text-red-800 underline"
-                    >
-                      Išvalyti
-                    </button>
+                    <div>
+                      <label className="block text-base font-medium text-gray-700 mb-2">
+                        Arba kaklo nr <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={searchCollarNo}
+                        onChange={(e) => {
+                          setSearchCollarNo(e.target.value);
+                          setSearchEarTag(''); // Clear the other field
+                        }}
+                        placeholder="Pvz: 123"
+                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && searchCollarNo.trim()) {
+                            searchForAnimal();
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                    {selectedZones.map((z, idx) => (
-                      <div 
-                        key={idx} 
-                        className="text-sm bg-white p-2 rounded border-2 border-purple-300"
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-base font-medium text-gray-700 mb-2">
+                        Apžiūros data <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={examinationDate}
+                        onChange={(e) => setExaminationDate(e.target.value)}
+                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-base font-medium text-gray-700 mb-2">
+                        Technikas
+                      </label>
+                      <select
+                        value={technicianName}
+                        onChange={(e) => setTechnicianName(e.target.value)}
+                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       >
-                        <div className="font-medium text-gray-800">
-                          {selectedLeg} - {z.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
-                          <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
-                            Z{z.zone}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                        <option value="">Pasirinkite techniką...</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.full_name}>{user.full_name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setMultiZoneProducts([]);
-                      setShowMultiZoneModal(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-                  >
-                    <Box className="w-5 h-5" />
-                    Tęsti - Pasirinkti produktus
-                  </button>
-                </div>
-              )}
 
-              {currentExaminations.length > 0 && (
-                <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      Įvestos būklės ({currentExaminations.length})
-                    </h4>
+                  <div className="flex justify-center">
                     <button
-                      onClick={() => setCurrentExaminations([])}
-                      className="text-xs text-red-600 hover:text-red-800 underline"
+                      onClick={searchForAnimal}
+                      disabled={!searchEarTag.trim() && !searchCollarNo.trim()}
+                      className="px-8 py-4 text-lg font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                     >
-                      Išvalyti visas
+                      <Search className="w-6 h-6 inline mr-2" />
+                      Ieškoti gyvūno
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {currentExaminations.map((exam, idx) => {
-                      const condition = getConditionByCode(exam.condition_code);
-                      return (
-                        <div 
-                          key={idx} 
-                          className="text-sm bg-white p-2 rounded border-2 border-green-300 hover:border-green-500 transition-colors cursor-pointer group relative"
-                          onClick={() => {
-                            // Allow editing by clicking on the examination card
-                            setSelectedLeg(exam.leg);
-                            setSelectedClaw(exam.claw);
-                            setSelectedZone(exam.zone || null);
-                            setClawFormData(exam);
-                            setShowClawModal(true);
-                          }}
-                        >
-                          <div className="font-medium text-gray-800">
-                            {exam.leg} - {exam.claw === 'inner' ? 'Vidinis' : 'Išorinis'}
-                            {exam.zone !== undefined && (
-                              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                                Z{exam.zone}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-gray-700 font-medium">{condition?.name_lt || exam.condition_code}</div>
-                          <div className="text-gray-500 text-xs">
-                            Sunkumas: {exam.severity}
-                            {exam.was_treated && ' • Gydyta'}
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCurrentExaminations(prev => 
-                                prev.filter((_, i) => i !== idx)
-                              );
-                            }}
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
-                            title="Pašalinti"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
+
+                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                    <p className="text-base text-blue-800">
+                      ℹ️ Įveskite gyvūno ausies numerį ARBA kaklo numerį ir paspauskite "Ieškoti gyvūno".
+                    </p>
                   </div>
-                  <div className="mt-3 text-xs text-gray-600 italic">
-                    💡 Spustelėkite kortelę norėdami redaguoti. Pasirinkite kitą koją, kad pridėtumėte daugiau apžiūrų.
-                  </div>
-                </div>
+                </>
               )}
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowExaminationForm(false);
-                    setCurrentExaminations([]);
-                    setPendingMultiZoneProductDeductions([]);
-                    setSelectedAnimalId('');
-                    setSelectedLeg(null);
-                    setSelectedClaw(null);
-                    setSelectedZone(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Atšaukti
-                </button>
-                <button
-                  onClick={saveAllExaminations}
-                  disabled={!selectedAnimalId || currentExaminations.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!selectedAnimalId ? 'Pasirinkite gyvulį' : currentExaminations.length === 0 ? 'Įveskite bent vieną nago būklę' : 'Išsaugoti visas apžiūras'}
-                >
-                  <Save className="w-5 h-5" />
-                  Išsaugoti visas ({currentExaminations.length})
-                </button>
-              </div>
-              {(!selectedAnimalId || currentExaminations.length === 0) && (
-                <div className="text-sm text-gray-500 text-right mt-2">
-                  {!selectedAnimalId && '⚠️ Pasirinkite gyvulį'}
-                  {selectedAnimalId && currentExaminations.length === 0 && '⚠️ Pridėkite bent vieną nago būklę'}
-                </div>
+              {/* STAGE 2: CHOOSE ACTION */}
+              {workflowStage === 'choose_action' && (
+                <>
+                  <div className="bg-gradient-to-br from-blue-50 to-green-50 border-2 border-blue-300 rounded-lg p-6">
+                    <div className="text-center mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                        {getAnimalById(selectedAnimalId)?.tag_no || selectedAnimalId}
+                      </h4>
+                      {previousHoofVisits.length > 0 && (
+                        <div className="text-sm text-gray-600">
+                          <Clock className="w-4 h-4 inline mr-1" />
+                          Ankstesnės apžiūros: {previousHoofVisits.slice(0, 3).map(v => formatDateLT(v.date)).join(', ')}
+                          {previousHoofVisits.length > 3 && ` (+${previousHoofVisits.length - 3})`}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <button
+                        onClick={() => setWorkflowStage('examination')}
+                        className="flex flex-col items-center gap-3 px-6 py-8 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                      >
+                        <AlertCircle className="w-12 h-12" />
+                        <span className="text-xl font-bold">Reikia gydymo</span>
+                        <span className="text-sm opacity-90">Nagas pažeistas, reikia apžiūros ir gydymo</span>
+                      </button>
+
+                      <button
+                        onClick={saveHealthyExamination}
+                        className="flex flex-col items-center gap-3 px-6 py-8 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                      >
+                        <CheckCircle className="w-12 h-12" />
+                        <span className="text-xl font-bold">Nėra pažeidimų</span>
+                        <span className="text-sm opacity-90">Nagai sveiki, nereikia gydymo</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        setWorkflowStage('select_animal');
+                        setSelectedAnimalId('');
+                        setSearchEarTag('');
+                        setSearchCollarNo('');
+                        setPreviousHoofVisits([]);
+                      }}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      ← Grįžti atgal
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* STAGE 3: EXAMINATION */}
+              {workflowStage === 'examination' && (
+                <>
+                  <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-4 rounded-lg">
+                    <HoofInterfaceNew
+                      selectedLeg={selectedLeg}
+                      selectedClaw={selectedClaw}
+                      selectedZone={selectedZone}
+                      selectedZones={selectedZones}
+                      onLegSelect={handleLegSelect}
+                      onClawSelect={handleClawSelect}
+                      onZoneSelect={handleZoneSelect}
+                      examinedZones={getExaminedZones()}
+                      animalId={selectedAnimalId}
+                    />
+                  </div>
+
+                  {selectedZones.length > 0 && (
+                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-purple-900 flex items-center gap-2 text-sm">
+                          <Layers className="w-4 h-4 text-purple-600" />
+                          Pasirinktos zonos ({selectedZones.length})
+                        </h4>
+                        <button
+                          onClick={() => setSelectedZones([])}
+                          className="text-xs text-red-600 hover:text-red-800 underline"
+                        >
+                          Išvalyti
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                        {selectedZones.map((z, idx) => (
+                          <div 
+                            key={idx} 
+                            className="text-xs bg-white p-1.5 rounded border border-purple-300"
+                          >
+                            <div className="font-medium text-gray-800">
+                              {selectedLeg} - {z.claw === 'inner' ? 'V' : 'I'}
+                              <span className="ml-1 px-1 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px]">
+                                Z{z.zone}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMultiZoneProducts([]);
+                          setShowMultiZoneModal(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                      >
+                        <Box className="w-4 h-4" />
+                        Tęsti - Pasirinkti produktus
+                      </button>
+                    </div>
+                  )}
+
+                  {currentExaminations.length > 0 && (
+                    <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-300 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-blue-900 flex items-center gap-2 text-sm">
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                          Įvestos būklės ({currentExaminations.length})
+                        </h4>
+                        <button
+                          onClick={() => setCurrentExaminations([])}
+                          className="text-xs text-red-600 hover:text-red-800 underline"
+                        >
+                          Išvalyti visas
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {currentExaminations.map((exam, idx) => {
+                          const condition = getConditionByCode(exam.condition_code);
+                          return (
+                            <div 
+                              key={idx} 
+                              className="text-xs bg-white p-1.5 rounded border border-green-300 hover:border-green-500 transition-colors cursor-pointer group relative"
+                              onClick={() => {
+                                setSelectedLeg(exam.leg);
+                                setSelectedClaw(exam.claw);
+                                setSelectedZone(exam.zone || null);
+                                setClawFormData(exam);
+                                setShowClawModal(true);
+                              }}
+                            >
+                              <div className="font-medium text-gray-800">
+                                {exam.leg} - {exam.claw === 'inner' ? 'V' : 'I'}
+                                {exam.zone !== undefined && (
+                                  <span className="ml-1 px-1 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px]">
+                                    Z{exam.zone}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-gray-700 font-medium text-[11px]">{condition?.name_lt || exam.condition_code}</div>
+                              <div className="text-gray-500 text-[10px]">
+                                S: {exam.severity}
+                                {exam.was_treated && ' • Gydyta'}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentExaminations(prev => 
+                                    prev.filter((_, i) => i !== idx)
+                                  );
+                                }}
+                                className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
+                                title="Pašalinti"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 text-[10px] text-gray-600 italic">
+                        💡 Spustelėkite kortelę redaguoti. Pasirinkite kitą koją daugiau apžiūrų.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between gap-3 pt-4 border-t border-gray-200">
+                    <button
+                      onClick={() => {
+                        setWorkflowStage('choose_action');
+                        setSelectedLeg(null);
+                        setSelectedClaw(null);
+                        setSelectedZone(null);
+                        setSelectedZones([]);
+                      }}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      ← Grįžti atgal
+                    </button>
+                    <button
+                      onClick={saveAllExaminations}
+                      disabled={!selectedAnimalId || currentExaminations.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!selectedAnimalId ? 'Pasirinkite gyvulį' : currentExaminations.length === 0 ? 'Įveskite bent vieną nago būklę' : 'Išsaugoti visas apžiūras'}
+                    >
+                      <Save className="w-5 h-5" />
+                      Išsaugoti visas ({currentExaminations.length})
+                    </button>
+                  </div>
+                  {(!selectedAnimalId || currentExaminations.length === 0) && (
+                    <div className="text-sm text-gray-500 text-right mt-2">
+                      {!selectedAnimalId && '⚠️ Pasirinkite gyvulį'}
+                      {selectedAnimalId && currentExaminations.length === 0 && '⚠️ Pridėkite bent vieną nago būklę'}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
