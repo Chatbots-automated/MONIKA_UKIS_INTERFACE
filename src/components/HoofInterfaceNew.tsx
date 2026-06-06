@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HoofLeg, HoofClaw } from '../lib/types';
 import { supabase } from '../lib/supabase';
-import { Clock, Activity } from 'lucide-react';
+import { Clock, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { HOOF_SELECTOR_DATA } from './hoof/hoofSelectorData';
 import { HOOF_ZONE_DATA } from './hoof/hoofZoneData';
 
@@ -27,6 +27,9 @@ interface HoofHistory {
   severity: number;
   was_treated: boolean;
   treatment_product_id: string | null;
+  treatment_quantity: number | null;
+  treatment_unit: string | null;
+  treatment_batch_no: string | null;
   technician_name: string;
   condition?: {
     name_lt: string;
@@ -78,6 +81,7 @@ export function HoofInterfaceNew({
   const [screen, setScreen] = useState<'legs' | 'zones'>('legs');
   const [history, setHistory] = useState<HoofHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   // Reset screen to 'legs' when parent resets selectedLeg (after saving examination)
   useEffect(() => {
@@ -132,9 +136,8 @@ export function HoofInterfaceNew({
     // Determine claw based on side
     const claw = side === 'left' ? 'inner' : side === 'right' ? 'outer' : 'inner';
     
-    // Just pass to parent - parent handles the toggle logic
-    onZoneSelect(zoneNum);
-    onClawSelect(claw);
+    // Pass claw as second parameter to avoid double state updates
+    onZoneSelect(zoneNum, claw);
   };
 
   const handleBack = () => {
@@ -405,65 +408,155 @@ export function HoofInterfaceNew({
               </div>
             ) : (
               <div className="divide-y divide-gray-200">
-                {history.map((record) => (
-                  <div 
-                    key={record.id} 
-                    className={`p-2 hover:bg-gray-50 transition-colors ${
-                      record.leg === selectedLeg ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] font-mono text-gray-500">
-                            {new Date(record.examination_date).toLocaleDateString('lt')}
-                          </span>
-                          <span className="text-[11px] font-semibold text-gray-900">
-                            {record.leg} - {record.claw === 'inner' ? 'V' : 'I'}
-                          </span>
-                          {record.zone !== null && (
-                            <span className="px-1 py-0.5 bg-blue-600 text-white rounded text-[10px] font-mono">
-                              Z{record.zone}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[11px] text-gray-700">
-                            {record.condition?.name_lt || record.condition_code}
-                          </span>
-                          
-                          <span className={`px-1 py-0.5 rounded text-[10px] font-medium
-                            ${record.severity === 0 ? 'bg-green-100 text-green-800' : ''}
-                            ${record.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
-                            ${record.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
-                            ${record.severity === 3 ? 'bg-red-100 text-red-800' : ''}
-                            ${record.severity === 4 ? 'bg-red-200 text-red-900' : ''}
-                          `}>
-                            S{record.severity}
-                          </span>
+                {(() => {
+                  // Group records by session (date + leg + technician)
+                  const grouped = history.reduce((acc, record) => {
+                    const sessionKey = `${record.examination_date}_${record.leg}_${record.technician_name || 'unknown'}`;
+                    if (!acc[sessionKey]) {
+                      acc[sessionKey] = [];
+                    }
+                    acc[sessionKey].push(record);
+                    return acc;
+                  }, {} as Record<string, typeof history>);
 
-                          {record.was_treated && (
-                            <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-medium flex items-center gap-0.5">
-                              <Activity className="w-2.5 h-2.5" />
-                              Gydyta
-                            </span>
-                          )}
+                  return Object.entries(grouped).map(([sessionKey, records]) => {
+                    // Sort records by zone and claw for consistent display
+                    const sortedRecords = records.sort((a, b) => {
+                      if (a.claw !== b.claw) return a.claw === 'inner' ? -1 : 1;
+                      return (a.zone ?? 0) - (b.zone ?? 0);
+                    });
+
+                    const firstRecord = sortedRecords[0];
+                    const allZones = sortedRecords
+                      .filter(r => r.zone !== null)
+                      .map(r => `${r.claw === 'inner' ? 'V' : 'I'}-Z${r.zone}`)
+                      .join(', ');
+                    
+                    // Collect products with details
+                    const productDetails = sortedRecords
+                      .filter(r => r.product)
+                      .map(r => ({
+                        name: r.product!.name,
+                        quantity: r.treatment_quantity,
+                        unit: r.treatment_unit,
+                        batch: r.treatment_batch_no
+                      }));
+                    
+                    // Get unique product names for summary
+                    const uniqueProducts = Array.from(
+                      new Set(productDetails.map(p => p.name))
+                    );
+
+                    const isExpanded = expandedSessions.has(sessionKey);
+                    
+                    const toggleExpand = () => {
+                      setExpandedSessions(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(sessionKey)) {
+                          newSet.delete(sessionKey);
+                        } else {
+                          newSet.add(sessionKey);
+                        }
+                        return newSet;
+                      });
+                    };
+
+                    return (
+                      <div 
+                        key={sessionKey}
+                        className={`transition-colors ${
+                          firstRecord.leg === selectedLeg ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <div 
+                          className="p-2 hover:bg-gray-50 cursor-pointer"
+                          onClick={toggleExpand}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                {productDetails.length > 0 && (
+                                  isExpanded ? 
+                                    <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" /> :
+                                    <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                )}
+                                <span className="text-[10px] font-mono text-gray-500">
+                                  {new Date(firstRecord.examination_date).toLocaleDateString('lt')}
+                                </span>
+                                <span className="text-[11px] font-semibold text-gray-900">
+                                  {firstRecord.leg}
+                                </span>
+                                {sortedRecords.length > 1 && (
+                                  <span className="px-1 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">
+                                    {sortedRecords.length} zonos
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {allZones && (
+                                <div className="text-[10px] text-gray-600 mb-0.5 ml-4">
+                                  Zonos: {allZones}
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-1.5 flex-wrap ml-4">
+                                <span className="text-[11px] text-gray-700">
+                                  {firstRecord.condition?.name_lt || firstRecord.condition_code}
+                                </span>
+                                
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-medium
+                                  ${firstRecord.severity === 0 ? 'bg-green-100 text-green-800' : ''}
+                                  ${firstRecord.severity === 1 ? 'bg-yellow-100 text-yellow-800' : ''}
+                                  ${firstRecord.severity === 2 ? 'bg-orange-100 text-orange-800' : ''}
+                                  ${firstRecord.severity === 3 ? 'bg-red-100 text-red-800' : ''}
+                                  ${firstRecord.severity === 4 ? 'bg-red-200 text-red-900' : ''}
+                                `}>
+                                  S{firstRecord.severity}
+                                </span>
+
+                                {sortedRecords.some(r => r.was_treated) && (
+                                  <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-medium flex items-center gap-0.5">
+                                    <Activity className="w-2.5 h-2.5" />
+                                    Gydyta
+                                  </span>
+                                )}
+                              </div>
+
+                              {!isExpanded && uniqueProducts.length > 0 && (
+                                <div className="text-[10px] text-gray-500 mt-0.5 ml-4 truncate">
+                                  {uniqueProducts.length} produktas(-ai)
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-gray-400 font-mono whitespace-nowrap">
+                              {firstRecord.technician_name}
+                            </div>
+                          </div>
                         </div>
 
-                        {record.product && (
-                          <div className="text-[10px] text-gray-500 mt-0.5 truncate">
-                            {record.product.name}
+                        {isExpanded && productDetails.length > 0 && (
+                          <div className="px-2 pb-2 ml-4 border-l-2 border-blue-200">
+                            <div className="bg-gray-50 rounded p-2 space-y-1">
+                              <div className="text-[10px] font-semibold text-gray-700 mb-1.5">
+                                Naudoti produktai:
+                              </div>
+                              {productDetails.map((prod, idx) => (
+                                <div key={idx} className="text-[10px] text-gray-600 flex items-center justify-between gap-2">
+                                  <span className="font-medium">{prod.name}</span>
+                                  <span className="text-gray-500">
+                                    {prod.quantity ? `${prod.quantity} ${prod.unit || ''}` : '—'}
+                                    {prod.batch ? ` (LOT ${prod.batch})` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
-
-                      <div className="text-[10px] text-gray-400 font-mono whitespace-nowrap">
-                        {record.technician_name}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>

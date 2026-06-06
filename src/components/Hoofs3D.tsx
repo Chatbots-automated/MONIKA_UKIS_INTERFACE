@@ -319,34 +319,40 @@ export function Hoofs3D() {
     showNotification(`Pridėta ${selectedZones.length} zonų apžiūrų su ${multiZoneProducts.length} produktais`, 'success');
   };
 
-  // Search for animal by ear tag or collar number
-  const searchForAnimal = () => {
-    let foundAnimal: Animal | undefined;
+  // Filter animals based on search terms (like in Animals tab)
+  const getFilteredAnimals = () => {
+    return animals.filter(animal => {
+      let matchesEar = true;
+      let matchesCollar = true;
 
-    if (searchEarTag.trim()) {
-      foundAnimal = animals.find(a => 
-        a.tag_no?.toLowerCase() === searchEarTag.trim().toLowerCase()
-      );
-    } else if (searchCollarNo.trim()) {
-      const collarNum = parseInt(searchCollarNo.trim());
-      if (!isNaN(collarNum)) {
-        // Find animal by collar number
-        for (const [animalId, collar] of animalCollarNumbers.entries()) {
-          if (collar === collarNum) {
-            foundAnimal = animals.find(a => a.id === animalId);
-            break;
-          }
-        }
+      // Filter by ear tag
+      if (searchEarTag.trim()) {
+        const searchLower = searchEarTag.toLowerCase().trim();
+        const tagNo = animal.tag_no?.toLowerCase() || '';
+        
+        // Search in tag number (including last 5 digits reversed)
+        const last5Digits = tagNo.slice(-5);
+        const reversed = last5Digits.split('').reverse().join('');
+        
+        matchesEar = tagNo.includes(searchLower) || reversed.includes(searchLower);
       }
-    }
 
-    if (foundAnimal) {
-      setSelectedAnimalId(foundAnimal.id);
-      loadPreviousVisits(foundAnimal.id);
-      setWorkflowStage('choose_action');
-    } else {
-      showNotification('Gyvulys nerastas. Patikrinkite ausies ar kaklo numerį.', 'error');
-    }
+      // Filter by collar number
+      if (searchCollarNo.trim()) {
+        const collarTrimmed = searchCollarNo.trim();
+        const collarNo = animalCollarNumbers.get(animal.id);
+        matchesCollar = collarNo?.toString() === collarTrimmed;
+      }
+
+      return matchesEar && matchesCollar;
+    });
+  };
+
+  // Select animal from filtered list
+  const selectAnimal = async (animal: Animal) => {
+    setSelectedAnimalId(animal.id);
+    await loadPreviousVisits(animal.id);
+    setWorkflowStage('choose_action');
   };
 
   // Load previous hoof visits for selected animal
@@ -820,44 +826,40 @@ export function Hoofs3D() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-base font-medium text-gray-700 mb-2">
-                        Gyvūno ausies nr <span className="text-red-500">*</span>
+                        Gyvūno ausies nr
                       </label>
-                      <input
-                        type="text"
-                        value={searchEarTag}
-                        onChange={(e) => {
-                          setSearchEarTag(e.target.value);
-                          setSearchCollarNo(''); // Clear the other field
-                        }}
-                        placeholder="Pvz: LT123456"
-                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && searchEarTag.trim()) {
-                            searchForAnimal();
-                          }
-                        }}
-                      />
+                      <div className="relative">
+                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={searchEarTag}
+                          onChange={(e) => {
+                            setSearchEarTag(e.target.value);
+                            setSearchCollarNo(''); // Clear the other field
+                          }}
+                          placeholder="Pvz: LT123456 arba paskutiniai 5 skaičiai..."
+                          className="w-full pl-12 pr-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-base font-medium text-gray-700 mb-2">
-                        Arba kaklo nr <span className="text-red-500">*</span>
+                        Arba kaklo nr
                       </label>
-                      <input
-                        type="number"
-                        value={searchCollarNo}
-                        onChange={(e) => {
-                          setSearchCollarNo(e.target.value);
-                          setSearchEarTag(''); // Clear the other field
-                        }}
-                        placeholder="Pvz: 123"
-                        className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && searchCollarNo.trim()) {
-                            searchForAnimal();
-                          }
-                        }}
-                      />
+                      <div className="relative">
+                        <Activity className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                        <input
+                          type="text"
+                          value={searchCollarNo}
+                          onChange={(e) => {
+                            setSearchCollarNo(e.target.value);
+                            setSearchEarTag(''); // Clear the other field
+                          }}
+                          placeholder="Pvz: 123"
+                          className="w-full pl-12 pr-4 py-3 text-lg border-2 border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -891,22 +893,69 @@ export function Hoofs3D() {
                     </div>
                   </div>
 
-                  <div className="flex justify-center">
-                    <button
-                      onClick={searchForAnimal}
-                      disabled={!searchEarTag.trim() && !searchCollarNo.trim()}
-                      className="px-8 py-4 text-lg font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                    >
-                      <Search className="w-6 h-6 inline mr-2" />
-                      Ieškoti gyvūno
-                    </button>
-                  </div>
+                  {/* Filtered Animals List */}
+                  {(searchEarTag.trim() || searchCollarNo.trim()) && (
+                    <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Rasti gyvūnai ({getFilteredAnimals().length})
+                        </h3>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto">
+                        {getFilteredAnimals().length === 0 ? (
+                          <div className="text-center py-12">
+                            <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <p className="text-gray-500 text-lg">Nerasta gyvūnų</p>
+                            <p className="text-gray-400 text-sm mt-1">Pabandykite kitą paieškos užklausą</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-gray-200">
+                            {getFilteredAnimals().map((animal) => {
+                              const collarNo = animalCollarNumbers.get(animal.id);
+                              return (
+                                <button
+                                  key={animal.id}
+                                  onClick={() => selectAnimal(animal)}
+                                  className="w-full px-6 py-4 text-left hover:bg-blue-50 transition-colors focus:outline-none focus:bg-blue-100"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <div className="font-semibold text-lg text-gray-900">
+                                        {animal.tag_no}
+                                      </div>
+                                      {collarNo && (
+                                        <div className="text-sm text-emerald-600 font-medium mt-1">
+                                          Kaklo nr: {collarNo}
+                                        </div>
+                                      )}
+                                      {animal.holder_name && (
+                                        <div className="text-sm text-gray-600 mt-1">
+                                          {animal.holder_name}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="text-blue-600">
+                                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                    <p className="text-base text-blue-800">
-                      ℹ️ Įveskite gyvūno ausies numerį ARBA kaklo numerį ir paspauskite "Ieškoti gyvūno".
-                    </p>
-                  </div>
+                  {!searchEarTag.trim() && !searchCollarNo.trim() && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                      <p className="text-base text-blue-800">
+                        ℹ️ Pradėkite rašyti ausies numerį arba kaklo numerį, kad pamatytumėte gyvūnų sąrašą.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
