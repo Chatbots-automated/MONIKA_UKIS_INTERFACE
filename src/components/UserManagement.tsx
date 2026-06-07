@@ -17,7 +17,6 @@ export function UserManagement() {
   const [newUserRole, setNewUserRole] = useState<UserRole>('viewer');
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserWorkLocation, setNewUserWorkLocation] = useState<string>('warehouse');
-  const [newUserRequiresLogin, setNewUserRequiresLogin] = useState(true);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -105,36 +104,25 @@ export function UserManagement() {
     setError('');
 
     try {
-      let newUserId: string | null = null;
+      // Create user with auth
+      const { data, error: createError } = await supabase.rpc('create_user', {
+        p_email: newUserEmail,
+        p_password: newUserPassword,
+        p_role: newUserRole
+      });
 
-      if (newUserRequiresLogin) {
-        // Create user with auth
-        const { data, error: createError } = await supabase.rpc('create_user', {
-          p_email: newUserEmail,
-          p_password: newUserPassword,
-          p_role: newUserRole
-        });
-
-        if (createError) throw createError;
-        newUserId = data;
-      } else {
-        // Create user without auth (just in users table)
-        const { data, error: insertError } = await supabase
-          .from('users')
-          .insert({
-            full_name: newUserFullName,
-            role: newUserRole,
-            requires_login: false
-          })
-          .select('id')
-          .single();
-
-        if (insertError) throw insertError;
-        newUserId = data?.id;
+      if (createError) {
+        // Handle duplicate email error specifically
+        if (createError.code === '23505' || createError.message?.includes('already exists')) {
+          throw new Error(`El. paštas "${newUserEmail}" jau naudojamas. Prašome naudoti kitą el. paštą.`);
+        }
+        throw createError;
       }
 
+      const newUserId = data;
+
       if (newUserId) {
-        const updateData: any = { full_name: newUserFullName, requires_login: newUserRequiresLogin };
+        const updateData: any = { full_name: newUserFullName };
 
         // Add work_location for worker roles
         if (newUserRole === 'farm_worker' || newUserRole === 'warehouse_worker' || newUserRole === 'administracija') {
@@ -146,7 +134,10 @@ export function UserManagement() {
           .update(updateData)
           .eq('id', newUserId);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Update error:', updateError);
+          // Don't throw - user was created successfully
+        }
       }
 
       setSuccess('User added successfully');
@@ -156,7 +147,6 @@ export function UserManagement() {
       setNewUserRole('viewer');
       setNewUserFullName('');
       setNewUserWorkLocation('warehouse');
-      setNewUserRequiresLogin(true);
       fetchUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -354,6 +344,8 @@ export function UserManagement() {
         return <Wrench className="w-4 h-4" />;
       case 'viewer':
         return <Eye className="w-4 h-4" />;
+      case 'guest':
+        return <Eye className="w-4 h-4" />;
       case 'farm_worker':
         return <Tractor className="w-4 h-4" />;
       case 'warehouse_worker':
@@ -379,6 +371,8 @@ export function UserManagement() {
         return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'viewer':
         return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'guest':
+        return 'bg-stone-100 text-stone-800 border-stone-200';
       case 'farm_worker':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'warehouse_worker':
@@ -404,6 +398,8 @@ export function UserManagement() {
         return 'Technikas';
       case 'viewer':
         return 'Stebėtojas';
+      case 'guest':
+        return 'Svečias';
       case 'farm_worker':
         return 'Fermos darbuotojas';
       case 'sandelininkas':
@@ -483,7 +479,7 @@ export function UserManagement() {
         </div>
         <button
           onClick={() => setShowAddUser(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all shadow-lg"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-700 to-cyan-800 text-white rounded-lg hover:from-cyan-800 hover:to-cyan-900 transition-all shadow-lg"
         >
           <UserPlus className="w-5 h-5" />
           <span>Pridėti Vartotoją</span>
@@ -517,7 +513,7 @@ export function UserManagement() {
                   type="text"
                   value={newUserFullName}
                   onChange={(e) => setNewUserFullName(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -525,51 +521,31 @@ export function UserManagement() {
                   required
                 />
               </div>
-              <div className="col-span-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!newUserRequiresLogin}
-                    onChange={(e) => setNewUserRequiresLogin(!e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">
-                    Šis vartotojas neprisijungs (tik grafikams)
-                  </span>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  El. paštas
                 </label>
-                <p className="text-xs text-gray-500 mt-1 ml-6">
-                  Pažymėkite, jei darbuotojas bus naudojamas tik darbo grafikuose ir nereikės prisijungimo
-                </p>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  required
+                />
               </div>
-              {newUserRequiresLogin && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      El. paštas
-                    </label>
-                    <input
-                      type="email"
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Slaptažodis
-                    </label>
-                    <input
-                      type="password"
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      required
-                      minLength={6}
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Slaptažodis
+                </label>
+                <input
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  required
+                  minLength={6}
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Rolė
@@ -577,7 +553,7 @@ export function UserManagement() {
                 <select
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 >
                   <optgroup label="Veterinarijos modulis">
                     <option value="viewer">Stebėtojas (View Only)</option>
@@ -585,12 +561,8 @@ export function UserManagement() {
                     <option value="vet">Veterinaras (Full Access)</option>
                     <option value="admin">Administratorius (All Access)</option>
                   </optgroup>
-                  <optgroup label="Technikos modulis">
-                    <option value="farm_worker">Fermos darbuotojas</option>
-                    <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
-                    <option value="sandelininkas">Sandėlininkas (Warehouse Manager)</option>
-                    <option value="buhaltere">Buhalterė (Secretary)</option>
-                    <option value="administracija">Administracija</option>
+                  <optgroup label="Ribotas priėjimas">
+                    <option value="guest">Svečias (No Module Access)</option>
                   </optgroup>
                   <optgroup label="Pasirinktinė prieiga">
                     <option value="custom">Pasirinktinė prieiga (Custom Permissions)</option>
@@ -605,7 +577,7 @@ export function UserManagement() {
                   <select
                     value={newUserWorkLocation}
                     onChange={(e) => setNewUserWorkLocation(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   >
                     <option value="farm">Ferma</option>
                     <option value="warehouse">Technikos kiemas</option>
@@ -619,7 +591,7 @@ export function UserManagement() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-700 to-cyan-800 text-white rounded-lg hover:from-cyan-800 hover:to-cyan-900 transition-all"
                 >
                   Pridėti
                 </button>
@@ -631,7 +603,6 @@ export function UserManagement() {
                     setNewUserPassword('');
                     setNewUserRole('viewer');
                     setNewUserFullName('');
-                    setNewUserRequiresLogin(true);
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
                 >
@@ -646,7 +617,7 @@ export function UserManagement() {
       <div className="bg-white rounded-xl shadow-lg overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-700"></div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -675,7 +646,7 @@ export function UserManagement() {
                   <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${user.is_frozen ? 'bg-red-50' : ''}`}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-600 to-cyan-800 rounded-full flex items-center justify-center">
                           <Mail className="w-5 h-5 text-white" />
                         </div>
                         <div>
@@ -690,7 +661,7 @@ export function UserManagement() {
                           <select
                             value={editRole}
                             onChange={(e) => setEditRole(e.target.value as UserRole)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                           >
                             <optgroup label="Veterinarijos modulis">
                               <option value="viewer">Stebėtojas</option>
@@ -698,10 +669,8 @@ export function UserManagement() {
                               <option value="vet">Veterinaras</option>
                               <option value="admin">Administratorius</option>
                             </optgroup>
-                            <optgroup label="Technikos modulis">
-                              <option value="farm_worker">Fermos darbuotojas</option>
-                              <option value="warehouse_worker">Technikos kiemo darbuotojas</option>
-                              <option value="administracija">Administracija</option>
+                            <optgroup label="Ribotas priėjimas">
+                              <option value="guest">Svečias</option>
                             </optgroup>
                             <optgroup label="Pasirinktinė prieiga">
                               <option value="custom">Pasirinktinė prieiga</option>
@@ -711,7 +680,7 @@ export function UserManagement() {
                             <select
                               value={editWorkLocation}
                               onChange={(e) => setEditWorkLocation(e.target.value)}
-                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-xs"
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-xs"
                             >
                               <option value="farm">Ferma</option>
                               <option value="warehouse">Technikos kiemas</option>
@@ -873,6 +842,13 @@ export function UserManagement() {
               <h4 className="font-semibold text-gray-900">Stebėtojas</h4>
             </div>
             <p className="text-sm text-gray-600">Tik peržiūros prieiga, negali keisti duomenų</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Eye className="w-4 h-4 text-stone-600" />
+              <h4 className="font-semibold text-gray-900">Svečias</h4>
+            </div>
+            <p className="text-sm text-gray-600">Gali prisijungti, bet neturi prieigos prie jokių modulių</p>
           </div>
         </div>
       </div>

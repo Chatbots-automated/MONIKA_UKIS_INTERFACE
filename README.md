@@ -61,4 +61,4 @@ See `supabase/migrations/20260607000000_vet_baseline.sql` for the complete schem
 
 ## License
 
-© 2025 Živatkauskų ūkis. All rights reserved.
+© 2026 Živatkauskų ūkis. All rights reserved.

@@ -3,13 +3,9 @@ import { UserManagement } from './UserManagement';
 import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
 import { SecurityMonitor } from './SecurityMonitor';
-import { TreatmentTransfer } from './TreatmentTransfer';
-import { WorkerApprovals } from './admin/WorkerApprovals';
-import { FoodManagement } from './FoodManagement';
-import { WorkerCodes } from './admin/WorkerCodes';
-import { Users, Activity, Shield, FileText, Settings, ClipboardCheck, UtensilsCrossed, Key } from 'lucide-react';
+import { Users, Activity, Shield, FileText } from 'lucide-react';
 
-type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'maintenance' | 'worker-approvals' | 'food' | 'worker-codes';
+type AdminTab = 'users' | 'activity' | 'audit' | 'security';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
@@ -43,12 +39,8 @@ export function AdminDashboard() {
   const tabs = [
     { id: 'activity' as AdminTab, label: 'Veiklos apžvalga', icon: Activity },
     { id: 'users' as AdminTab, label: 'Vartotojai', icon: Users },
-    { id: 'worker-approvals' as AdminTab, label: 'Darbuotojų ataskaitos', icon: ClipboardCheck },
-    { id: 'worker-codes' as AdminTab, label: 'Darbuotojų kodai', icon: Key },
-    { id: 'food' as AdminTab, label: 'Pietūs', icon: UtensilsCrossed },
     { id: 'audit' as AdminTab, label: 'Audito žurnalas', icon: FileText },
     { id: 'security' as AdminTab, label: 'Saugumas', icon: Shield },
-    { id: 'maintenance' as AdminTab, label: 'ŽURNALAS', icon: Settings },
   ];
 
   return (
@@ -83,12 +75,8 @@ export function AdminDashboard() {
       <div className="mt-6">
         {activeTab === 'activity' && <UserActivityDashboard />}
         {activeTab === 'users' && <UserManagement />}
-        {activeTab === 'worker-approvals' && <WorkerApprovals />}
-        {activeTab === 'worker-codes' && <WorkerCodes />}
-        {activeTab === 'food' && <FoodManagement />}
         {activeTab === 'audit' && <AuditLogViewer />}
         {activeTab === 'security' && <SecurityMonitor />}
-        {activeTab === 'maintenance' && <TreatmentTransfer />}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'farm_worker' | 'warehouse_worker' | 'buhaltere' | 'sandelininkas' | 'administracija' | 'custom';
+export type UserRole = 'admin' | 'vet' | 'tech' | 'viewer' | 'guest' | 'farm_worker' | 'warehouse_worker' | 'buhaltere' | 'sandelininkas' | 'administracija' | 'custom';
 
 export interface ModulePermission {
   module_name: string;
@@ -313,6 +313,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user.is_frozen) return false;
 
     const role = user.role;
+
+    // Guest users have NO module access
+    if (role === 'guest') return false;
 
     // Admin always has all permissions
     if (role === 'admin') return true;

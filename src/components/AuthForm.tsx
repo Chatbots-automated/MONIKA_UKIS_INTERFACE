@@ -24,12 +24,12 @@ export function AuthForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-teal-800 to-emerald-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-cyan-900 to-slate-900 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE0YzMuMzEgMCA2LTIuNjkgNi02cy0yLjY5LTYtNi02LTYgMi42OS02IDYgMi42OSA2IDYgNnptMCAzMGMzLjMxIDAgNi0yLjY5IDYtNnMtMi42OS02LTYtNi02IDIuNjktNiA2IDIuNjkgNiA2IDZ6TTE2IDE0YzMuMzEgMCA2LTIuNjkgNi02cy0yLjY5LTYtNi02LTYgMi42OS02IDYgMi42OSA2IDYgNnptMCAzMGMzLjMxIDAgNi0yLjY5IDYtNnMtMi42OS02LTYtNi02IDIuNjktNiA2IDIuNjkgNiA2IDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
 
       <div className="w-full max-w-md relative">
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-10 text-center">
+          <div className="bg-gradient-to-r from-cyan-700 to-cyan-800 px-8 py-10 text-center">
             <div className="flex items-center justify-center mb-4">
               <img
                 src="/gvet-logo.png"
@@ -39,7 +39,7 @@ export function AuthForm() {
                   e.currentTarget.style.display = 'none';
                   const fallback = document.createElement('div');
                   fallback.className = 'w-20 h-20 rounded-xl bg-white p-4 shadow-lg flex items-center justify-center';
-                  fallback.innerHTML = '<svg class="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                  fallback.innerHTML = '<svg class="w-12 h-12 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
                   e.currentTarget.parentNode?.appendChild(fallback);
                 }}
               />
@@ -47,7 +47,7 @@ export function AuthForm() {
             <h1 className="text-3xl font-bold text-white mb-2">
               Živatkauskų ūkis
             </h1>
-            <p className="text-emerald-50">
+            <p className="text-cyan-50">
               GVET PRO
             </p>
           </div>
@@ -76,7 +76,7 @@ export function AuthForm() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
                     placeholder="jusu.email@example.com"
                     required
                   />
@@ -96,7 +96,7 @@ export function AuthForm() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
                     placeholder="••••••••"
                     required
                     minLength={6}
@@ -116,7 +116,7 @@ export function AuthForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-3 rounded-lg font-semibold hover:from-emerald-700 hover:to-teal-700 focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                className="w-full bg-gradient-to-r from-cyan-700 to-cyan-800 text-white py-3 rounded-lg font-semibold hover:from-cyan-800 hover:to-cyan-900 focus:ring-4 focus:ring-cyan-500 focus:ring-opacity-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
               >
                 {loading ? (
                   <>
@@ -133,8 +133,8 @@ export function AuthForm() {
             </form>
           </div>
 
-          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-8 py-4 border-t border-emerald-100">
-            <div className="flex items-center justify-center gap-2 text-sm text-emerald-800">
+          <div className="bg-gradient-to-r from-cyan-50 to-cyan-100 px-8 py-4 border-t border-cyan-100">
+            <div className="flex items-center justify-center gap-2 text-sm text-cyan-900">
               <Stethoscope className="w-4 h-4" />
               <span>Saugus veterinarijos atsargų valdymas</span>
             </div>
@@ -142,7 +142,7 @@ export function AuthForm() {
         </div>
 
         <div className="mt-6 text-center text-sm text-white/80">
-          <p>© 2025 Živatkauskų ūkis · GVET PRO v1.0.0</p>
+          <p>© 2026 Živatkauskų ūkis · GVET PRO v1.0.0</p>
         </div>
       </div>
     </div>
