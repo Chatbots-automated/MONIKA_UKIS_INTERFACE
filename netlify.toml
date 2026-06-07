@@ -10,6 +10,7 @@
   to = "/index.html"
   status = 200
 
-# Environment variables (for reference - set these in Netlify dashboard)
-# VITE_SUPABASE_URL=https://kpuwhvsjtiqyezhmpmnt.supabase.co
-# VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwdXdodnNqdGlxeWV6aG1wbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NDgyODIsImV4cCI6MjA5NjQyNDI4Mn0._JRAJ035r898kDvpxlEOV3n7cv2p4nJzX29f7I28h64
+# Environment variables
+[build.environment]
+  VITE_SUPABASE_URL = "https://kpuwhvsjtiqyezhmpmnt.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwdXdodnNqdGlxeWV6aG1wbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NDgyODIsImV4cCI6MjA5NjQyNDI4Mn0._JRAJ035r898kDvpxlEOV3n7cv2p4nJzX29f7I28h64"
