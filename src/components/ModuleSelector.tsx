@@ -505,8 +505,8 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-6">
             <img
-              src="https://rekvizitai.vz.lt/logos/berciunai-16440-447.jpg"
-              alt="ŽŪB Berčiunai"
+              src="/gvet-logo.png"
+              alt="Živatkauskų ūkis"
               className="w-24 h-24 rounded-2xl bg-white p-2 shadow-2xl object-contain"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
@@ -514,7 +514,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
             />
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">
-            ŽŪB Berčiunai
+            Živatkauskų ūkis
           </h1>
           <p className="text-xl text-emerald-100">
             GVET PRO
@@ -677,7 +677,7 @@ export function ModuleSelector({ onSelectModule }: ModuleSelectorProps) {
 
           <div className="text-center">
             <p className="text-sm text-white/60">
-              © 2025 ŽŪB Berčiūnai · GVET PRO v1.0.0
+              © 2025 Živatkauskų ūkis · GVET PRO v1.0.0
             </p>
           </div>
         </div>
