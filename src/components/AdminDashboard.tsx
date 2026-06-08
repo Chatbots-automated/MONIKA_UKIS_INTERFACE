@@ -3,9 +3,10 @@ import { UserManagement } from './UserManagement';
 import { AuditLogViewer } from './AuditLogViewer';
 import { UserActivityDashboard } from './UserActivityDashboard';
 import { SecurityMonitor } from './SecurityMonitor';
-import { Users, Activity, Shield, FileText } from 'lucide-react';
+import { VICManagement } from './admin/VICManagement';
+import { Users, Activity, Shield, FileText, Key } from 'lucide-react';
 
-type AdminTab = 'users' | 'activity' | 'audit' | 'security';
+type AdminTab = 'users' | 'activity' | 'audit' | 'security' | 'vic';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
@@ -39,6 +40,7 @@ export function AdminDashboard() {
   const tabs = [
     { id: 'activity' as AdminTab, label: 'Veiklos apžvalga', icon: Activity },
     { id: 'users' as AdminTab, label: 'Vartotojai', icon: Users },
+    { id: 'vic' as AdminTab, label: 'VIC Duomenys', icon: Key },
     { id: 'audit' as AdminTab, label: 'Audito žurnalas', icon: FileText },
     { id: 'security' as AdminTab, label: 'Saugumas', icon: Shield },
   ];
@@ -75,6 +77,7 @@ export function AdminDashboard() {
       <div className="mt-6">
         {activeTab === 'activity' && <UserActivityDashboard />}
         {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'vic' && <VICManagement />}
         {activeTab === 'audit' && <AuditLogViewer />}
         {activeTab === 'security' && <SecurityMonitor />}
       </div>
