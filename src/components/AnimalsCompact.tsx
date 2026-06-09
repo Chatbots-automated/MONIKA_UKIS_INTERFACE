@@ -68,8 +68,8 @@ export function AnimalsCompact() {
 
   const loadData = async () => {
     try {
-      // Fetch ALL animals using pagination helper
-      const allAnimals = await fetchAllRows<Animal>('animals', '*', 'tag_no');
+      // Fetch ALL animals using pagination helper with vic_clients relationship
+      const allAnimals = await fetchAllRows<Animal>('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no');
 
       // Fetch visit summaries
       const summariesData = await fetchAllRows<AnimalVisitSummary>('animal_visit_summary');

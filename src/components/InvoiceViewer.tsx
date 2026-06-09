@@ -17,6 +17,12 @@ interface Invoice {
   total_gross: number;
   vat_rate: number;
   created_at: string;
+  client_id?: string;
+  vic_clients?: {
+    id: string;
+    client_name: string;
+    personal_code: string;
+  };
 }
 
 interface InvoiceItem {
@@ -52,7 +58,7 @@ export function InvoiceViewer() {
     try {
       const { data, error } = await supabase
         .from('invoices')
-        .select('*')
+        .select('*, vic_clients(id, client_name, personal_code)')
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
@@ -158,6 +164,11 @@ export function InvoiceViewer() {
                         <span className="text-xs text-gray-500">({invoice.supplier_code})</span>
                       )}
                     </div>
+                    {invoice.vic_clients && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Klientas: <span className="font-medium text-gray-700">{invoice.vic_clients.client_name}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-xl font-bold text-emerald-700">

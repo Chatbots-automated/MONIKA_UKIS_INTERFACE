@@ -1116,21 +1116,11 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center mb-4">
                 <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-600" />
                   Gyvūno informacija
                 </h3>
-                <button
-                  onClick={() => {
-                    const url = `https://app.brolisherdline.com/animals#search=${encodeURIComponent(animal.tag_no || '')}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Atidaryti brolio sistemą
-                </button>
               </div>
               
               {/* Ausies numeris - centered at top */}
@@ -1140,6 +1130,23 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
                   <span className="font-bold text-blue-600 text-lg">{animal.tag_no || '-'}</span>
                 </div>
               </div>
+
+              {/* Savininkas - Owner Information */}
+              {(animal.vic_clients?.client_name || animal.holder_name) && (
+                <div className="mb-4">
+                  <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                    <span className="text-xs text-gray-500 block mb-1">Savininkas</span>
+                    <span className="font-bold text-emerald-700 text-base">
+                      {animal.vic_clients?.client_name || animal.holder_name || '-'}
+                    </span>
+                    {animal.vic_clients?.personal_code && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Asmens kodas: {animal.vic_clients.personal_code}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Two column layout */}
               <div className="grid grid-cols-2 gap-3">

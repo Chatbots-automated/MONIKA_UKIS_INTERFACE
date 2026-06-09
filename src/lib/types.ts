@@ -60,6 +60,12 @@ export interface Animal {
   holder_address: string | null;
   created_at: string;
   group_number?: string | null;
+  vic_client_id?: string | null;
+  vic_clients?: {
+    id: string;
+    client_name: string;
+    personal_code: string;
+  };
 }
 
 export interface Disease {

@@ -38,7 +38,7 @@ export function Synchronizations() {
     try {
       // Load animals and collar data in parallel
       const [allAnimals, collarMap] = await Promise.all([
-        fetchAllRows<Animal>('animals', '*', 'tag_no'),
+        fetchAllRows<Animal>('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
         fetchLatestCollarNumbers()
       ]);
 

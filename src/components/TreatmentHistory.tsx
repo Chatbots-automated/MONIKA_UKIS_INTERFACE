@@ -249,7 +249,7 @@ export function TreatmentHistory() {
                                     e.stopPropagation();
                                     const { data: animalData } = await supabase
                                       .from('animals')
-                                      .select('*')
+                                      .select('*, vic_clients(id, client_name, personal_code)')
                                       .eq('id', treatment.animal_id)
                                       .maybeSingle();
                                     if (animalData) {

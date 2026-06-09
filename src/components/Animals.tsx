@@ -15,6 +15,8 @@ interface AnimalDetail extends Animal {
 export function Animals() {
   const { logAction } = useAuth();
   const [animals, setAnimals] = useState<Animal[]>([]);
+  const [vicClients, setVicClients] = useState<Array<{ id: string; client_name: string }>>([]);
+  const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [selectedAnimal, setSelectedAnimal] = useState<AnimalDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -39,12 +41,13 @@ export function Animals() {
 
   useEffect(() => {
     loadData();
+    loadVicClients();
   }, []);
 
   const loadData = async () => {
     try {
       const [allAnimals, productsRes, diseasesRes, collarMap, groupMap] = await Promise.all([
-        fetchAllRows<Animal>('animals', '*', 'tag_no'),
+        fetchAllRows<Animal>('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
         // Exclude hoof_care products - they are only for nagos section
         supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
         supabase.from('diseases').select('*'),
@@ -71,6 +74,21 @@ export function Animals() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadVicClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vic_clients')
+        .select('id, client_name')
+        .eq('is_active', true)
+        .order('client_name');
+
+      if (error) throw error;
+      setVicClients(data || []);
+    } catch (error) {
+      console.error('Error loading VIC clients:', error);
     }
   };
 
@@ -243,6 +261,7 @@ export function Animals() {
     return animals.filter(animal => {
       let matchesGeneral = true;
       let matchesNeck = true;
+      let matchesClient = true;
 
       // Filter by general search term
       if (generalTerm) {
@@ -268,7 +287,16 @@ export function Animals() {
         matchesNeck = collarNo === neckTrimmed;
       }
 
-      return matchesGeneral && matchesNeck;
+      // Filter by client
+      if (selectedClientFilter !== 'all') {
+        if (selectedClientFilter === 'unassigned') {
+          matchesClient = !animal.vic_client_id;
+        } else {
+          matchesClient = animal.vic_client_id === selectedClientFilter;
+        }
+      }
+
+      return matchesGeneral && matchesNeck && matchesClient;
     });
   };
 
@@ -349,10 +377,27 @@ export function Animals() {
                   Savininko informacija
                 </h3>
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-600">Savininkas</p>
-                    <p className="font-medium text-gray-900">{selectedAnimal.holder_name || 'N/A'}</p>
-                  </div>
+                  {selectedAnimal.vic_clients?.client_name && (
+                    <div>
+                      <p className="text-sm text-gray-600">Savininkas</p>
+                      <p className="font-medium text-gray-900">{selectedAnimal.vic_clients.client_name}</p>
+                      {selectedAnimal.vic_clients.personal_code && (
+                        <p className="text-xs text-gray-500">Asmens kodas: {selectedAnimal.vic_clients.personal_code}</p>
+                      )}
+                    </div>
+                  )}
+                  {!selectedAnimal.vic_clients?.client_name && selectedAnimal.holder_name && (
+                    <div>
+                      <p className="text-sm text-gray-600">Laikytojas (VIC)</p>
+                      <p className="font-medium text-gray-900">{selectedAnimal.holder_name}</p>
+                    </div>
+                  )}
+                  {!selectedAnimal.vic_clients?.client_name && !selectedAnimal.holder_name && (
+                    <div>
+                      <p className="text-sm text-gray-600">Savininkas</p>
+                      <p className="font-medium text-gray-900">N/A</p>
+                    </div>
+                  )}
                   {selectedAnimal.holder_address && (
                     <div>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
@@ -930,6 +975,43 @@ export function Animals() {
         </div>
       </div>
 
+      {/* Client Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedClientFilter('all')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            selectedClientFilter === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Visi gyvūnai
+        </button>
+        <button
+          onClick={() => setSelectedClientFilter('unassigned')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            selectedClientFilter === 'unassigned'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Nepriskirta
+        </button>
+        {vicClients.map(client => (
+          <button
+            key={client.id}
+            onClick={() => setSelectedClientFilter(client.id)}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedClientFilter === client.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {client.client_name}
+          </button>
+        ))}
+      </div>
+
       {showAdd && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Naujas gyvūnas</h3>
@@ -1102,7 +1184,9 @@ export function Animals() {
                         {animal.age_months ? `${animal.age_months} mėn.` : 'N/A'}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{animal.holder_name || 'N/A'}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {animal.vic_clients?.client_name || animal.holder_name || 'N/A'}
+                        </div>
                         <div className="text-xs text-gray-500">{animal.holder_address || ''}</div>
                       </td>
                       <td className="px-6 py-4">

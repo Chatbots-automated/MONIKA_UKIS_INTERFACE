@@ -19,6 +19,8 @@ interface StockItem {
   package_size?: number | null;
   package_count?: number | null;
   primary_pack_size?: number | null;
+  client_id?: string | null;
+  client_name?: string;
 }
 
 interface EditingData {
@@ -34,6 +36,8 @@ interface EditingData {
 export function Inventory() {
   const { logAction } = useAuth();
   const [inventory, setInventory] = useState<StockItem[]>([]);
+  const [vicClients, setVicClients] = useState<Array<{ id: string; client_name: string }>>([]);
+  const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -42,6 +46,7 @@ export function Inventory() {
 
   useEffect(() => {
     loadInventory();
+    loadVicClients();
   }, []);
 
   useRealtimeSubscription({
@@ -69,7 +74,7 @@ export function Inventory() {
 
   const loadInventory = async () => {
     try {
-      // Get batches with their products
+      // Get batches with their products and client info
       const { data: batchesData, error: batchesError } = await supabase
         .from('batches')
         .select(`
@@ -82,11 +87,16 @@ export function Inventory() {
           qty_left,
           package_size,
           package_count,
+          client_id,
           products!inner(
             name,
             category,
             primary_pack_unit,
             primary_pack_size
+          ),
+          vic_clients(
+            id,
+            client_name
           )
         `);
 
@@ -106,6 +116,8 @@ export function Inventory() {
         primary_pack_size: batch.products?.primary_pack_size,
         package_size: batch.package_size,
         package_count: batch.package_count,
+        client_id: batch.client_id,
+        client_name: batch.vic_clients?.client_name,
       })) || [];
 
       // Filter out expired batches
@@ -117,13 +129,15 @@ export function Inventory() {
         return expiryDate >= today;
       });
 
-      // Group batches by product_id and sum up quantities
+      // Group batches by product_id AND client_id, then sum up quantities
       const productMap = new Map<string, { item: StockItem, batchCount: number, lots: Set<string> }>();
 
       validBatches.forEach(batch => {
-        const existing = productMap.get(batch.product_id);
+        // Create a composite key using product_id and client_id
+        const compositeKey = `${batch.product_id}_${batch.client_id || 'unassigned'}`;
+        const existing = productMap.get(compositeKey);
         if (existing) {
-          // Product already exists, sum the quantities
+          // Product already exists for this client, sum the quantities
           existing.item.on_hand += batch.on_hand;
           existing.batchCount += 1;
           if (batch.lot) existing.lots.add(batch.lot);
@@ -132,10 +146,10 @@ export function Inventory() {
             existing.item.expiry_date = batch.expiry_date;
           }
         } else {
-          // First time seeing this product, add it
+          // First time seeing this product for this client, add it
           const lots = new Set<string>();
           if (batch.lot) lots.add(batch.lot);
-          productMap.set(batch.product_id, {
+          productMap.set(compositeKey, {
             item: { ...batch },
             batchCount: 1,
             lots
@@ -166,6 +180,21 @@ export function Inventory() {
     }
   };
 
+  const loadVicClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vic_clients')
+        .select('id, client_name')
+        .eq('is_active', true)
+        .order('client_name');
+
+      if (error) throw error;
+      setVicClients(data || []);
+    } catch (error) {
+      console.error('Error loading VIC clients:', error);
+    }
+  };
+
   const filteredInventory = inventory.filter(item => {
     const matchesSearch = !searchTerm ||
       item.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -173,7 +202,11 @@ export function Inventory() {
 
     const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
 
-    return matchesSearch && matchesCategory;
+    const matchesClient = selectedClientFilter === 'all' || 
+      (selectedClientFilter === 'unassigned' && !item.client_id) ||
+      item.client_id === selectedClientFilter;
+
+    return matchesSearch && matchesCategory && matchesClient;
   });
 
   const isExpiringSoon = (expiryDate: string | null) => {
@@ -319,6 +352,7 @@ export function Inventory() {
     const exportData = filteredInventory.map(item => ({
       'Produktas': item.product_name || '',
       'Kategorija': translateCategory(item.category || ''),
+      'Savininkas': item.client_name || 'Nepriskirta',
       'Kiekis': item.on_hand,
       'Vienetas': item.unit || '',
       'Pakuotės dydis': item.primary_pack_size || '',
@@ -337,6 +371,7 @@ export function Inventory() {
     const columnWidths = [
       { wch: 30 }, // Produktas
       { wch: 20 }, // Kategorija
+      { wch: 25 }, // Savininkas
       { wch: 10 }, // Kiekis
       { wch: 12 }, // Vienetas
       { wch: 15 }, // Pakuotės dydis
@@ -413,6 +448,43 @@ export function Inventory() {
         </button>
       </div>
 
+      {/* Client Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedClientFilter('all')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            selectedClientFilter === 'all'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Visos atsargos
+        </button>
+        <button
+          onClick={() => setSelectedClientFilter('unassigned')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            selectedClientFilter === 'unassigned'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Nepriskirta
+        </button>
+        {vicClients.map(client => (
+          <button
+            key={client.id}
+            onClick={() => setSelectedClientFilter(client.id)}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedClientFilter === client.id
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {client.client_name}
+          </button>
+        ))}
+      </div>
+
       {filteredInventory.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -429,6 +501,9 @@ export function Inventory() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Kategorija
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Savininkas
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     LOT
@@ -486,6 +561,11 @@ export function Inventory() {
                           {translateCategory(item.category)}
                         </span>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-600">
+                        {item.client_name || 'Nepriskirta'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       {editingBatchId === item.batch_id && editingData ? (

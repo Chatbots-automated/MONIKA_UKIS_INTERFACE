@@ -12,6 +12,8 @@ export function ReceiveStock() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inseminationProducts, setInseminationProducts] = useState<InseminationProduct[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [vicClients, setVicClients] = useState<Array<{ id: string; client_name: string; personal_code: string }>>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -91,15 +93,17 @@ export function ReceiveStock() {
   });
 
   const loadData = async () => {
-    const [productsRes, inseminationProductsRes, suppliersRes] = await Promise.all([
+    const [productsRes, inseminationProductsRes, suppliersRes, vicClientsRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true).order('name'),
       supabase.from('insemination_products').select('*').eq('is_active', true).order('name'),
       supabase.from('suppliers').select('*').order('name'),
+      supabase.from('vic_clients').select('id, client_name, personal_code').eq('is_active', true).order('client_name'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
     if (inseminationProductsRes.data) setInseminationProducts(inseminationProductsRes.data);
     if (suppliersRes.data) setSuppliers(suppliersRes.data);
+    if (vicClientsRes.data) setVicClients(vicClientsRes.data);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -486,6 +490,7 @@ export function ReceiveStock() {
           total_gross: parseFloat(invoiceData.invoice.total_gross) || 0,
           vat_rate: parseFloat(invoiceData.invoice.vat_rate) || 0,
           pdf_filename: selectedFile?.name || null,
+          client_id: selectedClientId || null,
         })
         .select()
         .single();
@@ -532,6 +537,7 @@ export function ReceiveStock() {
           package_size: packageSize,
           package_count: packageCount,
           received_qty: packageSize && packageCount ? packageSize * packageCount : qty,
+          client_id: selectedClientId || null,
         });
 
         // Store invoice item data for later insertion (use webhook's original values)
@@ -840,6 +846,27 @@ export function ReceiveStock() {
                 </div>
               )}
 
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Klientas (Savininkas)
+                </label>
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">-- Nepriskirta --</option>
+                  {vicClients.map(client => (
+                    <option key={client.id} value={client.id}>
+                      {client.client_name} ({client.personal_code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500">
+                  Pasirinkite klientą, kuriam bus priskirta ši sąskaita
+                </p>
+              </div>
+
               <button
                 onClick={handleFileUpload}
                 disabled={uploadStatus === 'uploading'}
@@ -902,6 +929,12 @@ export function ReceiveStock() {
                     <div>
                       <p className="text-xs text-gray-600 mb-1">PVM kodas</p>
                       <p className="font-semibold text-gray-900">{invoiceData.supplier.vat_code || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Priskirta klientui</p>
+                      <p className="font-semibold text-gray-900">
+                        {selectedClientId ? vicClients.find(c => c.id === selectedClientId)?.client_name || '-' : 'Nepriskirta'}
+                      </p>
                     </div>
                   </div>
 

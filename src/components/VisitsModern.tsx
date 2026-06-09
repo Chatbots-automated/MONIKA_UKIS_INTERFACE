@@ -48,7 +48,7 @@ export function VisitsModern() {
       // Fetch the animal data to ensure it's loaded
       const { data: animalData } = await supabase
         .from('animals')
-        .select('*')
+        .select('*, vic_clients(id, client_name, personal_code)')
         .eq('id', newVisit.animal_id)
         .maybeSingle();
 
@@ -71,7 +71,7 @@ export function VisitsModern() {
       // Fetch the animal data to ensure it's loaded
       const { data: animalData } = await supabase
         .from('animals')
-        .select('*')
+        .select('*, vic_clients(id, client_name, personal_code)')
         .eq('id', updatedVisit.animal_id)
         .maybeSingle();
 
