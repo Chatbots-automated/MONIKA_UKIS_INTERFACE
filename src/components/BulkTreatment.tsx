@@ -69,9 +69,9 @@ export function BulkTreatment() {
 
   const loadData = async () => {
     const [animalsRes, productsRes, batchesRes, collarMap, vetsRes] = await Promise.all([
-      fetchAllRows<Animal>('animals', '*', 'tag_no'),
-      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
-      supabase.from('stock_by_batch').select('*').gt('on_hand', 0),
+      fetchAllRows<Animal>('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
+      supabase.from('products').select('*').eq('is_active', true),
+      supabase.from('stock_by_batch').select('*, batches!inner(client_id)').gt('on_hand', 0),
       fetchLatestCollarNumbers(),
       supabase.from('treatments').select('vet_name').not('vet_name', 'is', null),
     ]);
@@ -155,6 +155,42 @@ export function BulkTreatment() {
     setSelectedAnimals([]);
   };
 
+  // Filter batches based on selected animals' owners
+  const getAvailableBatches = (): StockByBatch[] => {
+    console.log('🔍 [Vienkartinis] Selected animals:', selectedAnimals.length);
+    
+    if (selectedAnimals.length === 0) {
+      // No animals selected - show all batches
+      console.log('🔍 [Vienkartinis] No animals selected, showing all batches');
+      return batches;
+    }
+
+    // Get unique client IDs from selected animals
+    const selectedClientIds = new Set(
+      selectedAnimals
+        .map(animal => (animal as any).vic_client_id)
+        .filter(Boolean)
+    );
+    
+    console.log('🔍 [Vienkartinis] Selected client IDs:', Array.from(selectedClientIds));
+
+    // If no animals have assigned clients, show unassigned stock
+    if (selectedClientIds.size === 0) {
+      const unassignedBatches = batches.filter(batch => !(batch as any).batches?.client_id);
+      console.log('🔍 [Vienkartinis] No assigned clients, showing unassigned batches:', unassignedBatches.length);
+      return unassignedBatches;
+    }
+
+    // Show ONLY batches that belong to the selected animals' owners (no unassigned stock)
+    const filteredBatches = batches.filter(batch => {
+      const batchClientId = (batch as any).batches?.client_id;
+      return batchClientId && selectedClientIds.has(batchClientId);
+    });
+    
+    console.log('🔍 [Vienkartinis] Filtered batches for owners:', filteredBatches.length);
+    return filteredBatches;
+  };
+
   const addMedication = () => {
     setSelectedMedications([
       ...selectedMedications,
@@ -174,19 +210,6 @@ export function BulkTreatment() {
     ));
   };
 
-  const suggestFIFOBatch = async (productId: string) => {
-    if (!productId) return null;
-
-    const { data, error } = await supabase.rpc('fn_fifo_batch', { p_product_id: productId });
-
-    if (error) {
-      console.error('FIFO error:', error);
-      return null;
-    }
-
-    return data;
-  };
-
   const handleProductChange = async (itemId: string, productId: string) => {
     // Update product and clear batch
     setSelectedMedications(prev => prev.map(item =>
@@ -201,11 +224,38 @@ export function BulkTreatment() {
       ));
     }
 
-    // Suggest and set FIFO batch
-    const suggestedBatch = await suggestFIFOBatch(productId);
-    if (suggestedBatch) {
+    // Get client IDs from selected animals for owner-aware batch selection
+    const selectedClientIds = new Set(
+      selectedAnimals
+        .map(animal => (animal as any).vic_client_id)
+        .filter(Boolean)
+    );
+
+    // Build query to get the first available batch respecting owner filtering
+    let batchQuery = supabase
+      .from('batches')
+      .select('id')
+      .eq('product_id', productId)
+      .gt('qty_left', 0)
+      .order('expiry_date', { ascending: true });
+
+    // Apply same filtering logic as getAvailableBatches
+    if (selectedClientIds.size === 0) {
+      // No animals with owners - show only unassigned stock
+      batchQuery = batchQuery.is('client_id', null);
+    } else {
+      // Build OR condition for client IDs (ONLY owner's stock, no unassigned)
+      const clientIdConditions = Array.from(selectedClientIds)
+        .map(id => `client_id.eq.${id}`)
+        .join(',');
+      batchQuery = batchQuery.or(clientIdConditions);
+    }
+
+    const { data: suggestedBatch } = await batchQuery.limit(1);
+
+    if (suggestedBatch && suggestedBatch.length > 0) {
       setSelectedMedications(prev => prev.map(item =>
-        item.id === itemId ? { ...item, batch_id: suggestedBatch } : item
+        item.id === itemId ? { ...item, batch_id: suggestedBatch[0].id } : item
       ));
     }
   };
@@ -404,6 +454,33 @@ export function BulkTreatment() {
             </button>
           </div>
 
+          {/* Owner info indicator */}
+          {selectedAnimals.length > 0 && (() => {
+            const uniqueOwners = Array.from(new Set(
+              selectedAnimals
+                .map(animal => (animal as any).vic_clients?.client_name)
+                .filter(Boolean)
+            ));
+            
+            if (uniqueOwners.length > 0) {
+              return (
+                <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <p className="text-sm text-emerald-800">
+                    <strong>Rodomas sandėlis:</strong> {uniqueOwners.join(', ')}
+                  </p>
+                </div>
+              );
+            } else {
+              return (
+                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <strong>Rodomas sandėlis:</strong> Nepriskirtos atsargos
+                  </p>
+                </div>
+              );
+            }
+          })()}
+
           <div className="space-y-3">
             {selectedMedications.map((med, index) => (
               <div key={med.id} className="flex gap-3 items-start bg-gray-50 p-4 rounded-lg">
@@ -444,11 +521,11 @@ export function BulkTreatment() {
                       disabled={!med.product_id}
                     >
                       <option value="">Pasirinkite partiją</option>
-                      {batches
+                      {getAvailableBatches()
                         .filter(b => b.product_id === med.product_id)
                         .map(batch => (
                           <option key={batch.batch_id} value={batch.batch_id}>
-                            {batch.lot || 'Be partijos'} - {getBatchInfo(batch.batch_id)}
+                            {batch.lot || 'Be partijos'} - {getBatchInfo(batch.batch_id)} {batch.on_hand > 0 ? `(Likutis: ${batch.on_hand.toFixed(2)})` : ''}
                           </option>
                         ))}
                     </select>

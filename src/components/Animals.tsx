@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Animal, Product, Disease } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAllRows, formatAnimalDisplay, fetchLatestCollarNumbers, fetchLatestGroupNumbers } from '../lib/helpers';
-import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, RefreshCw, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, Save, X, Stethoscope, Search, Syringe, Activity, FileText, Calendar, AlertCircle, User, MapPin, ExternalLink } from 'lucide-react';
 
 interface AnimalDetail extends Animal {
   treatments?: any[];
@@ -20,7 +20,6 @@ export function Animals() {
   const [selectedAnimal, setSelectedAnimal] = useState<AnimalDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,7 +48,7 @@ export function Animals() {
       const [allAnimals, productsRes, diseasesRes, collarMap, groupMap] = await Promise.all([
         fetchAllRows<Animal>('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
         // Exclude hoof_care products - they are only for nagos section
-        supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
+        supabase.from('products').select('*').eq('is_active', true),
         supabase.from('diseases').select('*'),
         fetchLatestCollarNumbers(),
         fetchLatestGroupNumbers(),
@@ -89,32 +88,6 @@ export function Animals() {
       setVicClients(data || []);
     } catch (error) {
       console.error('Error loading VIC clients:', error);
-    }
-  };
-
-  const handleRefreshAnimals = async () => {
-    setRefreshing(true);
-    try {
-      const response = await fetch('https://n8n-up8s.onrender.com/webhook-test/112e7037-0627-4635-a9a0-93db432b8f02', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setTimeout(async () => {
-          await loadData();
-          alert('Gyvūnų duomenys atnaujinti!');
-        }, 2000);
-      } else {
-        throw new Error('Failed to trigger refresh');
-      }
-    } catch (error) {
-      console.error('Error refreshing animals:', error);
-      alert('Klaida atnaujinant gyvūnus');
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -933,14 +906,6 @@ export function Animals() {
         </div>
         {!showAdd && (
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleRefreshAnimals}
-              disabled={refreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Atnaujinama...' : 'Atnaujinti iš VIC'}
-            </button>
             <button
               onClick={() => setShowAdd(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"

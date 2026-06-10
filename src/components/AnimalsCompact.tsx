@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Animal, AnimalVisitSummary } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Edit2, Save, X, Search, RefreshCw, Calendar, Clock } from 'lucide-react';
+import { Plus, Edit2, Save, X, Search, Calendar, Clock } from 'lucide-react';
 import { AnimalDetailSidebar } from './AnimalDetailSidebar';
 import { formatDateTimeLT } from '../lib/formatters';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
@@ -21,7 +21,6 @@ export function AnimalsCompact() {
   const [geaCollars, setGeaCollars] = useState<Map<string, number>>(new Map());
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -109,32 +108,6 @@ export function AnimalsCompact() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleRefreshAnimals = async () => {
-    setRefreshing(true);
-    try {
-      const response = await fetch('https://n8n-up8s.onrender.com/webhook-test/112e7037-0627-4635-a9a0-93db432b8f02', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setTimeout(async () => {
-          await loadData();
-          alert('Gyvūnų duomenys atnaujinti!');
-        }, 2000);
-      } else {
-        throw new Error('Failed to trigger refresh');
-      }
-    } catch (error) {
-      console.error('Error refreshing animals:', error);
-      alert('Klaida atnaujinant gyvūnus');
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -251,14 +224,6 @@ export function AnimalsCompact() {
           </div>
         </div>
         <div className="flex gap-2 justify-end">
-          <button
-            onClick={handleRefreshAnimals}
-            disabled={refreshing}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-            Atnaujinti iš VIC
-          </button>
           <button
             onClick={() => setShowAdd(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"

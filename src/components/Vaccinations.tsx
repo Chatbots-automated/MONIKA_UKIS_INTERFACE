@@ -87,8 +87,8 @@ export function Vaccinations() {
       const [vacsRes, prodsRes, animalsRes, batchesRes, collarMap, groupMap] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
-        fetchAllRows('animals', '*', 'tag_no', [{ column: 'active', value: true }]),
-        supabase.from('batches').select('*').order('expiry_date', { ascending: false }),
+        fetchAllRows('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no', [{ column: 'active', value: true }]),
+        supabase.from('batches').select('*, client_id').order('expiry_date', { ascending: false }),
         fetchLatestCollarNumbers(),
         fetchLatestGroupNumbers(),
       ]);
@@ -99,6 +99,7 @@ export function Vaccinations() {
       setProducts(prodsRes.data || []);
       setAnimals(animalsRes || []);
       setBatches(batchesRes.data || []);
+      console.log('🔍 [Bulk Vaccination] Loaded batches with client_id:', batchesRes.data?.length);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -106,14 +107,81 @@ export function Vaccinations() {
     }
   };
 
+  const getAvailableBatches = (productId: string): Batch[] => {
+    console.log('🔍 [Bulk Vaccination] Selected animals:', selectedAnimals.size);
+    
+    if (selectedAnimals.size === 0) {
+      // No animals selected - show all batches
+      console.log('🔍 [Bulk Vaccination] No animals selected, showing all batches');
+      return batches.filter(b => b.product_id === productId);
+    }
+
+    // Get unique client IDs from selected animals
+    const selectedClientIds = new Set(
+      Array.from(selectedAnimals)
+        .map(animalId => {
+          const animal = animals.find(a => a.id === animalId);
+          return (animal as any)?.vic_client_id;
+        })
+        .filter(Boolean)
+    );
+    
+    console.log('🔍 [Bulk Vaccination] Selected client IDs:', Array.from(selectedClientIds));
+
+    // Filter batches by product
+    let filteredBatches = batches.filter(b => b.product_id === productId);
+
+    // If no animals have assigned clients, show unassigned stock
+    if (selectedClientIds.size === 0) {
+      filteredBatches = filteredBatches.filter(batch => !(batch as any).client_id);
+      console.log('🔍 [Bulk Vaccination] No assigned clients, showing unassigned batches:', filteredBatches.length);
+      return filteredBatches;
+    }
+
+    // Show ONLY batches that belong to the selected animals' owners (no unassigned stock)
+    filteredBatches = filteredBatches.filter(batch => {
+      const batchClientId = (batch as any).client_id;
+      return batchClientId && selectedClientIds.has(batchClientId);
+    });
+    
+    console.log('🔍 [Bulk Vaccination] Filtered batches for owners:', filteredBatches.length);
+    return filteredBatches;
+  };
+
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
-      const { data, error } = await supabase
+      // Get unique client IDs from selected animals
+      const selectedClientIds = new Set(
+        Array.from(selectedAnimals)
+          .map(animalId => {
+            const animal = animals.find(a => a.id === animalId);
+            return (animal as any)?.vic_client_id;
+          })
+          .filter(Boolean)
+      );
+
+      let query = supabase
         .from('batches')
-        .select('id, qty_left, expiry_date')
+        .select('id, qty_left, expiry_date, client_id')
         .eq('product_id', productId)
         .gt('qty_left', 0)
         .order('expiry_date', { ascending: true });
+
+      // Filter by owner
+      if (selectedClientIds.size === 0) {
+        // No animals with owners - show only unassigned stock
+        query = query.is('client_id', null);
+        console.log('🔍 [Bulk Vaccination] Auto-selecting from unassigned stock');
+      } else {
+        // Build OR condition for client IDs (ONLY owner's stock, no unassigned)
+        const clientIdConditions = Array.from(selectedClientIds)
+          .map(id => `client_id.eq.${id}`)
+          .join(',');
+        query = query.or(clientIdConditions);
+        console.log('🔍 [Bulk Vaccination] Auto-selecting from owners:', Array.from(selectedClientIds));
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching batch stock:', error);
@@ -434,6 +502,43 @@ export function Vaccinations() {
               </button>
             </div>
 
+            {/* Owner stock indicator */}
+            {selectedAnimals.size > 0 && (() => {
+              const selectedClientIds = new Set(
+                Array.from(selectedAnimals)
+                  .map(animalId => {
+                    const animal = animals.find(a => a.id === animalId);
+                    return (animal as any)?.vic_client_id;
+                  })
+                  .filter(Boolean)
+              );
+
+              const uniqueOwners = Array.from(selectedClientIds)
+                .map(clientId => {
+                  const animal = animals.find(a => (a as any).vic_client_id === clientId);
+                  return (animal as any)?.vic_clients?.client_name;
+                })
+                .filter(Boolean);
+
+              if (uniqueOwners.length > 0) {
+                return (
+                  <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <p className="text-sm text-emerald-800">
+                      <strong>Rodomas sandėlis:</strong> {uniqueOwners.join(', ')}
+                    </p>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-sm text-gray-600">
+                      <strong>Rodomas sandėlis:</strong> Nepriskirtos atsargos
+                    </p>
+                  </div>
+                );
+              }
+            })()}
+
             <div className="space-y-3">
               {massVaccines.map((vaccine, idx) => (
                 <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -482,7 +587,7 @@ export function Vaccinations() {
                           className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Pasirinkite partiją</option>
-                          {batches.filter(b => b.product_id === vaccine.product_id).map(b => (
+                          {getAvailableBatches(vaccine.product_id).map(b => (
                             <option key={b.id} value={b.id}>
                               {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                             </option>

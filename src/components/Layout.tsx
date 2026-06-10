@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Package,
   FileText,
-  Pill,
   Syringe,
   AlertTriangle,
   Droplet,
@@ -37,7 +36,6 @@ interface LayoutProps {
 const menuItems = [
   { id: 'dashboard', label: 'Pagrindinis', icon: LayoutDashboard, permission: 'view' },
   { id: 'inventory', label: 'Atsargos', icon: Package, permission: 'view' },
-  { id: 'receive', label: 'Priėmimas', icon: FileText, permission: 'receive_stock' },
   { id: 'animals', label: 'Gyvūnai', icon: Stethoscope, permission: 'animals' },
   { id: 'visits', label: 'Vizitai', icon: Calendar, permission: 'animals' },
   { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
@@ -48,8 +46,6 @@ const menuItems = [
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
-  { id: 'products', label: 'Produktai', icon: Pill, permission: 'products' },
-  { id: 'reports', label: 'Ataskaitos', icon: FileText, permission: 'view' },
   { id: 'users', label: 'Vartotojai', icon: Users, permission: 'manage_users' },
 ];
 

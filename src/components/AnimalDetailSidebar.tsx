@@ -189,10 +189,7 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         .eq('id', animalId)
         .single();
 
-      console.log('🔍 Animal data:', { animalId, tag_no: animalData?.tag_no });
-
       if (!animalData?.tag_no) {
-        console.log('❌ No tag_no found for animal');
         setLoading(false);
         return;
       }
@@ -206,12 +203,9 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         .maybeSingle();
 
       if (!latestImport) {
-        console.log('❌ No GEA imports found');
         setLoading(false);
         return;
       }
-
-      console.log('🔍 Latest import:', latestImport);
 
       // First get ataskaita1 to find the cow_number
       const { data: a1Data } = await supabase
@@ -222,11 +216,9 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
         .maybeSingle();
 
       if (!a1Data) {
-        console.log('❌ No ataskaita1 data found for this animal, trying old gea_daily table');
         // Fall through to fallback below
       } else {
       const cowNumber = a1Data.cow_number;
-      console.log('🔍 Found cow_number:', cowNumber);
 
       // Now get ataskaita2 and ataskaita3 using cow_number
       const [a2Result, a3Result] = await Promise.all([
@@ -329,7 +321,6 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
       }
 
     // Fallback: try old gea_daily table when animal not in ataskaita1 (e.g. different tag format)
-    console.log('⚠️ No new GEA data, trying old gea_daily table');
     const { data: oldGeaData, error: oldGeaError } = await supabase
         .from('gea_daily')
         .select('*')
@@ -340,12 +331,10 @@ function GeaDailyCard({ animalId, onStatusChange }: { animalId: string; onStatus
 
       if (oldGeaError) {
         // Old table might not exist anymore - that's okay
-        console.log('⚠️ Old gea_daily table not found or error:', oldGeaError.message);
         setLoading(false);
         return;
       }
       
-      console.log('Old GEA data:', oldGeaData);
       setGeaData(oldGeaData);
       setPrevStatus(oldGeaData?.statusas || null);
     } catch (error) {
@@ -868,8 +857,6 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       .order('reg_date', { ascending: false });
 
     if (!error && treatmentsData) {
-      console.log('📥 Loaded treatments:', treatmentsData.length);
-
       const treatmentsWithItems = await Promise.all(
         treatmentsData.map(async (treatment: any) => {
           // Load both usage_items (single doses) and treatment_courses (multi-day courses)
@@ -1049,6 +1036,7 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
           </h2>
           <p className="text-xs xl:text-sm text-gray-600">
             {animal.species} {animal.sex && `• ${animal.sex}`} {animal.age_months && `• ${animal.age_months}`}<span className="xl:hidden">m</span><span className="hidden xl:inline"> mėn.</span>
+            {animal.collar_no && ` • Kaklo nr: ${animal.collar_no}`}
           </p>
         </div>
         <button
@@ -2344,6 +2332,9 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const temperatureSectionRef = useRef<HTMLDivElement>(null);
   const hoofSectionRef = useRef<HTMLDivElement>(null);
 
+  // Store animal's owner info for stock filtering
+  const [animalOwnerClientId, setAnimalOwnerClientId] = useState<string | null>(null);
+
   const isEditMode = !!visitToEdit;
 
   const [formData, setFormData] = useState({
@@ -2461,6 +2452,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   useEffect(() => {
     loadResources();
+    loadAnimalOwner();
     if (isEditMode && visitToEdit) {
       loadExistingData();
     }
@@ -2722,18 +2714,60 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   const loadResources = async () => {
     const [productsRes, diseasesRes, batchesRes, usersRes, hoofConditionsRes] = await Promise.all([
       // Exclude hoof_care products - they are only for nagos section
-      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
+      supabase.from('products').select('*').eq('is_active', true),
       supabase.from('diseases').select('*').order('name'),
-      supabase.from('batches').select('*').order('expiry_date'),
+      supabase.from('batches').select('*, client_id').order('expiry_date'),
       supabase.from('users').select('id, full_name, email').eq('role', 'vet').order('full_name'),
       supabase.from('hoof_condition_codes').select('*').order('code'),
     ]);
 
     if (productsRes.data) setProducts(productsRes.data);
     if (diseasesRes.data) setDiseases(diseasesRes.data);
-    if (batchesRes.data) setBatches(batchesRes.data);
+    if (batchesRes.data) {
+      console.log('🔍 [Prevention] Loaded batches with client_id:', batchesRes.data.length);
+      setBatches(batchesRes.data);
+    }
     if (usersRes.data) setUsers(usersRes.data);
     if (hoofConditionsRes.data) setHoofConditions(hoofConditionsRes.data);
+  };
+
+  const loadAnimalOwner = async () => {
+    const { data, error } = await supabase
+      .from('animals')
+      .select('vic_client_id, vic_clients(client_name)')
+      .eq('id', animalId)
+      .single();
+
+    if (!error && data) {
+      setAnimalOwnerClientId(data.vic_client_id);
+      console.log('🐄 [Prevention] Animal owner client_id:', data.vic_client_id, 'name:', (data as any).vic_clients?.client_name);
+    }
+  };
+
+  // Filter batches by animal's owner for prevention products
+  const getAvailableBatchesForPrevention = (productId: string) => {
+    console.log('🔍 [Prevention] Filtering batches for product:', productId, 'owner client_id:', animalOwnerClientId);
+    
+    let filteredBatches = batches.filter(b => b.product_id === productId);
+    console.log('🔍 [Prevention] Total batches for product:', filteredBatches.length);
+
+    if (!animalOwnerClientId) {
+      // Animal has no owner - show only unassigned stock
+      filteredBatches = filteredBatches.filter(batch => !batch.client_id);
+      console.log('🔍 [Prevention] Animal has no owner, showing unassigned batches:', filteredBatches.length);
+    } else {
+      // Show ONLY batches that belong to this animal's owner (no unassigned stock)
+      filteredBatches = filteredBatches.filter(batch => batch.client_id === animalOwnerClientId);
+      console.log('🔍 [Prevention] Showing ONLY owner batches:', filteredBatches.length);
+    }
+
+    // Also filter out expired batches
+    const nonExpiredBatches = filteredBatches.filter(b =>
+      !b.expiry_date || new Date(b.expiry_date) >= new Date()
+    );
+    console.log('🔍 [Prevention] Non-expired batches:', nonExpiredBatches.length);
+    
+    return nonExpiredBatches;
   };
 
   const handleCreateDisease = async () => {
@@ -2764,12 +2798,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
   };
 
   const fetchStockLevel = async (productId: string) => {
-    const { data: batchesData, error } = await supabase
+    let query = supabase
       .from('batches')
-      .select('id, received_qty, qty_left, expiry_date')
+      .select('id, received_qty, qty_left, expiry_date, client_id')
       .eq('product_id', productId);
 
-    if (error || !batchesData) return 0;
+    // Filter by owner
+    if (!animalOwnerClientId) {
+      // Animal has no owner - show only unassigned stock
+      query = query.is('client_id', null);
+      console.log('🔍 [StockLevel] Calculating for animal with no owner (unassigned stock)');
+    } else {
+      // Show ONLY batches that belong to this animal's owner
+      query = query.eq('client_id', animalOwnerClientId);
+      console.log('🔍 [StockLevel] Calculating for owner:', animalOwnerClientId);
+    }
+
+    const { data: batchesData, error } = await query;
+
+    if (error || !batchesData) {
+      console.log('🔍 [StockLevel] Error or no data:', error);
+      return 0;
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -2783,6 +2833,8 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
     // Use qty_left from batches (maintained by database triggers) as the source of truth
     const total = validBatches.reduce((sum, batch) => sum + (batch.qty_left || 0), 0);
+    
+    console.log('🔍 [StockLevel] Total for product:', total, 'from', validBatches.length, 'batches');
 
     setStockLevels(prev => ({ ...prev, [productId]: total }));
     return total;
@@ -2790,11 +2842,23 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
 
   const getOldestBatchWithStock = async (productId: string): Promise<string> => {
     try {
-      const { data: batchesData, error } = await supabase
+      let query = supabase
         .from('batches')
-        .select('id, qty_left, expiry_date')
-        .eq('product_id', productId)
-        .order('expiry_date', { ascending: true });
+        .select('id, qty_left, expiry_date, client_id')
+        .eq('product_id', productId);
+      
+      // Filter by owner
+      if (!animalOwnerClientId) {
+        // Animal has no owner - show only unassigned stock
+        query = query.is('client_id', null);
+        console.log('🔍 [Prevention] Auto-selecting batch for animal with no owner (unassigned stock)');
+      } else {
+        // Show ONLY batches that belong to this animal's owner
+        query = query.eq('client_id', animalOwnerClientId);
+        console.log('🔍 [Prevention] Auto-selecting batch for owner:', animalOwnerClientId);
+      }
+
+      const { data: batchesData, error } = await query.order('expiry_date', { ascending: true });
 
       if (error) {
         console.error('Error fetching batch stock:', error);
@@ -4143,11 +4207,24 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                   {treatmentData.medications.map((med, idx) => {
                     const selectedProduct = products.find(p => p.id === med.product_id);
                     const stockLevel = med.product_id ? stockLevels[med.product_id] : undefined;
-                    const availableBatches = batches.filter(b =>
+                    
+                    // Filter batches by owner
+                    let availableBatches = batches.filter(b =>
                       b.product_id === med.product_id &&
                       (!b.expiry_date || new Date(b.expiry_date) >= new Date()) &&
                       b.qty_left > 0
                     );
+                    
+                    // Apply owner filtering
+                    if (!animalOwnerClientId) {
+                      // Animal has no owner - show only unassigned stock
+                      availableBatches = availableBatches.filter(b => !b.client_id);
+                    } else {
+                      // Show ONLY batches that belong to this animal's owner
+                      availableBatches = availableBatches.filter(b => b.client_id === animalOwnerClientId);
+                    }
+                    
+                    console.log('🔍 [Treatment Gydymas] Available batches for product:', med.product_id, 'count:', availableBatches.length);
 
                     return (
                       <div key={idx} className="bg-white p-3 rounded-lg border-2 border-gray-300 space-y-2">
@@ -4499,14 +4576,28 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite seriją</option>
-                        {batches.filter(b =>
-                          b.product_id === vaccine.product_id &&
-                          (!b.expiry_date || new Date(b.expiry_date) >= new Date())
-                        ).map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
-                          </option>
-                        ))}
+                        {(() => {
+                          // Filter batches by owner
+                          let availableBatches = batches.filter(b =>
+                            b.product_id === vaccine.product_id &&
+                            (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                          );
+                          
+                          // Apply owner filtering
+                          if (!animalOwnerClientId) {
+                            // Animal has no owner - show only unassigned stock
+                            availableBatches = availableBatches.filter(b => !b.client_id);
+                          } else {
+                            // Show ONLY batches that belong to this animal's owner
+                            availableBatches = availableBatches.filter(b => b.client_id === animalOwnerClientId);
+                          }
+                          
+                          return availableBatches.map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
+                            </option>
+                          ));
+                        })()}
                       </select>
                     </div>
 
@@ -4699,10 +4790,7 @@ function VisitCreateModal({ animalId, onClose, onSuccess, visitToEdit }: { anima
                         required
                       >
                         <option value="">Pasirinkite seriją</option>
-                        {batches.filter(b =>
-                          b.product_id === product.product_id &&
-                          (!b.expiry_date || new Date(b.expiry_date) >= new Date())
-                        ).map(b => (
+                        {getAvailableBatchesForPrevention(product.product_id).map(b => (
                           <option key={b.id} value={b.id}>
                             {b.lot || b.serial_number || b.id.slice(0, 8)} · Exp: {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('lt') : 'N/A'} · Likutis: {b.qty_left?.toFixed(2) || '0'}
                           </option>
@@ -5155,7 +5243,7 @@ function VisitDetailModal({ visit, animalId, onClose, onSuccess }: { visit: Anim
   const loadProductsAndBatches = async () => {
     const [productsRes, batchesRes] = await Promise.all([
       // Exclude hoof_care products - they are only for nagos section
-      supabase.from('products').select('*').neq('category', 'hoof_care').order('name'),
+      supabase.from('products').select('*').order('name'),
       supabase.from('batches').select('*').order('expiry_date')
     ]);
 

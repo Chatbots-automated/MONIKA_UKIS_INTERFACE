@@ -50,11 +50,14 @@ export function CourseMedicationScheduler({
   const [step, setStep] = useState<'dates' | 'medications' | 'review'>('dates');
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<Map<string, Batch[]>>(new Map());
+  const [animalClientId, setAnimalClientId] = useState<string | null>(null);
+  const [animalClientName, setAnimalClientName] = useState<string>('');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [dateSchedule, setDateSchedule] = useState<Map<string, ScheduledMedication[]>>(new Map());
   const [currentDateIndex, setCurrentDateIndex] = useState(0);
 
   useEffect(() => {
+    loadAnimalOwner();
     loadProducts();
 
     // Load initial schedule if provided (for editing existing courses)
@@ -88,6 +91,20 @@ export function CourseMedicationScheduler({
     }
   }, [initialStartDate, initialSchedule]);
 
+  const loadAnimalOwner = async () => {
+    const { data, error } = await supabase
+      .from('animals')
+      .select('vic_client_id, vic_clients(client_name)')
+      .eq('id', animalId)
+      .single();
+
+    if (!error && data) {
+      setAnimalClientId(data.vic_client_id);
+      setAnimalClientName((data as any).vic_clients?.client_name || '');
+      console.log('🐄 [Kurso planavimas] Animal owner client_id:', data.vic_client_id, 'name:', (data as any).vic_clients?.client_name);
+    }
+  };
+
   const loadProducts = async () => {
     const { data, error } = await supabase
       .from('products')
@@ -102,15 +119,29 @@ export function CourseMedicationScheduler({
   const loadBatchesForProduct = async (productId: string) => {
     if (batches.has(productId)) return;
 
-    console.log('Loading batches for product:', productId);
-    const { data, error } = await supabase
+    console.log('🔍 [Kurso planavimas] Loading batches for product:', productId, 'client_id:', animalClientId);
+    
+    let query = supabase
       .from('batches')
-      .select('id, batch_number, qty_left')
+      .select('id, batch_number, qty_left, lot, client_id')
       .eq('product_id', productId)
       .gt('qty_left', 0)
       .order('expiry_date', { ascending: true });
 
-    console.log('Batches data:', data, 'error:', error);
+    // Filter by animal's owner if assigned
+    if (animalClientId) {
+      // Show ONLY batches that belong to this animal's owner (no unassigned stock)
+      query = query.eq('client_id', animalClientId);
+      console.log('🔍 [Kurso planavimas] Filtering for owner:', animalClientId);
+    } else {
+      // If animal has no owner, show only unassigned stock
+      query = query.is('client_id', null);
+      console.log('🔍 [Kurso planavimas] No owner, showing unassigned stock');
+    }
+
+    const { data, error } = await query;
+
+    console.log('🔍 [Kurso planavimas] Batches data:', data?.length, 'error:', error);
 
     if (error) {
       console.error('Error loading batches:', error);
@@ -121,7 +152,7 @@ export function CourseMedicationScheduler({
       const newBatches = new Map(batches);
       newBatches.set(productId, data);
       setBatches(newBatches);
-      console.log('Updated batches state:', newBatches);
+      console.log('🔍 [Kurso planavimas] Updated batches state for product');
     }
   };
 
@@ -198,13 +229,24 @@ export function CourseMedicationScheduler({
       console.log('Calling loadBatchesForProduct...');
       await loadBatchesForProduct(value);
 
-      const { data: batchData } = await supabase
+      // Apply the same client filtering as loadBatchesForProduct
+      let batchQuery = supabase
         .from('batches')
         .select('id')
         .eq('product_id', value)
         .gt('qty_left', 0)
-        .order('expiry_date', { ascending: true })
-        .limit(1);
+        .order('expiry_date', { ascending: true });
+
+      // Filter by animal's owner if assigned
+      if (animalClientId) {
+        // Show ONLY batches that belong to this animal's owner (no unassigned stock)
+        batchQuery = batchQuery.eq('client_id', animalClientId);
+      } else {
+        // If animal has no owner, show only unassigned stock
+        batchQuery = batchQuery.is('client_id', null);
+      }
+
+      const { data: batchData } = await batchQuery.limit(1);
 
       updated = updated.map(m => {
         if (m.id === medId) {
@@ -357,6 +399,21 @@ export function CourseMedicationScheduler({
 
           {step === 'medications' && (
             <div className="space-y-4">
+              {/* Owner info indicator */}
+              {animalClientName ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <p className="text-sm text-emerald-800">
+                    <strong>Rodomas sandėlis:</strong> {animalClientName}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <strong>Rodomas sandėlis:</strong> Nepriskirtos atsargos
+                  </p>
+                </div>
+              )}
+
               {selectedDates.map((date, dayIndex) => {
                 const dayMeds = dateSchedule.get(date) || [];
                 const isFirstDay = dayIndex === 0;
@@ -426,7 +483,7 @@ export function CourseMedicationScheduler({
                                       <option value="">Pasirinkite seriją...</option>
                                       {productBatches.map((batch) => (
                                         <option key={batch.id} value={batch.id}>
-                                          {batch.batch_number} (Likutis: {batch.qty_left})
+                                          LOT: {(batch as any).lot || batch.batch_number || 'Be partijos'} - Likutis: {batch.qty_left?.toFixed(2) || 0}
                                         </option>
                                       ))}
                                     </select>

@@ -3,7 +3,6 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Inventory } from './components/Inventory';
 import { ReceiveStock } from './components/ReceiveStock';
-import { Products } from './components/Products';
 import { AnimalsCompact as Animals } from './components/AnimalsCompact';
 import { VisitsModern as Visits } from './components/VisitsModern';
 import { Synchronizations } from './components/Synchronizations';
@@ -32,8 +31,9 @@ import { NotificationToast, setNotificationCallback, NotificationType } from './
 import { useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import { Euro, Droplets } from 'lucide-react';
+import { Apskaita } from './components/Apskaita';
 
-type Module = 'veterinarija' | 'buhalterija' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food' | null;
+type Module = 'veterinarija' | 'buhalterija' | 'admin' | 'pienas' | 'technika' | 'worker-schedules' | 'food' | 'apskaita' | null;
 
 interface Notification {
   id: string;
@@ -284,14 +284,27 @@ function App() {
     );
   }
 
+  if (selectedModule === 'apskaita') {
+    return (
+      <RealtimeProvider>
+        <Apskaita onBackToModules={() => setSelectedModule(null)} />
+        {notification && (
+          <NotificationToast
+            message={notification.message}
+            type={notification.type}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </RealtimeProvider>
+    );
+  }
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
         return <Dashboard />;
       case 'inventory':
         return <Inventory />;
-      case 'receive':
-        return <ReceiveStock />;
       case 'treatment-history':
         return <TreatmentHistory />;
       case 'treatment-costs':
@@ -300,8 +313,6 @@ function App() {
         return <Vaccinations />;
       case 'bulk-treatment':
         return <BulkTreatment />;
-      case 'products':
-        return <Products />;
       case 'animals':
         return <Animals />;
       case 'visits':
@@ -322,8 +333,6 @@ function App() {
         return <OwnerMeds />;
       case 'waste':
         return <MedicalWaste />;
-      case 'reports':
-        return <Reports />;
       case 'users':
         return <UserManagement />;
       default:

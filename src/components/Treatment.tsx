@@ -53,13 +53,14 @@ export function Treatment() {
 
   const loadData = async () => {
     const [animalsRes, diseasesRes, productsRes, batchesRes] = await Promise.all([
-      fetchAllRows('animals', '*', 'tag_no'),
+      fetchAllRows('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
       supabase.from('diseases').select('*').order('name'),
       // Exclude hoof_care products - they are only for nagos section
-      supabase.from('products').select('*').eq('is_active', true).neq('category', 'hoof_care'),
+      supabase.from('products').select('*').eq('is_active', true),
       supabase.from('stock_by_batch').select(`
         *,
-        products!inner(name)
+        products!inner(name),
+        batches!inner(client_id)
       `).gt('on_hand', 0),
     ]);
 
@@ -89,19 +90,6 @@ export function Treatment() {
     setUsageItems(usageItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
-  };
-
-  const suggestFIFOBatch = async (productId: string) => {
-    if (!productId) return null;
-
-    const { data, error } = await supabase.rpc('fn_fifo_batch', { p_product_id: productId });
-
-    if (error) {
-      console.error('FIFO error:', error);
-      return null;
-    }
-
-    return data;
   };
 
   const handleCreateDisease = async () => {
@@ -158,9 +146,31 @@ export function Treatment() {
       updateUsageLine(lineId, 'unit', product.primary_pack_unit);
     }
 
-    const suggestedBatch = await suggestFIFOBatch(productId);
-    if (suggestedBatch) {
-      updateUsageLine(lineId, 'batch_id', suggestedBatch);
+    // Get animal's owner for filtering batches
+    const selectedAnimal = animals.find(a => a.id === formData.animal_id);
+    const animalClientId = (selectedAnimal as any)?.vic_client_id;
+
+    // Build query to get the first available batch respecting owner filtering
+    let batchQuery = supabase
+      .from('batches')
+      .select('id')
+      .eq('product_id', productId)
+      .gt('qty_left', 0)
+      .order('expiry_date', { ascending: true });
+
+    // Apply same filtering logic as getAvailableBatches
+    if (!animalClientId) {
+      // Animal has no assigned owner - show only unassigned stock
+      batchQuery = batchQuery.is('client_id', null);
+    } else {
+      // Show ONLY batches that belong to this animal's owner (no unassigned stock)
+      batchQuery = batchQuery.eq('client_id', animalClientId);
+    }
+
+    const { data: suggestedBatch } = await batchQuery.limit(1);
+
+    if (suggestedBatch && suggestedBatch.length > 0) {
+      updateUsageLine(lineId, 'batch_id', suggestedBatch[0].id);
     }
 
     setTimeout(calculateWithdrawalDate, 100);
@@ -330,7 +340,36 @@ export function Treatment() {
   };
 
   const getAvailableBatches = (productId: string) => {
-    return batches.filter(b => b.product_id === productId);
+    console.log('🔍 [Individual Treatment] Getting batches for product:', productId);
+    console.log('🔍 [Individual Treatment] Selected animal ID:', formData.animal_id);
+    
+    // First filter by animal's owner
+    let filteredBatches = batches;
+
+    if (formData.animal_id) {
+      const selectedAnimal = animals.find(a => a.id === formData.animal_id);
+      const animalClientId = (selectedAnimal as any)?.vic_client_id;
+      
+      console.log('🔍 [Individual Treatment] Animal client_id:', animalClientId);
+
+      if (!animalClientId) {
+        // Animal has no assigned owner - show only unassigned stock
+        filteredBatches = batches.filter(batch => !(batch as any).batches?.client_id);
+        console.log('🔍 [Individual Treatment] No owner, showing unassigned batches:', filteredBatches.length);
+      } else {
+        // Show ONLY batches that belong to this animal's owner (no unassigned stock)
+        filteredBatches = batches.filter(batch => {
+          const batchClientId = (batch as any).batches?.client_id;
+          return batchClientId === animalClientId;
+        });
+        console.log('🔍 [Individual Treatment] Showing owner batches:', filteredBatches.length);
+      }
+    }
+
+    // Then filter by product
+    const productBatches = filteredBatches.filter(b => b.product_id === productId);
+    console.log('🔍 [Individual Treatment] Final batches for product:', productBatches.length);
+    return productBatches;
   };
 
   return (
