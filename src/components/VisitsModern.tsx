@@ -725,9 +725,13 @@ export function VisitsModern() {
                         <div className="font-medium text-gray-900">{formatDateLT(visit.visit_datetime)}</div>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
-                        <div className="font-medium text-gray-900">{formatAnimalDisplay(visit.animal)}</div>
-                        {(visit.animal as any)?.neck_no && (
-                          <div className="text-xs text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
+                        {(visit.animal as any)?.neck_no ? (
+                          <>
+                            <div className="font-medium text-gray-900">{(visit.animal as any).neck_no}</div>
+                            <div className="text-xs text-gray-500">{formatAnimalDisplay(visit.animal)}</div>
+                          </>
+                        ) : (
+                          <div className="font-medium text-gray-900">{formatAnimalDisplay(visit.animal)}</div>
                         )}
                         <div className="text-gray-600">{visit.animal?.sex}</div>
                       </td>
@@ -833,7 +837,7 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete, wi
           <div className="flex-1 min-w-0">
             <div className="flex items-start flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
               <div className="font-bold text-gray-900 text-base sm:text-lg truncate">
-                {formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>}
+                {(visit.animal as any)?.neck_no || (formatAnimalDisplay(visit.animal) !== '-' ? formatAnimalDisplay(visit.animal) : <span className="text-red-500">Loading...</span>)}
               </div>
               {withdrawalStatus && (withdrawalStatus.milk_active || withdrawalStatus.meat_active) && (
                 <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-100 border border-red-300 rounded text-xs font-medium text-red-700" title="Karencijos periodas">
@@ -848,8 +852,8 @@ function VisitCard({ visit, getStatusColor, getStatusIcon, onClick, onDelete, wi
                 </div>
               )}
             </div>
-            {(visit.animal as any)?.neck_no && (
-              <div className="text-xs sm:text-sm text-gray-500">Kaklo Nr.: {(visit.animal as any).neck_no}</div>
+            {(visit.animal as any)?.neck_no && formatAnimalDisplay(visit.animal) !== '-' && (
+              <div className="text-xs sm:text-sm text-gray-500">{formatAnimalDisplay(visit.animal)}</div>
             )}
             {visit.animal?.sex && (
               <div className="text-xs sm:text-sm font-medium text-gray-700">{visit.animal.sex}</div>

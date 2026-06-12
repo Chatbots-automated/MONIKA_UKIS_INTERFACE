@@ -6,7 +6,6 @@ import {
   Syringe,
   AlertTriangle,
   Droplet,
-  Droplets,
   Trash2,
   Menu,
   X,
@@ -41,12 +40,10 @@ const menuItems = [
   { id: 'synchronizations', label: 'Sinchronizacijos', icon: Repeat, permission: 'animals' },
   { id: 'insemination', label: 'Sėklinimas', icon: Heart, permission: 'animals' },
   { id: 'hoofs', label: 'Nagos', icon: Activity, permission: 'animals' },
-  { id: 'pienas', label: 'Pienas', icon: Droplets, permission: 'animals' },
   { id: 'bulk-treatment', label: 'Masinis Gydymas', icon: Users, permission: 'treatment' },
   { id: 'treatment-history', label: 'Gydymų Istorija', icon: Activity, permission: 'view' },
   { id: 'treatment-costs', label: 'Gydymų Savikaina', icon: Euro, permission: 'view' },
   { id: 'vaccinations', label: 'Vakcinacijos', icon: Syringe, permission: 'treatment' },
-  { id: 'users', label: 'Vartotojai', icon: Users, permission: 'manage_users' },
 ];
 
 export function Layout({ children, currentView, onNavigate, onBackToModules }: LayoutProps) {

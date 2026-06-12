@@ -87,12 +87,16 @@ export function Vaccinations() {
       const [vacsRes, prodsRes, animalsRes, batchesRes, collarMap, groupMap] = await Promise.all([
         supabase.from('vaccinations').select('*').order('vaccination_date', { ascending: false }),
         supabase.from('products').select('*').eq('is_active', true).in('category', ['prevention', 'vakcina']).order('name'),
-        fetchAllRows('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no', [{ column: 'active', value: true }]),
+        fetchAllRows('animals', '*, vic_clients(id, client_name, personal_code)', 'tag_no'),
         supabase.from('batches').select('*, client_id').order('expiry_date', { ascending: false }),
         fetchLatestCollarNumbers(),
         fetchLatestGroupNumbers(),
       ]);
 
+      console.log('🔍 [Vaccinations] Loaded animals:', animalsRes?.length);
+      console.log('🔍 [Vaccinations] Loaded collar numbers:', collarMap.size);
+      console.log('🔍 [Vaccinations] Loaded group numbers:', groupMap.size);
+      
       setGeaCollars(collarMap);
       setGeaGroups(groupMap);
       setVaccinations(vacsRes.data || []);
@@ -101,7 +105,7 @@ export function Vaccinations() {
       setBatches(batchesRes.data || []);
       console.log('🔍 [Bulk Vaccination] Loaded batches with client_id:', batchesRes.data?.length);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error loading vaccination data:', error);
     } finally {
       setLoading(false);
     }
@@ -821,7 +825,9 @@ export function Vaccinations() {
           <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div className="mb-2">
               <p className="text-sm font-medium text-gray-700 mb-2">
-                Pasirinkta gyvūnų: <span className="text-blue-600 font-bold">{selectedAnimals.size}</span>
+                Pasirinkta gyvūnų: <span className="text-blue-600 font-bold">{selectedAnimals.size}</span> / 
+                Filtruota: <span className="text-gray-600 font-bold">{filteredAnimals.length}</span> / 
+                Viso: <span className="text-gray-600 font-bold">{animals.length}</span>
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="relative">
@@ -847,7 +853,7 @@ export function Vaccinations() {
               </div>
             </div>
 
-            <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+            <div className="min-h-[200px] max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-white">
               <div className="sticky top-0 bg-gray-100 border-b border-gray-200 px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-gray-200 transition-colors" onClick={handleToggleAll}>
                 {selectedAnimals.size === filteredAnimals.length && filteredAnimals.length > 0 ? (
                   <CheckSquare className="w-4 h-4 text-blue-600" />
@@ -859,26 +865,38 @@ export function Vaccinations() {
                 </span>
               </div>
 
-              {filteredAnimals.map(animal => (
-                <div
-                  key={animal.id}
-                  onClick={() => handleToggleAnimal(animal.id)}
-                  className={`px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors flex items-center gap-2 ${
-                    selectedAnimals.has(animal.id) ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  {selectedAnimals.has(animal.id) ? (
-                    <CheckSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                  ) : (
-                    <Square className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{animal.tag_no}</p>
-                    <p className="text-xs text-gray-500">{animal.holder_name}</p>
-                  </div>
-                  <span className="text-xs text-gray-500">{animal.species}</span>
+              {filteredAnimals.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  Nerasta gyvūnų pagal pasirinktus filtrus
                 </div>
-              ))}
+              )}
+              
+              {filteredAnimals.map(animal => {
+                const collarNo = geaCollars.get(animal.id);
+                return (
+                  <div
+                    key={animal.id}
+                    onClick={() => handleToggleAnimal(animal.id)}
+                    className={`px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors flex items-center gap-2 ${
+                      selectedAnimals.has(animal.id) ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    {selectedAnimals.has(animal.id) ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    ) : (
+                      <Square className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        {animal.tag_no}
+                        {collarNo && <span className="ml-2 text-emerald-600 font-semibold">#{collarNo}</span>}
+                      </p>
+                      <p className="text-xs text-gray-500">{animal.holder_name}</p>
+                    </div>
+                    <span className="text-xs text-gray-500">{animal.species}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -994,6 +1012,7 @@ export function Vaccinations() {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Gyvūnas</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Kaklo Nr.</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vakcina / prevencija</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Dozė</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Kita vakcina</th>
@@ -1001,26 +1020,33 @@ export function Vaccinations() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {group.vaccinations.map((vac: any) => (
-                      <tr key={vac.id} className="hover:bg-blue-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {animals.find(a => a.id === vac.animal_id)?.tag_no || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {products.find(p => p.id === vac.product_id)?.name}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          <span className="font-medium">{vac.dose_amount} {vac.unit}</span>
-                          {vac.dose_number > 1 && <span className="ml-1 text-xs text-gray-500">(#{vac.dose_number})</span>}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">
-                          {vac.next_booster_date || <span className="text-gray-400">-</span>}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">
-                          {vac.administered_by || <span className="text-gray-400">-</span>}
-                        </td>
-                      </tr>
-                    ))}
+                    {group.vaccinations.map((vac: any) => {
+                      const animal = animals.find(a => a.id === vac.animal_id);
+                      const collarNo = geaCollars.get(vac.animal_id);
+                      return (
+                        <tr key={vac.id} className="hover:bg-blue-50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-gray-900">
+                            {animal?.tag_no || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-emerald-600 font-semibold">
+                            {collarNo || <span className="text-gray-400">-</span>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            {products.find(p => p.id === vac.product_id)?.name}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            <span className="font-medium">{vac.dose_amount} {vac.unit}</span>
+                            {vac.dose_number > 1 && <span className="ml-1 text-xs text-gray-500">(#{vac.dose_number})</span>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-xs">
+                            {vac.next_booster_date || <span className="text-gray-400">-</span>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-xs">
+                            {vac.administered_by || <span className="text-gray-400">-</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

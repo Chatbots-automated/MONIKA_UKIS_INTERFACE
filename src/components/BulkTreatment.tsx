@@ -680,12 +680,10 @@ export function BulkTreatment() {
                   >
                     <div className="text-sm font-medium text-gray-900">
                       {animal.tag_no}
+                      {animal.collar_no && (
+                        <span className="ml-1 text-emerald-600 font-semibold">#{animal.collar_no}</span>
+                      )}
                     </div>
-                    {animal.collar_no && (
-                      <div className="text-xs text-gray-600">
-                        Kaklo: {animal.collar_no}
-                      </div>
-                    )}
                     {animal.age_months !== null && (
                       <div className="text-xs text-gray-500">
                         {animal.age_months} mėn.

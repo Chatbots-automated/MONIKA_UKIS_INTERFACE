@@ -7,14 +7,12 @@ import { AnimalsCompact as Animals } from './components/AnimalsCompact';
 import { VisitsModern as Visits } from './components/VisitsModern';
 import { Synchronizations } from './components/Synchronizations';
 import { Seklinimas } from './components/Seklinimas';
-import { Pienas } from './components/Pienas';
 import { Hoofs3D } from './components/Hoofs3D';
 import { Suppliers } from './components/Suppliers';
 import { Biocides } from './components/Biocides';
 import { OwnerMeds } from './components/OwnerMeds';
 import { MedicalWaste } from './components/MedicalWaste';
 import { Reports } from './components/Reports';
-import { UserManagement } from './components/UserManagement';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Vaccinations } from './components/Vaccinations';
 import { BulkTreatment } from './components/BulkTreatment';
@@ -323,8 +321,6 @@ function App() {
         return <Synchronizations />;
       case 'insemination':
         return <Seklinimas />;
-      case 'pienas':
-        return <Pienas />;
       case 'suppliers':
         return <Suppliers />;
       case 'biocides':
@@ -333,8 +329,6 @@ function App() {
         return <OwnerMeds />;
       case 'waste':
         return <MedicalWaste />;
-      case 'users':
-        return <UserManagement />;
       default:
         return <Dashboard />;
     }

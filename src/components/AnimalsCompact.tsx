@@ -239,8 +239,8 @@ export function AnimalsCompact() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaklo nr.</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupė</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rūšis</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amžius</th>
@@ -339,11 +339,11 @@ export function AnimalsCompact() {
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {animal.tag_no}
-                        </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {(animal as any).neck_no || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {animal.tag_no}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {(animal as any).group_number || '-'}

@@ -1055,8 +1055,8 @@ export function Animals() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kaklo nr.</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grupė</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rūšis</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amžius</th>
@@ -1134,6 +1134,7 @@ export function Animals() {
                     </>
                   ) : (
                     <>
+                      <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).neck_no || '-'}</td>
                       <td className="px-6 py-4">
                         <button
                           onClick={() => loadAnimalDetails(animal.id)}
@@ -1142,7 +1143,6 @@ export function Animals() {
                           {formatAnimalDisplay(animal)}
                         </button>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).neck_no || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{(animal as any).group_number || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{animal.sex || animal.species}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">

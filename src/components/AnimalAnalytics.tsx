@@ -189,7 +189,7 @@ export function AnimalAnalytics({ animalId, tagNumber }: AnimalAnalyticsProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-blue-100">
                 <div className="text-2xl font-bold text-blue-600">€{costAnalytics.medicine_cost.toFixed(2)}</div>
                 <div className="text-xs text-gray-600 mt-1">Vaistai</div>
@@ -199,11 +199,6 @@ export function AnimalAnalytics({ animalId, tagNumber }: AnimalAnalyticsProps) {
                 <div className="text-2xl font-bold text-purple-600">€{costAnalytics.vaccine_cost.toFixed(2)}</div>
                 <div className="text-xs text-gray-600 mt-1">Vakcinos</div>
                 <div className="text-xs text-gray-500 mt-0.5">({costAnalytics.vaccination_count} vakc.)</div>
-              </div>
-              <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-orange-100">
-                <div className="text-2xl font-bold text-orange-600">€{costAnalytics.visit_cost.toFixed(2)}</div>
-                <div className="text-xs text-gray-600 mt-1">Vizitai</div>
-                <div className="text-xs text-gray-500 mt-0.5">({costAnalytics.visit_count} viz.)</div>
               </div>
             </div>
           </div>

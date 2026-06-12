@@ -1032,11 +1032,11 @@ export function AnimalDetailSidebar({ animal, onClose, defaultTab = 'overview' }
       <div className="flex items-center justify-between p-2 xl:p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
         <div>
           <h2 className="text-base xl:text-xl font-bold text-gray-900">
-            {animal.tag_no || 'Nenurodytas ID'}
+            {animal.collar_no || animal.tag_no || 'Nenurodytas ID'}
           </h2>
           <p className="text-xs xl:text-sm text-gray-600">
+            {animal.tag_no && animal.collar_no && `${animal.tag_no} • `}
             {animal.species} {animal.sex && `• ${animal.sex}`} {animal.age_months && `• ${animal.age_months}`}<span className="xl:hidden">m</span><span className="hidden xl:inline"> mėn.</span>
-            {animal.collar_no && ` • Kaklo nr: ${animal.collar_no}`}
           </p>
         </div>
         <button

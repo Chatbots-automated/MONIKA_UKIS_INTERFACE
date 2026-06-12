@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrencyLT, formatDateLT, formatNumberLT } from '../lib/formatters';
-import { calculateSafeUnitCost, TREATMENT_COST_CONFIG, formatCost, formatUnitCost } from '../lib/costCalculations';
+import { calculateSafeUnitCost, formatCost, formatUnitCost } from '../lib/costCalculations';
 import { fetchAllRows } from '../lib/helpers';
 import { Euro, Activity, Syringe, Calendar, TrendingDown, Package, RefreshCw, ChevronDown, ChevronRight, Search, Droplet } from 'lucide-react';
 import { TreatmentMilkLossAnalysis } from './TreatmentMilkLossAnalysis';
@@ -9,6 +9,7 @@ import { TreatmentMilkLossAnalysis } from './TreatmentMilkLossAnalysis';
 interface AnimalCostData {
   animal_id: string;
   tag_no: string | null;
+  collar_no: string | null;
   treatment_count: number;
   visit_count: number;
   visit_costs: number;
@@ -63,7 +64,7 @@ interface AnimalDetailData {
 }
 
 interface RawData {
-  animals: Array<{ id: string; tag_no: string | null }>;
+  animals: Array<{ id: string; tag_no: string | null; collar_no: string | null }>;
   treatments: any[];
   usageItems: any[];
   vaccinations: any[];
@@ -199,9 +200,9 @@ export function TreatmentCostAnalysis() {
 
         // Calculate visit costs (only for visits in range)
         const visitCount = completedVisits.length;
-        const visitCosts = visitCount * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
+        const visitCosts = 0; // No base visit cost, only medicine costs
 
-        const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
+        const totalCosts = medicationCosts + vaccinationCosts;
 
         // Get earliest and latest visit dates (from filtered visits)
         let earliestVisitDate: string | null = null;
@@ -217,6 +218,7 @@ export function TreatmentCostAnalysis() {
           animalCosts.push({
             animal_id: animal.id,
             tag_no: animal.tag_no,
+            collar_no: animal.collar_no || null,
             treatment_count: treatmentIdsInRange.size,
             visit_count: visitCount,
             visit_costs: visitCosts,
@@ -246,6 +248,30 @@ export function TreatmentCostAnalysis() {
       const animals = await fetchAllRows<{ id: string; tag_no: string | null }>('animals', 'id, tag_no', 'tag_no');
 
       console.log('Animals loaded:', animals?.length);
+
+      // Fetch collar numbers from the latest GEA import (using the view)
+      const { data: collarData, error: collarError } = await supabase
+        .from('vw_animal_latest_collar')
+        .select('animal_id, collar_no');
+      
+      if (collarError) {
+        console.error('Error fetching collar numbers:', collarError);
+      }
+      
+      const collarMap = new Map();
+      collarData?.forEach(item => {
+        if (item.collar_no) {
+          collarMap.set(item.animal_id, item.collar_no.toString());
+        }
+      });
+      
+      console.log(`🏁 Collar fetch complete: Found collar_no for ${collarMap.size} animals`);
+
+      // Enrich animals with collar numbers
+      const enrichedAnimals = animals?.map(animal => ({
+        ...animal,
+        collar_no: collarMap.get(animal.id) || null,
+      })) || [];
 
       // Get all treatments (all time)
       const treatments = await fetchAllRows<any>('treatments', `
@@ -387,9 +413,9 @@ export function TreatmentCostAnalysis() {
 
         // Calculate visit costs
         const visitCount = completedVisits.length;
-        const visitCosts = visitCount * TREATMENT_COST_CONFIG.VISIT_BASE_COST;
+        const visitCosts = 0; // No base visit cost, only medicine costs
 
-        const totalCosts = visitCosts + medicationCosts + vaccinationCosts;
+        const totalCosts = medicationCosts + vaccinationCosts;
 
         // Get earliest and latest visit dates
         let earliestVisitDate: string | null = null;
@@ -405,6 +431,7 @@ export function TreatmentCostAnalysis() {
           animalCosts.push({
             animal_id: animal.id,
             tag_no: animal.tag_no,
+            collar_no: animal.collar_no || null,
             treatment_count: animalTreatments.length,
             visit_count: visitCount,
             visit_costs: visitCosts,
@@ -426,7 +453,7 @@ export function TreatmentCostAnalysis() {
 
       // Store raw data for filtering
       setRawData({
-        animals: animals || [],
+        animals: enrichedAnimals || [],
         treatments: treatments || [],
         usageItems: usageItems || [],
         vaccinations: vaccinations || [],
@@ -753,7 +780,8 @@ export function TreatmentCostAnalysis() {
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      if (!animal.tag_no?.toLowerCase().includes(searchLower)) {
+      if (!animal.tag_no?.toLowerCase().includes(searchLower) && 
+          !(animal.collar_no?.toString().toLowerCase().includes(searchLower))) {
         return false;
       }
     }
@@ -1021,12 +1049,6 @@ export function TreatmentCostAnalysis() {
                 {formatCost(totalStats.totalVisits > 0 ? totalStats.totalCosts / totalStats.totalVisits : 0)}
               </span>
             </div>
-            <div>
-              <span className="text-gray-600">Vizitų bazinė kaina:</span>
-              <span className="ml-2 font-bold text-gray-700">
-                {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)} / vizitas
-              </span>
-            </div>
           </div>
         </div>
       </div>
@@ -1051,7 +1073,7 @@ export function TreatmentCostAnalysis() {
               <option value="visit_count">Vizitų skaičius</option>
             </optgroup>
             <optgroup label="Pagal gyvūną">
-              <option value="tag_no">Ausies numeris</option>
+              <option value="tag_no">Kaklo nr.</option>
             </optgroup>
           </select>
           <button
@@ -1077,7 +1099,7 @@ export function TreatmentCostAnalysis() {
                 <tr>
                   <th className="w-12 px-4 py-3"></th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Ausies Nr.
+                    Kaklo Nr.
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Gydymų
@@ -1118,7 +1140,10 @@ export function TreatmentCostAnalysis() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium text-gray-900">{row.tag_no || '-'}</div>
+                          <div className="font-medium text-gray-900">{row.collar_no || row.tag_no || '-'}</div>
+                          {row.collar_no && row.tag_no && (
+                            <div className="text-xs text-gray-500">{row.tag_no}</div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
@@ -1180,7 +1205,7 @@ export function TreatmentCostAnalysis() {
                                 ) : (
                                   detailData.visits.map((visit) => {
                                     const isVisitExpanded = expandedVisits.has(visit.id);
-                                    const totalVisitCost = TREATMENT_COST_CONFIG.VISIT_BASE_COST + visit.total_products_cost;
+                                    const totalVisitCost = visit.total_products_cost; // Only medicine costs, no base visit cost
                                     const hasProducts = visit.all_products.length > 0;
 
                                     return (
@@ -1237,12 +1262,11 @@ export function TreatmentCostAnalysis() {
                                               <div className="font-bold text-blue-600 text-2xl mb-1">
                                                 {formatCost(totalVisitCost)}
                                               </div>
-                                              <div className="text-xs text-gray-600 space-y-0.5">
-                                                <div>Vizitas: {formatCost(TREATMENT_COST_CONFIG.VISIT_BASE_COST)}</div>
-                                                {visit.total_products_cost > 0 && (
+                                              {visit.total_products_cost > 0 && (
+                                                <div className="text-xs text-gray-600">
                                                   <div>Produktai: {formatCost(visit.total_products_cost)}</div>
-                                                )}
-                                              </div>
+                                                </div>
+                                              )}
                                             </div>
                                           </div>
                                         </div>
@@ -1316,13 +1340,13 @@ export function TreatmentCostAnalysis() {
                                 <div className="mt-6 bg-blue-600 text-white p-4 rounded-lg shadow-lg">
                                   <div className="space-y-2">
                                     <div className="flex items-center justify-between text-sm">
-                                      <span>Vizitai ({detailData.visits.length} × €10):</span>
+                                      <span>Vizitų skaičius:</span>
                                       <span className="font-semibold">
-                                        {formatCost(detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST)}
+                                        {detailData.visits.length}
                                       </span>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
-                                      <span>Visi produktai:</span>
+                                      <span>Produktų kaina:</span>
                                       <span className="font-semibold">
                                         {formatCost(detailData.visits.reduce((sum, v) => sum + v.total_products_cost, 0))}
                                       </span>
@@ -1331,7 +1355,6 @@ export function TreatmentCostAnalysis() {
                                       <span className="font-bold text-lg">VISO:</span>
                                       <span className="font-bold text-2xl">
                                         {formatCost(
-                                          detailData.visits.length * TREATMENT_COST_CONFIG.VISIT_BASE_COST +
                                           detailData.visits.reduce((sum, v) => sum + v.total_products_cost, 0)
                                         )}
                                       </span>

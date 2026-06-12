@@ -823,9 +823,9 @@ export function ProductUsageAnalysis() {
                                               </span>
                                             </div>
                                             <div className="flex items-center gap-4 text-sm">
-                                              <span className="text-gray-600">
-                                                Gyvūnas: <span className="font-medium">{usage.animal_tag || 'N/A'}</span>
-                                              </span>
+                              <span className="text-gray-600">
+                                Kaklo nr: <span className="font-medium">{usage.animal_tag || 'N/A'}</span>
+                              </span>
                                               <span className="text-gray-600">
                                                 Kiekis: <span className="font-medium">{formatNumberLT(usage.quantity)} {product.unit}</span>
                                               </span>

@@ -402,8 +402,8 @@ export function ProfitabilityDashboard() {
 
       const vaccinations = (vaccinationsData || []).filter(v => v.animal_id === animal.id);
       const visits = (visitsData || []).filter(v => v.animal_id === animal.id);
-      const visitCosts = visits.length * 10;
-      const totalCosts = medicationCosts + visitCosts;
+      const visitCosts = 0; // No base visit cost, only medicine costs
+      const totalCosts = medicationCosts;
 
       // Calculate withdrawal days
       const withdrawalDays = animalTreatments.filter(t => t.withdrawal_until_milk).length;
@@ -933,7 +933,7 @@ export function ProfitabilityDashboard() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Gyvulys
+                        Kaklo nr.
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Pieno Pajamos
@@ -966,8 +966,10 @@ export function ProfitabilityDashboard() {
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center">
                             <div>
-                              <div className="text-sm font-medium text-gray-900">{animal.tag_no || '—'}</div>
-                              <div className="text-xs text-gray-500">Kakl: {animal.collar_no || '—'}</div>
+                              <div className="text-sm font-medium text-gray-900">{animal.collar_no || animal.tag_no || '—'}</div>
+                              {animal.collar_no && animal.tag_no && (
+                                <div className="text-xs text-gray-500">{animal.tag_no}</div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -1068,11 +1070,13 @@ export function ProfitabilityDashboard() {
                             }`}
                           >
                             <div className="text-sm font-medium text-gray-900">
-                              {animal.tag_no || 'Nežinomas'}
+                              {animal.collar_no || animal.tag_no || 'Nežinomas'}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              Kakl: {animal.collar_no || '—'}
-                            </div>
+                            {animal.collar_no && animal.tag_no && (
+                              <div className="text-xs text-gray-500">
+                                {animal.tag_no}
+                              </div>
+                            )}
                           </button>
                         ))}
                     </div>
@@ -1092,9 +1096,15 @@ export function ProfitabilityDashboard() {
                             <>
                               <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
-                                  <span className="text-gray-600">Auskaras:</span>
-                                  <span className="font-medium">{animal.tag_no || '—'}</span>
+                                  <span className="text-gray-600">Gyvūnas:</span>
+                                  <span className="font-medium">{animal.collar_no || animal.tag_no || '—'}</span>
                                 </div>
+                                {animal.collar_no && animal.tag_no && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Ausies nr.:</span>
+                                    <span className="text-sm text-gray-500">{animal.tag_no}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">Pieno per dieną:</span>
                                   <span className="font-bold text-blue-700">{formatNumberLT(animal.avg_daily_milk)} L</span>
@@ -1283,8 +1293,10 @@ export function ProfitabilityDashboard() {
                             <div className="flex items-center gap-3">
                               <span className="text-xs font-bold text-green-700 w-8">#{index + 1}</span>
                               <div>
-                                <span className="text-sm font-medium text-gray-900">{animal.tag_no}</span>
-                                <span className="text-xs text-gray-500 ml-2">Kakl: {animal.collar_no || '—'}</span>
+                                <span className="text-sm font-medium text-gray-900">{animal.collar_no || animal.tag_no}</span>
+                                {animal.collar_no && animal.tag_no && (
+                                  <span className="text-xs text-gray-500 ml-2">{animal.tag_no}</span>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
@@ -1324,8 +1336,10 @@ export function ProfitabilityDashboard() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-red-700">#{index + 1}</span>
                               <div>
-                                <div className="text-sm font-medium text-gray-900">{animal.tag_no}</div>
-                                <div className="text-xs text-gray-500">{formatNumberLT(animal.avg_daily_milk)} L/d</div>
+                                <div className="text-sm font-medium text-gray-900">{animal.collar_no || animal.tag_no}</div>
+                                {animal.collar_no && animal.tag_no && (
+                                  <div className="text-xs text-gray-500">{animal.tag_no}</div>
+                                )}
                               </div>
                             </div>
                             <span className="text-sm font-bold text-red-700">
@@ -1487,11 +1501,13 @@ export function ProfitabilityDashboard() {
                                       <div className="flex items-center justify-between">
                                         <div className="flex-1">
                                           <div className="text-sm font-medium text-gray-900">
-                                            {animal.tag_no || 'Nežinomas'}
+                                            {animal.collar_no || animal.tag_no || 'Nežinomas'}
                                           </div>
-                                          <div className="text-xs text-gray-500">
-                                            Kakl: {animal.collar_no || '—'}
-                                          </div>
+                                          {animal.collar_no && animal.tag_no && (
+                                            <div className="text-xs text-gray-500">
+                                              {animal.tag_no}
+                                            </div>
+                                          )}
                                         </div>
                                         <div className="text-right">
                                           <div className={`text-sm font-bold ${animal.net_profit > 0 ? 'text-green-700' : 'text-red-700'}`}>
@@ -1661,7 +1677,7 @@ export function ProfitabilityDashboard() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Gyvulio Detalės: {selectedAnimalDetail.tag_no || 'Nežinomas'}
+                  Gyvulio Detalės: {selectedAnimalDetail.collar_no || selectedAnimalDetail.tag_no || 'Nežinomas'}
                 </h2>
                 <button
                   onClick={() => setSelectedAnimalDetail(null)}
@@ -1677,13 +1693,15 @@ export function ProfitabilityDashboard() {
                   <h3 className="font-semibold text-gray-900 mb-3">Pagrindinė Informacija</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Auskaras:</span>
-                      <span className="font-medium">{selectedAnimalDetail.tag_no || '—'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Kaklajuostė:</span>
+                      <span className="text-gray-600">Kaklo nr.:</span>
                       <span className="font-medium">{selectedAnimalDetail.collar_no || '—'}</span>
                     </div>
+                    {selectedAnimalDetail.collar_no && selectedAnimalDetail.tag_no && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Ausies nr.:</span>
+                        <span className="text-sm text-gray-500">{selectedAnimalDetail.tag_no}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">Grupė:</span>
                       <span className="font-medium">{selectedAnimalDetail.current_group || '—'}</span>

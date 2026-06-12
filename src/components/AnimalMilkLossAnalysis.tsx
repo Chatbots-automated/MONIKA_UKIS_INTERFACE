@@ -307,7 +307,7 @@ export function AnimalMilkLossAnalysis() {
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('animal')}
                 >
-                  Gyvūnas {sortBy === 'animal' && (sortOrder === 'desc' ? '↓' : '↑')}
+                  Kaklo nr. {sortBy === 'animal' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"

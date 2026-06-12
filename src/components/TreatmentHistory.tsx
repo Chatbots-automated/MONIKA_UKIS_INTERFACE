@@ -27,6 +27,7 @@ interface TreatmentHistoryItem {
   created_at: string;
   animal_id: string;
   animal_tag: string;
+  collar_no: string | null;
   species: string;
   owner_name: string | null;
   disease_id: string;
@@ -57,13 +58,69 @@ export function TreatmentHistory() {
 
   const loadTreatments = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch treatments
+      const { data: treatmentsData, error } = await supabase
         .from('treatment_history_view')
         .select('*')
         .order('reg_date', { ascending: false });
 
       if (error) throw error;
-      setTreatments(data || []);
+
+      // Fetch collar numbers for all animals in batches (to avoid URL length limits)
+      const animalIds = [...new Set(treatmentsData?.map(t => t.animal_id) || [])];
+      const collarMap = new Map();
+      
+      console.log(`📊 [TreatmentHistory] Starting collar_no fetch for ${animalIds.length} unique animals`);
+      
+      // Process in batches of 100 to avoid URL length limits
+      const batchSize = 100;
+      const totalBatches = Math.ceil(animalIds.length / batchSize);
+      
+      for (let i = 0; i < animalIds.length; i += batchSize) {
+        const batchIds = animalIds.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        
+        console.log(`📦 [TreatmentHistory] Batch ${batchNum}/${totalBatches}: Querying ${batchIds.length} animal IDs`);
+        console.log(`📦 Sample IDs: ${batchIds.slice(0, 3).join(', ')}...`);
+        
+        const { data: batchData, error: batchError } = await supabase
+          .from('gea_daily_new')
+          .select('animal_id, collar_no')
+          .in('animal_id', batchIds)
+          .order('import_created_at', { ascending: false });
+        
+        if (batchError) {
+          console.error(`❌ [TreatmentHistory] Batch ${batchNum} ERROR:`, {
+            message: batchError.message,
+            details: batchError.details,
+            hint: batchError.hint,
+            code: batchError.code,
+          });
+        } else {
+          console.log(`✅ [TreatmentHistory] Batch ${batchNum} SUCCESS: Received ${batchData?.length || 0} rows`);
+          
+          // Add to map (keep only first/latest collar_no per animal)
+          batchData?.forEach(item => {
+            if (!collarMap.has(item.animal_id) && item.collar_no) {
+              collarMap.set(item.animal_id, item.collar_no);
+            }
+          });
+        }
+      }
+      
+      console.log(`🏁 [TreatmentHistory] Collar fetch complete: Found collar_no for ${collarMap.size} animals`);
+      if (collarMap.size > 0) {
+        const sampleEntries = Array.from(collarMap.entries()).slice(0, 3);
+        console.log(`📋 [TreatmentHistory] Sample collar_no data:`, sampleEntries);
+      }
+
+      // Enrich treatments with collar numbers
+      const enrichedTreatments = treatmentsData?.map(treatment => ({
+        ...treatment,
+        collar_no: collarMap.get(treatment.animal_id) || null,
+      })) || [];
+
+      setTreatments(enrichedTreatments);
     } catch (error) {
       console.error('Error loading treatments:', error);
     } finally {
@@ -257,12 +314,15 @@ export function TreatmentHistory() {
                                     }
                                   }}
                                 >
-                                  {treatment.animal_tag}
+                                  {treatment.collar_no || treatment.animal_tag}
                                 </h4>
                                 <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
                                   {treatment.species}
                                 </span>
                               </div>
+                              {treatment.collar_no && treatment.animal_tag && (
+                                <div className="text-xs text-gray-500 mb-2">{treatment.animal_tag}</div>
+                              )}
 
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-sm">

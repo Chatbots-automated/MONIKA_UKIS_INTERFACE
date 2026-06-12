@@ -461,7 +461,7 @@ export function MastitisMilk() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Gyvulio Nr.
+                    Kaklo nr.
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Dabartinė grupė
